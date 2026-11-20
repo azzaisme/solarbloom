@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Play: your gardens</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="sb.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;family=Fredoka:wght@600;700&amp;display=swap">
+<style>
+body{margin:0}
+.slot{position:relative;width:330px;height:470px;border-radius:20px;display:flex;flex-direction:column;overflow:hidden}
+.slot .pic{height:170px;background:url(/_blob/a9d707ad7e970f6865db7fa2b896f422) center/cover;position:relative}
+.slot .pic .tag{position:absolute;left:12px;top:12px}
+.slot .info{padding:16px 18px;display:flex;flex-direction:column;gap:10px;flex:1}
+.slot .facts{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font:700 16px/1.3 Nunito,sans-serif;color:#4c5947}
+.slot .facts b{color:#1f2a1c;font-weight:900}
+.slot .btns{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+.slot.empty{border:2.5px dashed rgba(92,72,30,.3);background:rgba(255,252,243,.72);align-items:center;justify-content:center;gap:14px;text-align:center}
+</style>
+</helmet>
+<div class="screen" style="width: 1280px; height: 800px">
+  <div style="position: absolute; inset: 0; background: rgba(255, 252, 243, .38); backdrop-filter: blur(10px)"></div>
+
+  <header style="position: absolute; left: 60px; right: 60px; top: 34px; display: flex; align-items: center; gap: 14px">
+    <div class="badge"><span class="ic i-sprout"></span></div>
+    <div class="grow">
+      <div class="h1">Your gardens</div>
+      <div class="body soft">Pick a garden to carry on, or start a new one.</div>
+    </div>
+  </header>
+
+  <div style="position: absolute; left: 0; right: 0; top: 140px; display: flex; justify-content: center; gap: 28px">
+
+    <article class="card slot focus" aria-label="Garden 1, Hillside garden">
+      <div class="pic"><span class="chip tag" style="background: rgba(255,252,243,.95)"><span class="ic s i-star" style="color: #875800"></span>Last played</span></div>
+      <div class="info">
+        <div class="h2">Hillside garden</div>
+        <div class="facts">
+          <span>Day</span><b>14 · morning</b>
+          <span>Played</span><b>6 h 20 min</b>
+          <span>Fountain</span><b>Step 3 of 5</b>
+          <span>Last seen</span><b>Tram stop</b>
+        </div>
+        <div class="btns">
+          <button class="btn primary focus"><span class="ic i-play"></span>Carry on</button>
+          <div class="row" style="gap: 8px"><button class="btn grow">Rename</button><button class="btn ghost grow" style="color: #a23d1c">Start over</button></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card slot" aria-label="Garden 2, Sunny patch">
+      <div class="pic" style="filter: saturate(.6) sepia(.25)"></div>
+      <div class="info">
+        <div class="h2">Sunny patch</div>
+        <div class="facts">
+          <span>Day</span><b>3 · evening</b>
+          <span>Played</span><b>48 min</b>
+          <span>Fountain</span><b>Step 1 of 5</b>
+          <span>Last seen</span><b>The workshop</b>
+        </div>
+        <div class="btns">
+          <button class="btn"><span class="ic i-play"></span>Carry on</button>
+          <div class="row" style="gap: 8px"><button class="btn grow">Rename</button><button class="btn ghost grow" style="color: #a23d1c">Start over</button></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="slot empty" aria-label="Garden 3, empty">
+      <div class="badge sun" style="width: 72px; height: 72px"><span class="ic l i-seed"></span></div>
+      <div class="h2">Start a new garden</div>
+      <div class="body soft" style="max-width: 240px">You'll pick how the days go before you begin.</div>
+      <button class="btn">Start</button>
+    </article>
+  </div>
+
+  <footer class="acts" style="position: absolute; right: 60px; bottom: 34px">
+    <span class="act"><span class="g pad pa">A</span>Choose</span>
+    <span class="act"><span class="g pad py">Y</span>Rename</span>
+    <span class="act"><span class="g pad pb">B</span>Back</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

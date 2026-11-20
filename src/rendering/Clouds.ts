@@ -2,18 +2,6 @@ import * as pc from 'playcanvas';
 import { group, shape } from './Shapes';
 import { color, mat, PALETTE } from './Materials';
 
-interface Face {
-  root: pc.Entity;
-  eyes: pc.Entity[];
-  sparkles: pc.Entity[];
-  /** 0 = asleep (eyes are little lines) … 1 = wide awake */
-  open: number;
-  /** grows in when the sky wakes up (songbirds have arrived) */
-  shown: number;
-  awake: boolean;
-  timer: number;
-}
-
 interface Rain {
   drops: pc.Entity[];
   phase: number[];
@@ -26,7 +14,6 @@ interface Rain {
 interface Cloud {
   root: pc.Entity;
   shadow: pc.Entity;
-  face?: Face;
   rain?: Rain;
   /** home in the layer, in units of the layer's half-size (−1…1 across, −1…1 in depth) */
   u: number;
@@ -55,7 +42,7 @@ interface Puff {
  */
 const PUFFS: Puff[] = [
   { pos: [0, 0.05, 0], r: [1.3, 0.48, 0.9] }, // base
-  { pos: [0, 0.52, 0.22], r: [0.66, 0.66, 0.66] }, // the big front puff (the face)
+  { pos: [0, 0.52, 0.22], r: [0.66, 0.66, 0.66] }, // the big front puff
   { pos: [0.18, 0.8, -0.32], r: [0.6, 0.6, 0.6] }, // crown, behind
   { pos: [-0.62, 0.62, -0.18], r: [0.42, 0.42, 0.42] },
   { pos: [-0.8, 0.32, 0.18], r: [0.5, 0.5, 0.5] },
@@ -129,7 +116,7 @@ function puffMesh(device: pc.GraphicsDevice, p: Puff, sunWorld: pc.Vec3, bands: 
 
 /**
  * Region unlocks' cloud wall: the same soft puffs at a lower resolution (the wall has many clouds), the first
- * `count` of them (base, face puff, crown and the biggest sides), with the shared unlit material.
+ * `count` of them (base, front puff, crown and the biggest sides), with the shared unlit material.
  */
 export function wallCloudParts(device: pc.GraphicsDevice, sunWorld: pc.Vec3, count = 8): { meshes: { mesh: pc.Mesh; pos: [number, number, number] }[]; material: pc.Material } {
   return { meshes: PUFFS.slice(0, count).map((p) => ({ mesh: puffMesh(device, p, sunWorld, [9, 14]), pos: p.pos })), material: softMaterial() };
@@ -147,6 +134,18 @@ function softMaterial(): pc.StandardMaterial {
   m.update();
   softMat = m;
   return m;
+}
+
+/**
+ * E23.7.1: tints every soft cloud (the sky's clouds and the cloud walls) by the time of day: warm at dusk, a dim
+ * blue at night. The clouds are unlit, so the light alone can't do it. Cheap: one shared material.
+ */
+export function tintClouds(r: number, g: number, b: number) {
+  const m = softMaterial();
+  const e = m.emissive;
+  if (Math.abs(e.r - r) + Math.abs(e.g - g) + Math.abs(e.b - b) < 0.004) return;
+  m.emissive = new pc.Color(r, g, b);
+  m.update();
 }
 
 /** A soft top-down footprint of the puffs (blurred), used as the cloud's shadow. */
@@ -171,7 +170,6 @@ function shadowTexture(device: pc.GraphicsDevice): pc.Texture {
 
 const SHADOW_Y = 0.35; // just over the ground slabs: flat ground and low props darken, buildings stand out of it
 const RAIN_FALL = 2.8; // how far (cloud units) a drop falls before it is gone
-const FACES = [0, 3];
 const RAINY = [2, 4];
 
 /**
@@ -182,9 +180,7 @@ const RAINY = [2, 4];
  *
  * - Shadows: the clouds float far above the city (near the camera), so a true sun shadow would land well off
  *   screen. Each cloud instead lays a soft shadow of its own footprint on the ground just below it on screen.
- * - Faces: two clouds have sleepy faces that only appear once songbirds have arrived (the sky wakes up with the
- *   park); now and then one opens its eyes, blinks, and dozes off again.
- * - Rain: two faceless clouds now and then sprinkle a short shower of little drops.
+ * - Rain: two clouds now and then sprinkle a short shower of little drops.
  *
  * Purely cosmetic: never picked, made once, no per-frame allocation; still (no drift, rain or blinking) with
  * reduced motion.
@@ -193,6 +189,8 @@ export class Clouds {
   private root: pc.Entity;
   private clouds: Cloud[] = [];
   private wind = 0;
+  /** E23.7.2: the weather's wind, 0 … 1 (the clouds drift faster) */
+  gust = 0;
   private t = 0;
   private right = new pc.Vec3();
   private back = new pc.Vec3();
@@ -200,8 +198,6 @@ export class Clouds {
   private pos = new pc.Vec3();
   private ray = new pc.Vec3();
   reducedMotion = false;
-  /** the sky has woken up (songbirds have arrived): sleepy faces appear on a couple of clouds */
-  happy = false;
   /** zoom at/above which there are no clouds, and at/below which they are full size */
   showBelow = 0.62;
   fullBelow = 0.34;
@@ -210,9 +206,6 @@ export class Clouds {
   constructor(parent: pc.Entity, device: pc.GraphicsDevice, sunUp: pc.Vec3) {
     this.root = group(parent, 'clouds');
     this.root.enabled = false;
-    const face = mat(PALETTE.sky.cloudFace, { unlit: true });
-    const blush = mat(PALETTE.sky.cloudBlush, { unlit: true });
-    const sparkle = mat(PALETTE.sky.cloudSparkle, { unlit: true });
     const drop = mat(PALETTE.sky.cloudRain, { unlit: true });
     const soft = softMaterial();
     const shadowMat = new pc.StandardMaterial();
@@ -248,21 +241,6 @@ export class Clouds {
       }
       const shadow = shape(this.root, 'plane', shadowMat, { name: 'cloudShadow', receive: false });
       const c: Cloud = { root: r, shadow, u, w, y, size, bob: i * 1.7 };
-      if (FACES.includes(i)) {
-        // A sleepy little face on the front of the big puff, tipped up toward the camera.
-        const f = group(body, 'face', [0, 0.9, 0.74]);
-        f.setLocalEulerAngles(-35, 0, 0);
-        const eyes: pc.Entity[] = [];
-        const sparkles: pc.Entity[] = [];
-        for (const sd of [-1, 1]) {
-          eyes.push(shape(f, 'sphere', face, { pos: [sd * 0.17, 0.02, 0], scale: [0.09, 0.014, 0.04] }));
-          sparkles.push(shape(f, 'sphere', sparkle, { pos: [sd * 0.17 + 0.022, 0.045, 0.02], scale: 0.026 }));
-          shape(f, 'sphere', blush, { pos: [sd * 0.32, -0.08, -0.02], scale: [0.13, 0.07, 0.04] });
-        }
-        shape(f, 'sphere', face, { pos: [0, -0.07, 0.005], scale: [0.06, 0.035, 0.03] });
-        f.enabled = false;
-        c.face = { root: f, eyes, sparkles, open: 0, shown: 0, awake: false, timer: 3 + i * 2.5 };
-      }
       if (RAINY.includes(i)) {
         const drops: pc.Entity[] = [];
         const phase: number[] = [];
@@ -292,7 +270,7 @@ export class Clouds {
     this.root.enabled = true;
     const still = this.reducedMotion;
     if (!still) {
-      this.wind += dt * 0.012;
+      this.wind += dt * 0.012 * (1 + this.gust * 4);
       this.t += dt;
     }
     const vh = cam.viewHeight;
@@ -343,31 +321,8 @@ export class Clouds {
       c.shadow.setLocalEulerAngles(0, cam.yaw, 0);
       c.shadow.setLocalScale(sg * 4, 1, sg * 4);
 
-      if (c.face) this.updateFace(c.face, dt, still);
       if (c.rain) this.updateRain(c.rain, dt, still);
     }
-  }
-
-  private updateFace(f: Face, dt: number, still: boolean) {
-    f.shown = pc.math.clamp(f.shown + (this.happy ? dt : -dt) * 1.5, 0, 1);
-    f.root.enabled = f.shown > 0.01;
-    if (!f.root.enabled) return;
-    const pop = smooth(0, 1, f.shown);
-    f.root.setLocalScale(pop, pop, pop);
-    // Asleep most of the time; now and then a slow wake, a look around with a blink, and back to sleep.
-    let target = 0;
-    if (!still) {
-      f.timer -= dt;
-      if (f.timer <= 0) {
-        f.awake = !f.awake;
-        f.timer = f.awake ? 2.6 + Math.random() * 2 : 7 + Math.random() * 9;
-      }
-      target = f.awake ? (f.timer > 1.1 && f.timer < 1.28 ? 0 : 1) : 0; // the blink
-    }
-    const rate = target > f.open ? 5 : f.awake ? 14 : 1.6; // opens briskly, blinks fast, dozes off slowly
-    f.open += (target - f.open) * Math.min(1, dt * rate);
-    for (const e of f.eyes) e.setLocalScale(0.09 - 0.015 * f.open, 0.014 + 0.062 * f.open, 0.04);
-    for (const sp of f.sparkles) sp.enabled = f.open > 0.65;
   }
 
   private updateRain(r: Rain, dt: number, still: boolean) {

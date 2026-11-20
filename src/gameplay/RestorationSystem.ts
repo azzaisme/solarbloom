@@ -1,34 +1,18 @@
-import { formatCost } from '../core/Economy';
 import { distToFootprint } from '../core/Grid';
-import { ROOF_TEMPLATES } from '../data/templates';
 import { GROUND } from '../core/GameState';
-import type { Cost, RestoreSource, TileData } from '../core/types';
+import type { PlantKind, RestoreSource, TileData } from '../core/types';
+import { PLANT_LOAD, PULSE_LOAD, type PulseLoadDef } from '../data/pulse';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
+/** Can a pulse go here? A pulse costs only charge (E23.2.1; E23.1.4: no energy or water). */
 export interface PulseCheck {
   ok: boolean;
   reason?: string;
-  cost: Cost;
 }
 
 export class RestorationSystem {
   constructor(private sim: Sim) {}
-
-  pulseCost(t: TileData): Cost {
-    const layer = this.sim.grid.layer(t.roofId);
-    // City rooftops cost like their template's ground, scaled by their area's distance difficulty.
-    const roofMult =
-      t.roofId === GROUND
-        ? this.sim.areas.info(this.sim.areas.areaOf(t)!).difficulty
-        : ((layer?.template ? ROOF_TEMPLATES[layer.template]?.pulseCostMult : undefined) ?? 1) * (layer?.cluster ? this.sim.areas.info(layer.cluster).difficulty : 1);
-    if (t.ground === 'restored') {
-      const n = TUNING.restore.nurture[Math.min(TUNING.restore.maxBloom, t.bloom + 1)];
-      return { energy: Math.round(n.energy * this.sim.upgrades.pulseEnergyMult * 100) / 100, water: n.water };
-    }
-    const base = t.ground === 'prepared' ? TUNING.pulse.prepared : TUNING.pulse.polluted;
-    return { energy: Math.round(base.energy * this.sim.upgrades.pulseEnergyMult * roofMult * 100) / 100, water: Math.ceil(base.water * roofMult) };
-  }
 
   /** E21.9: may a helper (drone, Cultivator, Mother Tree) work this tile? (Old City: bloombot's share first.) */
   helperMay(t: TileData): boolean {
@@ -48,33 +32,23 @@ export class RestorationSystem {
   }
 
   checkPulse(t: TileData): PulseCheck {
-    const cost = this.pulseCost(t);
     const roof = this.sim.grid.roof(t.roofId);
-    if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'This rooftop is not reachable yet', cost };
+    if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'This rooftop is not reachable yet' };
     const fog = this.sim.areas.fogReason(t);
-    if (fog) return { ok: false, reason: fog, cost };
-    if (t.blocked && t.feature === 'water') return { ok: false, reason: 'The open sea — nothing grows out there', cost };
+    if (fog) return { ok: false, reason: fog };
+    if (t.blocked && t.feature === 'water') return { ok: false, reason: 'The open sea — nothing grows out there' };
     const piece = t.blocked ? this.sim.salvage?.describe(t) : undefined; // E21: a pile, a gate, a Keeper
-    if (piece) return { ok: false, reason: piece.detail, cost };
-    if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here', cost };
-    if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
-    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
-    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through — ${Math.max(1, Math.ceil(t.growthRemainingSec))}s`, cost };
+    if (piece) return { ok: false, reason: piece.detail };
+    if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here' };
+    if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready' };
+    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom' };
+    // E23.2.1: out of charge, no pulse (bloombot walks on; eat, sit or find a charger)
+    if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of charge. Eat something, rest or find a charger' };
+    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through — ${Math.max(1, Math.ceil(t.growthRemainingSec))}s` };
     const tilling = this.sim.cultivators?.remaining(t);
-    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab — ${Math.max(1, Math.ceil(tilling))}s`, cost };
-    if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here', cost };
-    const short = this.sim.econ.shortfall(cost);
-    if (short === 'energy')
-      return { ok: false, reason: `Need ${formatCost({ energy: cost.energy })} — solar is recharging, or Harvest Sunlight`, cost };
-    if (short === 'water') {
-      const hasCondenser = this.sim.state.machines.some((m) => m.type === 'condenser');
-      return {
-        ok: false,
-        reason: hasCondenser ? 'Water is condensing — one moment' : 'Need 💧 — the rain barrel is refilling. A Water Condenser helps!',
-        cost,
-      };
-    }
-    return { ok: true, cost };
+    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab — ${Math.max(1, Math.ceil(tilling))}s` };
+    if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here' };
+    return { ok: true };
   }
 
   /** Player Restoration Pulse. */
@@ -90,15 +64,34 @@ export class RestorationSystem {
       this.sim.bus.emit('action.failed', { reason: chk.reason!, tileId });
       return false;
     }
-    this.sim.econ.spend(chk.cost);
-    if (this.megaReady()) return this.releaseMega(t);
+    this.sim.charge.use('pulse');
+    // E23.2.2: the pulse uses one unit of its load (or fires empty) and sends out its reveal ripple
+    const load = this.sim.pulseLoad.take();
+    const ripple = this.sim.pulseLoad.ripple(t);
+    this.sim.buried.reveal(ripple.filter((g) => g.kind === 'buried')); // found: a mound marks each until it is dug up
+    this.sim.bus.emit('pulse.ripple', { tileId, targets: ripple });
+    if (this.megaReady()) return this.releaseMega(t, load);
     this.chargeMega();
     if (t.ground === 'restored') {
+      // a loaded pulse on living ground: it grows the load there, the chain it sets off carries the load, and a
+      // load with extra reach (fertiliser) restores the dead ground round it too
+      if (load.plant) this.plant(t, load.plant);
+      this.carrying = load.plant;
       this.grow(t, undefined, 'player');
+      this.carrying = undefined;
       this.boostNeighbours(t);
-      this.sim.bus.emit('pulse.fired', { tileId, extra: [], overcharged: false });
+      const extra: string[] = [];
+      if (load.plant && load.extraReach > 0) {
+        for (const { tile: nb, d } of this.footprint(t, false, load)) {
+          this.plant(nb, load.plant);
+          this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + Math.min(1.2, 0.12 * d + 0.01 * extra.length));
+          extra.push(nb.id);
+        }
+      }
+      this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged: false });
       return true;
     }
+    if (load.plant) this.plant(t, load.plant);
     this.beginGrowth(t, 'pulse', TUNING.pulse.growSeconds);
     this.boostNeighbours(t);
     // Overcharge: every Nth manual pulse restores everything within 2 tiles.
@@ -113,7 +106,8 @@ export class RestorationSystem {
       }
     }
     const extra: string[] = [];
-    for (const { tile: nb, d } of this.footprint(t, overcharged)) {
+    for (const { tile: nb, d } of this.footprint(t, overcharged, load)) {
+      if (load.plant) this.plant(nb, load.plant);
       this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + Math.min(1.2, 0.12 * d + 0.01 * extra.length)); // ripple outward, done within ~2 s
       extra.push(nb.id);
     }
@@ -131,8 +125,8 @@ export class RestorationSystem {
    * The extra tiles a pulse on dead tile `t` restores for free (beyond `t` itself), nearest first, with their
    * grid distance. Pure: the HUD previews exactly this before you tap (Phase 4 E03.1).
    */
-  footprint(t: TileData, overcharged = this.nextIsOvercharged()): { tile: TileData; d: number }[] {
-    const radius = this.pulseRadius(overcharged);
+  footprint(t: TileData, overcharged = this.nextIsOvercharged(), load: PulseLoadDef = this.sim.pulseLoad.next()): { tile: TileData; d: number }[] {
+    const radius = this.pulseRadius(overcharged, load.extraReach);
     if (radius <= 0) return [];
     const r2 = radius * radius;
     return this.sim.grid
@@ -144,9 +138,9 @@ export class RestorationSystem {
   }
 
   /** Phase 4 E04.2: the pulse's reach (Euclidean, in tiles) from Pulse Reach; Overcharge reaches a tier further. */
-  pulseRadius(overcharged = false): number {
+  pulseRadius(overcharged = false, extraReach = 0): number {
     const tiers = TUNING.pulseTiers;
-    const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + (overcharged ? 1 : 0));
+    const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + extraReach + (overcharged ? 1 : 0));
     return overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
   }
 
@@ -187,26 +181,83 @@ export class RestorationSystem {
     if (p.megaCharge >= TUNING.mega.charge && was < TUNING.mega.charge) this.sim.bus.emit('mega.ready', {});
   }
 
-  private releaseMega(t: TileData): boolean {
+  /** E23.2.2: a loaded Mega Pulse grows its load where it lands, and everything its wave restores grows it too. */
+  private releaseMega(t: TileData, load: PulseLoadDef = PULSE_LOAD.none): boolean {
     this.sim.state.progression.megaCharge = 0;
     this.boostNeighbours(t);
-    this.sim.chains.startMegaPulse(t, this.megaBudget());
+    if (load.plant && t.ground === 'restored') {
+      this.plant(t, load.plant);
+      this.raiseBloom(t, load.bloom);
+    }
+    const id = this.sim.chains.startMegaPulse(t, this.megaBudget());
+    if (load.plant && id >= 0) this.rememberChainPlant(id, load.plant);
     this.sim.bus.emit('pulse.fired', { tileId: t.id, extra: [], overcharged: true });
     return true;
   }
 
-  /** `quiet`: offline drone work (Phase 4 E01) grows the tile and pays its yield but sets off no chain. */
+  /** `quiet`: grows the tile but sets off no chain. */
   grow(t: TileData, chainId?: number, starter: 'player' | 'auto' = 'auto', quiet = false) {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
-    t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
+    this.chainPlantOn(t, chainId);
+    // one bloom level, or straight to what its plant grows at (a grove: full bloom)
+    t.bloom = Math.min(TUNING.restore.maxBloom, Math.max(t.bloom + 1, this.plantDef(t).bloom));
     this.sim.transitions.bloom(t, t.bloom, starter === 'auto' || quiet);
     this.sim.grid.touch(t);
-    const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
-    if (b.gt(0)) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
     this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom, auto: starter === 'auto' });
     if (quiet) return;
     const id = this.sim.chains.onGrown(t, chainId, starter);
-    this.sim.chains.addReward(id, b);
+    if (this.carrying && id >= 0) this.rememberChainPlant(id, this.carrying); // the chain carries the pulse's load
+  }
+
+  /** the plant of the loaded pulse being fired right now (its chain is told to carry it) */
+  private carrying?: PlantKind;
+
+  /** Lifts a living tile's bloom to at least `to` (what a plant grows at), with its bloom transition. */
+  private raiseBloom(t: TileData, to: number) {
+    const b = Math.min(TUNING.restore.maxBloom, to);
+    if (t.ground !== 'restored' || t.bloom >= b) return;
+    t.bloom = b;
+    this.sim.transitions.bloom(t, t.bloom, false);
+    this.sim.grid.touch(t);
+  }
+
+  // ───────────── E23.2.2: what grows ─────────────
+
+  /** What a loaded pulse grows on a tile (it stays: the look and the biomass follow it). */
+  plant(t: TileData, kind: PlantKind) {
+    t.plant = kind;
+    this.sim.grid.touch(t);
+    this.sim.bus.emit('tile.planted', { tile: t, plant: kind });
+  }
+
+  /** The load that grew this tile (nothing: plain grass and moss). */
+  plantDef(t: TileData): PulseLoadDef {
+    return t.plant ? PULSE_LOAD[PLANT_LOAD[t.plant]] : PULSE_LOAD.none;
+  }
+
+  /**
+   * Chains a loaded pulse set off grow what it carried, for as long as each chain runs: every running chain is
+   * remembered (no cap), and let go once it has ended. (A chain that grew nothing ends without a `chain.ended`
+   * event, so the list is checked against the chains still running.) Chains themselves are never saved (a reload
+   * ends them); what they grew is saved on each tile (`TileData.plant`), so a reload loses no plant.
+   */
+  private chainPlants = new Map<number, PlantKind>();
+  private rememberChainPlant(id: number, kind: PlantKind) {
+    this.forgetEndedChains();
+    if (this.sim.chains.running(id)) this.chainPlants.set(id, kind);
+  }
+  private forgetEndedChains() {
+    for (const id of this.chainPlants.keys()) if (!this.sim.chains.running(id)) this.chainPlants.delete(id);
+  }
+  /** Chains still running with a load's plant (tests). */
+  get plantedChains(): number {
+    this.forgetEndedChains();
+    return this.chainPlants.size;
+  }
+  private chainPlantOn(t: TileData, chainId?: number) {
+    if (t.plant || chainId === undefined || chainId < 0) return;
+    const k = this.chainPlants.get(chainId);
+    if (k) this.plant(t, k);
   }
 
   beginGrowth(t: TileData, source: RestoreSource, seconds: number) {
@@ -236,6 +287,9 @@ export class RestorationSystem {
 
   tick(dt: number) {
     if (!this.growing.size) return;
+    // E23.7.2: rain (and a storm's downpour) makes restoring ground bloom faster; nothing makes it slower
+    const speed = Math.max(1, this.sim.weather?.bloomSpeed() ?? 1);
+    dt *= speed;
     for (const t of [...this.growing.values()]) {
       if (t.ground !== 'growing') {
         this.growing.delete(t.id);
@@ -253,19 +307,18 @@ export class RestorationSystem {
    */
   complete(t: TileData, source: RestoreSource, chainId?: number, quiet = false): number {
     if (t.ground === 'restored') return chainId ?? -1;
+    this.chainPlantOn(t, chainId);
     // Look 6: a tile that grew already plays its restore; one restored straight from dead ground starts it now.
     if (t.ground !== 'growing' || t.tr?.k !== 'restore') this.sim.transitions.restore(t, source, t.ground === 'polluted' ? t.pollution : 0, { quiet });
     this.growing.delete(t.id);
     t.ground = 'restored';
-    t.bloom = Math.max(1, t.bloom);
+    t.bloom = Math.max(1, t.bloom, this.plantDef(t).bloom); // E23.2.2: a meadow flowers at once, a grove in full
     t.pollution = 0;
     t.growthRemainingSec = 0;
     t.growSource = undefined;
     if (source === 'overflow') this.sim.transitions.lush(t, this.sim.time + TUNING.neighbourhood.reservoir.lushSeconds);
     this.sim.grid.touch(t);
     this.sim.state.stats.tilesRestored++;
-    const biomass = this.sim.econ.add('biomass', TUNING.restore.instantBiomass * this.sim.upgrades.soilMult);
-    if (biomass.gt(0)) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: biomass, tileId: t.id });
     // Life seeps outward: neighbours soften from concrete into moss.
     for (const nb of this.sim.grid.neighbors(t)) {
       if (nb.ground !== 'polluted' || nb.blocked) continue;
@@ -285,12 +338,12 @@ export class RestorationSystem {
     if (source === 'pulse' || source === 'broad' || source === 'mega') this.sim.areas.countBot(t);
     this.sim.areas.onRestored(t);
     if (quiet) {
-      this.sim.bus.emit('tile.restored', { tile: t, source, chainId: -1, biomass });
+      this.sim.bus.emit('tile.restored', { tile: t, source, chainId: -1 });
       return -1;
     }
     const id = this.sim.chains.onRestored(t, source, chainId);
-    this.sim.chains.addReward(id, biomass);
-    this.sim.bus.emit('tile.restored', { tile: t, source, chainId: id, biomass });
+    if (t.plant && id >= 0 && (source === 'pulse' || source === 'broad')) this.rememberChainPlant(id, t.plant);
+    this.sim.bus.emit('tile.restored', { tile: t, source, chainId: id });
     if (source === 'cultivator') this.sim.cultivators.onRestored(t);
     return id;
   }

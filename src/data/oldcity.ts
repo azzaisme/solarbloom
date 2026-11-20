@@ -18,7 +18,7 @@ export const OLD_CITY = {
   seaMaxX: 1,
   /** E21.24: one terrace level is this many tiles high */
   levelHeight: 1.2,
-  /** the level everything is measured from (drawn at the classic ground height) */
+  /** the level everything is measured from (drawn at the old flat ground height) */
   baseLevel: 1,
   /** the sea and canals */
   seaLevel: 0,
@@ -58,6 +58,12 @@ export interface CellRect {
   d: number;
 }
 
+/**
+ * Deep water in a region: a rectangle, all water unless `mask` draws its outline (one string a row from `z`, one
+ * character a cell from `x`; `#` water). `pond`: a natural pond, drawn as a pool (banks, rocks, reeds), not a canal.
+ */
+export type WaterRect = CellRect & { pond?: boolean; mask?: string[] };
+
 export type RampDir = 'n' | 's' | 'e' | 'w';
 
 /** E21.24: a ramp (one level over 3 tiles) or a stair (one level over 2), walked along `dir` from `from` to `to`. */
@@ -96,7 +102,7 @@ export interface RegionDef {
   material: MaterialId;
   landmark: { kind: string; name: string; x: number; z: number };
   keeper: string;
-  /** the 2×2 seam (a Reclaimer stands on it once the landmark wakes) */
+  /** the 2×2 seam: kept clear of generated clutter (E21's Reclaimers stood here; E23.7.4 dropped them) */
   seam: { name: string; x: number; z: number };
   gate: GateDef;
   /** the Keeper's second request: restore every tile of this patch */
@@ -111,12 +117,23 @@ export interface RegionDef {
   /** E21.7: ladders (Climb) and perches (Glide, with their landing cell) */
   ladders: { x: number; z: number; to: [number, number] }[];
   perches: { x: number; z: number; to: [number, number] }[];
-  /** loose piles (Milestone A lays out the park and Mast Row; the others land with E21.14–E21.16) */
+  /**
+   * Loose piles. Ring 1: about 120 of the region's material and 80 Scrap; ring 2: about 160; ring 3: about 200 of each
+   * rich material (#327–#329). Laid on open, reachable ground by scripts/place-region-piles.ts; respawning per E23.7.4.
+   */
   piles: PileDef[];
   /** the region's main street: a road from its gate (cells, two wide, for generation) */
   roads: CellRect[];
-  /** deep water inside the region (a canal: never walked, until Hover; level 0) */
-  water?: CellRect[];
+  /**
+   * deep water inside the region (a canal: never walked, until Hover; level 0). `pond`: a natural pond rather than
+   * a canal, drawn as a pool (rounded painted banks, rocks and reeds, the pool's surface) instead of open water.
+   */
+  water?: WaterRect[];
+  /**
+   * E23.5.4.6: shallow ponds beside the Keeper's garden. A silted bed while the ground is dead; restored, it is fresh
+   * water (E23.4.1) that waters the planters within reach. Walkable, like the park's pond.
+   */
+  ponds?: CellRect[];
 }
 
 const P = (id: string, x: number, z: number, material: MaterialId, size: PileSize, model: string): PileDef => ({ id, x, z, material, size, model });
@@ -132,6 +149,8 @@ export const REGIONS: RegionDef[] = [
     material: 'copper',
     landmark: { kind: 'mast', name: 'Signal Mast', x: 18, z: -26 },
     keeper: 'pylon',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 9, z: -8, w: 2, d: 3 }],
     seam: { name: 'the Pipeworks', x: 23, z: -8 },
     gate: { id: 'g-mastRow', kind: 'barricade', cells: [[7, -1], [8, -1]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
     patch: { name: 'The tram stop', x: 10, z: -20, w: 5, d: 3 },
@@ -154,17 +173,17 @@ export const REGIONS: RegionDef[] = [
       P('mr-c1', 4, -22, 'copper', 'large', 'salvage-copper'),
       P('mr-c2', 21, -14, 'copper', 'large', 'salvage-copper'),
       P('mr-c3', 12, -8, 'copper', 'medium', 'salvage-copper'),
-      P('mr-c4', 16, -30, 'copper', 'medium', 'salvage-copper'),
+      P('mr-c4', 14, -31, 'copper', 'medium', 'salvage-copper'),
       P('mr-c5', 22, -20, 'copper', 'medium', 'salvage-copper'),
       P('mr-c6', 2, -6, 'copper', 'medium', 'salvage-copper'),
       P('mr-c7', 15, -3, 'copper', 'small', 'salvage-copper'),
       P('mr-c8', 29, -6, 'copper', 'small', 'salvage-copper'),
       P('mr-c9', 11, -24, 'copper', 'small', 'salvage-copper'),
       P('mr-c10', 26, -28, 'copper', 'small', 'salvage-copper'),
-      P('mr-s1', 20, -4, 'scrap', 'large', 'rubble-pile'),
+      P('mr-s1', 20, -2, 'scrap', 'large', 'rubble-pile'),
       P('mr-s2', 4, -14, 'scrap', 'medium', 'crate'),
       P('mr-s3', 13, -27, 'scrap', 'medium', 'stone-block'),
-      P('mr-s4', 30, -29, 'scrap', 'medium', 'rubble-pile'),
+      P('mr-s4', 30, -27, 'scrap', 'medium', 'rubble-pile'),
       P('mr-s5', 11, -12, 'scrap', 'small', 'crate'),
       P('mr-s6', 19, -10, 'scrap', 'small', 'rubble-pile'),
       P('mr-s7', 5, -29, 'scrap', 'small', 'stone-block'),
@@ -184,6 +203,8 @@ export const REGIONS: RegionDef[] = [
     material: 'glass',
     landmark: { kind: 'hall', name: 'Market Hall', x: 32, z: 14 },
     keeper: 'tally',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 21, z: 9, w: 2, d: 3 }],
     seam: { name: 'the Glassworks', x: 40, z: 24 },
     gate: { id: 'g-oldMarket', kind: 'barricade', cells: [[16, 7], [16, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
     patch: { name: 'The market square', x: 26, z: 18, w: 6, d: 4 },
@@ -201,7 +222,27 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    piles: [],
+    // E23.1.4 (#536): the market's glass, so Tally's Solar Panel can be made once Tally wakes (glass panes): two
+    // just past the barricade, two along the market road, two by the Glassworks. They refill like every pile (E23.7.4).
+    piles: [
+      P('om-g1', 22, 5, 'glass', 'medium', 'salvage-glass'),
+      P('om-g2', 27, 11, 'glass', 'small', 'salvage-glass'),
+      P('om-g3', 36, 10, 'glass', 'medium', 'salvage-glass'),
+      P('om-g4', 44, 4, 'glass', 'small', 'salvage-glass'),
+      P('om-g5', 40, 22, 'glass', 'large', 'salvage-glass'),
+      P('om-g6', 35, 25, 'glass', 'small', 'salvage-glass'),
+      // E23.8: built on E23.1.4's six, to the ring's 120 Glass, and 78 Scrap (scripts/place-region-piles.ts)
+      P('om-g7', 16, 30, 'glass', 'large', 'salvage-glass'),
+      P('om-g8', 35, 1, 'glass', 'large', 'salvage-glass'),
+      P('om-g9', 25, 26, 'glass', 'small', 'salvage-glass'),
+      P('om-s1', 44, 12, 'scrap', 'large', 'stone-block'),
+      P('om-s2', 45, 30, 'scrap', 'medium', 'rubble-pile'),
+      P('om-s3', 33, 18, 'scrap', 'medium', 'rubble-pile'),
+      P('om-s4', 16, 21, 'scrap', 'medium', 'crate'),
+      P('om-s5', 28, 3, 'scrap', 'small', 'crate'),
+      P('om-s6', 22, 20, 'scrap', 'small', 'crate'),
+      P('om-s7', 38, 31, 'scrap', 'small', 'stone-block'),
+    ],
     roads: [{ x: 16, z: 7, w: 32, d: 2 }],
   },
   {
@@ -214,6 +255,8 @@ export const REGIONS: RegionDef[] = [
     material: 'timber',
     landmark: { kind: 'sealock', name: 'The Sea Lock', x: -6, z: 40 },
     keeper: 'tide',
+    // E23.5.4.6: a freshwater rock pool above the tide line beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 7, z: 16, w: 2, d: 3 }],
     seam: { name: 'the Driftline', x: -12, z: 28 },
     // The boat lands here, so the beach is open from the start. The Sea Lock stands across the canal that runs down
     // to the bay; the barricade blocks the boardwalk bridge over it.
@@ -234,9 +277,75 @@ export const REGIONS: RegionDef[] = [
     ladders: [],
     perches: [],
     // the first pile: right in front of bloombot as it steps off the jetty
-    piles: [P('sw-s1', 8, 44, 'scrap', 'small', 'crate')],
+    piles: [
+      P('sw-s1', 8, 44, 'scrap', 'small', 'crate'),
+      P('sw-t1', -15, 44, 'timber', 'large', 'salvage-driftwood'),
+      P('sw-t2', 3, 44, 'timber', 'large', 'salvage-driftwood'),
+      P('sw-t3', -15, 29, 'timber', 'medium', 'salvage-driftwood'),
+      P('sw-t4', -15, 16, 'timber', 'medium', 'salvage-driftwood'),
+      P('sw-t5', 14, 44, 'timber', 'medium', 'salvage-driftwood'),
+      P('sw-t6', 1, 34, 'timber', 'medium', 'salvage-driftwood'),
+      P('sw-t7', -5, 24, 'timber', 'small', 'salvage-driftwood'),
+      P('sw-t8', 14, 34, 'timber', 'small', 'salvage-driftwood'),
+      P('sw-t9', -7, 33, 'timber', 'small', 'salvage-driftwood'),
+      P('sw-t10', -15, 37, 'timber', 'small', 'salvage-driftwood'),
+      P('sw-s2', -7, 43, 'scrap', 'large', 'stone-block'),
+      P('sw-s3', -8, 16, 'scrap', 'medium', 'crate'),
+      P('sw-s4', 2, 27, 'scrap', 'medium', 'stone-block'),
+      P('sw-s5', 0, 16, 'scrap', 'medium', 'rubble-pile'),
+      P('sw-s6', -15, 22, 'scrap', 'small', 'rubble-pile'),
+      P('sw-s7', 15, 28, 'scrap', 'small', 'rubble-pile'),
+      // sunstone pebbles in the tide line: sun cells for the first lights, and Fern's 15 before the roofs open
+      P('sw-u1', 8, 29, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('sw-u2', -10, 21, 'sunstone', 'small', 'salvage-sunstone'),
+      P('sw-u3', 0, 21, 'sunstone', 'small', 'salvage-sunstone'),
+      P('sw-u4', -10, 26, 'sunstone', 'small', 'salvage-sunstone'),
+    ],
     roads: [],
-    water: [{ x: -3, z: 16, w: 2, d: 32 }],
+    // E23.13: the canal runs two tiles wide past the boardwalk bridge (the gate spans it at z 36…37), then opens out
+    // toward the sea, five wide where it meets the surf (eastward: the Sea Lock stands to its west)
+    water: [
+      {
+        x: -3,
+        z: 16,
+        w: 5,
+        d: 32,
+        mask: [
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '##...',
+          '###..',
+          '###..',
+          '####.',
+          '####.',
+          '####.',
+          '#####',
+          '#####',
+          '#####',
+        ],
+      },
+    ],
   },
   {
     id: 'elderGrove',
@@ -266,7 +375,29 @@ export const REGIONS: RegionDef[] = [
     ramps: [{ x: -21, z: 2, w: 3, d: 3, dir: 'n', from: 1, to: 2, kind: 'ramp' }],
     ladders: [],
     perches: [],
-    piles: [],
+    piles: [
+      P('eg-e1', -31, -13, 'seeds', 'large', 'broken-pot'),
+      P('eg-e2', -31, 4, 'seeds', 'large', 'stump'),
+      P('eg-e3', -15, -14, 'seeds', 'medium', 'stump'),
+      P('eg-e4', -1, -15, 'seeds', 'medium', 'broken-pot'),
+      P('eg-e5', -19, -1, 'seeds', 'medium', 'broken-pot'),
+      P('eg-e6', -21, 9, 'seeds', 'medium', 'broken-pot'),
+      P('eg-e7', -5, -5, 'seeds', 'small', 'broken-pot'),
+      P('eg-e8', -23, -14, 'seeds', 'small', 'stump'),
+      P('eg-e9', -27, -5, 'seeds', 'small', 'broken-pot'),
+      P('eg-e10', -8, -12, 'seeds', 'small', 'broken-pot'),
+      P('eg-c1', -12, -5, 'clay', 'medium', 'salvage-clay'),
+      P('eg-c2', -14, 12, 'clay', 'small', 'salvage-clay'),
+      P('eg-c3', -21, -8, 'clay', 'small', 'salvage-clay'),
+      P('eg-c4', -25, 1, 'clay', 'small', 'salvage-clay'),
+      P('eg-s1', -27, 11, 'scrap', 'large', 'rubble-pile'),
+      P('eg-s2', -1, 1, 'scrap', 'medium', 'stone-block'),
+      P('eg-s3', -9, 3, 'scrap', 'medium', 'rubble-pile'),
+      P('eg-s4', -14, 0, 'scrap', 'medium', 'crate'),
+      P('eg-s5', -16, 5, 'scrap', 'small', 'stone-block'),
+      P('eg-s6', -26, 6, 'scrap', 'small', 'crate'),
+      P('eg-s7', -22, 14, 'scrap', 'small', 'stone-block'),
+    ],
     roads: [{ x: -32, z: 7, w: 32, d: 2 }],
   },
   {
@@ -279,6 +410,8 @@ export const REGIONS: RegionDef[] = [
     material: 'clay',
     landmark: { kind: 'cistern', name: 'Old Cistern', x: 56, z: 48 },
     keeper: 'sluice',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 36, z: 33, w: 2, d: 3 }],
     seam: { name: 'the Claypits', x: 70, z: 58 },
     gate: { id: 'g-cistern', kind: 'water', cells: [[40, 32], [41, 32], [40, 33], [41, 33], [40, 34], [41, 34]], needs: { ability: 'hover' }, blocked: 'Deep water — needs Hover (fountain tier 2)' },
     patch: { name: 'The spillway', x: 44, z: 52, w: 4, d: 6 },
@@ -303,8 +436,56 @@ export const REGIONS: RegionDef[] = [
     ],
     ladders: [],
     perches: [],
-    piles: [],
+    piles: [
+      P('cb-c1', 78, 62, 'clay', 'large', 'salvage-clay'),
+      P('cb-c2', 78, 35, 'clay', 'large', 'salvage-clay'),
+      P('cb-c3', 58, 62, 'clay', 'large', 'salvage-clay'),
+      P('cb-c4', 62, 46, 'clay', 'medium', 'salvage-clay'),
+      P('cb-c5', 42, 62, 'clay', 'medium', 'salvage-clay'),
+      P('cb-c6', 60, 33, 'clay', 'medium', 'salvage-clay'),
+      P('cb-c7', 75, 48, 'clay', 'medium', 'salvage-clay'),
+      P('cb-c8', 51, 50, 'clay', 'medium', 'salvage-clay'),
+      P('cb-c9', 68, 58, 'clay', 'small', 'salvage-clay'),
+      P('cb-c10', 33, 52, 'clay', 'small', 'salvage-clay'),
+      P('cb-c11', 69, 36, 'clay', 'small', 'salvage-clay'),
+      P('cb-c12', 42, 52, 'clay', 'small', 'salvage-clay'),
+      P('cb-c13', 51, 33, 'clay', 'small', 'salvage-clay'),
+      P('cb-s1', 51, 41, 'scrap', 'large', 'rubble-pile'),
+      P('cb-s2', 59, 54, 'scrap', 'medium', 'stone-block'),
+      P('cb-s3', 50, 58, 'scrap', 'medium', 'stone-block'),
+      P('cb-s4', 33, 60, 'scrap', 'medium', 'rubble-pile'),
+      P('cb-s5', 75, 55, 'scrap', 'small', 'rubble-pile'),
+      P('cb-s6', 57, 39, 'scrap', 'small', 'rubble-pile'),
+      P('cb-s7', 63, 39, 'scrap', 'small', 'rubble-pile'),
+    ],
     roads: [],
+    // E23.4.1: the spring-fed pond east of the island (dry until the Old Cistern wakes and its springs run)
+    // its outline is irregular (a natural pond, not a tank): `#` is water, `.` the basin floor round it
+    water: [
+      {
+        x: 63,
+        z: 40,
+        w: 11,
+        d: 14,
+        pond: true,
+        mask: [
+          '...####....',
+          '..#######..',
+          '.#########.',
+          '.##########',
+          '###########',
+          '##########.',
+          '.#########.',
+          '.########..',
+          '..#######..',
+          '..########.',
+          '.#########.',
+          '.########..',
+          '..######...',
+          '....###....',
+        ],
+      },
+    ],
   },
   {
     id: 'clockPlaza',
@@ -316,6 +497,8 @@ export const REGIONS: RegionDef[] = [
     material: 'gears',
     landmark: { kind: 'clock', name: 'Clock Tower', x: 64, z: 4 },
     keeper: 'tock',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 53, z: 4, w: 2, d: 3 }],
     seam: { name: 'the Escapement', x: 72, z: -12 },
     gate: { id: 'g-clockPlaza', kind: 'lockBridge', cells: [[48, 7], [49, 7], [48, 8], [49, 8]], needs: { landmark: 'saltwind', ability: 'hover' }, blocked: 'The canal is too deep — the lock bridge rises when the Sea Lock wakes (or Hover)' },
     patch: { name: 'The plaza', x: 60, z: 12, w: 8, d: 4 },
@@ -333,7 +516,28 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    piles: [],
+    piles: [
+      P('cp-g1', 76, -15, 'gears', 'large', 'salvage-gears'),
+      P('cp-g2', 78, 28, 'gears', 'large', 'salvage-gears'),
+      P('cp-g3', 78, 1, 'gears', 'large', 'salvage-gears'),
+      P('cp-g4', 62, 30, 'gears', 'medium', 'salvage-gears'),
+      P('cp-g5', 59, -15, 'gears', 'medium', 'salvage-gears'),
+      P('cp-g6', 73, 14, 'gears', 'medium', 'salvage-gears'),
+      P('cp-g7', 49, 28, 'gears', 'medium', 'salvage-gears'),
+      P('cp-g8', 49, -13, 'gears', 'medium', 'salvage-gears'),
+      P('cp-g9', 68, 2, 'gears', 'small', 'salvage-gears'),
+      P('cp-g10', 63, 20, 'gears', 'small', 'salvage-gears'),
+      P('cp-g11', 58, -6, 'gears', 'small', 'salvage-gears'),
+      P('cp-g12', 68, -15, 'gears', 'small', 'salvage-gears'),
+      P('cp-g13', 66, -7, 'gears', 'small', 'salvage-gears'),
+      P('cp-s1', 77, -7, 'scrap', 'large', 'stone-block'),
+      P('cp-s2', 49, -5, 'scrap', 'medium', 'crate'),
+      P('cp-s3', 70, 28, 'scrap', 'medium', 'crate'),
+      P('cp-s4', 65, 10, 'scrap', 'medium', 'stone-block'),
+      P('cp-s5', 56, 19, 'scrap', 'small', 'stone-block'),
+      P('cp-s6', 75, 21, 'scrap', 'small', 'rubble-pile'),
+      P('cp-s7', 61, 1, 'scrap', 'small', 'crate'),
+    ],
     roads: [],
   },
   {
@@ -346,6 +550,8 @@ export const REGIONS: RegionDef[] = [
     material: 'sunstone',
     landmark: { kind: 'crystal', name: 'Rooftop Core', x: 6, z: -52 },
     keeper: 'gable',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 7, z: -40, w: 2, d: 3 }],
     seam: { name: 'the Sunvein', x: -10, z: -60 },
     gate: { id: 'g-terraces', kind: 'climb', cells: [[8, -33]], needs: { ability: 'climb' }, blocked: 'Only the roofs go on from here — needs Climb (fountain tier 3)' },
     patch: { name: 'The roof garden', x: 18, z: -46, w: 4, d: 4 },
@@ -363,7 +569,28 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [{ x: 31, z: -48, to: [33, -48] }],
-    piles: [],
+    piles: [
+      P('te-u1', -14, -61, 'sunstone', 'large', 'salvage-sunstone'),
+      P('te-u2', 27, -63, 'sunstone', 'large', 'salvage-sunstone'),
+      P('te-u3', 4, -63, 'sunstone', 'large', 'salvage-sunstone'),
+      P('te-u4', -16, -44, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('te-u5', 29, -48, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('te-u6', 30, -36, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('te-u7', 15, -59, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('te-u8', -1, -52, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('te-u9', -6, -42, 'sunstone', 'small', 'salvage-sunstone'),
+      P('te-u10', -16, -34, 'sunstone', 'small', 'salvage-sunstone'),
+      P('te-u11', 18, -49, 'sunstone', 'small', 'salvage-sunstone'),
+      P('te-u12', -5, -63, 'sunstone', 'small', 'salvage-sunstone'),
+      P('te-u13', 9, -50, 'sunstone', 'small', 'salvage-sunstone'),
+      P('te-s1', -11, -53, 'scrap', 'large', 'crate'),
+      P('te-s2', -8, -34, 'scrap', 'medium', 'crate'),
+      P('te-s3', 22, -34, 'scrap', 'medium', 'crate'),
+      P('te-s4', 22, -56, 'scrap', 'medium', 'crate'),
+      P('te-s5', 29, -56, 'scrap', 'small', 'stone-block'),
+      P('te-s6', 1, -44, 'scrap', 'small', 'crate'),
+      P('te-s7', 23, -41, 'scrap', 'small', 'stone-block'),
+    ],
     roads: [],
   },
   {
@@ -376,6 +603,8 @@ export const REGIONS: RegionDef[] = [
     material: 'glass',
     landmark: { kind: 'greenhouse', name: 'Great Greenhouse', x: -50, z: -10 },
     keeper: 'fern',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: -41, z: 2, w: 2, d: 3 }],
     seam: { name: 'the Potting Sheds', x: -60, z: -28 },
     gate: { id: 'g-glasshouse', kind: 'bridge', cells: [[-36, 0], [-35, 0], [-34, 0], [-33, 0], [-36, 1], [-35, 1], [-34, 1], [-33, 1]], needs: { repair: { timber: 30, copper: 20, gears: 10 } }, blocked: 'The bridge is broken — repair it with 30 Timber, 20 Copper and 10 Gears' },
     patch: { name: 'The nursery beds', x: -46, z: 6, w: 4, d: 4 },
@@ -393,7 +622,45 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    piles: [],
+    piles: [
+      P('gh-e1', -60, -32, 'seeds', 'large', 'broken-pot'),
+      P('gh-e2', -36, -31, 'seeds', 'large', 'stump'),
+      P('gh-e3', -62, -14, 'seeds', 'large', 'broken-pot'),
+      P('gh-e4', -63, 12, 'seeds', 'large', 'stump'),
+      P('gh-e5', -39, -18, 'seeds', 'large', 'stump'),
+      P('gh-e6', -60, -1, 'seeds', 'medium', 'stump'),
+      P('gh-e7', -51, -19, 'seeds', 'medium', 'broken-pot'),
+      P('gh-e8', -52, 14, 'seeds', 'medium', 'broken-pot'),
+      P('gh-e9', -50, -32, 'seeds', 'medium', 'broken-pot'),
+      P('gh-e10', -50, -7, 'seeds', 'small', 'stump'),
+      P('gh-e11', -63, -23, 'seeds', 'small', 'broken-pot'),
+      P('gh-e12', -42, -10, 'seeds', 'small', 'broken-pot'),
+      P('gh-e13', -34, -10, 'seeds', 'small', 'broken-pot'),
+      P('gh-e14', -52, 1, 'seeds', 'small', 'stump'),
+      P('gh-e15', -43, -32, 'seeds', 'small', 'stump'),
+      P('gh-g1', -44, -25, 'glass', 'large', 'salvage-glass'),
+      P('gh-g2', -45, 14, 'glass', 'large', 'salvage-glass'),
+      P('gh-g3', -57, -26, 'glass', 'large', 'salvage-glass'),
+      P('gh-g4', -51, -26, 'glass', 'large', 'salvage-glass'),
+      P('gh-g5', -34, -25, 'glass', 'large', 'salvage-glass'),
+      P('gh-g6', -57, -20, 'glass', 'medium', 'salvage-glass'),
+      P('gh-g7', -45, -19, 'glass', 'medium', 'salvage-glass'),
+      P('gh-g8', -55, -13, 'glass', 'medium', 'salvage-glass'),
+      P('gh-g9', -63, -8, 'glass', 'medium', 'salvage-glass'),
+      P('gh-g10', -57, -7, 'glass', 'small', 'salvage-glass'),
+      P('gh-g11', -63, 5, 'glass', 'small', 'salvage-glass'),
+      P('gh-g12', -57, 7, 'glass', 'small', 'salvage-glass'),
+      P('gh-g13', -39, 14, 'glass', 'small', 'salvage-glass'),
+      P('gh-g14', -42, -4, 'glass', 'small', 'salvage-glass'),
+      P('gh-g15', -34, -4, 'glass', 'small', 'salvage-glass'),
+      P('gh-s1', -39, -24, 'scrap', 'large', 'rubble-pile'),
+      P('gh-s2', -34, -20, 'scrap', 'medium', 'stone-block'),
+      P('gh-s3', -34, -15, 'scrap', 'medium', 'stone-block'),
+      P('gh-s4', -50, -14, 'scrap', 'medium', 'crate'),
+      P('gh-s5', -47, -2, 'scrap', 'small', 'crate'),
+      P('gh-s6', -47, 3, 'scrap', 'small', 'crate'),
+      P('gh-s7', -52, 6, 'scrap', 'small', 'stone-block'),
+    ],
     roads: [],
   },
   {
@@ -406,6 +673,8 @@ export const REGIONS: RegionDef[] = [
     material: 'copper',
     landmark: { kind: 'observatory', name: 'Sky Observatory', x: 60, z: -66 },
     keeper: 'vega',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 33, z: -45, w: 2, d: 3 }],
     seam: { name: 'the Lens Grinders', x: 72, z: -40 },
     gate: { id: 'g-observatory', kind: 'cliff', cells: [[33, -48]], needs: { ability: 'glide' }, blocked: 'A cliff too high to climb — glide here from the edge of The Terraces (fountain tier 4)' },
     patch: { name: 'The hilltop', x: 56, z: -74, w: 6, d: 4 },
@@ -424,7 +693,45 @@ export const REGIONS: RegionDef[] = [
     ramps: [{ x: 60, z: -59, w: 2, d: 3, dir: 'n', from: 3, to: 4, kind: 'ramp' }],
     ladders: [],
     perches: [],
-    piles: [],
+    piles: [
+      P('ob-c1', 78, -77, 'copper', 'large', 'salvage-copper'),
+      P('ob-c2', 78, -36, 'copper', 'large', 'salvage-copper'),
+      P('ob-c3', 55, -79, 'copper', 'large', 'salvage-copper'),
+      P('ob-c4', 68, -57, 'copper', 'large', 'salvage-copper'),
+      P('ob-c5', 36, -78, 'copper', 'large', 'salvage-copper'),
+      P('ob-c6', 61, -34, 'copper', 'medium', 'salvage-copper'),
+      P('ob-c7', 53, -64, 'copper', 'medium', 'salvage-copper'),
+      P('ob-c8', 37, -66, 'copper', 'medium', 'salvage-copper'),
+      P('ob-c9', 56, -49, 'copper', 'medium', 'salvage-copper'),
+      P('ob-c10', 66, -79, 'copper', 'small', 'salvage-copper'),
+      P('ob-c11', 64, -68, 'copper', 'small', 'salvage-copper'),
+      P('ob-c12', 67, -46, 'copper', 'small', 'salvage-copper'),
+      P('ob-c13', 50, -34, 'copper', 'small', 'salvage-copper'),
+      P('ob-c14', 74, -67, 'copper', 'small', 'salvage-copper'),
+      P('ob-c15', 78, -57, 'copper', 'small', 'salvage-copper'),
+      P('ob-u1', 77, -47, 'sunstone', 'large', 'salvage-sunstone'),
+      P('ob-u2', 45, -79, 'sunstone', 'large', 'salvage-sunstone'),
+      P('ob-u3', 44, -57, 'sunstone', 'large', 'salvage-sunstone'),
+      P('ob-u4', 45, -71, 'sunstone', 'large', 'salvage-sunstone'),
+      P('ob-u5', 69, -38, 'sunstone', 'large', 'salvage-sunstone'),
+      P('ob-u6', 42, -34, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('ob-u7', 33, -58, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('ob-u8', 33, -34, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('ob-u9', 48, -45, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('ob-u10', 52, -72, 'sunstone', 'small', 'salvage-sunstone'),
+      P('ob-u11', 44, -64, 'sunstone', 'small', 'salvage-sunstone'),
+      P('ob-u12', 60, -61, 'sunstone', 'small', 'salvage-sunstone'),
+      P('ob-u13', 51, -57, 'sunstone', 'small', 'salvage-sunstone'),
+      P('ob-u14', 57, -42, 'sunstone', 'small', 'salvage-sunstone'),
+      P('ob-u15', 72, -79, 'sunstone', 'small', 'salvage-sunstone'),
+      P('ob-s1', 70, -73, 'scrap', 'large', 'crate'),
+      P('ob-s2', 33, -72, 'scrap', 'medium', 'rubble-pile'),
+      P('ob-s3', 60, -55, 'scrap', 'medium', 'rubble-pile'),
+      P('ob-s4', 63, -40, 'scrap', 'medium', 'rubble-pile'),
+      P('ob-s5', 44, -51, 'scrap', 'small', 'stone-block'),
+      P('ob-s6', 42, -40, 'scrap', 'small', 'rubble-pile'),
+      P('ob-s7', 50, -79, 'scrap', 'small', 'stone-block'),
+    ],
     roads: [],
   },
   {
@@ -438,6 +745,8 @@ export const REGIONS: RegionDef[] = [
     material: 'gears',
     landmark: { kind: 'spire', name: 'Solar Spire', x: -50, z: -66 },
     keeper: 'atlas',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: -27, z: -40, w: 2, d: 3 }],
     seam: { name: 'the Foundry Vaults', x: -70, z: -50 },
     gate: { id: 'g-spireHeights', kind: 'climb', cells: [[-24, -33], [-23, -33]], needs: { ability: 'climb' }, blocked: 'A collapsed skybridge blocks the avenue — needs Climb (fountain tier 3)' },
     patch: { name: 'Spire Square', x: -54, z: -58, w: 8, d: 4 },
@@ -455,10 +764,74 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    piles: [],
+    piles: [
+      P('sh-g1', -77, -91, 'gears', 'large', 'salvage-gears'),
+      P('sh-g2', -41, -92, 'gears', 'large', 'salvage-gears'),
+      P('sh-g3', -79, -56, 'gears', 'large', 'salvage-gears'),
+      P('sh-g4', -54, -66, 'gears', 'large', 'salvage-gears'),
+      P('sh-g5', -18, -92, 'gears', 'large', 'salvage-gears'),
+      P('sh-g6', -61, -33, 'gears', 'medium', 'salvage-gears'),
+      P('sh-g7', -33, -71, 'gears', 'medium', 'salvage-gears'),
+      P('sh-g8', -59, -92, 'gears', 'medium', 'salvage-gears'),
+      P('sh-g9', -79, -38, 'gears', 'medium', 'salvage-gears'),
+      P('sh-g10', -79, -74, 'gears', 'small', 'salvage-gears'),
+      P('sh-g11', -58, -50, 'gears', 'small', 'salvage-gears'),
+      P('sh-g12', -18, -77, 'gears', 'small', 'salvage-gears'),
+      P('sh-g13', -18, -61, 'gears', 'small', 'salvage-gears'),
+      P('sh-g14', -39, -56, 'gears', 'small', 'salvage-gears'),
+      P('sh-g15', -60, -79, 'gears', 'small', 'salvage-gears'),
+      P('sh-s1', -45, -43, 'scrap', 'large', 'rubble-pile'),
+      P('sh-s2', -30, -92, 'scrap', 'medium', 'rubble-pile'),
+      P('sh-s3', -44, -79, 'scrap', 'medium', 'crate'),
+      P('sh-s4', -68, -68, 'scrap', 'medium', 'crate'),
+      P('sh-s5', -34, -82, 'scrap', 'small', 'stone-block'),
+      P('sh-s6', -44, -69, 'scrap', 'small', 'crate'),
+      P('sh-s7', -28, -61, 'scrap', 'small', 'stone-block'),
+    ],
     roads: [{ x: -24, z: -96, w: 2, d: 64 }],
   },
 ];
+
+// ───────────── E23.8.1 (#399): region strengths ─────────────
+
+/**
+ * A region's natural strength, as well as its E21 material: the reason to link regions together. A machine that
+ * matches a strength gives that much more output when it stands in the region (see `strengthAt` in
+ * core/RegionStrengths). `shelter` and `water` read as yes/no: greenhouses ignore weather, springs refill for free.
+ */
+export type StrengthKind = 'wind' | 'tide' | 'sun' | 'soil' | 'water' | 'machinery' | 'salvage' | 'shelter' | 'trade';
+
+/** Starting value: about 1.5× output for a matching machine in its strength region. */
+export const STRENGTH_BONUS = 1.5;
+
+export const REGION_STRENGTHS: Record<RegionId, { strengths: Partial<Record<StrengthKind, number>>; text: string }> = {
+  mastRow: { strengths: { wind: STRENGTH_BONUS }, text: 'Wind' },
+  oldMarket: { strengths: { trade: STRENGTH_BONUS }, text: 'Trade: swap materials, buy seeds' },
+  saltwind: { strengths: { wind: 1.75, tide: STRENGTH_BONUS }, text: 'Wind and tide: the strongest wind' },
+  elderGrove: { strengths: { soil: STRENGTH_BONUS }, text: 'Fertile soil: faster crops, more biomass' },
+  cistern: { strengths: { water: STRENGTH_BONUS }, text: 'Water: springs refill for free' },
+  clockPlaza: { strengths: { machinery: STRENGTH_BONUS }, text: 'Machinery' },
+  terraces: { strengths: { sun: STRENGTH_BONUS }, text: 'Sun: more solar on the roofs' },
+  glasshouse: { strengths: { shelter: STRENGTH_BONUS }, text: 'Shelter: greenhouses ignore weather' },
+  observatory: { strengths: { sun: STRENGTH_BONUS, wind: STRENGTH_BONUS }, text: 'Sun and wind' },
+  spireHeights: { strengths: { salvage: STRENGTH_BONUS }, text: 'Scrap and metals: the richest salvage' },
+};
+
+/**
+ * Which machines a strength boosts. Machine ids are the E23 build ids; several belong to sessions still landing
+ * (power, water, farm, crafting), so this is a plain lookup they can extend. A machine not listed has no strength.
+ */
+export const STRENGTH_MACHINES: Record<StrengthKind, string[]> = {
+  wind: ['windTurbine', 'turbineField'],
+  tide: ['tidalPump', 'desalinationPlant'],
+  sun: ['solar', 'largeSolar'],
+  soil: ['planter', 'orchard', 'floodedBed', 'roofGarden', 'beehive'],
+  water: ['pump', 'reservoir', 'largeReservoir', 'gravityFeed', 'spring'],
+  machinery: ['craftingTable', 'assembler', 'motor', 'bioDigester', 'mulcher'],
+  salvage: ['salvage'],
+  shelter: ['greenhouse', 'mushroomLog'],
+  trade: ['trade'],
+};
 
 // ───────────── E21.26: the island ─────────────
 
@@ -483,6 +856,12 @@ export const COAST: Record<'north' | 'south' | 'east' | 'west', { kind: CoastKin
 export const LANDING = {
   /** 3 × 4 tiles: the jetty model at half size, so its planks and rope posts suit bloombot (0.85 m) */
   jetty: { x: 7, z: 45, w: 3, d: 4 } as CellRect,
+  /**
+   * The jetty model's turn about +Y. The model runs 8 m along its +X, with the rope rail across its +X end; −π/2 sends
+   * that end south (+z), out to sea, so the open end meets the beach and its side ropes run along the walkway's edges
+   * (at π/2 it was backwards: the end rail crossed the planks at the beach, where bloombot starts).
+   */
+  jettyYaw: -Math.PI / 2,
   spawn: [8.5, 45.5] as [number, number],
   /** radians, 0 = +z (south): π faces north, up the beach to the park */
   facing: Math.PI,
@@ -507,7 +886,8 @@ export const PARK_SET = {
   /** broad steps down to the beach through the south gate */
   ramps: [{ x: 6, z: 14, w: 4, d: 2, dir: 's', from: 1, to: 0, kind: 'stair' }] as RampDef[],
   pages: [
-    { id: 'p-park-1', x: 1, z: 4 },
+    // E23.9.1: his first note waits at the top of the beach steps, beside the path up (never across the way in)
+    { id: 'p-park-1', x: 4, z: 13 },
     { id: 'p-park-2', x: 14, z: 9 },
   ] as SpotDef[],
 };
@@ -549,12 +929,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { seeds: 8 }, landmark: { copper: 20, scrap: 10 }, reward: 'beacons', rewardText: 'Every landmark beacon shows on the minimap',
     say: {
       asleep: ['A robot slumped against a lamp post. Its visor is dark.'],
-      stirred: ['…bzzt. Power? Is someone there?', 'Five of anything would get my circuits going.'],
-      woke: ['Pylon, signal keeper of Mast Row. You woke me!', 'The mast up the street has been dark for years.'],
-      request1: ['Nothing grows here any more.', 'Bring me 8 Seeds from the park and I will plant the verges.'],
-      request2: ['The old tram stop is where everyone used to meet.', 'Bring it back to life, every tile of it.'],
-      landmark: ['The Signal Mast is ready to sing again.', 'Bring 20 Copper and 10 Scrap to the mast and wake it.'],
-      settled: ['The mast is calling! Every beacon in the city answers now.', 'Look for the lights on your map.'],
+      stirred: ['…bzzt. Signal? Is someone there?', 'Five of anything would get my circuits going.'],
+      woke: ['Pylon, signal keeper of Mast Row! You woke me!'],
+      request1: ["Could you bring me 8 Seeds from the park? Please? I'd like to plant the verges."],
+      request2: ['The old tram stop was the busiest spot on the street.', 'Could you bring it back to life, every tile?'],
+      landmark: ['The Signal Mast is ready to sing.', 'Bring 20 Copper and 10 Scrap to the mast and wake it.'],
+      settled: ['Every landmark beacon answers now. Look for the lights on your map.'],
     },
   },
   {
@@ -562,12 +942,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { timber: 10 }, landmark: { glass: 20, timber: 10 }, reward: 'trade', rewardText: 'Tally trades any 3 of one material for 1 of another',
     say: {
       asleep: ['A robot behind a broken stall, counting nothing.'],
-      stirred: ['Customer? Five of anything and we can talk.'],
-      woke: ['Tally, keeper of the Old Market. Every stall had a lamp once.'],
-      request1: ['The stalls need mending. 10 Timber from the beach, please.'],
-      request2: ['Restore the market square, so people have somewhere to stand.'],
+      stirred: ['A customer? Five of anything and we can talk.'],
+      woke: ['Tally, keeper of the Old Market. Everything here had a price.'],
+      request1: ["The stalls need mending. 10 Timber from the beach, please. I'll put it on your account."],
+      request2: ['Restore the market square, so the stalls have somewhere green to stand.'],
       landmark: ['The Market Hall can open its doors.', 'Bring 20 Glass and 10 Timber to the hall.'],
-      settled: ['Open for business! Bring me 3 of anything and I will give you 1 of what you need.'],
+      settled: ["Bring me 3 of anything, and I'll give you 1 of what you need."],
     },
   },
   {
@@ -576,11 +956,11 @@ export const KEEPERS: KeeperDef[] = [
     say: {
       asleep: ['A robot half buried in the sand, facing the sea.'],
       stirred: ['…the tide? Five of anything, and I will get up.'],
-      woke: ['Tide, keeper of Saltwind Beach. I watch the Sea Lock.'],
-      request1: ['The lock\'s hinges are gone. 10 Copper from Mast Row, please.'],
-      request2: ['Restore the boardwalk so the beach can be walked again.'],
+      woke: ['Tide, keeper of Saltwind Beach. I kept the Sea Lock.'],
+      request1: ["The lock's hinges are gone. 10 Copper from Mast Row, please."],
+      request2: ['Restore the boardwalk, so the beach can be walked again.'],
       landmark: ['The Sea Lock is ready. Bring 20 Timber and 10 Copper.'],
-      settled: ['The lock is open! The canals fill and the bridge to Clock Plaza rises.'],
+      settled: ['The canals fill, and the bridge to Clock Plaza rises.'],
     },
   },
   {
@@ -589,24 +969,24 @@ export const KEEPERS: KeeperDef[] = [
     say: {
       asleep: ['A robot curled up among dead leaves.'],
       stirred: ['Mm. Five of anything, and I will wake properly.'],
-      woke: ['Moss, keeper of Elder Grove. The old tree is still alive, just.'],
-      request1: ['I need cloches for the seedlings. 10 Glass from the market.'],
+      woke: ['Moss, keeper of Elder Grove. Mm. Good morning.'],
+      request1: ['The seedlings need cloches. 10 Glass from the market, if you would.'],
       request2: ['Restore the ring of stumps where the grove began.'],
       landmark: ['Wake the Elder Tree with 20 Seeds and 40 Biomass.'],
-      settled: ['The Elder Tree is awake! Seeds come twice as easily now.'],
+      settled: ['The Elder Tree is awake. Seeds come twice as easily now.'],
     },
   },
   {
     id: 'sluice', name: 'Sluice', region: 'cistern', x: 38, z: 37, tint: '#6a8fb0', prop: 'dry-drain',
-    request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water storage doubled',
+    request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water Condensers fill twice as fast',
     say: {
       asleep: ['A robot on the rim of a dry basin.'],
       stirred: ['Water? No… five of anything, then.'],
-      woke: ['Sluice, keeper of Cistern Basin.'],
-      request1: ['The valves are seized. 12 Gears from Clock Plaza.'],
-      request2: ['Restore the spillway so the water has somewhere to go.'],
+      woke: ['Sluice, keeper of Cistern Basin. Is it raining? It never rains.'],
+      request1: ['The valves are seized. 12 Gears from Clock Plaza, please. Sorry. Please.'],
+      request2: ['Restore the spillway, so the water has somewhere to go.'],
       landmark: ['Wake the Old Cistern with 30 Clay and 15 Copper.'],
-      settled: ['The cistern holds water again! Your tanks hold twice as much.'],
+      settled: ['The cistern holds water again. Your tanks hold twice as much.'],
     },
   },
   {
@@ -614,21 +994,21 @@ export const KEEPERS: KeeperDef[] = [
     request1: { glass: 12 }, landmark: { gears: 30, glass: 15 }, reward: 'helpersFast', rewardText: 'Helpers work 25% faster',
     say: {
       asleep: ['A robot frozen mid-step at the foot of the stair.'],
-      stirred: ['Tick… tick… five of anything, please.'],
-      woke: ['Tock, keeper of Clock Plaza. The clock stopped at twenty past four.'],
+      stirred: ['Tick… tick… five of anything, please. Promptly.'],
+      woke: ["Tock, keeper of Clock Plaza. You're late. The clock stopped at twenty past four."],
       request1: ['The clock face is shattered. 12 Glass, please.'],
       request2: ['Restore the plaza around the tower.'],
       landmark: ['Wake the Clock Tower with 30 Gears and 15 Glass.'],
-      settled: ['The clock runs! Every helper keeps better time now.'],
+      settled: ['Every helper keeps better time now.'],
     },
   },
   {
     id: 'gable', name: 'Gable', region: 'terraces', x: 10, z: -36, tint: '#b07a8a', prop: 'planter-trough',
-    request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Energy storage doubled',
+    request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Batteries hold twice as much',
     say: {
       asleep: ['A robot asleep against a chimney.'],
-      stirred: ['Up here? Five of anything and I will wake.'],
-      woke: ['Gable, keeper of The Terraces.'],
+      stirred: ["Up here? Five of anything and I'll wake."],
+      woke: ['Gable, keeper of The Terraces! Mind the edge.'],
       request1: ['The roof beds need clay. 15 Clay from the basin.'],
       request2: ['Restore the roof garden.'],
       landmark: ['Wake the Rooftop Core with 30 Sunstone and 15 Gears.'],
@@ -640,12 +1020,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { sunstone: 15 }, landmark: { glass: 40, seeds: 40, clay: 20 }, reward: 'heartSeed', rewardText: 'The Heart Seed',
     say: {
       asleep: ['A robot among cracked glass panes.'],
-      stirred: ['Five of anything, and I will see you properly.'],
-      woke: ['Fern, keeper of the Glasshouse Gardens.'],
-      request1: ['The heaters need light. 15 Sunstone from the roofs.'],
+      stirred: ["Oh. Five of anything, and I'll see you properly."],
+      woke: ['Fern, keeper of the Glasshouse Gardens. Hello. Sorry. Hello.'],
+      request1: ['The heaters need light. 15 Sunstone, from the beach or the roofs.'],
       request2: ['Restore the nursery beds.'],
       landmark: ['Wake the Great Greenhouse with 40 Glass, 40 Seeds and 20 Clay.'],
-      settled: ['The greenhouse breathes! Take the Heart Seed to the fountain.'],
+      settled: ['Take the Heart Seed to the fountain.'],
     },
   },
   {
@@ -653,12 +1033,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { glass: 20 }, landmark: { sunstone: 40, copper: 30, gears: 20 }, reward: 'starLens', rewardText: 'The Star Lens; caches show on the map',
     say: {
       asleep: ['A robot staring at the sky, unmoving.'],
-      stirred: ['Five of anything, and I will look down for once.'],
+      stirred: ['Five of anything, and I will look down. For once.'],
       woke: ['Vega, keeper of Observatory Hill.'],
       request1: ['The telescope needs lenses. 20 Glass, please.'],
       request2: ['Restore the hilltop.'],
       landmark: ['Wake the Sky Observatory with 40 Sunstone, 30 Copper and 20 Gears.'],
-      settled: ['I can see everything! Take the Star Lens, and look for the caches on your map.'],
+      settled: ['Take the Star Lens. The caches show on your map now.'],
     },
   },
   {
@@ -671,7 +1051,7 @@ export const KEEPERS: KeeperDef[] = [
       request1: ['The planters on the terraces are bare. 20 Clay from the basin.'],
       request2: ['Restore Spire Square, at the foot of the towers.'],
       landmark: ['Wake the Solar Spire with 40 Glass, 30 Gears and 20 Sunstone.'],
-      settled: ['The Spire is lit! Every lift runs again, right to the top.'],
+      settled: ['Every lift runs again, right to the top.'],
     },
   },
 ];
@@ -686,7 +1066,7 @@ export const BLUEPRINTS: { id: string; name: string; region: RegionId }[] = [
   { id: 'machines3', name: 'Machines, level 3', region: 'elderGrove' },
   { id: 'drones3', name: 'Drones, level 3', region: 'cistern' },
   { id: 'storage3', name: 'Storage, level 3', region: 'clockPlaza' },
-  { id: 'reclaimerMk2', name: 'Reclaimer Mk 2 (12 a minute)', region: 'terraces' },
+  { id: 'salvageLore', name: 'Salvage Lore (piles refill twice as fast)', region: 'terraces' },
   { id: 'packFrame', name: 'Pack Frame (+40 to every stack)', region: 'glasshouse' },
   { id: 'sprintServos', name: 'Sprint Servos (faster sprint)', region: 'observatory' },
   { id: 'longGlide', name: 'Long Glide (glides from a tower top reach twice as far)', region: 'spireHeights' },
@@ -706,31 +1086,8 @@ export const KEEPSAKES: { id: string; name: string; model: string; region: Regio
   { id: 'ks-spire', name: 'Lift dial', model: 'keepsake-lift-dial', region: 'spireHeights' },
 ];
 
-/** The journal: 22 pages, two per region and two in the park, by page id. */
-export const PAGES: Record<string, { title: string; text: string }> = {
-  'p-park-1': { title: 'Orders from the mainland', text: 'The fog came and the island emptied in a week. We are sending one small robot by boat to bring it back to life.' },
-  'p-park-2': { title: 'A child\'s drawing', text: 'Crayon flowers round a fountain, and a little robot watering them. Someone wrote "bloombot" underneath.' },
-  'p-mastRow-1': { title: 'Tram timetable', text: 'Mast Row, every ten minutes, last tram at midnight. The last tram ran at four in the afternoon.' },
-  'p-mastRow-2': { title: 'Engineer\'s log', text: 'The mast carried the city\'s signals. When it went dark, the keepers lost each other one by one.' },
-  'p-oldMarket-1': { title: 'Price board', text: 'Lamps, two coins. Glass jars, one coin. Bring your own bag.' },
-  'p-oldMarket-2': { title: 'A stallholder\'s letter', text: 'We are closing the hall. Tally says it will keep count until we come back.' },
-  'p-saltwind-1': { title: 'Tide table', text: 'High water at the Sea Lock twice a day. The lock kept the canals full.' },
-  'p-saltwind-2': { title: 'A note in a bottle', text: 'If you find this, the sea is still here. It always will be.' },
-  'p-elderGrove-1': { title: 'Planting record', text: 'The Elder Tree was planted when the city was founded. Every seed in the grove came from it.' },
-  'p-elderGrove-2': { title: 'Moss\'s list', text: 'Water the stumps. Talk to the tree. Wait.' },
-  'p-cistern-1': { title: 'Water board notice', text: 'The cistern will be drained for repairs. Repairs were never booked.' },
-  'p-cistern-2': { title: 'Clay works ledger', text: 'Bricks for the whole city came from the basin\'s clay.' },
-  'p-clockPlaza-1': { title: 'Clockmaker\'s card', text: 'The tower clock wants winding every Sunday. Tock does it.' },
-  'p-clockPlaza-2': { title: 'A torn poster', text: 'Concert in the plaza tonight. Bring a lantern.' },
-  'p-terraces-1': { title: 'Roof garden plan', text: 'Beans on the south roofs, herbs on the north. Sunstone in the gutters keeps them warm.' },
-  'p-terraces-2': { title: 'Gable\'s sketch', text: 'The roofs step down the hill like stairs. You can see the sea from every one.' },
-  'p-glasshouse-1': { title: 'Greenhouse label', text: 'The Heart Seed: the first of every plant the city ever grew.' },
-  'p-glasshouse-2': { title: 'Bridge notice', text: 'Bridge closed. Use the ferry. The ferry is also closed.' },
-  'p-observatory-1': { title: 'Star chart', text: 'From the hill the whole city shows, and the sea beyond it.' },
-  'p-observatory-2': { title: 'Vega\'s note', text: 'The Star Lens focuses sunlight. With it the fountain could make the whole city bloom.' },
-  'p-spireHeights-1': { title: 'Lift inspection', text: 'All five towers passed. The Spire\'s crown lift sticks at ten; Atlas knows the trick.' },
-  'p-spireHeights-2': { title: 'A view from the top', text: 'From the Spire you can see the causeway, the bay and on a clear day the mainland.' },
-};
+/** E23.9.1: the journal's pages live in data/journal (book order, by stage); the posts are placed above. */
+export { PAGES } from './journal';
 
 // ───────────── §11 the house ─────────────
 
@@ -803,8 +1160,10 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'causeway-broken': { standIn: 'procedural', what: 'The Long Causeway\'s broken middle' },
   'sea-cliff': { standIn: 'skyline-cliff', what: 'Close-range sea cliffs in the north' },
   // machines
-  reclaimer: { standIn: 'ac-unit', what: 'The Reclaimer (on a seam)' },
   'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
+  // E23.8.3.2: the mainland's steel and its big machines (E23.10.2 makes the real models)
+  'salvage-steel': { standIn: 'procedural', what: 'A heap of steel girders from the industrial ruins' },
+  'grid-battery': { standIn: 'storage-chest', what: 'The Grid Battery: a grid-scale battery bank (2 × 2)' },
   // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
   'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },
   'salvage-driftwood': { standIn: 'barrel', what: 'A Timber (driftwood) pile' },

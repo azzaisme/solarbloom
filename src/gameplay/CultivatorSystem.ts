@@ -9,8 +9,7 @@ const C = () => TUNING.cultivator;
 /**
  * Look 6.8 (#177): the Cultivator, a solar tiller. The one Look 6 transition that takes gameplay time (spike #170):
  * each tiller drives to dead ground near its dock and pushes it through softening (pollution falls at a steady
- * rate) → moss → growing → restored, drawing energy while it works instead of paying pulse costs. It parks when the
- * energy store is below the drones' reserve, so the player's taps always have something left.
+ * rate) → moss → growing → restored, on power from the grid (E23.3.3). Off the grid it parks on its dock.
  *
  * Its tiles use the drones' reservation set (a drone and a tiller never take the same tile), its restores are
  * `cultivator` restores (they can set off chains, like a drone's), and its transitions carry the gameplay flag so
@@ -113,14 +112,6 @@ export class CultivatorSystem {
     this.sim.drones.external.delete(id);
   }
 
-  /** Energy the tillers may draw: never below the drones' reserve share of the store. */
-  private canDraw(amount: number): boolean {
-    const e = this.sim.econ;
-    const cap = e.cap('energy');
-    const floor = cap ? cap.toNumber() * TUNING.drone.reserve : 0;
-    return e.get('energy').toNumber() - amount >= floor;
-  }
-
   tick(dt: number) {
     const docks = this.docks();
     if (!docks.length) return;
@@ -128,7 +119,14 @@ export class CultivatorSystem {
     for (const m of docks) {
       this.ensureUnits(m);
       const sp = this.speed(m);
+      // E23.3.3: off the grid (or shed), the tillers drive home and park on the dock until the power is back.
+      const powered = s.power.isPowered(m);
       for (const u of m.cult!.units) {
+        if (!powered) {
+          u.parked = true;
+          this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
+          continue;
+        }
         // drop tiles something else finished (a pulse, a chain) or that became unreachable
         for (const id of [...u.work]) {
           const t = s.grid.byTileId(id);
@@ -136,6 +134,13 @@ export class CultivatorSystem {
         }
         if (!u.work.length) {
           if ((u.retryAt ?? 0) > s.time) continue;
+          // E23.6.3: short of power or water, a tiller finishes what it was doing, then parks on its dock and waits
+          if (s.droneFuel.short(m, 'cultivator')) {
+            u.retryAt = s.time + 1;
+            u.parked = true;
+            this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
+            continue;
+          }
           const job = this.findJob(m, u);
           if (!job.length) {
             u.retryAt = s.time + 1;
@@ -143,20 +148,19 @@ export class CultivatorSystem {
             this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
             continue;
           }
+          // the job's water and power; should that come up short after all, it doesn't start
+          if (!s.droneFuel.take(m, 'cultivator')) {
+            u.retryAt = s.time + 1;
+            u.parked = true;
+            this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
+            continue;
+          }
           this.claim(u, job);
+          u.parked = false; // paid and on its way: it draws (and its booked power is counted) from now
         }
         const lead = s.grid.byTileId(u.work[0])!;
         if (!this.drive(u, lead.x + 0.5, lead.z + 0.5, sp, dt)) continue;
-        // at the tiles: work them, if the sun allows
-        const draw = C().energyPerSec * u.work.length * dt;
-        const growing = u.work.every((id) => s.grid.byTileId(id)?.ground === 'growing');
-        if (!growing) {
-          if (!this.canDraw(draw)) {
-            u.parked = true;
-            continue;
-          }
-          s.econ.spend({ energy: draw });
-        }
+        // at the tiles: work them (E23.1.4: the dock's power comes from the grid, checked above; no energy counter)
         u.parked = false;
         for (const id of [...u.work]) this.work(m, u, s.grid.byTileId(id)!, sp, dt);
       }
@@ -215,10 +219,10 @@ export class CultivatorSystem {
   private finished(m: MachineData, u: CultivatorUnit, t: TileData) {
     this.release(u, t.id);
     m.cult!.done++;
+    // E23.6.3: the water it tilled with is the job's, drawn by its dock as it set out (DroneFuel.take): nothing more
     if (this.level(m, 'cultSeed') && t.bloom < C().seedBloom) {
       t.bloom = C().seedBloom;
       this.sim.transitions.bloom(t, t.bloom, true);
-      this.sim.production.markDirty();
       this.sim.grid.touch(t);
       this.sim.bus.emit('tile.transition', { tile: t });
     }

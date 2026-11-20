@@ -1,5 +1,6 @@
 import { ACTION, ACTIONS, type Action, type Bindings, type BindResult, GROUPS, keyLabel } from '../app/Bindings';
 import { GLYPH_SETTINGS, type GlyphSetting, keyGlyph, padGlyph, padName, type PadStyle } from './Glyphs';
+import { type BarItem, fillGlyphs, glyph, icon, setBar } from './PanelShell';
 
 /**
  * E22.4 (#341): Settings › Controls. Two columns, keyboard and mouse, and gamepad, with every action listed in
@@ -8,6 +9,9 @@ import { GLYPH_SETTINGS, type GlyphSetting, keyGlyph, padGlyph, padName, type Pa
  * button can't be moved or unbound. Each column has its own "Reset to defaults". It works with the keyboard alone
  * (Tab, arrows, Enter; Esc cancels a wait; Backspace clears a keyboard cell) and the pad alone (the d-pad's focus
  * ring and A; Menu cancels a wait).
+ *
+ * E23.11 (Sunlit Glass): the table sits in the Settings sheet; while it waits, a banner above the action bar says
+ * what to press ("Press a key for Interact…", "Esc cancels"), and the bar names the buttons for that moment.
  */
 export type Kind = 'key' | 'pad';
 
@@ -44,7 +48,7 @@ export class ControlsTable {
   render(focusId?: string) {
     const b = this.host.bindings;
     const style = this.host.padStyle();
-    const list = ACTIONS.filter((a) => !a.classic || !b.oldCity);
+    const list = ACTIONS;
     const cell = (a: (typeof ACTIONS)[number], kind: Kind) => {
       const can = kind === 'key' ? a.keys : a.pad;
       const locked = b.locked(a.id, kind);
@@ -58,19 +62,20 @@ export class ControlsTable {
     };
     const p = this.pending;
     const ask = p
-      ? `<div class="ctl-ask" role="alertdialog" aria-labelledby="ctlAskText"><span id="ctlAskText">${esc(`Swap with ${ACTION[p.other].label}?`)}</span><button id="ctlSwap">Swap</button><button id="ctlCancel">Cancel</button></div>`
+      ? `<div class="ctl-ask" role="alertdialog" aria-labelledby="ctlAskText"><span id="ctlAskText">${esc(`Swap with ${ACTION[p.other].label}?`)}</span><button class="pn-btn primary" id="ctlSwap">Swap</button><button class="pn-btn" id="ctlCancel">Cancel</button></div>`
       : '';
     const gs = this.host.glyphSetting();
+    this.listening(undefined);
     this.body.innerHTML =
-      `<label class="set-row" for="set-glyphs"><span>Button pictures</span><select id="set-glyphs" data-key="glyphs">${GLYPH_SETTINGS.map(([v, l]) => `<option value="${v}" ${v === gs ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` +
-      `<p class="ctl-help">Choose a key or button, then press the new one. Esc (or Menu on the pad) cancels; Backspace clears a key.</p>` +
+      `<div class="ctl-top"><p class="ctl-help">Choose a key or button, then press the new one. Esc (or Menu on the pad) cancels; Backspace clears a key.</p>` +
+      `<label for="set-glyphs">Button pictures<select id="set-glyphs" data-key="glyphs">${GLYPH_SETTINGS.map(([v, l]) => `<option value="${v}" ${v === gs ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>` +
       `<p class="ctl-note" role="status" aria-live="polite">${esc(this.note)}</p>${ask}` +
       `<div class="ctl-table" role="table" aria-label="Controls"><div class="ctl-row ctl-headrow" role="row"><span role="columnheader">Action</span><span role="columnheader">Keyboard and mouse</span><span role="columnheader">Gamepad</span></div>` +
       GROUPS.map((g) => {
         const rows = list.filter((a) => a.group === g.id);
         return `<h3 class="set-h" role="row"><span role="rowheader">${g.label}</span></h3>${rows.map((a) => `<div class="ctl-row" role="row"><span role="rowheader">${esc(a.label)}</span><span role="cell">${cell(a, 'key')}</span><span role="cell">${cell(a, 'pad')}</span></div>`).join('')}`;
       }).join('') +
-      `</div><div class="ctl-resets"><button id="ctlResetKeys">Reset keyboard and mouse to defaults</button><button id="ctlResetPad">Reset gamepad to defaults</button></div>`;
+      `</div><div class="ctl-resets"><button class="pn-btn" id="ctlResetKeys">Reset keyboard and mouse to defaults</button><button class="pn-btn" id="ctlResetPad">Reset gamepad to defaults</button></div>`;
     this.body.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) => btn.addEventListener('click', () => this.choose(btn)));
     this.body.querySelector('#ctlResetKeys')!.addEventListener('click', () => this.reset('keys'));
     this.body.querySelector('#ctlResetPad')!.addEventListener('click', () => this.reset('pad'));
@@ -88,7 +93,8 @@ export class ControlsTable {
       return this.render(btn.id);
     }
     btn.classList.add('listening');
-    btn.innerHTML = `<span class="ctl-wait">${kind === 'key' ? 'Press a key or mouse button' : 'Press a button'}</span>`;
+    btn.innerHTML = `<span class="ctl-wait">${kind === 'key' ? 'Press a key' : 'Press a button'}</span>`;
+    this.listening(action, kind);
     this.host.listen(kind, (input) => {
       if (input === undefined) {
         this.note = '';
@@ -105,6 +111,34 @@ export class ControlsTable {
       if (r.ok) this.host.changed();
       this.render(btn.id);
     });
+  }
+
+  /**
+   * The banner above the action bar while a cell waits for its new input, and the bar for that moment (or, with
+   * no action, the table's own bar: Enter / A changes the cell in focus).
+   */
+  private listening(action: Action | undefined, kind?: Kind) {
+    const sheet = this.body.closest<HTMLElement>('.sheet');
+    const banner = sheet?.querySelector<HTMLElement>('#ctlListen');
+    const foot = sheet?.querySelector<HTMLElement>('.sheet-foot');
+    let items: BarItem[];
+    if (action && kind) {
+      const what = kind === 'key' ? 'a key or mouse button' : 'a button';
+      if (banner) {
+        banner.innerHTML = `${icon('spark')}<span class="grow">Press ${what} for ${esc(ACTION[action].label)}…</span><span>${glyph(kind === 'key' ? 'back' : 'menu')}</span><span>cancels</span>`;
+        banner.hidden = false;
+        fillGlyphs(sheet!);
+      }
+      items = kind === 'key' ? [{ press: 'clear', label: 'Clear this one' }, { press: 'back', label: 'Cancel' }] : [{ press: 'menu', label: 'Cancel' }];
+    } else {
+      if (banner) banner.hidden = true;
+      items = [
+        { press: 'choose', label: 'Change' },
+        { press: 'tabs', label: 'Change tab' },
+        { press: 'back', label: 'Back' },
+      ];
+    }
+    setBar(foot, items);
   }
 
   /** The answer to "Swap with …?". */

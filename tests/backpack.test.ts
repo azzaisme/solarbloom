@@ -3,14 +3,14 @@ import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 import { MATERIAL_IDS } from '../src/data/salvage';
 import { PAGES } from '../src/data/oldcity';
-import { blueprintRows, collection, itemCells, journalPages, pinNext, pinnedRequest, pinRequest, requestRows, TABS } from '../src/ui/BackpackModel';
+import { visibleMaterials, blueprintRows, collection, itemCells, journalPages, pinNext, pinnedRequest, pinRequest, requestRows, TABS } from '../src/ui/BackpackModel';
 import { materialIcon, MATERIAL_ICON_IDS } from '../src/ui/MaterialIcons';
 import { bannedIn } from '../src/ui/words';
 import { SaveService } from '../src/app/SaveService';
 
 /** E22.6 (#343): the backpack screen's contents, from E21's real data. */
 function oldCity() {
-  const sim = new Sim(createInitialState(11, 'oldcity'));
+  const sim = new Sim(createInitialState(11));
   const sv = sim.state.salvage!;
   sv.pack.copper = 32;
   sv.store.copper = 110;
@@ -29,9 +29,9 @@ describe('E22.6: the backpack', () => {
     const copper = itemCells(sim).find((c) => c.id === 'copper')!;
     expect(copper.label).toBe('Copper, 32 of 40 in backpack, 110 in store');
     expect([copper.count, copper.limit, copper.stored]).toEqual([32, 40, 110]);
-    expect(copper.from).toBe('Found in Mast Row');
+    expect(copper.from).toBe('Found in Mast Row and Observatory Hill'); // E23.8: copper piles lie in both
     expect(copper.next).toMatch(/Copper|needs|takes|asks/i);
-    expect(itemCells(sim).map((c) => c.id)).toEqual(MATERIAL_IDS);
+    expect(itemCells(sim).map((c) => c.id)).toEqual(visibleMaterials()); // every material (Steel once the mainland opens)
   });
 
   it('keeps a material not found yet to itself', () => {
@@ -82,7 +82,7 @@ describe('E22.6: the backpack', () => {
     sim.state.salvage!.pages = ['p-mastRow-1'];
     const pages = journalPages(sim);
     expect(pages.length).toBe(Object.keys(PAGES).length);
-    expect(pages.filter((p) => p.found).map((p) => p.title)).toEqual(['Tram timetable']);
+    expect(pages.filter((p) => p.found).map((p) => p.title)).toEqual(['The mast']);
     expect(pages[0]).toMatchObject({ n: 1, found: false, title: 'A missing page' });
   });
 
@@ -99,15 +99,14 @@ describe('E22.6: the backpack', () => {
     sim.state.cat.found = 2;
     const text = JSON.stringify(collection(sim));
     for (const old of ['Lucky Harvest', 'Solar Surge', 'Mega Bloom', 'Drone Party', 'Jackpot', 'Golden Relay', "Cat's Garden", 'Fog Whisker']) expect(text).not.toContain(old);
-    expect(collection(sim).map((g) => g.title)).toEqual(['Lucky Cats', 'Keepsakes', 'Wildlife', 'Landmarks', 'Plots', 'Decorations']);
+    expect(collection(sim).map((g) => g.title)).toEqual(['Lucky Cats', 'Friends', 'Keepsakes', 'Wildlife', 'Visitors', 'Landmarks', 'Plots', 'Decorations']);
     const words = [...collection(sim).flatMap((g) => [g.title, g.count, g.empty, ...g.rows.flatMap((r) => [r.name, r.detail])]), ...itemCells(sim).flatMap((c) => [c.label, c.from, c.next]), ...requestRows(sim).map((r) => r.text)];
     expect(words.filter((w) => bannedIn(w).length)).toEqual([]);
   });
 
-  it('a classic game has no materials or requests to show', () => {
-    const sim = new Sim(createInitialState(3, 'classic'));
-    expect(itemCells(sim)).toEqual([]);
-    expect(requestRows(sim)).toEqual([]);
-    expect(collection(sim).length).toBe(6);
+  it('a keepsake not found yet never hints at a Lucky Cat (they stay hidden)', () => {
+    const sim = oldCity();
+    const keeps = collection(sim).find((g) => g.title === 'Keepsakes')!;
+    for (const r of keeps.rows.filter((r) => !r.found)) expect(`${r.name} ${r.detail}`).not.toMatch(/cat/i);
   });
 });

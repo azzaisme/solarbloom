@@ -1,4 +1,5 @@
 import type { Row, SettingsTab } from './SettingsScreen';
+import { canFullScreen, isFullScreen, setFullScreen } from '../app/FullScreen';
 
 /**
  * E22.11: what each Settings tab holds, shared by the title screen and the in-game menu. `inGame` adds what only
@@ -19,6 +20,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
     case 'game':
       return [
         { kind: 'check', key: 'hints', label: 'Tutorial hints' },
+        { kind: 'check', key: 'realClock', label: 'Follow my clock', hint: c.inGame ? 'The sky and the sun keep your local time; everything grows at the same pace' : 'New gardens offer to follow your local time first' },
         { kind: 'check', key: 'potter', label: 'Potter about', hint: 'No nudges or tips, and gentler chains' },
         { kind: 'check', key: 'showNumbers', label: 'Show details', hint: 'Adds the figures to the energy and water gauges' },
         { kind: 'check', key: 'followChains', label: 'Camera follows big chains' },
@@ -46,7 +48,9 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         },
         { kind: 'check', key: 'lowVfx', label: 'Fewer particles and softer sparkles' },
         { kind: 'check', key: 'lowFog', label: 'Simple fog (faster on small devices)' },
-        { kind: 'check', key: 'fireflies', label: 'Fireflies' },
+        { kind: 'check', key: 'fireflies', label: 'Fireflies at night', defaultOn: true },
+        // in a browser: the page's own full screen keeps Esc for the game (the browser's F11 takes Esc for itself)
+        ...(canFullScreen() ? [{ kind: 'toggle', id: 'fullScreen', label: 'Full screen', hint: 'Esc stays with the game. Hold Esc to leave full screen', get: isFullScreen, set: setFullScreen } as Row] : []),
       ];
     case 'sound':
       return [
@@ -63,6 +67,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         { kind: 'check', key: 'holdToAct', label: 'Hold to act', hint: 'Off: one press salvages or pries', defaultOn: true },
         { kind: 'heading', label: 'Camera' },
         { kind: 'select', key: 'camSensitivity', label: 'Camera speed', options: [['50', 'Slow'], ['75', 'Gentle'], ['100', 'Normal'], ['150', 'Quick'], ['200', 'Fast']], fallback: '100', numeric: true },
+        { kind: 'check', key: 'mouseLook', label: 'Look around with the mouse', hint: 'Press a mouse button over the world to take the mouse; Esc frees it', defaultOn: true },
         { kind: 'check', key: 'invertX', label: 'Invert camera left and right' },
         { kind: 'check', key: 'invertY', label: 'Invert camera up and down' },
         { kind: 'check', key: 'noRecentre', label: 'Keep the view where I turn it' },

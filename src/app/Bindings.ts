@@ -27,6 +27,12 @@ export type Action =
   | 'rotate'
   | 'rotateBack'
   | 'removeMode'
+  | 'waterOverlay'
+  | 'powerOverlay'
+  | 'viewCycle'
+  | 'slotPrev'
+  | 'slotNext'
+  | 'pinSlot'
   | 'slot1'
   | 'slot2'
   | 'slot3'
@@ -38,7 +44,9 @@ export type Action =
   | 'slot9'
   | 'backpack'
   | 'map'
-  | 'harvest'
+  | 'eat'
+  | 'loadNext'
+  | 'loadPrev'
   | 'pinNext'
   | 'cancel'
   | 'menu'
@@ -46,10 +54,7 @@ export type Action =
   | 'prevTab'
   | 'nextTab'
   | 'debug'
-  // Classic rules only (decision 7): old-city rules give these no default (E21 hides them).
-  | 'upgrades'
-  | 'nextArea'
-  | 'home';
+;
 
 export type Context = 'world' | 'build' | 'panel' | 'any';
 /** The rebinding screen's groups (E22.4). */
@@ -70,11 +75,9 @@ export interface ActionDef {
   keys: boolean;
   /** can be put on a pad button (movement and look are the sticks) */
   pad: boolean;
-  /** only under classic rules */
-  classic?: boolean;
 }
 
-const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true, classic = false): ActionDef => ({ id, label, group, context, keys, pad, classic });
+const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true): ActionDef => ({ id, label, group, context, keys, pad });
 
 /** Every action, in the order the rebinding screen lists them. */
 export const ACTIONS: readonly ActionDef[] = [
@@ -89,15 +92,21 @@ export const ACTIONS: readonly ActionDef[] = [
   A('recentre', 'Recentre the camera', 'move', 'world'),
   A('interact', 'Interact', 'act', 'world'),
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
-  A('harvest', 'Harvest Sunlight', 'act', 'world'),
+  A('eat', 'Eat a snack (recharge)', 'act', 'world'),
+  A('loadNext', 'Pulse load: next', 'act', 'world'),
+  A('loadPrev', 'Pulse load: previous', 'act', 'world'),
   A('pinNext', 'Pin the next request', 'act', 'world'),
-  A('nextArea', 'Go to the area that needs you', 'act', 'world', true, true, true),
-  A('home', 'Back to the park', 'act', 'world', true, true, true),
   A('buildMenu', 'Build menu', 'build', 'world'),
   A('place', 'Place (in build mode)', 'build', 'build'),
   A('rotate', 'Turn the piece', 'build', 'build'),
   A('rotateBack', 'Turn the piece back', 'build', 'build'),
   A('removeMode', 'Remove mode', 'build', 'build'),
+  A('waterOverlay', 'Water view (in build mode)', 'build', 'build'),
+  A('powerOverlay', 'Power view (in build mode)', 'build', 'build'),
+  // E23.11: the pad's build dock: d-pad up changes the view, left and right walk the hotbar slots
+  A('viewCycle', 'Change the view', 'build', 'build'),
+  A('slotPrev', 'Previous build slot', 'build', 'build'),
+  A('slotNext', 'Next build slot', 'build', 'build'),
   A('slot1', 'Hotbar slot 1', 'build', 'world'),
   A('slot2', 'Hotbar slot 2', 'build', 'world'),
   A('slot3', 'Hotbar slot 3', 'build', 'world'),
@@ -107,9 +116,10 @@ export const ACTIONS: readonly ActionDef[] = [
   A('slot7', 'Hotbar slot 7', 'build', 'world'),
   A('slot8', 'Hotbar slot 8', 'build', 'world'),
   A('slot9', 'Hotbar slot 9', 'build', 'world'),
+  // E23.11 (#344): in the build menu, pin the piece shown to a hotbar slot
+  A('pinSlot', 'Pin to a hotbar slot', 'build', 'panel'),
   A('backpack', 'Backpack', 'menus', 'world'),
   A('map', 'Map', 'menus', 'world'),
-  A('upgrades', 'Upgrades', 'menus', 'world', true, true, true),
   A('photo', 'Photo mode', 'menus', 'world'),
   A('cancel', 'Back', 'menus', 'any'),
   A('menu', 'Pause and menu', 'menus', 'any'),
@@ -126,11 +136,15 @@ export const FIXED_KEY = 'Escape';
 /** The pad's Menu button always opens the menu (it can't be unbound or moved). */
 export const FIXED_PAD: Partial<Record<Action, number>> = { menu: 9 };
 
-/** Saved bindings carry this version; older ones are reset once, with a notice (decision 6). */
+/**
+ * Saved bindings carry this version; older ones are reset once, with a notice (decision 6). Bump it only when a
+ * saved map can no longer be read: a save holds just what differs from the defaults, so new or moved defaults
+ * reach everyone who never rebound them without a bump (E23.11 kept 2 when the d-pad got its build-mode jobs).
+ */
 export const BINDINGS_VERSION = 2;
 
-/** The keyboard defaults from the epic's table. `oldCity` drops the classic-only keys (decision 7). */
-export function defaultKeys(oldCity = false): Record<Action, string[]> {
+/** The keyboard defaults from the epic's table. */
+export function defaultKeys(): Record<Action, string[]> {
   const k: Record<Action, string[]> = {
     up: ['KeyW', 'ArrowUp'],
     down: ['KeyS', 'ArrowDown'],
@@ -148,6 +162,13 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     rotate: ['KeyR', 'Wheel'],
     rotateBack: [],
     removeMode: ['KeyX'],
+    waterOverlay: ['KeyV'],
+    powerOverlay: ['KeyO'],
+    // E23.11: the pad's d-pad jobs in build mode (keys can be given to them in Settings)
+    viewCycle: [],
+    slotPrev: [],
+    slotNext: [],
+    pinSlot: ['KeyP'],
     slot1: ['Digit1'],
     slot2: ['Digit2'],
     slot3: ['Digit3'],
@@ -159,7 +180,10 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     slot9: ['Digit9'],
     backpack: ['Tab', 'KeyI'],
     map: ['KeyM'],
-    harvest: ['KeyF'],
+    eat: ['KeyF'],
+    // E23.2.2: the pulse load wheel
+    loadNext: ['KeyV'],
+    loadPrev: ['KeyZ'],
     pinNext: ['KeyG'],
     cancel: [FIXED_KEY],
     menu: [FIXED_KEY],
@@ -167,11 +191,7 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     prevTab: ['KeyQ'],
     nextTab: ['KeyE'],
     debug: ['F3'],
-    upgrades: ['KeyU'],
-    nextArea: ['KeyN'],
-    home: ['Home'],
   };
-  if (oldCity) for (const a of ACTIONS) if (a.classic) k[a.id] = [];
   return k;
 }
 
@@ -179,7 +199,7 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
  * Standard gamepad buttons: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 8 View, 9 Menu, 10 LS, 11 RS,
  * 12–15 d-pad up, down, left, right. Movement, looking and the camera's turn are the sticks.
  */
-export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
+export function defaultPad(): Partial<Record<Action, number>> {
   const p: Partial<Record<Action, number>> = {
     sprint: 6,
     sprintToggle: 10,
@@ -192,20 +212,24 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
     rotate: 5,
     rotateBack: 4,
     removeMode: 7,
+    // E23.11: in build mode d-pad up changes the view (off, Power, Water) and left / right walk the hotbar slots;
+    // walking, the same buttons open the backpack, eat and pin the next request. Water and Power views stay V / O.
+    viewCycle: 12,
+    slotPrev: 14,
+    slotNext: 15,
+    pinSlot: 2, // X in the build menu (Y stays the build menu's own toggle: it closes it again)
     backpack: 12,
     map: 8,
-    harvest: 14,
     cancel: 1,
     menu: 9,
     prevTab: 4,
     nextTab: 5,
+    pinNext: 15,
   };
-  if (oldCity) p.pinNext = 15;
-  else {
-    // Classic keeps a pad button for Upgrades. Every button is taken by the new map, so it shares d-pad right with
-    // Pin next request, which only exists under old-city rules.
-    p.upgrades = 15;
-  }
+  p.eat = 14; // E23.2.1: d-pad left eats
+  // E23.2.2: the bumpers turn the load wheel while walking (in build mode they turn the piece)
+  p.loadPrev = 4;
+  p.loadNext = 5;
   return p;
 }
 
@@ -275,17 +299,22 @@ export type BindResult = { ok: true; swapped?: Action } | { ok: false; reason: '
 export class Bindings {
   readonly keys: Record<Action, string[]>;
   readonly pad: Partial<Record<Action, number>>;
-  readonly oldCity: boolean;
-
-  constructor(saved?: SavedBindings, opts: { oldCity?: boolean } = {}) {
-    this.oldCity = !!opts.oldCity;
-    const dk = defaultKeys(this.oldCity);
+  constructor(saved?: SavedBindings) {
+    const dk = defaultKeys();
     this.keys = Object.fromEntries(Object.entries(dk).map(([a, k]) => [a, [...(saved?.keys?.[a as Action] ?? k)]])) as Record<Action, string[]>;
-    this.pad = { ...defaultPad(this.oldCity) };
+    this.pad = { ...defaultPad() };
     for (const [a, b] of Object.entries(saved?.pad ?? {})) {
       if (!ACTIONS.some((x) => x.id === a)) continue; // an action that no longer exists (E23.1.2: Bloom Frenzy)
       if (b === null || b === undefined) delete this.pad[a as Action];
       else this.pad[a as Action] = b;
+    }
+    // E23.11: a default added after a player rebound something never takes that player's input: when a new
+    // default lands on a button or key the save gave to another action (where both apply), the new one starts
+    // unbound instead. No version bump is needed: saves hold only what differs from the defaults.
+    for (const a of ACTIONS) {
+      const b = this.pad[a.id];
+      if (b !== undefined && !(saved?.pad && a.id in saved.pad) && ACTIONS.some((o) => o.id !== a.id && saved?.pad?.[o.id] === b && contextsMeet(a.context, o.context))) delete this.pad[a.id];
+      if (!saved?.keys?.[a.id]) this.keys[a.id] = this.keys[a.id].filter((c) => !ACTIONS.some((o) => o.id !== a.id && saved?.keys?.[o.id]?.includes(c) && contextsMeet(a.context, o.context)));
     }
     // The fixed inputs are always where they belong, whatever a save says.
     this.keys.cancel = [FIXED_KEY];
@@ -295,10 +324,10 @@ export class Bindings {
 
   /** Back to the default map (both columns, or one: `keys` or `pad`). */
   reset(column?: 'keys' | 'pad') {
-    if (column !== 'pad') for (const [a, k] of Object.entries(defaultKeys(this.oldCity))) this.keys[a as Action] = [...k];
+    if (column !== 'pad') for (const [a, k] of Object.entries(defaultKeys())) this.keys[a as Action] = [...k];
     if (column !== 'keys') {
       for (const a of Object.keys(this.pad) as Action[]) delete this.pad[a];
-      Object.assign(this.pad, defaultPad(this.oldCity));
+      Object.assign(this.pad, defaultPad());
     }
   }
 
@@ -395,8 +424,8 @@ export class Bindings {
 
   /** Only what differs from the defaults is saved. */
   save(): SavedBindings {
-    const dk = defaultKeys(this.oldCity);
-    const dp = defaultPad(this.oldCity);
+    const dk = defaultKeys();
+    const dp = defaultPad();
     const keys: Partial<Record<Action, string[]>> = {};
     for (const [a, k] of Object.entries(this.keys)) if (k.join() !== dk[a as Action].join()) keys[a as Action] = [...k];
     const pad: Partial<Record<Action, number | null>> = {};

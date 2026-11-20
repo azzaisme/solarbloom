@@ -4,15 +4,20 @@ import { SLAB_TOP } from '../core/Picking';
 import type { Sim } from '../gameplay/Sim';
 import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
 import { heightAt, levelY } from '../core/Height';
+import { TurnBack } from '../gameplay/TurnBack';
+import { MAINLAND_CLOSED } from '../data/mainland';
+import { GROUND } from '../core/GameState';
 import type { Action, Bindings } from './Bindings';
+import { RESEARCH } from '../data/research';
+import { CHARGE } from '../data/charge';
 
 /**
  * Bloombot (#234): input, movement and the camera follow (G.2, G.3, G.11, G.12). The game owns what an action
  * does; this owns where bloombot is and when it gets there. Docs: docs/BLOOMBOT_EPIC.md.
  *
  * Moving: WASD / arrows or the left stick, relative to where the camera is looking; once the Hover upgrade is
- * bought, Shift or the right trigger hovers (bloombot's sprint: faster, a little off the ground). A click sets
- * a walk target: bloombot paths there and then runs the click's action (`arrive`).
+ * bought, Shift or the right trigger hovers (bloombot's sprint: faster, a little off the ground). The game can
+ * still set a walk target (`goTo`: a wake button, the map's travel): bloombot paths there and runs `arrive`.
  * The camera follows bloombot unless something else moved it (a drag, a fly-to, Home, the overview's travel);
  * it picks bloombot up again as soon as bloombot moves.
  */
@@ -56,12 +61,22 @@ export class BotController {
   onTurn?: (degrees: number) => void;
   /** a gamepad button was pressed (the game resolves it to an action for the context in effect) */
   onPad?: (button: number) => void;
+  /** Island release: bloombot headed into the closed causeway and turns back; the game shows the card (once per approach). */
+  onMainlandClosed?: () => void;
+  /** Island release: the turn back at the closed causeway (gameplay/TurnBack). */
+  readonly turnBack = new TurnBack();
+  /** Third person: aiming a build, bloombot faces the way the camera looks and strafes instead of turning */
+  strafe = false;
   /** E22.1: sprint switched on by the toggle (left stick click); it ends when bloombot stops */
   sprintLatched = false;
   /** a menu that wants pad buttons first (G.7 focus navigation); true when it used the press */
   padCapture?: (button: number) => boolean;
   /** any gamepad button press, by index (the rebinding screen listens here) */
   onButton?: (button: number) => void;
+  /** E23.2.3: sitting (a bench, a charger): drawn here instead of at its pose, and input doesn't move it */
+  seat?: { x: number; y: number; z: number; facing: number };
+  /** E23.2.3: moving while seated stands bloombot up */
+  onSeatMove?: () => void;
   /** true while input must not move bloombot (cinematics, open modal, paused) */
   frozen = () => false;
 
@@ -219,19 +234,42 @@ export class BotController {
         return;
       }
     }
+    if (this.seat && mag > 0.3 && !this.frozen()) this.onSeatMove?.();
+    if (this.seat) {
+      const st = this.seat;
+      this.walk = undefined;
+      this.speed = 0;
+      this.sprinting = false;
+      this.visuals.place(st.x, st.y, st.z, st.facing);
+      this.visuals.setMotion(0, false);
+      this.visuals.update(dt);
+      this.follow(st.x, st.y, st.z);
+      return;
+    }
     const frozen = this.frozen();
     if (mag < 0.01 && !this.walk) this.sprintLatched = false; // a toggled sprint ends when bloombot stops
     // Sprinting is the Hover upgrade: until it is bought the sprint inputs do nothing.
-    const canHover = (this.sim.state.upgrades.hover ?? 0) > 0;
-    this.sprinting = !frozen && canHover && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
+    const canHover = (this.sim.state.upgrades.hover ?? 0) > 0 || !!this.sim.state.salvage?.abilities.includes('hover'); // E23.1.5: the fountain's tier-2 ability
+    // E23.2.1: sprinting costs charge; at zero, a low-power walk (slower, never stranded)
+    const flat = this.sim.charge.empty;
+    this.sprinting = !frozen && canHover && !flat && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
     const p = this.pose;
     const w = this.walker;
     const wade = w.wading(p) ? BOT.wade : 1;
-    const top = (this.sprinting ? BOT.sprint : BOT.walk) * wade;
+    // E23.6.2: "Longer stride" research makes sprinting a little faster
+    const stride = 1 + RESEARCH.sprintSpeedPerLevel * (this.sim.research?.level('sprint') ?? 0);
+    const top = (this.sprinting ? BOT.sprint * stride : BOT.walk * (flat ? CHARGE.lowPowerWalk : 1)) * wade;
     let dirX = 0;
     let dirZ = 0;
     let want = 0;
-    if (!frozen && mag > 0.01) {
+    // island release: turning back from the closed causeway wins over steering for its short moment
+    const back = !frozen && p.roofId === GROUND ? this.turnBack.tick(dt) : undefined;
+    if (back) {
+      this.walk = undefined;
+      dirX = back.x;
+      dirZ = back.z;
+      want = BOT.walk * MAINLAND_CLOSED.turnSpeed;
+    } else if (!frozen && mag > 0.01) {
       this.walk = undefined; // steering takes over from a click-walk
       // Camera-relative: up on the stick/W goes away from the camera.
       const yr = (this.camera.yaw * Math.PI) / 180;
@@ -263,9 +301,16 @@ export class BotController {
       }
     }
     let moved = 0;
+    const yr = (this.camera.yaw * Math.PI) / 180;
+    const strafing = this.strafe && !this.walk && !frozen;
+    if (strafing && want <= 0) {
+      // standing while aiming: turn with the camera
+      const diff = Math.atan2(Math.sin(Math.atan2(-Math.sin(yr), -Math.cos(yr)) - p.facing), Math.cos(Math.atan2(-Math.sin(yr), -Math.cos(yr)) - p.facing));
+      p.facing = Math.atan2(Math.sin(p.facing + diff * Math.min(1, dt * BOT.turn)), Math.cos(p.facing + diff * Math.min(1, dt * BOT.turn)));
+    }
     if (want > 0) {
       moved = w.move(p, dirX * want * dt, dirZ * want * dt);
-      const goal = Math.atan2(dirX, dirZ);
+      const goal = strafing ? Math.atan2(-Math.sin(yr), -Math.cos(yr)) : Math.atan2(dirX, dirZ);
       let diff = goal - p.facing;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       p.facing += diff * Math.min(1, dt * BOT.turn);
@@ -275,12 +320,21 @@ export class BotController {
         if (this.walk.stuckFor > 0.6) this.walk = undefined; // something moved into the way
       }
       if (moved > 0.001) this.following = true;
+      // island release: heading into the closed causeway (keys, pad or a path) turns bloombot back
+      if (!back && p.roofId === GROUND && this.turnBack.bump(p.x, p.z, dirX, dirZ)) this.onMainlandClosed?.();
     }
     this.speed = dt > 0 ? moved / dt : 0;
+    if (this.sprinting && moved > 0.001) {
+      // E23.6.7: sprinting along a laid path costs less (e23-craft's sim.paths, once it lands)
+      const paths = (this.sim as unknown as { paths?: { onPath?(x: number, z: number): boolean; sprintChargeShare?: number } }).paths;
+      const k = paths?.onPath?.(this.pose.x, this.pose.z) ? (paths.sprintChargeShare ?? CHARGE.pathSprintShare) : 1;
+      this.sim.charge.use('sprint', dt * k);
+    }
     // A machine built or a plot turned solid under bloombot: step aside.
     if (!w.fits(p.roofId, p.x, p.z)) w.settle(p);
     const [x, y, z] = this.world();
     this.visuals.place(x, y, z, p.facing);
+    this.visuals.setTired(flat);
     this.visuals.setMotion(this.speed, this.sprinting);
     this.visuals.update(dt);
     this.follow(x, y, z);

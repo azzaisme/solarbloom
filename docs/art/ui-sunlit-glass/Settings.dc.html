@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings, Controls</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="sb.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap">
+<style>
+body{margin:0}
+.crow{display:grid;grid-template-columns:minmax(0,1fr) 170px 170px;align-items:center;gap:12px;padding:8px 4px;border-bottom:1px solid rgba(92,72,30,.14)}
+.kbtn{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;border-radius:12px;background:#f6f0e1;border:1.5px solid transparent;font:800 15px Nunito}
+</style>
+</helmet>
+<div class="screen" style="width: 1280px; height: 800px">
+  <div class="veil"></div>
+  <section class="card sheet" role="dialog" aria-label="Settings">
+    <header class="sheet-head">
+      <div class="badge"><span class="ic i-gear"></span></div>
+      <h2 class="h1" style="margin: 0">Settings</h2>
+      <span class="grow"></span>
+      <button class="btn ghost" style="min-height: 40px"><span class="g wide">Esc</span>Back</button>
+    </header>
+    <div class="sheet-tabs tabs" role="tablist">
+      <span class="g">Q</span>
+      <span class="tab">Game</span>
+      <span class="tab on">Controls</span>
+      <span class="tab">Display</span>
+      <span class="tab">Sound</span>
+      <span class="tab">Accessibility</span>
+      <span class="g">E</span>
+      <span class="grow"></span>
+      <span class="small soft">Button pictures</span>
+      <span class="chip" style="background: #fff; border: 1.5px solid rgba(92,72,30,.3)">Follow my device</span>
+    </div>
+    <div style="flex: 1; min-height: 0; overflow: hidden; padding: 6px 26px 0">
+      <div class="crow label" style="border-bottom-width: 2px"><span>Act</span><span>Keyboard and mouse</span><span>Gamepad</span></div>
+      <div class="crow"><span class="body">Interact</span><span class="kbtn"><span class="g">E</span></span><span class="kbtn"><span class="g pad pa">A</span></span></div>
+      <div class="crow"><span class="body">Pulse</span><span class="kbtn focus"><span class="g mouse"></span><span class="g wide">Space</span></span><span class="kbtn"><span class="g pad px">X</span></span></div>
+      <div class="crow"><span class="body">Eat</span><span class="kbtn"><span class="g">F</span></span><span class="kbtn"><span class="g dpad left"></span></span></div>
+      <div class="crow"><span class="body">Change the pulse load</span><span class="kbtn"><span class="g">Z</span><span class="g">V</span></span><span class="kbtn"><span class="g bumper">LB</span><span class="g bumper">RB</span></span></div>
+      <div class="crow"><span class="body">Hover</span><span class="kbtn"><span class="g wide">Shift</span></span><span class="kbtn"><span class="g bumper">LT</span></span></div>
+      <div class="crow" style="border: 0"><span class="label" style="padding-top: 10px">Build</span><span></span><span></span></div>
+      <div class="crow"><span class="body">Build menu</span><span class="kbtn"><span class="g">Q</span></span><span class="kbtn"><span class="g pad py">Y</span></span></div>
+      <div class="crow"><span class="body">Turn the piece</span><span class="kbtn"><span class="g">R</span></span><span class="kbtn"><span class="g bumper">RB</span></span></div>
+    </div>
+    <div class="row" style="margin: 0 26px 12px; padding: 12px 16px; border-radius: 14px; background: #fdf0cb">
+      <span class="ic i-spark" style="color: #875800"></span><span class="body grow">Press a key for Pulse…</span><span class="small soft">Esc cancels</span>
+    </div>
+    <footer class="sheet-foot acts">
+      <span class="act"><span class="g wide">Enter</span>Change</span>
+      <span class="act"><span class="g wide">Del</span>Reset this one</span>
+      <span class="act"><span class="g wide">Esc</span>Back</span>
+    </footer>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

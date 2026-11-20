@@ -5,25 +5,6 @@ import type { Sim } from '../gameplay/Sim';
 
 const BLOOMS = new Set(['RESTORE', 'GROW', 'LUSH']);
 
-/** Look 5.5: what a chain's combo is made of (the combo-counted event kinds, grouped for the combo panel). */
-export interface ChainBreakdown {
-  restored: number;
-  adjacent: number;
-  synergy: number;
-  relay: number;
-}
-const PART: Partial<Record<string, keyof ChainBreakdown>> = {
-  RESTORE: 'restored',
-  GROW: 'adjacent',
-  LUSH: 'adjacent',
-  PRODUCE_ENERGY: 'synergy',
-  PRODUCE_WATER: 'synergy',
-  DISCHARGE: 'synergy',
-  OVERFLOW: 'synergy',
-  CANOPY_BURST: 'synergy',
-  RELAY: 'relay',
-};
-
 export interface ChainTrack {
   chainId: number;
   /** blooms per area, in the order the wave reached them */
@@ -39,32 +20,18 @@ export interface ChainTrack {
 
 /**
  * City 10.6: readable huge chains. Follows every running chain from its events: blooms per area (for
- * "Canal ×37" summaries and a running total) and a smoothed wave front position. Pure bookkeeping, no
+ * "Canal · 37 blooms" summaries and a running total) and a smoothed wave front position. Pure bookkeeping, no
  * rendering, so it is tested headless.
  */
 export class ChainSummary {
   readonly tracks = new Map<number, ChainTrack>();
-  private parts = new Map<number, ChainBreakdown>();
 
   constructor(private sim: Sim) {
-    sim.bus.on('chain.event', ({ event, combo }) => this.onEvent(event, combo));
-    sim.bus.on('chain.ended', ({ chainId }) => {
-      this.tracks.delete(chainId);
-      this.parts.delete(chainId);
-    });
+    sim.bus.on('chain.event', ({ event }) => this.onEvent(event));
+    sim.bus.on('chain.ended', ({ chainId }) => this.tracks.delete(chainId));
   }
 
-  private onEvent(ev: ChainEvent, combo = 0) {
-    const part = PART[ev.type];
-    let p = this.parts.get(ev.chainId);
-    if (!p && (part || combo > 0)) this.parts.set(ev.chainId, (p = { restored: 0, adjacent: 0, synergy: 0, relay: 0 }));
-    if (p) {
-      if (part) p[part]++;
-      // Pollinated blooms count toward the combo without an event of their own (the POLLINATE arc comes first):
-      // whatever the combo grew by beyond this event is garden synergy.
-      const extra = combo - (p.restored + p.adjacent + p.synergy + p.relay);
-      if (extra > 0) p.synergy += extra;
-    }
+  private onEvent(ev: ChainEvent) {
     if (!BLOOMS.has(ev.type)) return;
     const t = this.sim.grid.byTileId(ev.target);
     if (!t) return;
@@ -83,11 +50,6 @@ export class ChainSummary {
     tr.updatedAt = this.sim.time;
   }
 
-  /** Look 5.5: a running chain's combo by kind (they add up to its combo count). */
-  breakdown(chainId: number): ChainBreakdown | undefined {
-    return this.parts.get(chainId);
-  }
-
   /** The biggest chain running now. */
   biggest(): ChainTrack | undefined {
     let best: ChainTrack | undefined;
@@ -95,13 +57,13 @@ export class ChainSummary {
     return best;
   }
 
-  /** "🛶 Canal ×37" for one area. */
+  /** "🛶 Canal · 37 blooms" for one area. */
   areaLabel(area: string, n: number): string {
-    if (area === PARK) return `🌳 The Park ×${n}`;
+    if (area === PARK) return `🌳 The Park · ${blooms(n)}`;
     const info = this.sim.grid.isPlayable('g') && /^a-?\d+_-?\d+_\d$/.test(area) ? this.sim.areas.info(area) : undefined;
-    if (!info) return `🏙️ ${this.sim.grid.roof(area)?.name ?? area} ×${n}`;
+    if (!info) return `🏙️ ${this.sim.grid.roof(area)?.name ?? area} · ${blooms(n)}`;
     const def = AREA_TYPES[info.type];
-    return `${def.icon} ${def.name} ×${n}`;
+    return `${def.icon} ${def.name} · ${blooms(n)}`;
   }
 
   /**
@@ -149,3 +111,5 @@ export class VfxBudget {
     return true;
   }
 }
+
+const blooms = (n: number) => `${n} bloom${n === 1 ? '' : 's'}`;

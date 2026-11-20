@@ -3,6 +3,7 @@ import { GROUND } from '../core/GameState';
 import { DECOR_OPTION } from '../data/cozy';
 import { LANDING } from '../data/oldcity';
 import { canStep, connected } from '../core/Height';
+import { mainlandClosedAt } from '../core/Mainland';
 import type { Sim } from './Sim';
 
 /**
@@ -56,6 +57,8 @@ export class Walker {
   walkable(roofId: string, cx: number, cz: number): boolean {
     const g = this.sim.grid;
     if (roofId === GROUND) {
+      // island release: the causeway and the mainland wait for a future update (bloombot turns back, see BotController)
+      if (mainlandClosedAt(cx, cz)) return false;
       if (this.sim.areas.fog(this.sim.areas.map.areaOfCell(cx, cz)) === 'hidden') return false;
     } else if (!g.isPlayable(roofId) || !g.inBounds(roofId, cx, cz)) return false;
     const t = g.get(roofId, cx, cz);
@@ -268,20 +271,11 @@ class MinHeap<T> {
   }
 }
 
-/** Where a new game (or a save from before bloombot) puts it: beside the park fountain, facing it. */
+/** Where a new game puts bloombot: the Landing (E21.26). */
 export function spawnPose(sim: Sim, walker: Walker): BotPose {
-  // E21.26: a new Old City game starts at the Landing, the jetty on Saltwind Beach below the park's south steps
-  if (sim.oldCity) {
-    const q: BotPose = { roofId: GROUND, x: LANDING.spawn[0], z: LANDING.spawn[1], facing: LANDING.facing };
-    walker.settle(q);
-    return q;
-  }
-  const p: BotPose = { roofId: GROUND, x: 8, z: 10.5, facing: Math.PI };
-  const fountain = sim.state.machines.find((m) => m.type === 'core' && m.roofId === GROUND && sim.areas.areaOf(m) === 'park');
-  if (fountain) {
-    p.x = fountain.x + fountain.size / 2;
-    p.z = fountain.z + fountain.size + 1.5;
-  }
-  walker.settle(p);
-  return p;
+  // E21.26: a new game starts at the Landing, the jetty on Saltwind Beach below the park's south steps
+  void sim;
+  const q: BotPose = { roofId: GROUND, x: LANDING.spawn[0], z: LANDING.spawn[1], facing: LANDING.facing };
+  walker.settle(q);
+  return q;
 }

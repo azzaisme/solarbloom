@@ -23,7 +23,6 @@ try {
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
   await page.waitForTimeout(1000);
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   const frame = async (x, z, zoom, wait = 2500) => {
     await page.evaluate(
       ([x, z, zoom]) => {
@@ -74,10 +73,10 @@ try {
       t.bloom = (t.x + t.z) % 3 === 0 ? 4 : 3;
       s.grid.touch(t);
     }
-    const D = st.resources.biomass.constructor; // break_infinity Decimal
-    st.caps.energy = new D(1e9);
-    st.caps.water = new D(1e9);
-    for (const k of ['energy', 'water', 'biomass']) st.resources[k] = new D(1e9);
+    // E23.1.4: no counters; machines open at their fountain tier and are paid with their recipe from the backpack
+    st.salvage.tier = Math.max(st.salvage.tier, 4);
+    for (const type of ['solar', 'condenser', 'pollinator'])
+      for (const [k, v] of Object.entries(s.build.recipe(type) ?? {})) st.salvage.pack[k] = Math.max(st.salvage.pack[k] ?? 0, v * 8);
     const placed = [];
     for (const [type, x, z] of [['solar', 4, 3], ['condenser', 5, 3], ['solar', 3, 4], ['pollinator', 10, 11], ['condenser', 11, 12], ['solar', 13, 11], ['pollinator', 3, 13], ['solar', 12, 13], ['condenser', 13, 6], ['solar', 2, 2], ['condenser', 9, 13], ['solar', 6, 13], ['pollinator', 13, 9], ['solar', 10, 4], ['condenser', 14, 3]]) {
       const m = s.build.place(type, 'g', x, z);

@@ -1,89 +1,184 @@
-/* E22.12: the splash, the title screen, the loading screen and the save leaf. Colours come from the tokens in
-   styles.css; the two painted stills are in src/ui/images (1920 × 1080 WebP). */
+/* E22.12, restyled in E23.11 (Sunlit Glass; the boards are docs/art/ui-sunlit-glass/Title, Saves and Confirm): the
+   splash, the title screen, the gardens, the loading screen and the save leaf. Every colour comes from the tokens in
+   styles.css; the two painted stills are in src/ui/images (1920 × 1080 WebP). The are-you-sure dialog has its own
+   stylesheet (confirm.css). Text is 16px or more everywhere. */
 
-/* ───── the logo: the painted mark over the wordmark, cream with a gold edge ───── */
-.sp-logo, .t-logo { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0; font: 700 64px/1 var(--font-display); letter-spacing: .5px; color: var(--text-strong); -webkit-text-stroke: 2px var(--gold-deep); paint-order: stroke fill; text-shadow: 0 3px 0 var(--gold-deep), 0 8px 26px var(--text-shade); }
-.sp-logo .mark, .t-logo .mark { width: 112px; height: 112px; filter: drop-shadow(0 4px 14px var(--text-shade)); }
+/* ───── icons: stroke masks coloured by the text colour (the design's .ic) ───── */
+.t-ic { display: inline-block; width: 22px; height: 22px; flex: none; background: currentColor; -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; }
+.t-ic-leaf { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 19c0-8 6-14 15-14 0 9-6 15-14 15zM5 19l7-7'/%3E%3C/svg%3E"); }
+.t-ic-play { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M8 5.5v13l10.5-6.5z'/%3E%3C/svg%3E"); }
+.t-ic-gear { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1'/%3E%3C/svg%3E"); }
+.t-ic-door { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4.5H6.5v15H14M10.5 12H21M17.5 8.5L21 12l-3.5 3.5'/%3E%3C/svg%3E"); }
+.t-ic-seed { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 20.5c-4 0-6.5-3-6.5-7S9 5.5 12 3.5c3 2 6.5 6 6.5 10s-2.5 7-6.5 7zM12 20.5V11'/%3E%3C/svg%3E"); }
+.t-ic-sprout { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21v-8M12 13c0-4-3-6.5-7.5-6.5 0 4 3 6.5 7.5 6.5zM12 11c0-4 3-6.5 7.5-6.5 0 4-3 6.5-7.5 6.5z'/%3E%3C/svg%3E"); }
+.t-ic-star { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 17l-5.2 2.7 1-5.9-4.3-4.1 5.9-.8z'/%3E%3C/svg%3E"); }
+
+/* ───── the leaf badge: an icon in a leaf-shaped tile (round with one sharp corner) ───── */
+.t-badge { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50% 50% 50% 6px; background: var(--leaf-soft); color: var(--leaf-ink); }
+.t-badge.sun { background: var(--sun-soft); color: var(--sun-ink); }
+.t-badge.big { width: 72px; height: 72px; }
+.t-badge.big .t-ic { width: 28px; height: 28px; }
+.t-badge.logo { width: 104px; height: 104px; background: var(--paper); color: var(--leaf); box-shadow: var(--shadow); }
+.t-badge.logo .t-ic { width: 58px; height: 58px; }
 
 /* ───── splash ───── */
-#splash { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: var(--glass-solid); transition: opacity .3s; }
+#splash { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: var(--paper); transition: opacity .3s; }
 #splash.gone { opacity: 0; pointer-events: none; }
+.sp-logo { display: flex; flex-direction: column; align-items: center; gap: 10px; font: 700 56px/1 var(--font-logo); letter-spacing: .01em; color: var(--ink); }
 #splash .sp-logo { animation: splashIn .7s cubic-bezier(.2, 1.3, .4, 1) both; }
 @keyframes splashIn { from { opacity: 0; transform: scale(.92); } }
 body.reduced #splash .sp-logo { animation: none; }
 
 /* ───── title ───── */
-#title { --title-veil: rgb(255 255 255 / 25%); position: fixed; inset: 0; z-index: 40; overflow: hidden; background: var(--glass-solid); color: var(--text); font-family: var(--font-ui); }
+#title { position: fixed; inset: 0; z-index: 40; overflow: hidden; background: var(--paper-2); color: var(--ink); font-family: var(--font-ui); }
 #title .t-art { position: absolute; inset: -3% -6%; background: url('./images/title-backdrop.webp') center / cover no-repeat; animation: titleTurn 70s ease-in-out infinite alternate; will-change: transform; }
 @keyframes titleTurn { from { transform: translateX(-4%) scale(1.04); } to { transform: translateX(4%) scale(1.09); } }
 #title.still .t-art, body.reduced #title .t-art { animation: none; transform: none; inset: 0; }
-/* the left third: a 25% white veil over the painting, the logo and the menu in its dead centre (owner, 18 Nov 2026) */
-#title .t-side { position: absolute; left: 0; top: 0; bottom: 0; width: 33.333%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5vh; padding: 16px; background: var(--title-veil); }
-#title .t-logo { flex: none; }
-#title .t-main { position: absolute; left: 33.333%; right: 0; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
-.t-press { min-height: 52px; padding: 0 28px; border-radius: 999px; font: 600 22px var(--font-display); background: var(--glass-strong); border: 1px solid var(--edge-strong); color: var(--text-strong); box-shadow: var(--shadow), var(--inner-glow); animation: pressPulse 2.2s ease-in-out infinite; }
-@keyframes pressPulse { 50% { box-shadow: var(--shadow), var(--glow-active); } }
-body.reduced .t-press { animation: none; }
-.t-panel { padding: 14px; border-radius: var(--radius-lg); background: var(--glass-strong); border: 1px solid var(--edge); box-shadow: var(--shadow), var(--inner-glow); max-height: 62vh; overflow-y: auto; }
-.t-menu { display: flex; flex-direction: column; gap: 10px; width: min(300px, 80%); }
-.t-menu button, .t-slots > button, .t-slot button, .t-confirm button { min-height: 46px; padding: 0 18px; border-radius: 14px; font: 600 18px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); }
-.t-menu button:hover, .t-menu button:focus-visible, .t-slot button:hover, .t-slot button:focus-visible, .t-slots > button:hover, .t-confirm button:hover { background: var(--glass-hi-2); border-color: var(--edge-strong); }
-.t-menu button small { display: block; font: 700 14px var(--font-ui); color: var(--text-soft); }
-#tPlay, .t-slot button.primary { background: var(--btn-gold); color: var(--ink-dark); border-color: var(--btn-gold-edge); }
-#tPlay { min-height: 56px; font-size: 22px; }
-#tPlay small { color: var(--ink-dark); }
-.t-slots { width: min(900px, 100%); }
-.t-slots h2 { margin: 2px 4px 10px; font: 600 22px var(--font-display); color: var(--gold); }
-.t-slot-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
-.t-slot { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: var(--radius); background: var(--glass-hi); border: 1px solid var(--edge-soft); }
-.t-slot h3 { margin: 0; font: 600 19px var(--font-display); color: var(--text-strong); }
-.t-slot.empty h3, .t-slot.empty p { color: var(--text-soft); }
-.t-slot ul { list-style: none; margin: 0; padding: 0; font-size: 16px; line-height: 1.5; color: var(--text); flex: 1; }
-.t-slot p { margin: 0; font-size: 16px; }
-.t-tag { margin-left: 6px; padding: 1px 8px; border-radius: 999px; font: 700 13px var(--font-ui); font-style: normal; background: var(--glass-hi-2); border: 1px solid var(--edge); color: var(--gold-hi); vertical-align: 2px; }
-.t-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.t-row button { flex: 1; }
-.t-slot button.danger, .t-confirm #tYes { background: var(--bad-bg); border-color: var(--bad); }
-.t-rename { display: flex; flex-direction: column; gap: 4px; font: 700 16px var(--font-ui); }
-.t-rename input { min-height: 40px; padding: 0 10px; border-radius: 10px; font: 600 17px var(--font-ui); color: var(--text-strong); background: var(--glass-sunk); border: 1px solid var(--edge); }
-.t-confirm { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; width: min(460px, 92vw); padding: 18px; background: var(--glass-solid); }
-.t-confirm p { margin: 0 0 14px; font: 600 19px/1.35 var(--font-display); color: var(--text-strong); }
-#title:has(.t-confirm) .t-side, #title:has(.t-confirm) .t-main { filter: brightness(.6); pointer-events: none; }
-@media (max-width: 900px) { .t-slot-list { grid-template-columns: 1fr; } }
+/* the left third: a frosted pale strip over the painting, the badge, the wordmark and the menu in its middle */
+#title .t-side { position: absolute; left: 0; top: 0; bottom: 0; width: 33.333%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; padding: 32px 16px; background: var(--veil-strip); backdrop-filter: blur(14px) saturate(1.1); -webkit-backdrop-filter: blur(14px) saturate(1.1); border-right: 1px solid var(--white-ring); }
+#title .t-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+#title .t-logo { margin: 0; font: 700 56px/1 var(--font-logo); letter-spacing: .01em; color: var(--ink); }
+#title .t-tagline { margin: 0; font: 700 17px/1.4 var(--font-ui); color: var(--ink); }
+#title .t-note { position: absolute; right: 20px; bottom: 16px; margin: 0; font: 800 16px var(--font-ui); color: var(--on); background: var(--note-bg); padding: 4px 12px; border-radius: 999px; text-shadow: 0 1px 3px var(--text-shade), 0 0 8px var(--text-shade); }
+.t-menu { display: flex; flex-direction: column; gap: 12px; width: min(280px, 100%); }
+.t-press { min-height: 56px; padding: 0 28px; border-radius: 999px; font: 800 20px var(--font-ui); background: var(--paper); border: 1.5px solid var(--line-2); color: var(--ink); box-shadow: var(--shadow); animation: pressPulse 2.2s ease-in-out infinite; }
+@keyframes pressPulse { 50% { box-shadow: var(--shadow), var(--glow-green); } }
+body.reduced .t-press, #title.still .t-press { animation: none; }
+.t-press:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
-/* ───── loading ───── */
-#loading { position: fixed; inset: 0; z-index: 50; overflow: hidden; background: var(--glass-solid); transition: opacity .45s; }
+/* ───── buttons (the design's .btn) ───── */
+.t-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 0 18px; border-radius: var(--r-tile); border: 1.5px solid var(--line-2); background: var(--paper); font: 800 17px var(--font-ui); color: var(--ink); white-space: nowrap; }
+.t-btn:hover { background: var(--leaf-soft); border-color: var(--leaf); }
+.t-btn.primary { background: var(--leaf-btn); border-color: var(--leaf-btn-2); color: var(--on); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .14); }
+.t-btn.primary:hover { background: var(--leaf-btn-2); }
+.t-btn.quiet { background: transparent; border-color: transparent; }
+.t-btn.quiet:hover { background: var(--paper-2); border-color: var(--line-2); }
+.t-btn.clay { color: var(--clay-ink); }
+.t-btn.clay:hover { background: var(--clay-soft); border-color: var(--clay); }
+#title .t-btn:focus-visible, #title .t-act:focus-visible { outline: none; box-shadow: var(--focus-ring); position: relative; z-index: 1; }
+.t-menu .t-btn { min-height: 52px; }
+#tPlay { min-height: 60px; font-size: 20px; }
+
+/* ───── the action bar: glyph + verb ───── */
+.t-acts { display: flex; align-items: center; justify-content: flex-end; gap: 22px; }
+.t-act { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 6px; border-radius: 10px; font: 800 16px var(--font-ui); color: var(--ink); white-space: nowrap; }
+button.t-act:hover { background: var(--glass-hi-2); }
+.t-act svg.glyph { height: 28px; width: auto; }
+
+/* ───── Play: your gardens ───── */
+#title .t-gardens { position: absolute; inset: 0; display: grid; grid-template-rows: auto 1fr auto; gap: 20px; padding: 34px 60px; overflow-y: auto; }
+#title .t-veil { position: fixed; inset: 0; background: rgba(var(--glass-rgb), .38); }
+/* One live blur at a time (stacked backdrop blurs over the drifting painting cost every frame: on a Deck or a weak
+   GPU, and under software GL they stalled the frame for minutes). Behind the gardens the painting itself is blurred
+   and holds still (the veil's frost, drawn once), so the slot cards need no blur of their own; a dialog or Settings
+   on top is the one sheet that blurs live, and the painting and the strip under it hold still. */
+#title[data-view=play] .t-art { filter: blur(10px); animation: none; transform: scale(1.06); }
+#title:has(> .t-confirm, > .cf-veil, > #settings.open) .t-art { animation-play-state: paused; }
+#title:has(> .t-confirm, > .cf-veil, > #settings.open) .t-side { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.t-gardens > :not(.t-veil) { position: relative; }
+.t-head { display: flex; align-items: center; gap: 14px; }
+.t-head h2 { margin: 0; font: 900 26px/1.2 var(--font-ui); letter-spacing: -.01em; color: var(--ink); }
+.t-soft { margin: 0; font: 700 16px/1.4 var(--font-ui); color: var(--ink-2); }
+.t-slot-list { display: flex; justify-content: center; align-items: stretch; align-self: center; gap: 28px; }
+.t-slot { position: relative; flex: 0 1 330px; min-width: 0; min-height: 470px; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--r); background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); }
+.t-slot:focus-within { border-color: var(--leaf); box-shadow: var(--shadow), 0 0 0 3px var(--leaf-hi); }
+.t-slot h3 { margin: 0; font: 900 20px/1.25 var(--font-ui); color: var(--ink); overflow-wrap: anywhere; }
+/* the garden's picture: the painted park, washed out while the fountain is dry and greener with each step */
+.t-pic { background-color: var(--paper-3); background-image: url('./images/title-backdrop.webp'); background-position: center; background-size: cover; background-repeat: no-repeat; }
+.t-pic.p0 { filter: saturate(.45) sepia(.35); }
+.t-pic.p1 { filter: saturate(.6) sepia(.25); }
+.t-pic.p2 { filter: saturate(.75) sepia(.15); }
+.t-pic.p3 { filter: saturate(.9) sepia(.06); }
+.t-slot .t-pic { position: relative; height: 170px; flex: none; }
+.t-tag { position: absolute; left: 12px; top: 12px; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px; background: var(--paper); box-shadow: var(--shadow-sm); font: 800 16px var(--font-ui); color: var(--ink); filter: none; }
+.t-tag .t-ic { width: 18px; height: 18px; color: var(--sun-ink); }
+/* the tag sits on the picture: a filtered parent would wash it out too, so the picture's filter is on a layer */
+.t-slot .t-pic { filter: none; }
+.t-slot .t-pic::before { content: ''; position: absolute; inset: 0; background: inherit; }
+.t-slot .t-pic.p0::before { filter: saturate(.45) sepia(.35); }
+.t-slot .t-pic.p1::before { filter: saturate(.6) sepia(.25); }
+.t-slot .t-pic.p2::before { filter: saturate(.75) sepia(.15); }
+.t-slot .t-pic.p3::before { filter: saturate(.9) sepia(.06); }
+.t-info { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; }
+.t-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font: 700 16px/1.3 var(--font-ui); color: var(--ink-2); }
+.t-facts dt { margin: 0; }
+.t-facts dd { margin: 0; font-weight: 900; color: var(--ink); }
+.t-btns { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.t-row { display: flex; gap: 8px; }
+.t-btns .t-row .t-btn { flex: 1 1 auto; padding: 0 10px; font-size: 16px; }
+.t-slot.empty { align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; border: 2.5px dashed var(--line-2); background: rgba(var(--glass-rgb), .72); box-shadow: none; }
+.t-slot.empty .t-soft { max-width: 240px; }
+.t-slot.empty .t-btn { min-width: 140px; }
+.t-slot.old .t-soft { color: var(--ink-2); }
+.t-rename { display: flex; flex-direction: column; gap: 6px; font: 800 16px var(--font-ui); color: var(--ink-2); }
+.t-rename input { flex: 1; min-width: 0; min-height: 48px; padding: 0 12px; border-radius: 12px; font: 800 17px var(--font-ui); color: var(--ink); background: var(--paper); border: 1.5px solid var(--line-2); -webkit-user-select: text; user-select: text; }
+.t-rename input:focus-visible { outline: none; border-color: var(--leaf-ink); box-shadow: var(--focus-ring); }
+.t-rename .t-btn { padding: 0 12px; font-size: 16px; }
+.t-gardens-foot { padding-top: 4px; }
+
+/* ───── a plain question (rename, how the days go): the dialog card, with no destructive choice ───── */
+#title .t-scrim { position: absolute; inset: 0; z-index: 4; background: var(--scrim); }
+.t-confirm { position: absolute; left: 50%; top: 50%; z-index: 5; transform: translate(-50%, -50%); width: min(520px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 26px 30px 0; border-radius: 24px; background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); text-align: center; }
+.t-ask h2 { margin: 0; font: 900 24px/1.25 var(--font-ui); color: var(--ink); }
+.t-ask .t-detail { margin: 10px 0 0; font: 700 16px/1.45 var(--font-ui); color: var(--ink-2); }
+.t-ask-btns { display: flex; flex-direction: column; gap: 10px; }
+.t-ask-btns .t-btn { min-height: 52px; }
+/* the day-clock question: two equal answers (neither a warning), the first focused */
+.t-confirm.t-choice #tYes, .t-confirm.t-choice #tAlt { min-height: 54px; }
+.t-confirm .t-acts { margin: 6px -30px 0; padding: 12px 22px; border-top: 1px solid var(--line); background: var(--paper-2); }
+
+@media (max-width: 1100px) { #title .t-gardens { padding: 24px 24px; } .t-slot-list { gap: 16px; } }
+@media (max-width: 900px) { .t-slot-list { flex-direction: column; align-items: center; } .t-slot { flex: none; width: min(420px, 100%); min-height: 0; } }
+
+/* high contrast: solid paper, ink edges */
+body.contrast #title .t-side { background: var(--paper); backdrop-filter: none; -webkit-backdrop-filter: none; border-right: 2px solid var(--ink); }
+body.contrast #title .t-veil { background: rgba(var(--glass-rgb), .9); }
+body.contrast .t-slot, body.contrast .t-confirm { background: var(--paper); border: 2px solid var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
+body.contrast .t-slot.empty { border: 2.5px dashed var(--ink); }
+body.contrast .t-btn { border-color: var(--ink-2); }
+body.contrast .t-btn.quiet { border-color: var(--line-2); }
+body.contrast #title .t-note { background: var(--ink); color: var(--paper); padding: 4px 10px; border-radius: 8px; text-shadow: none; }
+
+/* ───── loading: the painted city, bloombot walking on the spot over a paper card with the leaf bar and a tip ───── */
+#loading { position: fixed; inset: 0; z-index: 50; overflow: hidden; background: var(--paper-2); font-family: var(--font-ui); transition: opacity .45s; }
 #loading.gone { opacity: 0; pointer-events: none; }
 #loading[hidden] { display: none; }
 #loading .ld-art { position: absolute; inset: 0; background: url('./images/loading-still.webp') center / cover no-repeat; }
-#loading .ld-foot { position: absolute; left: 50%; bottom: 4.5vh; transform: translateX(-50%); width: min(640px, 86vw); text-align: center; }
-#loading .ld-bar { height: 14px; border-radius: 999px; background: var(--glass-strong); border: 1px solid var(--edge-strong); box-shadow: var(--shadow-sm); overflow: hidden; }
-#loading .ld-bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--btn-gold); transition: width .25s; }
-#loading .ld-line, #loading .ld-tip { margin: 8px 0 0; color: var(--text-strong); text-shadow: 0 1px 3px var(--glass-solid), 0 0 12px var(--glass-solid); }
-#loading .ld-line { font: 600 18px var(--font-display); }
-#loading .ld-tip { font: 700 17px var(--font-ui); }
-#loading .ld-bot { position: absolute; left: 50%; bottom: calc(4.5vh + 96px); transform: translateX(-50%); width: 120px; height: 150px; filter: drop-shadow(0 4px 10px var(--text-shade)); }
+#loading .ld-foot { position: absolute; left: 50%; bottom: 4.5vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; padding: 16px 22px 18px; border-radius: var(--r); background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); text-align: left; }
+#loading .ld-head { display: flex; align-items: center; gap: 12px; }
+#loading .ld-head .t-badge { width: 36px; height: 36px; }
+#loading .ld-head .t-ic { width: 20px; height: 20px; }
+#loading .ld-bar { position: relative; height: 14px; border-radius: 999px; background: var(--paper-3); overflow: hidden; box-shadow: inset 0 1px 2px rgba(70, 50, 10, .15); }
+#loading .ld-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--leaf), var(--leaf-hi)); transition: width .25s; }
+#loading .ld-line, #loading .ld-tip { margin: 0; }
+#loading .ld-line { font: 900 18px/1.3 var(--font-ui); color: var(--ink); }
+#loading .ld-tip { font: 700 16px/1.45 var(--font-ui); color: var(--ink-2); }
+#loading .ld-tip b { font-weight: 900; color: var(--sun-ink); margin-right: 6px; }
+#loading .ld-bot { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); width: 120px; height: 150px; filter: drop-shadow(0 4px 10px var(--shade)); }
+body.reduced #loading .ld-bar i, #loading.still .ld-bar i { transition: none; }
 /* Bloombot walks on the spot: the legs and arms swing about their tops, the body bobs. */
-.ld-bot .lb-shell { fill: var(--text); stroke: var(--gold-deep); stroke-width: 1.2; }
-.ld-bot .lb-gold { fill: var(--gold); }
-.ld-bot .lb-gold-line { fill: none; stroke: var(--gold); stroke-width: 3; }
+.ld-bot .lb-shell { fill: var(--paper); stroke: var(--sun-edge); stroke-width: 1.2; }
+.ld-bot .lb-gold { fill: var(--sun); }
+.ld-bot .lb-gold-line { fill: none; stroke: var(--sun); stroke-width: 3; }
 .ld-bot .lb-dark { fill: var(--bot-joint); }
 .ld-bot .lb-visor { fill: var(--glyph-ink-dark); }
-.ld-bot .lb-eye { fill: none; stroke: var(--cyan-hi); stroke-width: 3.2; stroke-linecap: round; }
-.ld-bot .lb-ear { fill: var(--cyan-hi); }
-.ld-bot .lb-leaf { fill: var(--leaf); stroke: var(--ink-green); stroke-width: 1; }
+.ld-bot .lb-eye { fill: none; stroke: var(--mm-water-hi); stroke-width: 3.2; stroke-linecap: round; }
+.ld-bot .lb-ear { fill: var(--mm-water-hi); }
+.ld-bot .lb-leaf { fill: var(--leaf); stroke: var(--leaf-ink); stroke-width: 1; }
 .ld-bot .lb-vein { fill: none; stroke: var(--leaf-hi); stroke-width: 1.4; }
 .ld-bot .lb-antenna { stroke: var(--bot-joint); stroke-width: 3; stroke-linecap: round; }
-.ld-bot .lb-bulb { fill: var(--energy); }
-.ld-bot .lb-pack { fill: var(--gold-deep); }
+.ld-bot .lb-bulb { fill: var(--sun); }
+.ld-bot .lb-pack { fill: var(--sun-edge); }
 .ld-bot .lb-roll { fill: var(--leaf); }
-.ld-bot .lb-shadow { fill: var(--text-shade); }
+.ld-bot .lb-shadow { fill: var(--shade); }
 .ld-bot .lb-leg, .ld-bot .lb-arm { transform-box: fill-box; transform-origin: 50% 0; animation: botSwing .7s ease-in-out infinite alternate; }
 .ld-bot .lb-leg-b, .ld-bot .lb-arm-f { animation-direction: alternate-reverse; }
 .ld-bot .lb-bob { animation: botBob .35s ease-in-out infinite alternate; }
 @keyframes botSwing { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
 @keyframes botBob { to { transform: translateY(-3px); } }
 #loading.still .lb-leg, #loading.still .lb-arm, #loading.still .lb-bob, body.reduced .ld-bot * { animation: none; }
+body.contrast #loading .ld-foot { background: var(--paper); border: 2px solid var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
+body.contrast #loading .ld-bar { outline: 1.5px solid var(--ink-2); }
 /* Nothing of the 3D world shows until the loading screen fades. */
 body.loading-on #hud { visibility: hidden; }
 
@@ -91,10 +186,3 @@ body.loading-on #hud { visibility: hidden; }
 #saveLeaf { position: absolute; top: calc(18px + var(--safe-t)); right: calc(284px + var(--safe-r)); width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--glass); border: 1px solid var(--edge-soft); opacity: 0; transform: scale(.8); transition: opacity .25s, transform .25s; pointer-events: none; }
 #saveLeaf.on { opacity: 1; transform: none; }
 #saveLeaf .icon { width: 18px; height: 18px; }
-
-/* the title menu sits on the pale veil, not in a panel: its buttons carry their own dark glass so they read */
-#title .t-menu button:not(#tPlay) { background: var(--glass-strong); border-color: var(--edge); box-shadow: var(--shadow); }
-#title .t-menu button:not(#tPlay):hover, #title .t-menu button:not(#tPlay):focus-visible { background: var(--glass-solid); border-color: var(--edge-strong); }
-/* a saved slot's four actions: two by two, each on one line */
-.t-slot:not(.empty) .t-row { display: grid; grid-template-columns: 1fr 1fr; }
-.t-slot button { white-space: nowrap; font-size: 16px; padding: 0 10px; }

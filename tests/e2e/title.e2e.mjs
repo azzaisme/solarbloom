@@ -114,6 +114,14 @@ try {
     if (dev === 'keys') await page.screenshot({ path: `${dir}/ui-title-slots.png` });
     await go(page, dev);
 
+    // ── E23.7.1 (#446): a new garden asks how its days go; take the game's own day (the first answer, focused) ──
+    await page.waitForSelector('#tYes');
+    check(/How should the days go\?/.test(await page.evaluate(() => document.querySelector('#tConfirmText').textContent)), T('a new garden asks how the days go'));
+    check(await page.evaluate(() => document.activeElement?.id === 'tYes' && /own day/.test(document.querySelector('#tYes').textContent) && /Follow my clock/.test(document.querySelector('#tAlt').textContent)), T("the game's own day is focused first, Follow my clock beside it"));
+    if (dev === 'keys') await page.screenshot({ path: `${dir}/ui-title-clock.png` });
+    check(await moveTo(page, '#tYes', dev), T("reach The game's own day"));
+    await go(page, dev);
+
     // ── the loading screen covers everything until the first view is complete ──
     await page.waitForSelector('#loading:not(.gone):not([hidden])');
     const seen = new Set();
@@ -134,10 +142,13 @@ try {
       const g = window.solarbloom;
       g.pause.clear('blur');
       const s = g.loadSteps();
-      return { s, pending: g.chunks.pending, loaded: g.chunks.loadedCount, device: g.bot.lastInput };
+      // E23.2.6 / #561: third person fades in once the ground round bloombot (two chunks out) is drawn, then the rest
+      // of the opening view (at most 8 s more), as loadSteps waits for
+      return { s, pending: g.chunks.pendingNear(g.camera.target, 32), far: g.chunks.pending, loaded: g.chunks.loadedCount, device: g.bot.lastInput };
     });
-    check(ready.s.models === 1 && ready.s.view === 1 && ready.pending === 0 && ready.loaded > 0, T(`the game faded in with its first view complete (${ready.loaded} chunks, ${ready.pending} pending)`));
+    check(ready.s.models === 1 && ready.s.view === 1 && ready.pending === 0 && ready.loaded > 0, T(`the game faded in with the ground round bloombot complete (${ready.loaded} chunks, ${ready.pending} near and ${ready.far} in all still to draw)`));
     check(ready.device === (dev === 'pad' ? 'pad' : 'keys'), T(`the title's first input picked the glyph set (${ready.device})`));
+    check(await page.evaluate(() => window.solarbloom.sim.clock.real === false), T("the new garden runs on the game's own day"));
 
     // ── nothing pops in during the 5 s after the fade: two frames of the paused world match ──
     await page.waitForTimeout(600); // the fade itself
@@ -167,7 +178,7 @@ try {
       await page.waitForTimeout(1500);
       await page.keyboard.up('KeyW');
     }
-    const before = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, rules: window.solarbloom.sim.state.rules }));
+    const before = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time }));
     if (dev === 'pad') await pressPad(page, 9);
     else await page.keyboard.press('Escape');
     await page.waitForSelector('#menu.open');
@@ -179,7 +190,7 @@ try {
     else await page.keyboard.press('Space');
     await page.waitForSelector('#tPlay');
     const head = await page.evaluate(() => JSON.parse(localStorage.getItem('solarbloom.save.1.head')));
-    check(head && head.name === 'Garden 1' && head.rules === 'oldcity' && head.played >= 0 && !!head.region && !!head.step, T(`slot 1 has its header (${JSON.stringify(head)})`));
+    check(head && head.name === 'Garden 1' && head.version >= 8 && !head.rules && head.played >= 0 && !!head.region && !!head.step, T(`slot 1 has its header (${JSON.stringify(head)})`));
 
     // ── Load game: the slot's card; rename and delete ask first (keyboard run) ──
     if (dev === 'keys') {
@@ -211,10 +222,11 @@ try {
     check(await moveTo(page, '#tLoad1', dev), T('reach Load on slot 1'));
     await go(page, dev);
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
-    const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, rules: window.solarbloom.sim.state.rules }));
-    check(after.seed === before.seed && after.time >= before.time && after.rules === before.rules, T(`Load brings back the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
+    const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time }));
+    check(after.seed === before.seed && after.time >= before.time, T(`Load brings back the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
 
-    // ── delete asks first, then the slot is empty (keyboard run, from a fresh title) ──
+    // ── E23.11: delete opens the are-you-sure dialog: "Keep my garden" first, the delete only on a one-second hold
+    //    (keyboard run, from a fresh title) ──
     if (dev === 'keys') {
       await page.goto(`${URL_}?title=1`);
       await page.waitForSelector('#tPress');
@@ -223,15 +235,66 @@ try {
       await moveTo(page, '#tPlay', dev);
       await go(page, dev);
       await page.waitForSelector('#tDelete1');
+      const saved = () => page.evaluate(() => !!localStorage.getItem('solarbloom.save.1'));
+      const dialog = () => page.evaluate(() => { const d = document.querySelector('[role=alertdialog]'); return d ? { title: d.querySelector('h2').textContent, focus: document.activeElement?.className ?? '' } : undefined; });
       await moveTo(page, '#tDelete1', dev);
       await go(page, dev);
-      await page.waitForSelector('#tYes');
-      check(/Delete Saltwind\? This can't be undone\./.test(await page.evaluate(() => document.querySelector('#tConfirmText').textContent)), T('deleting asks first'));
-      await moveTo(page, '#tYes', dev);
+      await page.waitForSelector('[role=alertdialog]');
+      const d = await dialog();
+      check(d?.title === 'Delete Saltwind?' && /cf-keep/.test(d.focus), T(`deleting asks first, with Keep my garden focused (${JSON.stringify(d)})`));
+      await page.screenshot({ path: `${dir}/ui-title-confirm.png` });
+      await page.keyboard.press('Enter'); // a quick Enter keeps the garden
+      await page.waitForSelector('[role=alertdialog]', { state: 'detached' });
+      check((await saved()) && (await page.evaluate(() => document.activeElement?.id)) === 'tDelete1', T('a quick Enter keeps the garden and goes back to Delete'));
       await go(page, dev);
+      await page.waitForSelector('[role=alertdialog]');
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('[role=alertdialog]', { state: 'detached' });
+      check((await saved()) && !!(await page.$('#tLoad1')), T('Esc backs out of the dialog, the garden kept'));
+      await go(page, dev);
+      await page.waitForSelector('[role=alertdialog]');
+      check(await moveTo(page, '.cf-go', dev), T('reach Hold to delete'));
+      await page.keyboard.down('Enter');
+      await page.waitForTimeout(350);
+      await page.keyboard.up('Enter');
+      await page.waitForTimeout(200);
+      check((await saved()) && !!(await page.$('[role=alertdialog]')), T('letting go early does nothing'));
+      await page.keyboard.down('Enter');
+      await page.waitForTimeout(1400);
+      await page.keyboard.up('Enter');
       await page.waitForFunction(() => !localStorage.getItem('solarbloom.save.1') && !localStorage.getItem('solarbloom.save.1.head'));
       await page.waitForSelector('#tStart1');
-      check(await page.evaluate(() => !document.querySelector('#tLoad1')), T('the slot is deleted and is empty again'));
+      check(await page.evaluate(() => !document.querySelector('#tLoad1') && !document.querySelector('[role=alertdialog]')), T('a one-second hold deletes it, and the slot is empty again'));
+    }
+
+    // ── E23.11: Start over on the pad: A on the dialog keeps; holding A on Hold to start over asks how the days go ──
+    if (dev === 'pad') {
+      await page.goto(`${URL_}?title=1`);
+      await page.waitForSelector('#tPress');
+      await pressPad(page, 0);
+      await page.waitForSelector('#tPlay');
+      await moveTo(page, '#tPlay', dev);
+      await go(page, dev);
+      await page.waitForSelector('#tStart1');
+      check(await page.evaluate(() => document.activeElement?.id === 'tLoad1' && !!document.querySelector('.t-slot.latest #tLoad1')), T('the gardens open on Carry on of the last-played garden'));
+      await moveTo(page, '#tStart1', dev);
+      await go(page, dev);
+      await page.waitForSelector('[role=alertdialog]');
+      check(/^Start .+ over\?$/.test(await page.evaluate(() => document.querySelector('[role=alertdialog] h2').textContent)), T('Start over asks first'));
+      await pressPad(page, 0); // A on Keep my garden
+      await page.waitForSelector('[role=alertdialog]', { state: 'detached' });
+      check(await page.evaluate(() => !!localStorage.getItem('solarbloom.save.1') && document.activeElement?.id === 'tStart1'), T('a quick A keeps the garden'));
+      await go(page, dev);
+      await page.waitForSelector('[role=alertdialog]');
+      check(await moveTo(page, '.cf-go', dev), T('reach Hold to start over with the d-pad'));
+      await page.evaluate(() => { window.__pad.buttons[0].pressed = true; window.__pad.buttons[0].value = 1; });
+      await page.waitForTimeout(1400);
+      await page.evaluate(() => { window.__pad.buttons[0].pressed = false; window.__pad.buttons[0].value = 0; });
+      await page.waitForSelector('#tConfirmText');
+      check(/How should the days go\?/.test(await page.evaluate(() => document.querySelector('#tConfirmText').textContent)), T('holding A starts the garden over: it asks how the days go'));
+      await pressPad(page, 1); // B: back out before anything is cleared
+      await page.waitForSelector('#tConfirmText', { state: 'detached' });
+      check(await page.evaluate(() => !!localStorage.getItem('solarbloom.save.1')), T('B backs out of the question, the garden still there'));
     }
     check(!errors.length, T(`no page errors ${errors.join(' | ')}`));
     await page.close();

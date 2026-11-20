@@ -12,19 +12,17 @@ const region = (id: string) => REGIONS.find((r) => r.id === id)!;
 
 /** An Old City just past tier 1: the park cleared, the ring-1 regions revealed behind their barricades. */
 function tier1(seed = 7) {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.state.salvage!.tier = 1;
   sim.areas.clear(PARK, true);
   return sim;
 }
 
 describe('E21.5: gates', () => {
-  it('revealed regions are sealed with no price anywhere; buying is refused', () => {
+  it('revealed regions are sealed, and their seal says what is in the way (nothing is bought)', () => {
     const sim = tier1();
     expect(sim.areas.sealed('mastRow')).toBe(true);
-    expect(sim.state.areas.mastRow.price).toBeUndefined();
-    expect(sim.areas.unlockProblem('mastRow')).toMatch(/Pry/);
-    expect(sim.areas.unlock('mastRow')).toBe(false);
+    expect(sim.areas.sealText('mastRow')).toMatch(/Pry/);
     expect(sim.areas.sealed('saltwind')).toBe(false); // the beach is open from the start
   });
 

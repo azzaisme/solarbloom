@@ -21,7 +21,7 @@ export function drawRoadOverview(ctx: CanvasRenderingContext2D, plan: RoadPlan, 
   const map = plan.map;
   const ids = new Set<string>();
   // Areas: a tint by type and a line on their borders.
-  const tint: Record<string, string> = { park: 'rgb(196,226,170)', grove: 'rgb(176,204,146)', street: 'rgb(220,215,203)', plaza: 'rgb(234,222,196)', market: 'rgb(234,206,170)', canal: 'rgb(190,215,230)', reservoir: 'rgb(210,196,168)', rooftops: 'rgb(204,198,220)' };
+  const tint: Record<string, string> = { park: 'rgb(196,226,170)', grove: 'rgb(176,204,146)', street: 'rgb(220,215,203)', plaza: 'rgb(234,222,196)', market: 'rgb(234,206,170)', reservoir: 'rgb(210,196,168)', rooftops: 'rgb(204,198,220)' };
   for (let c = -N; c <= N; c++)
     for (let r = -N; r <= N; r++) {
       const id = map.areaOfChunk(cx + r, cz + c);

@@ -27,7 +27,7 @@ try {
     for (let i = 0; i < steps; i++) {
       if (i % 30 === 0) {
         const want = order[next];
-        if (want && s.build.isUnlocked(want) && s.econ.canAfford(s.build.cost(want))) {
+        if (want && s.build.isUnlocked(want) && s.inventory.canPay(s.build.recipe(want) ?? {})) {
           const spot = s.areas.tiles('park').find((t) => s.build.check(want, 'g', t.x, t.z).ok);
           if (spot && s.build.place(want, 'g', spot.x, spot.z)) next++;
         }
@@ -39,9 +39,6 @@ try {
           if (id === 'park') s.progression.activateCore();
           else s.areas.clear(id);
         } else if (sug.action.kind === 'build') s.build.place(sug.action.type, 'g', sug.action.x, sug.action.z);
-        else if (sug.action.kind === 'harvest') s.harvestSun();
-        const up = s.upgrades.all().find((u) => s.upgrades.status(u).ok);
-        if (up) s.upgrades.purchase(up.id);
         if (s.state.cat.active) s.cat.claim();
       }
       s.tick();

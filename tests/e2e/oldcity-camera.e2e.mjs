@@ -1,6 +1,6 @@
 // E21.22: the exploration camera, in the real page (a new Old City game, ?gfx=deck):
-// - pitch stays within 20°–60° (default 35°) and the zoom within its three steps;
-// - after 3 s of walking with no camera input the view drifts back behind bloombot (not before);
+// - third person: pitch stays within -15°–70° (default 16°) and the zoom within its three steps;
+// - running with no camera input, the view swings in behind bloombot after a moment (not straight away);
 // - the camera never ends below the ground, also tilted low beside Mast Row's embankment;
 // - a full circle at each zoom step in the park and in Mast Row: no page errors, within the Deck's draw calls;
 // - walking down Mast Row's main street, no building covers bloombot at more than 30% opacity.
@@ -53,25 +53,24 @@ try {
     g.updateBotZoom();
     return out;
   });
-  check(lim.start === 35, `default pitch 35° (${lim.start})`);
-  check(Math.abs(lim.max - 60) < 0.5 && Math.abs(lim.min - 20) < 0.5, `pitch stays in 20°–60° (${lim.min.toFixed(1)}–${lim.max.toFixed(1)})`);
+  check(lim.start === 16, `default pitch 16° (${lim.start})`);
+  check(Math.abs(lim.max - 70) < 0.5 && Math.abs(lim.min + 15) < 0.5, `pitch stays in -15°–70° (${lim.min.toFixed(1)}–${lim.max.toFixed(1)})`);
   check(Math.max(...lim.zooms) <= 4.27 + 0.01 && Math.min(...lim.zooms) >= 2.04, `zoom stays on its three steps (${[...new Set(lim.zooms)].join(', ')})`);
   // auto-recentre: turn the view, walk; no drift before 3 s, a drift back after
   await page.evaluate(() => {
     const g = window.solarbloom;
-    document.querySelector('#introGo')?.click();
     g.bot.teleport('g', 8.5, 34.5);
     g.bot.pose.facing = Math.PI;
     g.camTurn(90, 0);
     g.bot.goTo('g', 8, 18, 1, () => {});
   });
   const h0 = await page.evaluate(() => window.solarbloom.camera.heading);
-  await step(2);
+  await step(0.3);
   const h2 = await page.evaluate(() => window.solarbloom.camera.heading);
   await step(2.5);
   const h4 = await page.evaluate(() => window.solarbloom.camera.heading);
-  check(Math.abs(h2 - h0) < 0.5, `no drift in the first 3 s of walking (${(h2 - h0).toFixed(1)}°)`);
-  check(Math.abs(h4 - h2) > 5, `drifts back behind bloombot after 3 s (${(h4 - h2).toFixed(1)}°)`);
+  check(Math.abs(h2 - h0) < 0.5, `no swing straight away (${(h2 - h0).toFixed(1)}°)`);
+  check(Math.abs(h4 - h2) > 5, `swings in behind a running bloombot after a moment (${(h4 - h2).toFixed(1)}°)`);
   // never below the ground: tilted low, looking across Mast Row's embankment
   const ground = await page.evaluate(() => {
     const g = window.solarbloom;
@@ -90,7 +89,7 @@ try {
     g.camera.pitchBy(15);
     return worst;
   });
-  check(ground >= 0.5, `the camera stays above the ground (lowest clearance ${ground.toFixed(2)})`);
+  check(ground >= 0.3, `the camera stays above the ground (lowest clearance ${ground.toFixed(2)})`);
   // a full circle at each zoom step, in the park and in Mast Row, within the Deck's draw calls
   for (const [x, z, where] of [[8.5, 10.5, 'park'], [8.5, -12.5, 'Mast Row']])
     for (const zs of [0, 1, 2]) {

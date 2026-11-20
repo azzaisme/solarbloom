@@ -2,13 +2,19 @@
  * Bloombot (G.7): gamepad navigation for the HUD's panels. While a panel is open and the pad is in use, the
  * d-pad moves a visible focus ring between its buttons and controls (spatially: the nearest one in that
  * direction), A presses the focused one, and B is left to Cancel (which closes the panel). With no panel open
- * the d-pad keeps its game actions (E22.1: the hotbar is for the keyboard; the pad builds from the build menu).
+ * the d-pad keeps its game actions (E23.11: in build mode d-pad left and right walk the build dock's slots).
  */
-const PANELS = ['#settings.open', '#bpScreen.open', '#menu.open', '#ocPanel.open', '#intro:not([hidden])', '#catPanel:not([hidden])', '#upgrades.open', '#plotPicker.open', '#buildTray.open', '#inspect.open'] as const;
+const PANELS = ['#settings.open', '#bpScreen.open', '#craftScreen.open', '#crateScreen.open', '#menu.open', '#ocPanel.open', '#catPanel:not([hidden])', '#plotPicker.open', '#buildMenu.open', '#inspect.open'] as const;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]';
 const DIRS: Partial<Record<number, [number, number]>> = { 12: [0, -1], 13: [0, 1], 14: [-1, 0], 15: [1, 0] };
 
 export class PadFocus {
+  /**
+   * E23.11: a modal dialog over every panel (the are-you-sure, Confirm.ts) takes each pad press while it is open;
+   * the panel under it, and the game, get none of them.
+   */
+  static modal?: { pad(i: number): boolean };
+
   constructor(
     private root: HTMLElement,
     private panels: readonly string[] = PANELS,
@@ -20,8 +26,7 @@ export class PadFocus {
       const el = this.root.querySelector<HTMLElement>(sel);
       if (el && el.offsetParent !== null) return el;
     }
-    const bar = this.root.querySelector<HTMLElement>('#hotbar');
-    return bar && bar.contains(document.activeElement) ? bar : undefined;
+    return undefined;
   }
 
   private items(panel: HTMLElement): HTMLElement[] {
@@ -29,10 +34,10 @@ export class PadFocus {
   }
 
   /**
-   * Handles a pad button. True when the panel used it (the game should not also act on it). D-pad down with
-   * nothing open focuses the hotbar.
+   * Handles a pad button. True when the panel used it (the game should not also act on it).
    */
   button(i: number): boolean {
+    if (PadFocus.modal) return PadFocus.modal.pad(i);
     const panel = this.panel();
     if (!panel) return false;
     const items = this.items(panel);
@@ -47,7 +52,7 @@ export class PadFocus {
       if (next) {
         next.focus({ focusVisible: true } as FocusOptions);
         next.scrollIntoView({ block: 'nearest' });
-      } else if (panel.id === 'hotbar' && dir[1] < 0) (document.activeElement as HTMLElement).blur();
+      }
       return true;
     }
     if (i === 0 && cur) {
@@ -56,10 +61,6 @@ export class PadFocus {
         cur.stepUp();
         cur.dispatchEvent(new Event('input', { bubbles: true }));
       } else cur.click();
-      return true;
-    }
-    if (i === 1 && panel.id === 'hotbar') {
-      (document.activeElement as HTMLElement).blur();
       return true;
     }
     return false;

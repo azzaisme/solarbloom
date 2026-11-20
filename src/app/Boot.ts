@@ -1,4 +1,5 @@
 import { Bindings, migrateBindings } from './Bindings';
+import { MAINLAND } from '../data/mainland';
 import { desktopApi, Game } from './Game';
 import { SaveService, type Slot, SLOT_COUNT } from './SaveService';
 import { parseSettings, SETTINGS_KEY } from './Settings';
@@ -51,12 +52,15 @@ const done = (s: LoadSteps) => s.models >= 1 && s.world >= 1 && s.view >= 1 && s
 
 export async function boot(canvas: HTMLCanvasElement) {
   const q = new URLSearchParams(location.search);
+  // island release: the mainland is closed (a future update). ?mainland=1 opens it for development only: in the dev
+  // server, or a build made with VITE_MAINLAND_QUERY=1 (the mainland e2e and perf scripts); never for players.
+  if (q.get('mainland') === '1' && (import.meta.env.DEV || import.meta.env.VITE_MAINLAND_QUERY === '1')) MAINLAND.open = true;
   const settings = loadSettings();
   applyTitleLook(settings);
   installIconDefs();
   let title: Title | undefined;
 
-  const start = async (slot: Slot, fresh: boolean, device: 'keys' | 'pad') => {
+  const start = async (slot: Slot, fresh: boolean, device: 'keys' | 'pad', realClock = false) => {
     const loading = new Loading(!!settings.reducedMotion);
     loading.show();
     title?.destroy();
@@ -67,7 +71,7 @@ export async function boot(canvas: HTMLCanvasElement) {
     loading.progress({ models: 0, world: 0, view: 0, shaders: 0 });
     await frame(); // the loading screen is on screen before the world is built
     await frame();
-    const game = new Game(canvas, lr, { slot, device });
+    const game = new Game(canvas, lr, { slot, device, realClock: fresh && realClock });
     (window as unknown as { solarbloom: Game }).solarbloom = game;
     // Debug tools (Phase 4 E00.5) exist only on the dev server; production builds drop this branch.
     if (import.meta.env.DEV) void import('./DevTools').then((m) => m.installDevTools(game));
@@ -80,10 +84,11 @@ export async function boot(canvas: HTMLCanvasElement) {
       await frame();
     }
     await loading.done(500);
+    game.shown();
   };
 
   const slotQ = Number(q.get('slot'));
-  if (slotQ >= 1 && slotQ <= SLOT_COUNT) return start(slotQ as Slot, q.has('new'), 'keys');
+  if (slotQ >= 1 && slotQ <= SLOT_COUNT) return start(slotQ as Slot, q.has('new'), 'keys', q.get('clock') === 'real');
 
   // ───── the title, with the same Settings screen as the game ─────
   const store = new SaveService();
@@ -98,18 +103,21 @@ export async function boot(canvas: HTMLCanvasElement) {
   const padStyle = (): PadStyle => (settings.glyphs === 'ps' || settings.glyphs === 'deck' || settings.glyphs === 'xbox' ? settings.glyphs : desktopApi()?.deck ? 'deck' : 'xbox');
   title = new Title({
     slots: () => store.slots(),
-    start: (slot, fresh, device) => void start(slot, fresh, device),
+    start: (slot, fresh, device, realClock) => void start(slot, fresh, device, realClock),
     rename: (slot, name) => void new SaveService(undefined, slot).rename(name),
     remove: (slot) => new SaveService(undefined, slot).deleteSlot(),
     quit: desktopApi()?.quit,
     reducedMotion: !!settings.reducedMotion,
+    earlierVersion: (slot) => new SaveService(undefined, slot).fromEarlierVersion(),
+    preferRealClock: () => !!settings.realClock,
+    padStyle,
     settingsOpen: () => !!screen?.isOpen,
     closeSettings: () => screen?.close(),
     settingsTab: (dir) => screen?.tab(dir, true),
     settings: (parent, back) => {
       onBack = back;
       const mig = migrateBindings(settings.keys || settings.pad ? { v: settings.bindingsV, keys: settings.keys, pad: settings.pad } : undefined);
-      const bindings = new Bindings(mig.saved, { oldCity: true });
+      const bindings = new Bindings(mig.saved);
       screen ??= new SettingsScreen(parent, {
         settings,
         set: (k, v) => {

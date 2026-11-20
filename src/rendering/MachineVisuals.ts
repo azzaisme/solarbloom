@@ -4,9 +4,13 @@ import { GROUND } from '../core/GameState';
 import { CHUNK } from '../core/Hash';
 import { chunkKey } from '../core/Grid';
 import type { Sim } from '../gameplay/Sim';
+import { inSurge } from '../gameplay/PowerEnv';
 import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape, vshape, type ShapeOpts } from './Shapes';
 import { TUNING } from '../data/tuning';
+import { POWER } from '../data/power';
+import { holoMaterial } from './Hologram';
+import { POLE_ARM } from './PowerLines';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
 import { foliageMaterial, FoliageBuilder, treeMesh } from './Foliage';
@@ -15,7 +19,12 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
+import { batBoxBody, beehiveBody, birdBoxBody, butterflyGardenBody, compostBinBody, digesterBody, fishPondBody, hedgehogHouseBody, mushroomLogBody, orchardBody, wormBinBody } from './FarmBodies';
+import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
+
+/** The views that turn machines into holograms (one colour each). */
+export type HoloView = 'power' | 'water';
 
 interface MachineView {
   /** E21.6: how full the Old City fountain may get (a trickle at tier 1) */
@@ -32,6 +41,8 @@ interface MachineView {
   coreBase?: pc.StandardMaterial;
   rings?: pc.Entity[];
   orbs?: pc.Entity[];
+  /** E23.6.5: the Assembler's moving parts (its press head and gear), kept out of the batch */
+  arm?: { head: pc.Entity; gear: pc.Entity; screen: pc.Entity };
   canopy?: pc.Entity;
   /** Mother Tree: the tree itself (the park's own tree geometry, swaying and see-through like every other tree) */
   tree?: pc.Entity;
@@ -58,6 +69,12 @@ interface MachineView {
   /** Phase 5 E16: really working right now (refreshed twice a second), and when its next active wisp is due */
   running?: boolean;
   wispAt?: number;
+  /** E23.3.2.3: a relay's power-pole crossarm (kept when the hand-built model replaces the procedural body) */
+  poleArm?: pc.Entity;
+  /** E23.3.2: a wind turbine's rotor angle (degrees), turned by its output */
+  turn?: number;
+  /** E23.3: the status light's own material (it goes dark while the machine has no power, or a pole is tripped) */
+  lightOn?: pc.Material;
   /** Look 3.12 Core gazebo: the vines on its arch (dry while dormant), their leaf material, and the flowers */
   vines?: pc.Entity;
   vineMat?: pc.StandardMaterial;
@@ -80,9 +97,25 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   droneHub: ['drone-hub', 1.0],
   reservoirGarden: ['reservoir-basin', 0.55],
   relay: ['bloom-relay', 0.72],
-  // E21: the Storage Chest and the Reclaimer (data/oldcity MODEL_NAMES; a stand-in until the files land)
+  // E21: the Storage Chest (data/oldcity MODEL_NAMES; a stand-in until the files land)
   chest: ['storage-chest', 1.0],
-  reclaimer: ['reclaimer', 1.0],
+  // E23.5.2: the planter box (its crop is drawn by CropVisuals)
+  planter: ['planter-bed', 0.9],
+  // E23.6.4: the supply crate is the old city's crate (the Assembler is built from parts below until its own model)
+  crate: ['crate', 0.85],
+  // E23.8.3.2: the Grid Battery is drawn (gridBattery below) until E23.10.2's grid-battery model lands; its only
+  // stand-in was the Storage Chest, which read as a chest. Add ['grid-battery', 2.0] here with the file.
+  // E23.5.3: E23.10's hand-built bin (1 m cube, scaled to its tile) and digester; the procedural bodies stand in
+  // until their files are in assets/raw/models/final (MODELS loads whatever is there)
+  compostBin: ['compost-bin', 0.82],
+  bioDigester: ['bio-digester', 0.8],
+  // E23.5.4: E23.10's models, used once their files are in assets/raw/models/final (today they wait in pending/, so
+  // the procedural bodies draw them)
+  beehive: ['beehive', 0.8],
+  mushroomLog: ['mushroom-log', 0.8],
+  birdBox: ['bird-box', 0.9],
+  batBox: ['bat-box', 0.9],
+  hedgehogHouse: ['hedgehog-house', 0.8],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };
@@ -104,6 +137,14 @@ const LANDMARK_MODELS: Record<string, [string, number]> = {
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });
 const orbOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
+/** E23.4.2: a pump's lamp, running and idle. */
+const pumpOn = () => mat(PALETTE.water, { emissive: PALETTE.waterGlow, emissiveIntensity: 1.4 });
+const pumpOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
+/** E23.4.2.1: a reservoir tank's heights: its floor, its rim, and its gauge's span. */
+const TANK = { floor: 0.14, top: 0.72, gauge0: 0.16, gauge1: 0.66 };
+/** E23.3.2: a battery's charge cells (lit mint when full, dark glass when empty). */
+const cellOn = () => mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.3 });
+const cellOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
 // matte enough to read navy while tilted toward the sun (glossy, it mirrored the sky and read white)
 const panelMat = () => mat(PALETTE.panel, { gloss: 0.45, metal: 0 });
 // boosted: the cells keep their blue with a warm glow (at 0.6 the gold washed them out to near white inside the cream frame)
@@ -122,6 +163,8 @@ const vent = () => mat(PALETTE.darkFace, { gloss: 0.5 });
 const cable = () => mat(PALETTE.grille, { gloss: 0.4 });
 const gridLine = () => mat(PALETTE.panelGrid, { metal: 0.4, gloss: 0.7 });
 const glassMat = () => mat(PALETTE.glass, { opacity: 0.3, gloss: 0.95 });
+/** E23.3.2.3: a pole insulator's glaze (a pale celadon, like old ceramic insulators) */
+const glazeMat = () => mat(PALETTE.water, { gloss: 0.9 });
 const waterGlow = () => mat(PALETTE.water, { emissive: PALETTE.waterGlow, emissiveIntensity: 1.2, gloss: 0.9 });
 const leafMat = (i = 0) => mat([PALETTE.shrub[1], PALETTE.leafFin, PALETTE.shrub[0]][i % 3], { gloss: 0.3 });
 /** Unit stem / rod (diameter 1, height 1, centred): scale it like the 'cylinder' primitive. */
@@ -320,6 +363,96 @@ export class MachineVisuals {
   static readonly BATCH_REGION = 64;
   private batchGroups = new Map<string, number>();
 
+  // ───── E23.3.4 / E23.4.5 the Power and Water views: machines become holograms ─────
+  /** one channel per view: its shared hologram material, each part shown with it (and the material it had) */
+  private holos: Record<HoloView, { mat?: pc.StandardMaterial; parts: Map<pc.MeshInstance, pc.Material>; sig: string; in: number }> = {
+    power: { parts: new Map(), sig: '', in: 0 },
+    water: { parts: new Map(), sig: '', in: 0 },
+  };
+  private holoBoost = 1;
+
+  /** Keeps the holograms as bright while a view's dim lowers the exposure (DayNight.boost). */
+  setHoloBoost(b: number): void {
+    if (Math.abs(b - this.holoBoost) < 0.01) return;
+    this.holoBoost = b;
+    for (const ch of Object.values(this.holos)) {
+      if (!ch.mat) continue;
+      ch.mat.emissiveIntensity = POWER.view.holo.glow * b;
+      ch.mat.update();
+    }
+  }
+
+  /**
+   * The Power view: the given machines (powered electrical ones) become holograms in pure yellow (the build
+   * preview's hologram look, Hologram.ts; the owner's call). Every part's material is swapped for one shared
+   * hologram material, so batches still merge; only regions that changed are re-batched. Pass undefined to put every
+   * material back. Cheap to call every frame: it re-checks 4× a second, so parts rebuilt meanwhile (an upgrade, a
+   * model arriving) pick it up.
+   */
+  powerHolo(ids: Set<string> | undefined, dt: number): void {
+    this.holoView('power', ids, dt);
+  }
+
+  /** E23.4.5 the Water view: the given machines (water that runs or is held) become blue holograms, as `powerHolo`. */
+  waterHolo(ids: Set<string> | undefined, dt: number): void {
+    this.holoView('water', ids, dt);
+  }
+
+  /** A view's one hologram material (made on first use), for other parts to wear (the Water view's pipes). */
+  holoMat(view: HoloView): pc.StandardMaterial {
+    const ch = this.holos[view];
+    const V = POWER.view.holo; // one hologram look for both views (the owner's numbers)
+    const hex = view === 'power' ? PALETTE.signal.power.machineHolo : PALETTE.signal.water.machineHolo;
+    return (ch.mat ??= holoMaterial(hex, V.opacity, V.glow * this.holoBoost, false));
+  }
+
+  private holoView(view: HoloView, ids: Set<string> | undefined, dt: number): void {
+    const ch = this.holos[view];
+    const dirty = new Set<number>();
+    const mark = (mi: pc.MeshInstance) => {
+      const g = (mi.node as pc.Entity | null)?.render?.batchGroupId;
+      if (g !== undefined && g >= 0) dirty.add(g);
+    };
+    if (!ids) {
+      if (!ch.parts.size) return;
+      for (const [mi, orig] of ch.parts) {
+        if (mi.material === ch.mat) mi.material = orig; // unless something swapped it since
+        mark(mi);
+      }
+      ch.parts.clear();
+      ch.sig = '';
+    } else {
+      const sig = [...ids].sort().join(',');
+      ch.in -= dt;
+      if (sig === ch.sig && ch.in > 0) return;
+      ch.sig = sig;
+      ch.in = 0.25;
+      const hm = this.holoMat(view);
+      const want = new Set<pc.MeshInstance>();
+      for (const v of this.views.values()) {
+        if (!ids.has(v.m.id)) continue;
+        for (const r of v.root.findComponents('render') as pc.RenderComponent[]) {
+          for (const mi of r.meshInstances) {
+            const cur = mi.material;
+            if (!cur) continue;
+            want.add(mi);
+            if (cur === hm) continue;
+            ch.parts.set(mi, cur);
+            mi.material = hm;
+            mark(mi);
+          }
+        }
+      }
+      for (const [mi, orig] of ch.parts) {
+        if (want.has(mi)) continue;
+        if (mi.material === ch.mat) mi.material = orig;
+        ch.parts.delete(mi);
+        mark(mi);
+      }
+    }
+    if (this.batcher) for (const g of dirty) this.batcher.markGroupDirty(g);
+  }
+
   private batchGroupFor(m: MachineData): number | undefined {
     if (!this.batcher || m.roofId !== GROUND) return undefined;
     const R = MachineVisuals.BATCH_REGION;
@@ -340,7 +473,7 @@ export class MachineVisuals {
     const id = this.batchGroupFor(v.m);
     if (id === undefined) return;
     v.batched = true;
-    const skip = new Set<pc.Entity>([...(v.panel ?? []), ...(v.orbs ?? []), ...(v.light ? [v.light] : [])]);
+    const skip = new Set<pc.Entity>([...(v.panel ?? []), ...(v.orbs ?? []), ...(v.light ? [v.light] : []), ...(v.arm ? [v.arm.head, v.arm.gear, v.arm.screen] : [])]);
     const walk = (e: pc.Entity) => {
       if (skip.has(e) || !e.enabled) return; // Look 3.19: procedural parts hidden under a model stay out
       if (e.render && e.render.batchGroupId !== id) e.render.batchGroupId = id;
@@ -555,6 +688,64 @@ export class MachineVisuals {
         break;
       case 'cultivator': // Look 6.9: the dock (its tillers are drawn by CultivatorVisuals)
         cultivatorDock(v.body);
+        break;
+      case 'compostBin': // E23.5.3 (its heap is drawn by CropVisuals)
+        compostBinBody(v.body);
+        break;
+      case 'bioDigester': // E23.5.3 (its glow is drawn by CropVisuals)
+        digesterBody(v.body);
+        break;
+      // E23.5.4 (what is ready, and the creatures, are drawn by CropVisuals)
+      case 'beehive':
+        beehiveBody(v.body);
+        break;
+      case 'fishPond':
+        fishPondBody(v.body);
+        break;
+      case 'orchard':
+        orchardBody(v.body);
+        break;
+      case 'mushroomLog':
+        mushroomLogBody(v.body);
+        break;
+      case 'wormBin':
+        wormBinBody(v.body);
+        break;
+      case 'birdBox':
+        birdBoxBody(v.body);
+        break;
+      case 'batBox':
+        batBoxBody(v.body);
+        break;
+      case 'hedgehogHouse':
+        hedgehogHouseBody(v.body);
+        break;
+      case 'butterflyGarden':
+        butterflyGardenBody(v.body);
+        break;
+      case 'reservoir': // E23.4.2.1
+        this.waterTank(v);
+        break;
+      case 'pump': // E23.4.2.2
+        this.pump(v);
+        break;
+      case 'desalination': // E23.4.3
+        this.desalination(v);
+        break;
+      case 'battery':
+        this.battery(v);
+        break;
+      case 'gridBattery':
+        this.gridBattery(v);
+        break;
+      case 'windTurbine':
+        this.windTurbine(v);
+        break;
+      case 'charger':
+        this.charger(v);
+        break;
+      case 'assembler':
+        this.assembler(v);
         break;
     }
     this.applyModel(v);
@@ -1136,7 +1327,7 @@ export class MachineVisuals {
       v.model = e;
       return;
     }
-    const keep = new Set<pc.Entity>([v.extras]);
+    const keep = new Set<pc.Entity>([v.extras, ...(v.poleArm ? [v.poleArm] : [])]);
     if (v.water) {
       keep.add(v.water);
       if (v.water.parent !== v.body) v.water.reparent(v.body);
@@ -1483,10 +1674,288 @@ export class MachineVisuals {
     part(b, latheAuto('relayDish', [[0, 1.02], [0.06, 1.04], [0.14, 1.12], [0.16, 1.17], [0.16, 1.17], [0.13, 1.15], [0.05, 1.1], [0, 1.09]], 14), cream(), { shadow: true });
     part(b, ring(18, 4, 0.12), metal(), { pos: [0, 1.17, 0], scale: [0.33, 0.06, 0.33] });
     v.light = part(b, ball(5, 8), mat(PALETTE.relayGlow, { emissive: PALETTE.relayGlow, emissiveIntensity: 1.6 }), { pos: [0, 1.28, 0], scale: 0.1 });
+    this.poleArm(v);
     for (let i = 0; i < 3; i++) {
       const a = i * 2.1;
       v.bob.push(part(b, ball(4, 6), mat(PALETTE.flower[i % PALETTE.flower.length]), { pos: [Math.cos(a) * 0.22, 0.16, Math.sin(a) * 0.22], scale: [0.08, 0.05, 0.08] }));
     }
+  }
+
+  /**
+   * E23.4.2.1 Reservoir: a round cream tank on a stone footing filling its 2×2 plot, with a gold rim and a dark
+   * inner wall. Its water (a gently turning glowing disc) sits as high as its level; a glass gauge up its side fills
+   * blue to match, and a ladder climbs to the rim. Empty, it shows its dry floor.
+   */
+  private waterTank(v: MachineView) {
+    const b = v.body;
+    part(b, rcyl(0.92, 0, 0.1, 0.03, 0.01, 28), creamSeam(), { shadow: true });
+    // an open cup: up the outside, over the lip, down the inside to the floor (so the water inside shows)
+    const cup: [number, number][] = [[0.84, 0.1], [0.84, TANK.top], [0.81, TANK.top + 0.045], [0.78, TANK.top], [0.78, TANK.floor], [0, TANK.floor]];
+    part(b, latheAuto('waterTankCup', cup, 28), cream(), { shadow: true });
+    part(b, rcyl(0.77, TANK.floor, TANK.floor + 0.004, 0, 0, 28), darkMetal(), {}); // the damp floor, seen when it runs dry
+    // (ring() lies flat with an outer diameter of 1: scale is the diameter)
+    part(b, ring(28, 6, 0.025), gold(), { pos: [0, TANK.top + 0.04, 0], scale: 1.7 });
+    for (const y of [0.32, 0.56]) part(b, ring(28, 4, 0.012), creamSeam(), { pos: [0, y, 0], scale: [1.71, 1.2, 1.71] });
+    v.water = part(b, rcyl(0.76, -0.015, 0.015, 0.005, 0.005, 28), waterGlow(), { pos: [0, TANK.floor, 0] });
+    // the gauge: a glass tube with a blue column, on the side facing the camera (+x +z)
+    const gauge = group(b, 'gauge');
+    gauge.setLocalEulerAngles(0, 45, 0);
+    const side = group(gauge, 'side', [0, 0, 0.86]);
+    part(side, rbox(0.08, TANK.gauge1 - TANK.gauge0 + 0.06, 0.05, 0.02), cream(), { pos: [0, (TANK.gauge0 + TANK.gauge1) / 2, -0.02] });
+    v.rings = [part(side, rbox(0.04, TANK.gauge1 - TANK.gauge0, 0.03, 0.01), waterGlow(), { pos: [0, TANK.gauge0, 0.02] })];
+    part(side, rbox(0.06, TANK.gauge1 - TANK.gauge0 + 0.02, 0.035, 0.015), glassMat(), { pos: [0, (TANK.gauge0 + TANK.gauge1) / 2, 0.02] });
+    // a ladder up the back
+    const ladder = group(b, 'ladder');
+    ladder.setLocalEulerAngles(0, -135, 0);
+    for (const x of [-0.08, 0.08]) part(ladder, rbox(0.02, TANK.top + 0.1, 0.02, 0.005), metal(), { pos: [x, (TANK.top + 0.1) / 2, 0.86] });
+    for (let i = 1; i <= 4; i++) part(ladder, rbox(0.16, 0.015, 0.015, 0.004), metal(), { pos: [0, (i * TANK.top) / 4.5, 0.86] });
+    bolts(b, [0, 1, 2, 3, 4, 5].map((i) => [Math.cos(i * 1.047) * 0.88, 0.1, Math.sin(i * 1.047) * 0.88] as [number, number, number]), 0.028, gold());
+  }
+
+  /**
+   * E23.4.2.2 Pump: a cream pump house on a stone plinth with a gold-hubbed flywheel on its side that turns while it
+   * pushes water, a pipe stub down into the water beside it, an outlet collar for the pipes, and a small lamp: aqua
+   * while running, dark when idle or without power.
+   */
+  private pump(v: MachineView) {
+    const b = v.body;
+    part(b, rbox(0.8, 0.1, 0.8, 0.03), creamSeam(), { pos: [0, 0.05, 0], shadow: true });
+    part(b, rbox(0.46, 0.44, 0.5, 0.08), cream(), { pos: [0, 0.32, 0], shadow: true });
+    part(b, rbox(0.48, 0.03, 0.52, 0.012), gold(), { pos: [0, 0.55, 0] });
+    part(b, dome(0.2, 0.12, 0, 10), cream(), { pos: [0, 0.56, 0], shadow: true });
+    // the flywheel (turns), facing +x +z
+    const side = group(b, 'side');
+    side.setLocalEulerAngles(0, 45, 0);
+    const wheel = group(side, 'wheel', [0, 0.34, 0.3]);
+    part(wheel, ring(18, 6, 0.08), darkMetal(), { rot: [90, 0, 0], scale: 0.4 }); // stood up to face out
+    for (let i = 0; i < 4; i++) part(wheel, rbox(0.03, 0.36, 0.02, 0.008), metal(), { rot: [0, 0, i * 45] });
+    part(wheel, ball(6, 8), gold(), { scale: [0.06, 0.06, 0.05] });
+    v.spin.push(wheel);
+    v.turn = 0;
+    // a pipe stub dropping into the water, and the outlet collar on top
+    part(b, rcyl(0.06, 0.05, 0.42, 0.01, 0.01, 10), mat(PALETTE.aqua.pipe, { gloss: 0.6, metal: 0.2 }), { pos: [-0.3, 0, -0.3] });
+    part(b, rcyl(0.075, 0.4, 0.46, 0.01, 0.01, 10), cream(), { pos: [-0.3, 0, -0.3] });
+    part(b, rcyl(0.09, 0.66, 0.72, 0.01, 0.01, 10), gold(), {});
+    v.light = part(b, ball(5, 8), pumpOff(), { pos: [0.2, 0.5, 0.2], scale: 0.05 });
+    bolts(b, [[-0.33, 0.1, 0.33], [0.33, 0.1, 0.33], [-0.33, 0.1, -0.33], [0.33, 0.1, -0.33]], 0.025, gold());
+  }
+
+  /**
+   * E23.4.3 Desalination Plant: a cream plant house with a pitched roof on a stone footing filling its 2×2 plot. Two
+   * tall glass columns beside it hold its fresh water (blue, as high as its tank is full); a slatted fan on the roof
+   * turns while it runs on grid power; a pale-blue intake pipe drops toward the sea at the back; gold trim and a lamp
+   * (aqua while running, dark without power).
+   */
+  private desalination(v: MachineView) {
+    const b = v.body;
+    part(b, rbox(1.8, 0.1, 1.8, 0.04), creamSeam(), { pos: [0, 0.05, 0], shadow: true });
+    // the house (toward the back), its roof and trim
+    const house = group(b, 'house', [-0.25, 0, -0.25]);
+    house.setLocalEulerAngles(0, 45, 0);
+    part(house, rbox(0.9, 0.62, 0.7, 0.07), cream(), { pos: [0, 0.41, 0], shadow: true });
+    part(house, rbox(0.92, 0.03, 0.72, 0.012), gold(), { pos: [0, 0.73, 0] });
+    for (const sx of [-1, 1]) part(house, rbox(0.98, 0.04, 0.42, 0.015), cream(), { pos: [0, 0.86, sx * 0.17], rot: [sx * 32, 0, 0], shadow: true });
+    part(house, rbox(0.26, 0.36, 0.02, 0.03), darkMetal(), { pos: [0, 0.3, 0.36] }); // the door
+    // the roof fan (turns while running)
+    const fan = group(house, 'fan', [0, 1.02, 0]);
+    part(house, rcyl(0.07, 0.9, 1.0, 0.01, 0.01, 10), metal(), {});
+    for (let i = 0; i < 4; i++) part(fan, rbox(0.34, 0.012, 0.07, 0.006), metal(), { rot: [0, i * 45, 0] });
+    part(fan, ball(6, 8), gold(), { scale: [0.06, 0.04, 0.06] });
+    v.spin.push(fan);
+    v.turn = 0;
+    // two glass columns of fresh water (toward the front, where the camera looks from)
+    v.rings = [];
+    for (const [x, z] of [
+      [0.55, 0.1],
+      [0.1, 0.55],
+    ] as const) {
+      part(b, rcyl(0.17, 0.1, 0.16, 0.02, 0.01, 14), cream(), { pos: [x, 0, z] });
+      v.rings.push(part(b, rcyl(0.13, 0, 0.78, 0.01, 0.01, 14), waterGlow(), { pos: [x, 0.16, z] }));
+      part(b, rcyl(0.15, 0.16, 0.96, 0.02, 0.02, 14), glassMat(), { pos: [x, 0, z] });
+      part(b, rcyl(0.17, 0.96, 1.02, 0.02, 0.01, 14), gold(), { pos: [x, 0, z] });
+    }
+    // the intake pipe at the back, dropping to the ground toward the sea
+    part(b, rcyl(0.07, 0.05, 0.7, 0.01, 0.01, 10), mat(PALETTE.aqua.pipe, { gloss: 0.6, metal: 0.2 }), { pos: [-0.72, 0, -0.72] });
+    part(b, rcyl(0.09, 0.66, 0.74, 0.01, 0.01, 10), cream(), { pos: [-0.72, 0, -0.72] });
+    v.light = part(b, ball(5, 8), pumpOff(), { pos: [0.32, 0.62, 0.32], scale: 0.06 });
+    bolts(b, [[-0.82, 0.1, 0.82], [0.82, 0.1, 0.82], [0.82, 0.1, -0.82], [-0.82, 0.1, -0.82]], 0.03, gold());
+  }
+
+  /**
+   * E23.3.2.1 Battery: a squat cream cabinet on a bevelled plinth with a glass front. Behind the glass a stack of
+   * four cells lights up mint from the bottom as it fills (the stored share, read from the grid); terminals and a
+   * cable on top, a gold trim band.
+   */
+  private battery(v: MachineView) {
+    // turned so the window faces the camera (which looks from +x +z)
+    const b = group(v.body, 'cabinet');
+    b.setLocalEulerAngles(0, 45, 0);
+    part(b, rbox(0.66, 0.08, 0.5, 0.03), creamSeam(), { pos: [0, 0.04, 0], shadow: true });
+    part(b, rbox(0.56, 0.74, 0.42, 0.07), cream(), { pos: [0, 0.45, 0], shadow: true });
+    part(b, rbox(0.565, 0.02, 0.425, 0.008), gold(), { pos: [0, 0.76, 0] });
+    part(b, rbox(0.565, 0.014, 0.425, 0.006), creamSeam(), { pos: [0, 0.18, 0] });
+    // cells sit behind a glass pane on the front face
+    const face = group(b, 'face', [0, 0, 0.21]);
+    part(face, rbox(0.34, 0.52, 0.02, 0.02), darkMetal(), { pos: [0, 0.46, 0] });
+    v.orbs = [];
+    for (let i = 0; i < 4; i++) v.orbs.push(part(face, rbox(0.26, 0.09, 0.03, 0.02), cellOff(), { pos: [0, 0.27 + i * 0.125, 0.01] }));
+    part(face, rbox(0.34, 0.52, 0.01, 0.02), glassMat(), { pos: [0, 0.46, 0.03] });
+    // terminals: one gold, one dark, with a cable looping down the back
+    part(b, rcyl(0.045, 0.82, 0.9, 0.01, 0.005, 10), gold(), { pos: [-0.14, 0, 0] });
+    part(b, rcyl(0.045, 0.82, 0.9, 0.01, 0.005, 10), darkMetal(), { pos: [0.14, 0, 0] });
+    part(b, tube('battCable', bezier([0.14, 0.88, 0], [0.24, 1.0, -0.12], [0.3, 0.3, -0.26], 7), 0.016, { sides: 6 }), cable(), {});
+    bolts(b, [[-0.24, 0.7, 0.215], [0.24, 0.7, 0.215], [-0.24, 0.22, 0.215], [0.24, 0.22, 0.215]], 0.025, gold());
+    v.light = part(b, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1 }), { pos: [0.22, 0.82, 0.12], scale: 0.05 });
+  }
+
+  /**
+   * E23.8.3.2 Grid Battery (2 × 2, mainland only): the island battery grown to a bank. Four tall cream cabinets on
+   * one bevelled plinth, each with a glass front over a column of cells; the cells light mint along the whole bank as
+   * it fills (read from the grid, like the battery). A gold-trimmed busbar joins their terminals over the top, a
+   * steel walkway rail runs along the front and a status light sits on the end.
+   */
+  private gridBattery(v: MachineView) {
+    const b = group(v.body, 'bank');
+    b.setLocalEulerAngles(0, 45, 0); // its glass faces the camera
+    part(b, rbox(1.82, 0.1, 1.3, 0.04), creamSeam(), { pos: [0, 0.05, 0], shadow: true });
+    part(b, rbox(1.7, 0.03, 1.18, 0.01), darkMetal(), { pos: [0, 0.11, 0] });
+    v.orbs = [];
+    const cells = 5;
+    for (let c = 0; c < 4; c++) {
+      const cab = group(b, 'cabinet', [-0.63 + c * 0.42, 0.12, -0.05]);
+      part(cab, rbox(0.38, 1.1, 0.78, 0.05), cream(), { pos: [0, 0.55, 0], shadow: true });
+      part(cab, rbox(0.385, 0.025, 0.785, 0.008), gold(), { pos: [0, 1.06, 0] });
+      part(cab, rbox(0.385, 0.016, 0.785, 0.006), creamSeam(), { pos: [0, 0.2, 0] });
+      const face = group(cab, 'face', [0, 0, 0.395]);
+      part(face, rbox(0.26, 0.78, 0.02, 0.02), darkMetal(), { pos: [0, 0.6, 0] });
+      for (let i = 0; i < cells; i++) v.orbs.push(part(face, rbox(0.2, 0.11, 0.03, 0.02), cellOff(), { pos: [0, 0.3 + i * 0.145, 0.01] }));
+      part(face, rbox(0.26, 0.78, 0.01, 0.02), glassMat(), { pos: [0, 0.6, 0.03] });
+      // a terminal on top of each cabinet
+      part(cab, rcyl(0.04, 1.1, 1.18, 0.01, 0.005, 10), c % 2 ? darkMetal() : gold(), { pos: [0, 0, -0.2] });
+    }
+    // cells fill along the bank bottom row first, so a half-full bank reads level across its four cabinets
+    v.orbs = Array.from({ length: cells * 4 }, (_, i) => v.orbs![(i % 4) * cells + Math.floor(i / 4)]);
+    // the busbar over the terminals, and a walkway rail along the front
+    part(b, rbox(1.36, 0.05, 0.07, 0.02), gold(), { pos: [0, 1.3, -0.25] });
+    for (const x of [-0.84, 0.84]) part(b, rbox(0.04, 0.42, 0.04, 0.01), metal(), { pos: [x, 0.33, 0.55] });
+    part(b, rbox(1.72, 0.035, 0.035, 0.01), metal(), { pos: [0, 0.54, 0.55] });
+    bolts(b, [[-0.8, 0.12, 0.6], [0.8, 0.12, 0.6], [-0.8, 0.12, -0.6], [0.8, 0.12, -0.6]], 0.035, gold());
+    v.light = part(b, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1 }), { pos: [0.86, 1.0, 0.3], scale: 0.05 });
+  }
+
+  /**
+   * E23.3.2.2 Wind Turbine: a slender cream mast on a round base, a rounded nacelle with a gold band and three
+   * long cream blades on a hub that turn with the turbine's output (still when there is no wind).
+   */
+  private windTurbine(v: MachineView) {
+    const b = v.body;
+    part(b, rcyl(0.3, 0, 0.12, 0.035, 0.01, 18), cream(), { shadow: true });
+    part(b, rcyl(0.305, 0.05, 0.062, 0.004, 0.004, 18), creamSeam(), {});
+    bolts(b, [0, 1, 2, 3].map((i) => [Math.cos(i * 1.571 + 0.4) * 0.24, 0.12, Math.sin(i * 1.571 + 0.4) * 0.24] as [number, number, number]), 0.03, gold());
+    part(b, latheAuto('windMast', [[0.09, 0.1], [0.09, 0.16], [0.07, 0.24], [0.04, 2.1], [0.04, 2.1], [0, 2.1]], 10), cream(), { shadow: true });
+    for (const y of [0.6, 1.2]) part(b, rcyl(0.06, y, y + 0.03, 0.01, 0.01, 10), metal(), {});
+    // the head faces +x +z (towards the camera, so the blades read)
+    const head = group(b, 'head', [0, 2.12, 0]);
+    head.setLocalEulerAngles(0, 45, 0);
+    part(head, latheAuto('windNacelle', [[0, -0.28], [0.08, -0.26], [0.1, -0.1], [0.1, 0.14], [0.07, 0.24], [0, 0.27]], 12), cream(), { rot: [90, 0, 0], shadow: true });
+    part(head, ring(16, 5), gold(), { pos: [0, 0, 0.05], rot: [90, 0, 0], scale: [0.21, 0.05, 0.21] });
+    part(head, rbox(0.02, 0.16, 0.14, 0.01), creamSeam(), { pos: [0, 0.06, -0.33] }); // tail fin
+    const rotor = group(head, 'rotor', [0, 0, 0.29]);
+    part(rotor, ball(6, 8), gold(), { scale: [0.12, 0.12, 0.14] });
+    for (let i = 0; i < 3; i++) {
+      const arm = group(rotor, 'blade', [0, 0, 0.02]);
+      arm.setLocalEulerAngles(0, 0, i * 120);
+      part(arm, latheAuto('windBlade', [[0, 0.04], [0.035, 0.08], [0.05, 0.3], [0.035, 0.7], [0.012, 0.86], [0, 0.88]], 6), cream(), { scale: [1, 1, 0.35], shadow: true });
+    }
+    v.spin.push(rotor);
+    v.turn = 0;
+    for (let i = 0; i < 3; i++) {
+      const a = i * 2.1;
+      v.bob.push(part(b, ball(4, 6), mat(PALETTE.flower[i % PALETTE.flower.length]), { pos: [Math.cos(a) * 0.22, 0.16, Math.sin(a) * 0.22], scale: [0.08, 0.05, 0.08] }));
+    }
+  }
+
+  /**
+   * E23.3.3 Charger: a low round cream pad bloombot sits on, with a gold rim and an inlaid glow ring that lights
+   * when the pad has power and breathes while it charges. A short mast at the back carries a leaf and a status light.
+   */
+  private charger(v: MachineView) {
+    const b = v.body;
+    part(b, rcyl(0.44, 0, 0.08, 0.03, 0.01, 24), cream(), { shadow: true });
+    part(b, rcyl(0.445, 0.03, 0.04, 0.004, 0.004, 24), creamSeam(), {});
+    part(b, ring(28, 6), gold(), { pos: [0, 0.08, 0], scale: [0.86, 0.06, 0.86] });
+    part(b, rcyl(0.3, 0.08, 0.1, 0.01, 0.005, 20), creamSeam(), {});
+    v.orbs = [part(b, ring(28, 5, 0.12), cellOff(), { pos: [0, 0.1, 0], scale: [0.5, 0.04, 0.5] })];
+    // the mast at the back (away from the camera), with a curled leaf and the status light
+    const mast = group(b, 'mast', [-0.3, 0, -0.3]);
+    part(mast, latheAuto('chargerMast', [[0.05, 0.06], [0.05, 0.12], [0.035, 0.18], [0.03, 0.62], [0.03, 0.62], [0, 0.62]], 10), cream(), { shadow: true });
+    part(mast, rcyl(0.045, 0.34, 0.37, 0.01, 0.01, 10), metal(), {});
+    part(mast, ball(3, 6), leafMat(0), { pos: [0.07, 0.58, 0.02], scale: [0.16, 0.035, 0.07], rot: [0, -40, 20] });
+    v.light = part(mast, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.2 }), { pos: [0, 0.68, 0], scale: 0.07 });
+    part(b, tube('chargerCable', bezier([-0.3, 0.1, -0.3], [-0.15, 0.04, -0.2], [-0.05, 0.08, -0.1], 6), 0.014, { sides: 6 }), cable(), {});
+  }
+
+  /**
+   * E23.6.5: the Assembler, kit-bashed from the machines' own parts until its model lands (batch B3): a powered press
+   * on a bevelled 2 × 2 pad. A hopper takes in on the left, a tray gives out on the right; between them a cream
+   * chassis with vents, a screen and a status light carries a metal gantry whose press head works up and down, and a
+   * gold gear turns at its side, while it crafts. Its power cable runs to the pad's edge.
+   */
+  private assembler(v: MachineView) {
+    const b = v.body;
+    part(b, rbox(1.7, 0.16, 1.7, 0.06), cream(), { pos: [0, 0.08, 0], shadow: true });
+    part(b, rbox(1.705, 0.014, 1.705, 0.006), creamSeam(), { pos: [0, 0.06, 0] });
+    for (const [x, z] of [[-0.85, -0.85], [0.85, -0.85], [-0.85, 0.85], [0.85, 0.85]]) {
+      part(b, rcyl(0.13, 0, 0.2, 0.04, 0.01, 14), cream(), { pos: [x, 0, z], shadow: true });
+      bolts(b, [[x, 0.202, z]], 0.045, gold());
+    }
+    // the chassis at the back: vents along its front, a screen and the status light on top
+    part(b, rbox(1.1, 0.62, 0.62, 0.06), cream(), { pos: [0, 0.47, -0.42], shadow: true });
+    part(b, rbox(1.105, 0.014, 0.625, 0.006), creamSeam(), { pos: [0, 0.3, -0.42] });
+    for (let i = 0; i < 4; i++) part(b, rbox(0.16, 0.025, 0.02, 0.008), vent(), { pos: [-0.33 + i * 0.22, 0.24, -0.105] });
+    part(b, rbox(0.4, 0.2, 0.03, 0.015), vent(), { pos: [0, 0.6, -0.1] });
+    const screen = part(b, rbox(0.32, 0.12, 0.01, 0.004), mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.2 }), { pos: [0, 0.6, -0.083] });
+    part(b, rbox(1.14, 0.05, 0.66, 0.02), metal(), { pos: [0, 0.8, -0.42], shadow: true });
+    v.light = part(b, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.5 }), { pos: [0.42, 0.87, -0.42], scale: 0.07 });
+    // the gantry over the work bed, and its press head
+    part(b, rbox(0.7, 0.05, 0.5, 0.02), darkMetal(), { pos: [0, 0.19, 0.25] });
+    for (const s of [-1, 1]) part(b, rod(), metal(), { pos: [s * 0.4, 0.55, 0.25], scale: [0.045, 0.74, 0.045] });
+    part(b, rbox(0.9, 0.07, 0.1, 0.02), metal(), { pos: [0, 0.95, 0.25], shadow: true });
+    const head = group(b, 'pressHead', [0, 0.72, 0.25]);
+    part(head, rod(), metal(), { pos: [0, 0.12, 0], scale: [0.04, 0.24, 0.04] });
+    part(head, rbox(0.26, 0.1, 0.22, 0.03), gold(), { shadow: true });
+    part(head, rbox(0.2, 0.03, 0.16, 0.01), darkMetal(), { pos: [0, -0.06, 0] });
+    // in: a hopper on the left; out: a tray on the right, a finished part on it
+    part(b, rcyl(0.18, 0.16, 0.5, 0.03, 0.01, 12), metal(), { pos: [-0.62, 0, 0.3], shadow: true });
+    part(b, rcyl(0.24, 0.5, 0.56, 0.02, 0.01, 12), gold(), { pos: [-0.62, 0, 0.3] });
+    part(b, rcyl(0.17, 0.53, 0.565, 0.005, 0, 12), vent(), { pos: [-0.62, 0, 0.3] });
+    part(b, rbox(0.38, 0.06, 0.4, 0.02), metal(), { pos: [0.62, 0.22, 0.3], shadow: true });
+    part(b, rbox(0.12, 0.08, 0.12, 0.02), mat(PALETTE.railCopper, { metal: 0.6, gloss: 0.6 }), { pos: [0.6, 0.29, 0.3] });
+    // the gear at its side
+    const gear = group(b, 'gear', [0.57, 0.5, -0.42]);
+    part(gear, ring(18, 6), gold(), { rot: [0, 0, 90], scale: [0.36, 0.08, 0.36] });
+    for (let i = 0; i < 6; i++) part(gear, rbox(0.03, 0.06, 0.07, 0.008), gold(), { pos: [0, Math.cos((i * Math.PI) / 3) * 0.19, Math.sin((i * Math.PI) / 3) * 0.19] });
+    part(b, tube('assemblerCable', bezier([-0.5, 0.2, -0.75], [-0.6, 0.06, -0.85], [-0.75, 0.1, -0.84], 6), 0.016, { sides: 6 }), cable(), {});
+    v.arm = { head, gear, screen };
+  }
+
+  /**
+   * E23.3.2.3: Bloom Relays are the grid's power poles. A cream crossarm with a gold band crosses the column under the
+   * crystal, braced from below, with a glazed insulator at each end where the lines meet (PowerLines POLE_ARM).
+   */
+  private poleArm(v: MachineView) {
+    const A = POLE_ARM;
+    const arm = group(v.body, 'poleArm', [0, A.y, 0]);
+    part(arm, rbox(A.half * 2 + 0.12, 0.06, 0.08, 0.02), cream(), { shadow: true });
+    part(arm, rbox(0.12, 0.075, 0.095, 0.01), gold(), {});
+    for (const s of [-1, 1]) {
+      // a diagonal brace down to the column, and the insulator: two glazed bells on a short pin
+      part(arm, rbox(0.03, 0.2, 0.03, 0.01), creamSeam(), { pos: [s * 0.13, -0.08, 0], rot: [0, 0, s * 50] });
+      part(arm, rcyl(0.012, 0.03, 0.06, 0, 0, 6), metal(), { pos: [s * A.half, 0, 0] });
+      part(arm, rcyl(0.04, 0.05, 0.08, 0.012, 0.005, 10), glazeMat(), { pos: [s * A.half, 0, 0] });
+      part(arm, rcyl(0.032, 0.085, 0.11, 0.01, 0.005, 10), glazeMat(), { pos: [s * A.half, 0, 0] });
+    }
+    v.poleArm = arm;
   }
 
   /** Reservoir Overflow: the basin spills over with a splash. */
@@ -1526,14 +1995,14 @@ export class MachineVisuals {
     // Superstructures carry their own model: no tier-1 extras (a placed Core keeps its machines' upgrade levels, and
     // a Megaflower has no base panel list, so refreshing one used to crash here).
     if (v.super) return;
-    const L = (id: string) => Math.min(6, id === 'richSoil' ? u.level(id) : u.levelOf(v.m, id));
+    const L = (id: string) => Math.min(6, u.levelOf(v.m, id));
     const key =
       v.m.type === 'solar' ? `${L('solarArray')}`
       : v.m.type === 'droneHub' ? `${L('droneSpeed')}|${L('secondDrone')}|${L('droneSweep')}|${L('droneRadius')}`
-      : v.m.type === 'pollinator' ? `${L('pollinatorReach')}|${L('richSoil')}`
+      : v.m.type === 'pollinator' ? `${L('pollinatorReach')}`
       : v.m.type === 'condenser' ? `${L('waterBloom')}`
       : v.m.type === 'motherTree' ? `${L('treeResonance')}`
-      : v.m.type === 'relay' ? `${L('relayLens')}`
+      : v.m.type === 'relay' ? `${L('relayLens')}|${v.m.golden ? 1 : 0}`
       : '';
     if (key === v.vkey) return;
     v.vkey = key;
@@ -1602,13 +2071,6 @@ export class MachineVisuals {
         const a = (i / (lvl * 4)) * Math.PI * 2;
         part(ex, ball(4, 8), mat(PALETTE.flower[i % 5]), { pos: [Math.cos(a) * 0.46, 0.3, Math.sin(a) * 0.46], scale: [0.11, 0.07, 0.11] });
       }
-      // Rich Soil: the bed spills over with taller blooms.
-      for (let i = 0; i < Math.min(6, L('richSoil')); i++) {
-        const a = i * 1.05 + 0.4;
-        const h = 0.34 + (i % 3) * 0.06;
-        part(ex, rod(), mat(PALETTE.stem), { pos: [Math.cos(a) * 0.3, 0.27 + h / 2, Math.sin(a) * 0.3], scale: [0.02, h, 0.02] });
-        part(ex, ball(4, 8), mat(i % 2 ? PALETTE.bloomPale : PALETTE.flower[(i + 2) % 5]), { pos: [Math.cos(a) * 0.3, 0.27 + h, Math.sin(a) * 0.3], scale: [0.13, 0.08, 0.13] });
-      }
     } else if (v.m.type === 'condenser') {
       // Water Bloom: an extra little tank per level around the plinth and a ring of mist beads.
       const lvl = L('waterBloom');
@@ -1643,6 +2105,17 @@ export class MachineVisuals {
     } else if (v.m.type === 'relay') {
       const lvl = L('relayLens');
       for (let i = 0; i < lvl; i++) part(ex, ring(24, 5), mat(PALETTE.relayGlow, { emissive: PALETTE.relayGlow, emissiveIntensity: 0.8, opacity: 0.8 }), { pos: [0, 1.02 + i * 0.12, 0], scale: [0.5 + i * 0.1, 0.05, 0.5 + i * 0.1] });
+      // E23.12 (#528): a Lucky Cat's Golden Relay wears a gold crown and a gold lamp (it carries power further)
+      if (v.m.golden) {
+        // metal gold with a low warm glow (the golden cat's gold): a bright gold emissive washes out to cream
+        const crownGold = mat(PALETTE.gold, { metal: 0.8, gloss: 0.9, emissive: PALETTE.trim.goldGlow, emissiveIntensity: 0.35 });
+        part(ex, ring(24, 5), crownGold, { pos: [0, 1.2, 0], scale: [0.42, 0.1, 0.42] });
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          part(ex, ball(4, 6), crownGold, { pos: [Math.cos(a) * 0.4, 1.3, Math.sin(a) * 0.4], scale: [0.06, 0.12, 0.06] });
+        }
+        part(ex, ball(5, 8), mat(PALETTE.trim.amber, { emissive: PALETTE.trim.amber, emissiveIntensity: 0.9 }), { pos: [0, 1.42, 0], scale: 0.12 });
+      }
     }
   }
 
@@ -1862,7 +2335,7 @@ export class MachineVisuals {
       }
       switch (v.m.type) {
         case 'solar': {
-          const boosted = v.m.boostUntil > now || this.sim.production.surgeActive();
+          const boosted = v.m.boostUntil > now || inSurge(this.sim, v.m);
           const m = boosted ? panelBoost() : panelMat();
           for (const p of v.panel!) if (p.render && p.render.material !== m) p.render.material = m;
           if (!rm && v.spin[0]) v.spin[0].setLocalEulerAngles(28 + Math.sin(t * 0.25 + v.m.x) * 5, 45 + Math.sin(t * 0.18 + v.m.z) * 14, 0);
@@ -1921,6 +2394,101 @@ export class MachineVisuals {
           if (!rm && v.running) v.rings![0].setLocalEulerAngles(0, t * 30, 0);
           break;
         }
+        case 'reservoir': {
+          // E23.4.2.1: the water inside rises and falls with the level; the side gauge shows it too
+          const lv = this.sim.water.levelOf(tankId(v.m));
+          v.water!.enabled = lv > 0.01;
+          v.water!.setLocalPosition(0, TANK.floor + (TANK.top - TANK.floor) * lv, 0);
+          const g = v.rings![0];
+          g.enabled = lv > 0.01;
+          g.setLocalScale(1, Math.max(0.001, lv), 1);
+          g.setLocalPosition(0, TANK.gauge0 + (TANK.gauge1 - TANK.gauge0) * lv * 0.5, 0);
+          if (!rm && lv > 0.01) v.water!.setLocalEulerAngles(0, t * 4, 0);
+          break;
+        }
+        case 'desalination': {
+          // E23.4.3: the columns show its fresh-water tank; the roof fan turns while it runs on power
+          const lv = this.sim.water.levelOf(plantId(v.m));
+          for (const c of v.rings ?? []) {
+            c.enabled = lv > 0.01;
+            c.setLocalScale(1, Math.max(0.001, lv), 1);
+          }
+          const on = this.sim.water.desalinating.has(v.m.id) && this.sim.water.pipes.powered(v.m);
+          if (on && !rm) {
+            v.turn = ((v.turn ?? 0) + dt * 300) % 360;
+            v.spin[0]?.setLocalEulerAngles(0, v.turn, 0);
+          }
+          const want = on ? pumpOn() : pumpOff();
+          if (matOf(v.light!) !== want) setMat(v.light!, want);
+          break;
+        }
+        case 'pump': {
+          // E23.4.2.2: the wheel turns while it pushes water (powered, on a bank with water, on a line)
+          const on = this.sim.water.pipes.pumping.has(v.m.id) && this.sim.water.pipes.powered(v.m);
+          if (on && !rm) {
+            v.turn = ((v.turn ?? 0) + dt * 220) % 360;
+            v.spin[0]?.setLocalEulerAngles(0, 0, v.turn);
+          }
+          const want = on ? pumpOn() : pumpOff();
+          if (matOf(v.light!) !== want) setMat(v.light!, want);
+          break;
+        }
+        case 'battery':
+        case 'gridBattery': {
+          // The cells fill from the bottom with the stored share.
+          const { stored, capacity } = this.sim.power.stored(v.m);
+          const lit = capacity > 0 ? Math.ceil((stored / capacity) * v.orbs!.length - 0.05) : 0;
+          v.orbs!.forEach((o, i) => {
+            const want = i < lit ? cellOn() : cellOff();
+            if (matOf(o) !== want) setMat(o, want);
+          });
+          const flow = this.sim.power.networkOf(v.m)?.batteryFlow ?? 0;
+          const s = 0.05 + (flow > 1e-6 && !rm ? 0.012 * (1 + Math.sin(t * 3)) : 0);
+          v.light!.setLocalScale(s, s, s);
+          break;
+        }
+        case 'assembler': {
+          // E23.6.5: while it crafts, the press head works and the gear turns; idle, both rest
+          const a = v.arm;
+          if (!a) break;
+          const on = this.sim.automation.working(v.m) && !rm;
+          a.head.setLocalPosition(0, 0.72 - (on ? 0.14 * Math.max(0, Math.sin(t * 5)) : 0), 0.25);
+          if (on) a.gear.setLocalEulerAngles(t * 90, 0, 0);
+          a.screen.enabled = this.sim.power.level(v.m) > 0.5 || this.sim.automation.working(v.m);
+          break;
+        }
+        case 'charger': {
+          // The ring lights when the pad has power, and breathes while bloombot charges on it.
+          const on = this.sim.power.isPowered(v.m);
+          const ring = v.orbs![0];
+          const want = on ? cellOn() : cellOff();
+          if (matOf(ring) !== want) setMat(ring, want);
+          const charging = on && this.sim.chargers.charging(v.m);
+          const s = 0.07 + (charging && !rm ? 0.025 * (1 + Math.sin(t * 4)) : 0);
+          v.light!.setLocalScale(s, s, s);
+          break;
+        }
+        case 'relay': {
+          // E23.3: a pole lightning tripped goes dark and gives the odd spark until bloombot resets it.
+          if (!v.light) break;
+          if (!v.lightOn) v.lightOn = matOf(v.light);
+          const tripped = this.sim.power.isTripped(v.m);
+          const want = tripped ? orbOff() : v.lightOn;
+          if (want && matOf(v.light) !== want) setMat(v.light, want);
+          const spark = tripped && !rm && Math.sin(t * 13 + v.m.x) > 0.97;
+          const s = tripped ? (spark ? 0.14 : 0.07) : 0.1;
+          v.light.setLocalScale(s, s, s);
+          break;
+        }
+        case 'windTurbine': {
+          // Blades turn with the output: still in calm air, brisk in a storm.
+          const out = this.sim.power.output(v.m) / POWER.wind.output;
+          if (!rm) {
+            v.turn = ((v.turn ?? 0) + dt * 260 * out) % 360;
+            v.spin[0]?.setLocalEulerAngles(0, 0, v.turn);
+          }
+          break;
+        }
         case 'reservoirGarden': {
           const f = Math.min(1, (v.m.charge ?? 0) / TUNING.neighbourhood.reservoir.threshold);
           v.water!.setLocalPosition(0, 0.08 + 0.18 * f, 0);
@@ -1954,6 +2522,24 @@ export class MachineVisuals {
           break;
         }
       }
+      this.powerLook(v);
+    }
+  }
+
+  /**
+   * E23.3.3: a machine on the grid that has no power shows it: its status light goes dark (fading with the grid's
+   * eased level), so a dark machine reads at a glance.
+   */
+  private powerLook(v: MachineView) {
+    if (!v.light || v.m.type === 'charger' || !this.sim.power.roleOf(v.m)?.consumer) return;
+    const lv = this.sim.power.level(v.m);
+    if (!v.lightOn) v.lightOn = matOf(v.light);
+    const want = lv < 0.5 ? orbOff() : v.lightOn;
+    if (want && matOf(v.light) !== want) setMat(v.light, want);
+    if (lv < 0.999) {
+      const k = 0.4 + 0.6 * lv;
+      const sc = v.light.getLocalScale();
+      v.light.setLocalScale(sc.x * k, sc.y * k, sc.z * k);
     }
   }
 

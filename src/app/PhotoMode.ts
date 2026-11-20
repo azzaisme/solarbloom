@@ -1,5 +1,9 @@
 import type { CameraSnapshot } from '../rendering/CameraController';
+import { DAY } from '../data/time';
+import type { WeatherKind } from '../data/weather';
 import type { Action, Bindings } from './Bindings';
+import { GOLDEN_HOUR, PHOTO_FILTERS, PHOTO_WEATHERS, type PhotoFilter, type PhotoWeather } from '../data/photo';
+const FILTER_ORDER = Object.keys(PHOTO_FILTERS) as PhotoFilter[];
 
 /**
  * E19.4.1 (#260): photo mode. The HUD steps aside, the camera is loosened within the city's bounds (free zoom,
@@ -14,6 +18,11 @@ import type { Action, Bindings } from './Bindings';
  * drag turns, the turn-piece inputs (R, LB / RB) tilt, recentre turns back, pulse saves the picture, interact
  * hides bloombot, the build menu key freezes the game, Harvest (F, for focus) toggles depth of field, the
  * backpack key hides the controls bar, and back, the menu or the photo key leave (E22.1 names).
+ *
+ * E23.7.3 (#397): it can set the scene. Pin next (G, d-pad right) steps the time of day an hour at a time (the bar
+ * has a slider too), the map key (M, View) picks the weather (sun, golden hour, cloud, rain, wind, storm, fog) and
+ * remove (X, RT) a filter. These change only what's drawn: the game keeps its own clock and weather, and leaving
+ * puts the real time and weather back.
  *
  * This file only steers the view and the presentation; it never touches the simulation (freezing simply skips
  * the sim step, as pausing does).
@@ -56,6 +65,11 @@ export interface PhotoState {
   dof: boolean;
   /** the controls bar is hidden too (nothing but the picture on screen) */
   clean: boolean;
+  /** E23.7.3: photo mode's own time of day, in clock hours (undefined: the real time) */
+  hour?: number;
+  /** E23.7.3: photo mode's own weather */
+  weather: PhotoWeather;
+  filter: PhotoFilter;
 }
 
 export interface PhotoHost {
@@ -69,6 +83,10 @@ export interface PhotoHost {
   render(state: PhotoState | undefined): void;
   /** the left stick, if a pad is connected (x right, y up, −1…1) */
   stick?(): { x: number; y: number } | undefined;
+  /** E23.7.3: the game's real clock hour (the time slider starts there) */
+  clockHour?(): number;
+  /** E23.7.3: a CSS filter over the view ('' for none) */
+  setFilter?(css: string): void;
 }
 
 const MOVES: readonly [Action, number, number][] = [
@@ -85,6 +103,10 @@ export class PhotoMode {
   hideBot = false;
   dof = true;
   clean = false;
+  /** E23.7.3: the scene: its own time (clock hours) and weather, and a filter. Reset on leaving. */
+  hour?: number;
+  weather: PhotoWeather = 'now';
+  filter: PhotoFilter = 'none';
   private saved?: { camera: CameraSnapshot; following?: boolean };
   /** keys held (movement and sprint), fed by `key` */
   private held = new Set<string>();
@@ -100,7 +122,7 @@ export class PhotoMode {
   }
 
   get state(): PhotoState {
-    return { freeze: this.freeze, hideBot: this.hideBot, dof: this.dof, clean: this.clean };
+    return { freeze: this.freeze, hideBot: this.hideBot, dof: this.dof, clean: this.clean, hour: this.hour, weather: this.weather, filter: this.filter };
   }
 
   toggle() {
@@ -113,6 +135,10 @@ export class PhotoMode {
     const { camera, bot } = this.host;
     this.saved = { camera: camera.snapshot(), following: bot?.following };
     this.active = true;
+    // E23.7.3: every visit opens on the real sky, unfiltered
+    this.hour = undefined;
+    this.weather = 'now';
+    this.filter = 'none';
     this.held.clear();
     camera.held = true;
     camera.maxZoom = Math.max(camera.maxZoom, PHOTO.maxZoom);
@@ -139,8 +165,64 @@ export class PhotoMode {
       if (s.following !== undefined) bot.following = s.following;
     }
     this.host.setDof(false);
+    // E23.7.3: nothing set here outlives photo mode: the real time and weather come back, the filter goes
+    this.hour = undefined;
+    this.weather = 'now';
+    this.filter = 'none';
+    this.host.setFilter?.('');
     this.host.setHudHidden(false);
     this.host.render(undefined);
+  }
+
+  // ───────────── E23.7.3: time, weather and filters (presentation only) ─────────────
+
+  /** The day fraction the sky and light should show, or undefined for the real light clock. */
+  lightOverride(): number | undefined {
+    if (!this.active || this.hour === undefined) return undefined;
+    const f = (this.hour - DAY.dawnHour) / 24;
+    return f - Math.floor(f);
+  }
+
+  /** The weather the screen should show, or undefined for the real weather. */
+  weatherOverride(): WeatherKind | undefined {
+    if (!this.active || this.weather === 'now') return undefined;
+    return this.weather === 'golden' ? 'sunny' : this.weather;
+  }
+
+  /** Sets photo mode's own time (clock hours, wrapped to 0…24), or undefined for the real time. */
+  setHour(h: number | undefined) {
+    this.hour = h === undefined ? undefined : ((h % 24) + 24) % 24;
+    if (this.weather === 'golden' && h !== GOLDEN_HOUR) this.weather = 'sunny'; // moved off golden hour
+    this.render();
+  }
+
+  /** The next hour on the clock (from the real time first); after a full turn it goes back to the real time. */
+  stepHour() {
+    const base = this.hour ?? this.host.clockHour?.() ?? 12;
+    const next = Math.floor(base) + 1;
+    const real = Math.floor(this.host.clockHour?.() ?? 12);
+    this.setHour(this.hour !== undefined && ((next % 24) + 24) % 24 === real ? undefined : next);
+  }
+
+  /** The next weather in the picker (golden hour sets the time to 21:00, the hour before dusk). */
+  setWeather(w: PhotoWeather) {
+    this.weather = w;
+    if (w === 'golden') this.hour = GOLDEN_HOUR;
+    this.render();
+  }
+
+  stepWeather() {
+    this.setWeather(PHOTO_WEATHERS[(PHOTO_WEATHERS.indexOf(this.weather) + 1) % PHOTO_WEATHERS.length]);
+  }
+
+  setFilter(f: PhotoFilter) {
+    this.filter = f;
+    this.host.setFilter?.(PHOTO_FILTERS[f].css);
+    this.render();
+  }
+
+  stepFilter() {
+    this.setFilter(FILTER_ORDER[(FILTER_ORDER.indexOf(this.filter) + 1) % FILTER_ORDER.length]);
   }
 
   /** A key went down or up (movement and sprint are held; the game routes the rest through `action`). */
@@ -177,13 +259,22 @@ export class PhotoMode {
       case 'buildMenu':
         this.freeze = !this.freeze;
         break;
-      case 'harvest': // F for focus
+      case 'eat': // F for focus
         this.dof = !this.dof;
         this.host.setDof(this.dof);
         break;
       case 'backpack':
         this.clean = !this.clean;
         break;
+      case 'pinNext': // E23.7.3: G / d-pad right: the next hour
+        this.stepHour();
+        return true;
+      case 'map': // M / View: the next weather
+        this.stepWeather();
+        return true;
+      case 'removeMode': // X / RT: the next filter
+        this.stepFilter();
+        return true;
       case 'zoomCamera':
         c.zoomBy(PHOTO.zoomStep);
         return true;

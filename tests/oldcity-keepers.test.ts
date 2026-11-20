@@ -16,7 +16,7 @@ const NEAR_PYLON = { roofId: GROUND, x: 10.5, z: -2.5 };
 
 /** An Old City with Mast Row open (its gate pried), bloombot beside the Pylon. */
 function mastRowOpen(seed = 7) {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.state.salvage!.tier = 1;
   sim.state.salvage!.abilities.push('pry');
   sim.areas.clear('park', true);
@@ -83,7 +83,7 @@ describe('E21.8: Keepers', () => {
   });
 
   it('a Keeper in a closed region can\'t be met', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     expect(sim.keepers.visible('pylon')).toBe(false);
     expect(sim.keepers.pulse('pylon')).toBe(false);
     expect(sim.keepers.interact('pylon')).toBe('none');
@@ -93,7 +93,7 @@ describe('E21.8: Keepers', () => {
 
   it('one request is pinned in the objective card; the rest wait in the list', () => {
     const sim = mastRowOpen();
-    expect(oldCityObjective(sim).title).toMatch(/Fountain tier 2/);
+    expect(oldCityObjective(sim).title).toMatch(/Fountain step 2/);
     sim.keepers.pulse('pylon');
     sim.inventory.add('scrap', 5);
     sim.keepers.interact('pylon');
@@ -115,12 +115,12 @@ describe('E21.8: Keepers', () => {
       }
     }
     // the Pylon's 8 Seeds: the park holds enough after tier 1 takes 6
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     expect(sim.salvage.looseLeft('seeds', 'park') - 6).toBeGreaterThanOrEqual(8);
   });
 
   it('all ten Keepers have their words, a tint, a prop and a model name; none stands in fog or on a blocked tile', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     const w = new Walker(sim);
     for (const k of KEEPERS) {
       for (const lines of Object.values(k.say)) {
