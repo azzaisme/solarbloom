@@ -2,6 +2,8 @@ import type { BuildableType, ComponentId, SalvageState } from '../core/types';
 import { COMPONENT_RECIPES, CRAFT, DECOR_RECIPES, MACHINE_RECIPES, type ComponentRecipe, type DecorRecipe, type MachineRecipe, type Unlock } from '../data/crafting';
 import { KEEPERS, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
+import { MACHINES } from '../data/machines';
+import { MAINLAND } from '../data/mainland';
 import { HAND_JOBS } from '../data/automation';
 import type { Sim } from './Sim';
 
@@ -15,6 +17,11 @@ import type { Sim } from './Sim';
  * Unlocks: from the start (`home`), when a region's Keeper wakes, from research (E23.6.2), from a cache, or (E23.12.2)
  * a cat-only decoration a Lucky Cat left.
  */
+/** Island release: a mainland-only machine's recipe is hidden until the mainland opens (data/mainland `MAINLAND.open`). */
+export function islandRecipe(r: MachineRecipe): boolean {
+  return MAINLAND.open || !r.builds || !MACHINES[r.builds].mainlandOnly;
+}
+
 export class Crafting {
   constructor(private sim: Sim) {}
 
@@ -77,12 +84,12 @@ export class Crafting {
 
   /** E23.6.1: the recipe that builds a machine type (undefined: it keeps its E21.3 recipe). */
   machineRecipe(type: BuildableType): MachineRecipe | undefined {
-    return MACHINE_RECIPES.find((r) => r.builds === type);
+    return MACHINE_RECIPES.find((r) => r.builds === type && islandRecipe(r));
   }
 
   /** Every machine recipe known now (including the ones waiting for their machine to exist). */
   machines(): MachineRecipe[] {
-    return MACHINE_RECIPES.filter((r) => this.unlocked(r.unlock));
+    return MACHINE_RECIPES.filter((r) => islandRecipe(r) && this.unlocked(r.unlock));
   }
 
   decor(id: string): DecorRecipe | undefined {

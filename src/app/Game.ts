@@ -13,7 +13,8 @@ import { SightPicker } from '../rendering/SightPicker';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
-import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
+import { MATERIALS, SALVAGE, TIERS, tierGives } from '../data/salvage';
+import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
 import { EXPLORE } from '../rendering/CameraController';
@@ -547,6 +548,9 @@ export class Game {
         this.padListener(i);
         this.swallowPad = i;
       };
+      // Island release: the mainland is a future update (data/mainland MAINLAND.open). Heading onto the causeway,
+      // bloombot turns back towards the island (BotController.turnBack) and a card says so, once per approach.
+      bot.onMainlandClosed = () => this.hud.toast(`${MAINLAND_CLOSED.title}<small>${MAINLAND_CLOSED.detail}</small>`, 'gold', MAINLAND_CLOSED.seconds);
       this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
       this.keepers.reducedMotion = !!this.settings.reducedMotion;
       this.oc = new OldCityController(this.oldCityHost());
@@ -4128,7 +4132,7 @@ export class Game {
       this.celebrateTier(tier);
       if (tier === 1) return this.playCoreSequence();
       const t = TIERS[tier - 1];
-      this.hud.toast(`⛲ ${t.name}!<small>${t.gives.join(' · ')}</small>`, 'gold', 6);
+      this.hud.toast(`⛲ ${t.name}!<small>${tierGives(t).join(' · ')}</small>`, 'gold', 6);
       this.sfx.fanfare();
       this.save();
     });

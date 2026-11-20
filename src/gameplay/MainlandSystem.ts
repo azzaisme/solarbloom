@@ -46,6 +46,7 @@ export class MainlandSystem {
       s.transitions.unblock(t);
       s.grid.touch(t);
     }
-    s.areas.reveal(landingArea());
+    // island release: the causeway rises (the journal's promise), but the mainland stays in its cloud until it opens
+    if (MAINLAND.open) s.areas.reveal(landingArea());
   }
 }

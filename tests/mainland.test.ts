@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { areaMapFor } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -8,6 +8,14 @@ import { pileById, seaCell, setPieceAt, surfCell } from '../src/core/OldCityLayo
 import { MAINLAND, MAINLAND_WATER } from '../src/data/mainland';
 import { OLD_CITY } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
+
+// the mainland is closed for the island release (a future update); these tests are about the mainland itself
+beforeAll(() => {
+  MAINLAND.open = true;
+});
+afterAll(() => {
+  MAINLAND.open = false;
+});
 
 /** E23.8.3.1 (#451): the endless mainland past the Long Causeway, generated deterministically and streamed in. */
 

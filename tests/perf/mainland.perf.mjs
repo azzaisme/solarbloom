@@ -51,7 +51,7 @@ try {
   page.setDefaultTimeout(600_000);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  const url = `http://localhost:${PORT}/?slot=1&gfx=deck`;
+  const url = `http://localhost:${PORT}/?slot=1&gfx=deck&mainland=1`;
   await page.goto(url, { waitUntil: 'commit' });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'commit' });

@@ -4,6 +4,9 @@ import { SLAB_TOP } from '../core/Picking';
 import type { Sim } from '../gameplay/Sim';
 import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
 import { heightAt, levelY } from '../core/Height';
+import { TurnBack } from '../gameplay/TurnBack';
+import { MAINLAND_CLOSED } from '../data/mainland';
+import { GROUND } from '../core/GameState';
 import type { Action, Bindings } from './Bindings';
 import { RESEARCH } from '../data/research';
 import { CHARGE } from '../data/charge';
@@ -58,6 +61,10 @@ export class BotController {
   onTurn?: (degrees: number) => void;
   /** a gamepad button was pressed (the game resolves it to an action for the context in effect) */
   onPad?: (button: number) => void;
+  /** Island release: bloombot headed into the closed causeway and turns back; the game shows the card (once per approach). */
+  onMainlandClosed?: () => void;
+  /** Island release: the turn back at the closed causeway (gameplay/TurnBack). */
+  readonly turnBack = new TurnBack();
   /** Third person: aiming a build, bloombot faces the way the camera looks and strafes instead of turning */
   strafe = false;
   /** E22.1: sprint switched on by the toggle (left stick click); it ends when bloombot stops */
@@ -255,7 +262,14 @@ export class BotController {
     let dirX = 0;
     let dirZ = 0;
     let want = 0;
-    if (!frozen && mag > 0.01) {
+    // island release: turning back from the closed causeway wins over steering for its short moment
+    const back = !frozen && p.roofId === GROUND ? this.turnBack.tick(dt) : undefined;
+    if (back) {
+      this.walk = undefined;
+      dirX = back.x;
+      dirZ = back.z;
+      want = BOT.walk * MAINLAND_CLOSED.turnSpeed;
+    } else if (!frozen && mag > 0.01) {
       this.walk = undefined; // steering takes over from a click-walk
       // Camera-relative: up on the stick/W goes away from the camera.
       const yr = (this.camera.yaw * Math.PI) / 180;
@@ -306,6 +320,8 @@ export class BotController {
         if (this.walk.stuckFor > 0.6) this.walk = undefined; // something moved into the way
       }
       if (moved > 0.001) this.following = true;
+      // island release: heading into the closed causeway (keys, pad or a path) turns bloombot back
+      if (!back && p.roofId === GROUND && this.turnBack.bump(p.x, p.z, dirX, dirZ)) this.onMainlandClosed?.();
     }
     this.speed = dt > 0 ? moved / dt : 0;
     if (this.sprinting && moved > 0.001) {

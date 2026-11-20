@@ -75,6 +75,14 @@ export function onCauseway(x: number, z: number): boolean {
   return z >= c.z0 && z <= c.z1 && x >= c.x0 && x <= c.x1;
 }
 
+/**
+ * Island release: is this cell closed to bloombot because the mainland is not open yet (`MAINLAND.open`)? The whole
+ * causeway from its island end, and everything past it.
+ */
+export function mainlandClosedAt(x: number, z: number): boolean {
+  return !MAINLAND.open && (onCauseway(x, z) || isMainlandCell(x));
+}
+
 /** Is a cell in the causeway's broken middle (open water until the Great Bloom)? */
 export function causewayBroken(x: number, z: number): boolean {
   return onCauseway(x, z) && x >= MAINLAND.broken.x0 && x <= MAINLAND.broken.x1;

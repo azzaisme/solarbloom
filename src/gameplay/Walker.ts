@@ -3,6 +3,7 @@ import { GROUND } from '../core/GameState';
 import { DECOR_OPTION } from '../data/cozy';
 import { LANDING } from '../data/oldcity';
 import { canStep, connected } from '../core/Height';
+import { mainlandClosedAt } from '../core/Mainland';
 import type { Sim } from './Sim';
 
 /**
@@ -56,6 +57,8 @@ export class Walker {
   walkable(roofId: string, cx: number, cz: number): boolean {
     const g = this.sim.grid;
     if (roofId === GROUND) {
+      // island release: the causeway and the mainland wait for a future update (bloombot turns back, see BotController)
+      if (mainlandClosedAt(cx, cz)) return false;
       if (this.sim.areas.fog(this.sim.areas.map.areaOfCell(cx, cz)) === 'hidden') return false;
     } else if (!g.isPlayable(roofId) || !g.inBounds(roofId, cx, cz)) return false;
     const t = g.get(roofId, cx, cz);
