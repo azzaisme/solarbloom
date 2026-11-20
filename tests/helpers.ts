@@ -47,13 +47,15 @@ export function unlockAll(sim: Sim, plenty = 9999) {
 }
 
 /**
- * E23.3.3: Drone Hubs and Cultivators run on the power grid. Mechanics tests are about what a helper does once it
- * runs, so here helpers need no line (tests/power-helpers.test.ts covers helpers on and off the grid). A sim
- * loaded from a save is a new sim: call this on it too.
+ * E23.3.3: Drone Hubs and Cultivators run on the power grid, and E23.6.3: their drones on water and Biomass. Mechanics
+ * tests are about what a helper does once it runs, so here helpers need no line and no supply
+ * (tests/power-helpers.test.ts covers helpers on and off the grid, tests/drone-fuel.test.ts what drones run on). A
+ * sim loaded from a save is a new sim: call this on it too.
  */
 export function offGrid<S extends Sim>(sim: S): S {
   sim.power.register('droneHub', { consumer: undefined });
   sim.power.register('cultivator', { consumer: undefined });
+  Object.assign(sim.droneFuel, { short: () => undefined, take: () => true });
   return sim;
 }
 

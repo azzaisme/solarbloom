@@ -223,6 +223,7 @@ describe('E18.2 Gardener', () => {
     const sim = city();
     const h = roleHub(sim, 20, 20, 'gardener');
     box(sim, 8, 8, 34, 34, (t) => ((t.x + t.z) % 2 ? grey(t) : green(TUNING.restore.maxBloom)(t)));
+    pond(sim, [24], 19, 22); // E23.6.3: water beside the hub, so it naps for want of work, not water
     sim.advance(20);
     const d = sim.state.drones.find((x) => x.hubId === h.id)!;
     expect(sim.drones.statusOf(d)).toBe('napping');
@@ -237,7 +238,7 @@ describe('E18.2 Gardener', () => {
     const h = roleHub(sim, 16, -32, 'gardener');
     (h.upg ??= {}).droneSweep = 2;
     box(sim, 8, -40, 26, -22, green(1));
-    pond(sim, [-36], 15, 18); // E23.4.1: a small pool by the hub, lawn all round it
+    pond(sim, [-34], 15, 18); // E23.4.1: a small pool by the hub (E23.6.3: in its reach), lawn all round it
     let most = 0;
     sim.bus.on('drone.roleWork', (e) => (most = Math.max(most, e.tileIds.length)));
     sim.advance(30);

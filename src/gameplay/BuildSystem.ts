@@ -179,7 +179,10 @@ export class BuildSystem {
     const recipe = this.recipe(m.type as BuildableType);
     for (const t of s.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t && t.occupantId === m.id) t.occupantId = undefined;
     s.grid.unindexMachine(m);
-    if (m.type === 'droneHub') s.drones.removeHub(m.id);
+    if (m.type === 'droneHub') {
+      s.automation.hubRemoved(m.id); // E23.6.4: couriers' baskets come back before the drones go
+      s.drones.removeHub(m.id);
+    }
     s.state.machines = s.state.machines.filter((q) => q.id !== m.id);
     machinesRemoved();
     if (recipe) s.inventory.refund(recipe);

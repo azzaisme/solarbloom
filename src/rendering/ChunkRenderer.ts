@@ -22,12 +22,13 @@ import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
-import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
+import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
 import { MODELS, ModelBatch } from './Models';
+import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER, poolMaterial, updatePool } from './Water';
 import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
@@ -100,6 +101,18 @@ type V3 = [number, number, number];
 const UP: V3 = [0, 1, 0];
 
 /** Accumulates transformed primitives into one vertex-coloured mesh. */
+/** E23.12.3: the box around some points (a quad, a triangle, a prism's ring), for the CPU line of sight. */
+function pointsBox(...pts: readonly (readonly number[])[]) {
+  return {
+    x0: Math.min(...pts.map((q) => q[0])),
+    y0: Math.min(...pts.map((q) => q[1])),
+    z0: Math.min(...pts.map((q) => q[2])),
+    x1: Math.max(...pts.map((q) => q[0])),
+    y1: Math.max(...pts.map((q) => q[1])),
+    z1: Math.max(...pts.map((q) => q[2])),
+  };
+}
+
 export class MeshBuilder {
   private pos = new Grow(new Float32Array(1 << 15));
   private nrm = new Grow(new Float32Array(1 << 15));
@@ -112,6 +125,7 @@ export class MeshBuilder {
 
   /** `glow` (0-1, Look 1.9) makes the primitive emissive: stored in the vertex alpha, read by the vertex-colour material. */
   add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number, glow = 0) {
+    SOLID_SINK.current?.prim(p, s); // E23.12.3: what's drawn solid, for the CPU line of sight
     const t = template(type);
     let sx: number, sy: number, sz: number;
     if (typeof s === 'number') sx = sy = sz = s;
@@ -184,6 +198,7 @@ export class MeshBuilder {
 
   /** Look 3: stamps a cached template (flex ignored: solid props don't sway), turned about Y and scaled. */
   addGeo(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number) {
+    SOLID_SINK.current?.geo(foliageBounds(g), x, y, z, scale);
     const nv = g.pos.length / 4;
     const base = this.pos.n / 3;
     this.pos.reserve(nv * 3);
@@ -225,6 +240,7 @@ export class MeshBuilder {
 
   /** Look 3.3: an upward quad with its own colour per corner (linear 0–1), for blended lawn tops. */
   quad(p: number[], cols: number[]) {
+    if (SOLID_SINK.current) SOLID_SINK.current.box(pointsBox([p[0], p[1], p[2]], [p[3], p[4], p[5]], [p[6], p[7], p[8]], [p[9], p[10], p[11]]));
     const base = this.pos.n / 3;
     this.pos.reserve(12);
     this.nrm.reserve(12);
@@ -259,6 +275,7 @@ export class MeshBuilder {
 
   /** One flat-shaded triangle (world positions), wound so it faces along `n`. */
   tri(hex: string, a: V3, b: V3, c: V3, n: V3) {
+    if (SOLID_SINK.current) SOLID_SINK.current.box(pointsBox(a, b, c));
     const ux = b[0] - a[0];
     const uy = b[1] - a[1];
     const uz = b[2] - a[2];
@@ -300,6 +317,7 @@ export class MeshBuilder {
    * each ring segment, facing away from `o`. Used for the rounded banks of pools.
    */
   prism(hex: string, o: [number, number], ring: [number, number][], closed: boolean, yTop: number, yBot: number) {
+    if (SOLID_SINK.current && ring.length) SOLID_SINK.current.box(pointsBox(...ring.flatMap(([x, z]) => [[o[0] + x, yBot, o[1] + z], [o[0] + x, yTop, o[1] + z]] as V3[])));
     const n = closed ? ring.length : ring.length - 1;
     for (let i = 0; i < n; i++) {
       const p = ring[i];
@@ -724,6 +742,7 @@ export class ChunkRenderer {
   }
 
   private drop(v: ChunkView) {
+    this.solids.clearChunk(v.key);
     this.dropModels(v);
     v.surface?.destroy();
     v.trans?.destroy();
@@ -803,6 +822,9 @@ export class ChunkRenderer {
     drain: ['dry-drain', 0.8, true],
     stump: ['stump', 0.85, true],
   };
+
+  /** how far right of a bench model's centre its planter tree stands: past the seat's end (the model is ~0.9 wide) */
+  static readonly PLANTER_BESIDE = 0.64;
 
   private propModel(prop: string, x: number, y: number, z: number): boolean {
     if (!this.batch) return false;
@@ -1115,13 +1137,27 @@ export class ChunkRenderer {
    * new), and abandons it if the camera has left and the chunk was dropped. Nothing is shown until the last step,
    * which swaps all of the chunk's meshes in at once. One job at a time: the build's working state lives on `this`.
    */
-  private job?: { v: ChunkView; steps: Generator<void> };
+  private job?: { v: ChunkView; steps: Generator<void>; solids?: SolidCollector };
+
+  /**
+   * E23.12.3 (#530): every built ground chunk's solid boxes, as its build drew them (core/Solids), for the CPU line
+   * of sight where the GPU sight pick can't run.
+   */
+  readonly solids = new SolidIndex();
 
   /** Runs the job until it finishes (true) or the frame's budget is spent (false). Always makes some progress. */
   private runJob(over: () => boolean): boolean {
     const job = this.job!;
     for (;;) {
-      if (job.steps.next().done) {
+      // only this chunk's own drawing reports solids (nothing else drawn between its steps)
+      SOLID_SINK.current = job.solids;
+      let done: boolean | undefined;
+      try {
+        done = job.steps.next().done;
+      } finally {
+        SOLID_SINK.current = undefined;
+      }
+      if (done) {
         this.job = undefined;
         return true;
       }
@@ -1151,6 +1187,10 @@ export class ChunkRenderer {
     v.sunk = fog === 'hidden';
     const city = s.grid.layer(GROUND)!.height;
     const h = city - (v.sunk ? SINK : 0);
+    // E23.12.3: what this build draws solid is recorded as it goes (the job sets it as the sink for each step)
+    const solids = new SolidCollector(h + 0.08);
+    if (this.job?.v === v) this.job.solids = solids;
+    SOLID_SINK.current = solids;
     v.far = dist(v, this.lastFocus) / CHUNK > this.farFrom;
     // Props in the park follow its stage; elsewhere they're broken until their area clears.
     this.level = area === 'park' ? Math.max(0, this.parkStage) : fog === 'cleared' ? 4 : 0;
@@ -1322,6 +1362,8 @@ export class ChunkRenderer {
       for (const [dx, dz] of EDGE_DIRS)
         if (s.areas.fog(s.areas.map.areaOfChunk(v.cx + dx, v.cz + dz)) === 'hidden') this.facade(b, v, dx, dz, city, alive, !!v.far);
     }
+    // E23.12.3: everything this build drew solid, the facades included, into the per-tile index
+    this.solids.setChunk(v.key, solids.boxes);
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
     this.treeTris.set(v.key, fb.tris);
@@ -2765,7 +2807,8 @@ export class ChunkRenderer {
   private prop(b: Sink, prop: string, x: number, y: number, z: number, r: VRng) {
     if (this.propModel(prop, x, y, z)) {
       // the park bench keeps its little planter tree beside it
-      if (prop === 'bench' && this.inPark) this.planterTree(b, x + 0.38, y, z + 0.32, this.level >= 3);
+      // (beside the bench's right end, clear of the seat: it used to stand in the seat's front corner)
+      if (prop === 'bench' && this.inPark) this.planterTree(b, x + ChunkRenderer.PLANTER_BESIDE, y, z - 0.04, this.level >= 3);
       if (prop === 'bench' && this.brokenBench(x, z)) this.benchDamage(b, x, y, z);
       return;
     }

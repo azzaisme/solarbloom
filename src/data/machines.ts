@@ -269,6 +269,24 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared'],
     blurb: 'Stands on the bank of a pond or canal and pushes its water along the pipes it touches, uphill or far away. Runs on grid power.',
   },
+  // E23.6.4: a box with its own contents, for machines and couriers (old-city rules only)
+  crate: {
+    type: 'crate',
+    name: 'Supply Crate',
+    icon: '🧺',
+    size: 1,
+    allowedGround: ['restored', 'prepared', 'polluted'],
+    blurb: 'A box of its own: couriers carry between crates, and machines take from and put into the crates beside them.',
+  },
+  // E23.6.5: crafts a component by itself, from the crate beside it into another (old-city rules only)
+  assembler: {
+    type: 'assembler',
+    name: 'Assembler',
+    icon: '🛠️',
+    size: 2,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Makes the component you choose by itself, from one supply crate beside it into another (you pick which), on grid power.',
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -279,8 +297,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter; E23.4 the water). */
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'beehive', 'fishPond', 'orchard', 'mushroomLog', 'wormBin', 'birdBox', 'batBox', 'hedgehogHouse', 'butterflyGarden', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter; E23.4 the water; E23.6.4 / E23.6.5 automation). */
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'beehive', 'fishPond', 'orchard', 'mushroomLog', 'wormBin', 'birdBox', 'batBox', 'hedgehogHouse', 'butterflyGarden', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator', 'crate', 'assembler'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

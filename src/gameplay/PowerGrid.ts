@@ -86,6 +86,9 @@ export class PowerGrid {
   private dirty = true;
   /** Served fraction per consumer id from the last solve (1 = fully on). */
   private servedFrac = new Map<string, number>();
+  /** E23.6.3: per network, the power left after every consumer at the last solve, and what is booked since */
+  private freeOf = new Map<PowerNetwork, number>();
+  private booked = new Map<PowerNetwork, number>();
   /** Eased level per consumer id. */
   private eased = new Map<string, number>();
   private solved = false;
@@ -100,9 +103,9 @@ export class PowerGrid {
     this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) * solarBoost(s, m) * s.upgrades.solarMult(m as MachineData) * (1 + (s.research?.effect('solarYield') ?? 0)) });
     this.register('battery', { battery: { capacity: () => POWER.battery.capacity * (sim.landmarks?.batteryMult() ?? 1), rate: POWER.battery.rate } });
     this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
-    // E23.3.3: helpers run on the grid.
-    this.register('droneHub', { consumer: { shed: 'helper', draw: POWER.helper.droneHub } });
-    this.register('cultivator', { consumer: { shed: 'helper', draw: POWER.helper.cultivator } });
+    // E23.3.3: helpers run on the grid; E23.6.3: each draws by its drones' roles (gameplay/DroneFuel)
+    this.register('droneHub', { consumer: { shed: 'helper', draw: (m, s) => s.droneFuel.draw(m as MachineData) } });
+    this.register('cultivator', { consumer: { shed: 'helper', draw: (m, s) => s.droneFuel.draw(m as MachineData) } });
   }
 
   private providers: (() => readonly PowerNode[])[] = [];
@@ -186,6 +189,32 @@ export class PowerGrid {
     if (!m || !this.roleOf(m)?.consumer) return true;
     this.fresh();
     return (this.servedFrac.get(m.id) ?? 0) > 0;
+  }
+
+  /**
+   * E23.6.3: the power truly free on a consumer's network (W): what is left after every consumer on it has drawn
+   * (every drone at work on every hub included), less what has been booked since the last solve. A new load this size
+   * runs without shedding anything already running. 0 off the grid or unpowered; Infinity for machines the grid does
+   * not power.
+   */
+  headroom(m: PowerNode | undefined): number {
+    if (!m || !this.roleOf(m)?.consumer) return Infinity;
+    if (!this.isPowered(m)) return 0;
+    const n = this.netOf.get(m.id);
+    if (!n) return 0;
+    return Math.max(0, (this.freeOf.get(n) ?? 0) - (this.booked.get(n) ?? 0));
+  }
+
+  /**
+   * E23.6.3: a consumer about to draw `w` more (a drone setting out) books it on its network at once, so the next
+   * launch in the same tick, from any hub on the line, sees it gone. The next solve counts the real draw and drops
+   * the booking.
+   */
+  reserve(m: PowerNode | undefined, w: number): void {
+    if (!m || !(w > 0) || !this.roleOf(m)?.consumer) return;
+    this.fresh();
+    const n = this.netOf.get(m.id);
+    if (n) this.booked.set(n, (this.booked.get(n) ?? 0) + w);
   }
 
   /** 0..1: how lit or running a consumer is, eased so lights fade. 1 for machines the grid does not power. */
@@ -399,6 +428,8 @@ export class PowerGrid {
     const rank = (m: PowerNode) => KEEP_ORDER.indexOf(this.roles.get(m.type)!.consumer!.shed);
     for (const n of this.nets) n.consumers.sort((a, b) => rank(a) - rank(b) || byId(a, b));
     for (const id of [...this.servedFrac.keys()]) if (!this.netOf.has(id)) this.servedFrac.delete(id);
+    this.freeOf.clear(); // the networks are new objects now
+    this.booked.clear();
     for (const id of [...this.eased.keys()]) if (!this.netOf.has(id)) this.eased.delete(id);
   }
 
@@ -445,6 +476,9 @@ export class PowerGrid {
     if (served > supply) flow = -Math.min(served - supply, canGive);
     else flow = Math.min(supply - served, canTake);
     if (dt > 0 && flow !== 0) this.spread(n, flow * dt);
+    // E23.6.3: free for new loads (none once something on the line is dark); the solve counts every booked launch now
+    this.freeOf.set(n, blocked ? 0 : Math.max(0, left));
+    this.booked.delete(n);
     n.supply = supply;
     n.demand = demand;
     n.served = served;

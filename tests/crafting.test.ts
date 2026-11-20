@@ -9,6 +9,7 @@ import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { GARDEN_REQUESTS } from '../src/data/farmExtras';
 import { PROJECTS } from '../src/data/research';
+import { HAND_JOBS } from '../src/data/automation';
 import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
 import { componentRows, machineRows } from '../src/ui/CraftTable';
@@ -33,6 +34,8 @@ function reachable(u: Unlock): boolean {
   // E23.5.4.6: a garden gift is handed over by some Keeper's garden request
   if ('gift' in u) return Object.values(GARDEN_REQUESTS).some((rs) => rs.some((r) => r.reward.kind === 'recipe' && r.reward.machine === u.gift));
   if ('cat' in u) return CAT_DECOR.includes(u.cat); // E23.12.2: a cat-only decoration (a Lucky Cat leaves it)
+  if ('hand' in u) return u.hand in HAND_JOBS; // E23.6.4: a job done by hand
+  if ('all' in u) return u.all.every(reachable);
   return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
 }
 

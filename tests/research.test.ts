@@ -227,7 +227,7 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     const sim = station();
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     const offered = sim.research.upgrades().map((u) => u.id);
-    // E23.4 water and E23.6.4 couriers are not in this game yet
+    // E23.4 water is not in this game yet; E23.6.4's couriers wait for things carried by hand
     for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'droneCarry'])
       expect(offered, id).not.toContain(id);
     expect(sim.research.upgradeProblem('pumpRate')).toBe('Not open yet');
@@ -235,8 +235,8 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(offered).toContain('compostSpeed');
     // E23.2.1's charge and E23.3's batteries are: their upgrades are offered
     for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'chargeCells', 'chargeEfficiency', 'sprint', 'batteryStore']) expect(offered, id).toContain(id);
-    // "Lighter drones" waits for E23.6.3's reader (#502), so it is not in the data yet
-    expect(RESEARCH_UPGRADES.map((u) => u.id)).not.toContain('droneThrift');
+    // "Lighter drones" is read by E23.6.3's drone supply (#502), so it is offered with the drones
+    expect(offered).toContain('droneThrift');
   });
 
   it('crops and creatures found open projects', () => {

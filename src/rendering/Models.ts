@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { SOLID_SINK, type GeoBounds } from '../core/Solids';
 import { MODEL_NAMES } from '../data/oldcity';
 
 /**
@@ -239,6 +240,32 @@ export class ModelLibrary {
     return this.loaded.has(name);
   }
 
+  private boundsCache = new Map<string, GeoBounds>();
+  /**
+   * E23.12.3: a loaded model's extent about its pivot (metres, unscaled): the furthest it reaches from its vertical
+   * axis and its height range, from its parts' bounds in the model. Undefined until loaded.
+   */
+  bounds(name: string): GeoBounds | undefined {
+    const hit = this.boundsCache.get(name);
+    if (hit) return hit;
+    const parts = this.parts(name);
+    if (!parts.length) return undefined;
+    const box = new pc.BoundingBox();
+    let first = true;
+    const tmp = new pc.BoundingBox();
+    for (const part of parts) {
+      tmp.setFromTransformedAabb(part.mesh.aabb, part.local);
+      if (first) box.copy(tmp);
+      else box.add(tmp);
+      first = false;
+    }
+    const lo = box.getMin();
+    const hi = box.getMax();
+    const b: GeoBounds = { r: Math.max(Math.hypot(lo.x, lo.z), Math.hypot(hi.x, hi.z), Math.hypot(lo.x, hi.z), Math.hypot(hi.x, lo.z)), y0: lo.y, y1: hi.y };
+    this.boundsCache.set(name, b);
+    return b;
+  }
+
   /** The parts to draw (far = the LOD1 version, falling back to the near one). */
   parts(name: string, far = false): ModelPart[] {
     const m = this.models.get(name);
@@ -384,6 +411,11 @@ export class ModelBatch {
   /** A copy at (x, y, z), turned rotY radians about +y, scaled (sx, sy, sz). E20.6: `neglected` draws its dusty look. */
   add(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy = sx, sz = sx, neglected = false): boolean {
     if (!this.lib.has(name)) return false;
+    // E23.12.3: the model as placed, at its loaded size, for the CPU line of sight
+    if (SOLID_SINK.current) {
+      const b = this.lib.bounds(name);
+      if (b) SOLID_SINK.current.model(b, x, y, z, sx, sy, sz);
+    }
     const key = neglected ? `${name}|neglected` : name;
     let list = this.placed.get(key);
     if (!list) this.placed.set(key, (list = []));

@@ -1,5 +1,6 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 /** `chest`: the Old City's caches (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+/** E23.6.4: `crate` (a supply crate, its own contents) and `assembler` (E23.6.5) are automation's machines. */
 export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
   // E23.5.2: the farm
   | 'planter'
@@ -21,7 +22,10 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   | 'pump'
   | 'desalination'
   // E23.8.3.2: the mainland's big machines
-  | 'gridBattery';
+  | 'gridBattery'
+  // E23.6.4 / E23.6.5: automation
+  | 'crate'
+  | 'assembler';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type RestoreSource =
   | 'pulse'
@@ -164,6 +168,8 @@ export interface MachineData {
   tripped?: boolean;
   /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
   cult?: { units: CultivatorUnit[]; done: number };
+  /** E23.6.3: a drone hub's (or Cultivator dock's) share of a Biomass item paid ahead (Lighter drones makes a job cost a fraction) */
+  fuelCredit?: number;
   /** E18: a Drone Hub's role (unset = restorer; slot 1 on a Fleet Hub). */
   role?: DroneRole;
   /** E18: roles this hub has been refitted for (Restorer is always owned, so never listed). */
@@ -219,6 +225,13 @@ export interface DroneData {
   role?: DroneRole;
   /** E18.4: a Courier's machine target (instead of a tile). */
   targetMachineId?: string;
+  /** E23.6.4: a Courier on a route: the route, and what it carries to the route's target crate (none: going to fetch) */
+  route?: string;
+  cargo?: { item: import('./types').ItemId; n: number }[];
+  /** E23.6.4: units of room it booked in the route's target before fetching (no two baskets count on the same room) */
+  reserve?: number;
+  /** E23.6.3: sent home short of power or supply: it draws nothing from its hub on the way back */
+  homing?: boolean;
 }
 
 export type BuffType = 'solarFrenzy' | 'megaflower' | 'droneParty';
@@ -410,6 +423,17 @@ export interface SalvageState {
   decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
+  /** E23.6.4: what each supply crate holds, by machine id */
+  crates?: Record<string, Partial<Record<ItemId, number>>>;
+  /** E23.6.4: courier routes the player set (from one crate to another, an item or everything) */
+  routes?: { id: string; from: string; to: string; item: import('../data/automation').RouteItem }[];
+  /** E23.6.4: how many times each job has been done by hand (it opens its automation) */
+  hand?: Partial<Record<import('../data/automation').HandJob, number>>;
+  /**
+   * E23.6.5: each Assembler's recipe (an item id), seconds left on the craft in hand and what that craft took (given
+   * back if it is stopped), and the crates the player chose as its input and output
+   */
+  assemblers?: Record<string, { recipe?: string; left?: number; taken?: Partial<Record<ItemId, number>>; input?: string; output?: string }>;
   /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
   research?: ResearchState;
   /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */
@@ -539,6 +563,11 @@ export interface GameState {
   };
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };
+  /**
+   * E23.2.4: times bloombot has sat down (seeds who visits), and the visitor log: each kind that came, the sim time
+   * it first did, the areas it was seen in and how often. Optional.
+   */
+  wildlife?: { sits: number; log: Record<string, { first: number; where: string[]; count: number }> };
   /** E23.2.2.3: buried finds revealed (a mound shows) and dug up, by id (`bur:x:z`). Optional. */
   buried?: { known: string[]; dug: string[] };
   /** E23.2.2: what the pulse is loaded with (absent = nothing). Optional, so no save version change. */
