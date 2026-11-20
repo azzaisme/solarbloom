@@ -11,7 +11,7 @@ import { planVisits, tierOf } from '../src/gameplay/Wildlife';
 import { treeSpot } from '../src/rendering/TreePlacement';
 
 SaveService.clock = () => 0;
-const oldSim = () => new Sim(createInitialState(7, 'oldcity'));
+const oldSim = () => new Sim(createInitialState(7));
 const parkBench = (sim: Sim) => sim.rest.benchAt(10, 6)!;
 
 /** Open park ground, dead, with (or without) a tree spot, so a test controls exactly which kinds of plant grow. */
@@ -245,11 +245,5 @@ describe('E23.2.4.2: visits scale with diversity', () => {
       const src = readFileSync(new URL(f, import.meta.url), 'utf8');
       expect(src).not.toMatch(/sim\.cat\b|\.cat\.|CAT_ANCHORS|catSpots|state\.cat\b/);
     }
-  });
-
-  it('classic rules: no visits', () => {
-    const sim = new Sim(createInitialState(7));
-    sim.wildlife.begin();
-    expect(sim.wildlife.visits).toEqual([]);
   });
 });

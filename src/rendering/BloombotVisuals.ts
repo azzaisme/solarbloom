@@ -3,7 +3,8 @@ import { color, PALETTE } from './Materials';
 import { BOT_CLIPS, REST, seatLift } from '../data/rest';
 import { VISIT_POINTS, type Perch } from '../data/wildlife';
 import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
-import { surfaceTriangles, vertexOnBones } from './SkinSurface';
+import { surfaceTriangles, skinnedVertices, vertexOnBones } from './SkinSurface';
+import { inBox, type SeatBox } from './SeatBox';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -39,30 +40,6 @@ export type BotLoop = 'idle' | 'walk' | 'hover' | 'sit' | 'meditate';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
 const LOOPS: readonly string[] = ['idle', 'walk', 'hover', 'sit', 'meditate', 'doze'];
 
-/**
- * A box in a bench's (or pad's) own frame: about `cx, cz` in the world, turned by `facing` (radians, as the bench
- * is: its +z is ahead); `x` across and `z` ahead in that frame, `y` in the world.
- */
-export interface SeatBox {
-  cx: number;
-  cz: number;
-  facing: number;
-  x: readonly number[];
-  y: readonly number[];
-  z: readonly number[];
-}
-
-/** A world point's distance ahead (`z`) in the box's own frame, if it is within the box across and ahead. */
-function inBox(b: SeatBox, x: number, z: number): number | undefined {
-  const c = Math.cos(b.facing);
-  const s = Math.sin(b.facing);
-  const dx = x - b.cx;
-  const dz = z - b.cz;
-  const u = dx * c - dz * s;
-  const w = dx * s + dz * c;
-  return u > b.x[0] && u < b.x[1] && w > b.z[0] && w < b.z[1] ? w : undefined;
-}
-
 export class BloombotVisuals {
   /** placed at bloombot's feet, turned to its facing */
   readonly root = new pc.Entity('bloombot');
@@ -91,7 +68,20 @@ export class BloombotVisuals {
   private settleOut = 0;
   private wantUp = 0;
   private wantOut = 0;
-  private settleAt = -1;
+  /**
+   * How far along settling it is: a first quick look as it sits ('look'), easing there ('ease'), then watching a whole
+   * breathing and leg-swing cycle holding still ('watch'), then still ('held').
+   */
+  private settling: 'look' | 'ease' | 'watch' | 'held' = 'look';
+  private settleNext = 0;
+  private settleUntil = 0;
+  private settlePasses = 0;
+  private needUp = -Infinity;
+  private needOut = 0;
+  private settledAt = 0;
+  private posedAt = 0;
+  private hanging?: Uint8Array;
+  private measured: number[] = [];
   private legs = 1;
   private legsAt = 0;
   /** true once the real model is drawn */
@@ -231,7 +221,8 @@ export class BloombotVisuals {
     if (pose !== was) {
       this.settleUp = this.wantUp = 0;
       this.settleOut = this.wantOut = 0;
-      this.settleAt = -1;
+      this.settling = 'look';
+      this.settlePasses = 0;
       this.posedAt = this.clock;
     }
     if (pose === 'meditate') this.setFace('blink', 1e9);
@@ -339,11 +330,11 @@ export class BloombotVisuals {
   }
 
   /**
-   * Sitting: settles onto what it sits on from its real skinned surface as drawn (after the legs are bent and
-   * swung; REST.settle). Every so often it measures the lowest of it over the seat (or pad), not counting its shins
-   * and feet on a bench (they hang over the front edge and swing), and whether its back is in the backrest or a shin
-   * in the seat's slab; then eases up or down so that lowest point rests on the top, and forward just clear. Not
-   * while a clip into the pose plays, nor in its first moments (it is still bending into the pose).
+   * Sitting: settles onto what it sits on from its real skinned surface as drawn (after the legs are bent and swung;
+   * REST.settle). A first look as soon as it has bent into the pose brings it roughly there. Then, holding still, it
+   * watches a whole breathing and leg-swing cycle and takes the most it needs to come up (and forward) across it,
+   * so its underside never dips into the seat or pad between looks and the breathing stays smooth; once that needs
+   * no more than a hair, it holds. Not while a clip into the pose plays.
    */
   private settle() {
     const k = REST.settle;
@@ -352,44 +343,77 @@ export class BloombotVisuals {
       this.settleOut = this.wantOut = 0;
       return;
     }
-    // as drawn last frame: moved by what was applied then
-    const drawnUp = this.settleUp;
-    const drawnOut = this.settleOut;
     const dt = Math.min(0.1, Math.max(0, this.clock - this.settledAt));
     this.settledAt = this.clock;
     const ease = Math.min(1, dt * k.ease);
     this.settleUp += (this.wantUp - this.settleUp) * ease;
     this.settleOut += (this.wantOut - this.settleOut) * ease;
     // not while it is still getting into the pose (its legs straight down under it as it bends)
-    if (this.action || this.clock - this.posedAt < k.after || this.clock - this.settleAt < k.every) return;
-    this.settleAt = this.clock;
-    const pts = this.corners();
-    // on a bench its shins and feet hang over the front edge: they don't rest on the seat (cross-legged on the pad,
-    // they do)
-    const hang = this.pose === 'sit' ? (this.hanging ??= vertexOnBones(this.model, (n) => HANGING.test(n), REST.settle.hangShare)) : undefined;
-    const s = this.restingOn;
-    let low = Infinity;
-    // and how far forward (the seat's +z: bloombot faces the way the bench does) it must come for its back to be out
-    // of the backrest and its shins clear of the seat's front edge
-    let push = 0;
+    if (this.action || this.clock - this.posedAt < k.after) return;
+    if (this.settling === 'look') {
+      const m = this.measure();
+      this.aim(m.up, m.out);
+    } else if (this.settling === 'ease' && this.clock >= this.settleUntil) {
+      // there: hold still while it watches a cycle
+      this.settleUp = this.wantUp;
+      this.settleOut = this.wantOut;
+      this.settling = 'watch';
+      this.settleNext = this.clock;
+      this.settleUntil = this.clock + k.cycle;
+      this.needUp = -Infinity;
+      this.needOut = 0;
+    } else if (this.settling === 'watch' && this.clock >= this.settleNext) {
+      const m = this.measure();
+      this.needUp = Math.max(this.needUp, m.up);
+      this.needOut = Math.max(this.needOut, m.out);
+      this.settleNext = this.clock + k.watchEvery;
+      if (this.clock >= this.settleUntil) {
+        this.settlePasses++;
+        const up = Number.isFinite(this.needUp) ? this.needUp : 0;
+        const done = (Math.abs(up) <= k.hair && this.needOut <= k.hair) || this.settlePasses >= k.passes;
+        this.aim(up, this.needOut);
+        if (done) this.settling = 'held';
+      }
+    }
+  }
+
+  /** Eases toward `up` and `out` more than it is now (within REST.settle.most), and looks again once there. */
+  private aim(up: number, out: number) {
+    const k = REST.settle;
+    const clamp = (v: number) => Math.max(-k.most, Math.min(k.most, v));
+    this.wantUp = clamp(this.settleUp + up);
+    this.wantOut = clamp(this.settleOut + out);
+    this.settling = 'ease';
+    this.settleUntil = this.clock + k.easeFor;
+  }
+
+  /**
+   * One look at itself as drawn now: how far it must come up for its lowest point over the seat (or pad) to rest on
+   * the top (down if negative; its shins and feet don't count on a bench, they hang over the front edge), and how far
+   * forward for nothing of its back to be in the backrest and no shin in the seat's slab.
+   */
+  private measure(): { up: number; out: number } {
+    const k = REST.settle;
+    const pts = this.measured;
+    pts.length = 0;
+    skinnedVertices(this.model!, pts);
+    const hang = this.pose === 'sit' ? (this.hanging ??= vertexOnBones(this.model!, (n) => HANGING.test(n), k.hangShare)) : undefined;
+    const s = this.restingOn!;
     const b = this.keepOutOf;
+    let low = Infinity;
+    let out = 0;
     for (let v = 0, i = 0; i < pts.length; v++, i += 3) {
       const y = pts[i + 1];
       const w = inBox(s, pts[i], pts[i + 2]);
       if (w !== undefined && !hang?.[v]) low = Math.min(low, y);
-      else if (w !== undefined && y > s.y[0] && y < s.y[1] - k.gap) push = Math.max(push, s.z[1] - w + k.gap); // a shin in the seat's slab (under it is open)
+      else if (w !== undefined && y > s.y[0] && y < s.y[1] - k.gap) out = Math.max(out, s.z[1] - w + k.gap); // a shin in the seat's slab (under it is open)
       if (b && y > b.y[0] && y < b.y[1]) {
         const bw = inBox(b, pts[i], pts[i + 2]);
-        if (bw !== undefined) push = Math.max(push, b.z[1] - bw + k.gap);
+        if (bw !== undefined) out = Math.max(out, b.z[1] - bw + k.gap);
       }
     }
-    const clamp = (v: number) => Math.max(-k.most, Math.min(k.most, v));
-    if (Number.isFinite(low)) this.wantUp = clamp(drawnUp + s.y[1] + k.gap - low);
-    if (push > 0) this.wantOut = clamp(drawnOut + push);
+    return { up: Number.isFinite(low) ? s.y[1] + k.gap - low : 0, out };
   }
-  private hanging?: Uint8Array;
-  private settledAt = 0;
-  private posedAt = 0;
 
   /**
    * On a bench: its little legs swing, one forward as the other goes back, now livelier, now nearly still; and still

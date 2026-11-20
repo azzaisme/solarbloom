@@ -19,10 +19,18 @@ function half(h: number): number {
   return e === 0 ? s * 2 ** -14 * (f / 1024) : e === 31 ? NaN : s * 2 ** (e - 15) * (1 + f / 1024);
 }
 
+/**
+ * A vertex or index buffer's CPU-side copy of its data. PlayCanvas keeps it (as `storage`) for buffers it may need to
+ * re-upload, but leaves it out of its public typings, so it is read here, once, behind a cast.
+ */
+function cpuCopy(buffer: pc.VertexBuffer | pc.IndexBuffer | undefined): ArrayBuffer | undefined {
+  return (buffer as unknown as { storage?: ArrayBuffer } | undefined)?.storage;
+}
+
 /** One element of a vertex buffer's format as a reader: (vertex, component) → number (normalised where it is). */
 function reader(vb: pc.VertexBuffer, name: string): Reader | undefined {
   const el = vb.getFormat().elements.find((e) => e.name === name);
-  const storage = (vb as unknown as { storage?: ArrayBuffer }).storage;
+  const storage = cpuCopy(vb);
   if (!el || !storage) return undefined;
   const view = new DataView(storage);
   const size = SIZE[el.dataType] ?? 4;
@@ -67,13 +75,14 @@ export function surfaceTriangles(entity: pc.Entity, out: number[] = [], corners?
     if (!r.enabled || !r.entity.enabled) continue;
     for (const mi of r.meshInstances) {
       const mesh = mi.mesh;
-      const ib = mesh?.indexBuffer?.[pc.RENDERSTYLE_SOLID] as unknown as { storage?: ArrayBuffer; format: number } | undefined;
+      const ib = mesh?.indexBuffer?.[pc.RENDERSTYLE_SOLID];
+      const ibData = cpuCopy(ib);
       const prim = mesh?.primitive?.[pc.RENDERSTYLE_SOLID];
       if (!mesh || !prim || prim.type !== pc.PRIMITIVE_TRIANGLES) continue;
       const vs: number[] = [];
       vertices(mi, vs); // this mesh instance's vertices (the same skinning, one mesh at a time)
       if (corners) for (const c of vs) corners.push(c); // (and each corner once, when asked)
-      const idx = ib?.storage ? (ib.format === pc.INDEXFORMAT_UINT32 ? new Uint32Array(ib.storage) : ib.format === pc.INDEXFORMAT_UINT8 ? new Uint8Array(ib.storage) : new Uint16Array(ib.storage)) : undefined;
+      const idx = ib && ibData ? (ib.format === pc.INDEXFORMAT_UINT32 ? new Uint32Array(ibData) : ib.format === pc.INDEXFORMAT_UINT8 ? new Uint8Array(ibData) : new Uint16Array(ibData)) : undefined;
       const count = prim.count;
       for (let t = prim.base; t + 2 < prim.base + count; t += 3) {
         for (let k = 0; k < 3; k++) {
@@ -81,6 +90,22 @@ export function surfaceTriangles(entity: pc.Entity, out: number[] = [], corners?
           out.push(vs[v * 3], vs[v * 3 + 1], vs[v * 3 + 2]);
         }
       }
+    }
+  }
+  return out;
+}
+
+/**
+ * The vertices drawn under `entity` (each once, x, y, z), skinned as surfaceTriangles skins them and in the same order
+ * as its `corners`, without building the triangles: for measuring where something rests.
+ */
+export function skinnedVertices(entity: pc.Entity, out: number[] = []): number[] {
+  for (const r of entity.findComponents('render') as pc.RenderComponent[]) {
+    if (!r.enabled || !r.entity.enabled) continue;
+    for (const mi of r.meshInstances) {
+      const prim = mi.mesh?.primitive?.[pc.RENDERSTYLE_SOLID];
+      if (!prim || prim.type !== pc.PRIMITIVE_TRIANGLES) continue;
+      vertices(mi, out);
     }
   }
   return out;

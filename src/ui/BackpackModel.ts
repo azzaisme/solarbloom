@@ -263,8 +263,7 @@ export function collection(sim: Sim): CollectionGroup[] {
     friends,
     { title: 'Keepsakes', count: `${keeps.filter((k) => k.found).length} of ${keeps.length}`, rows: keeps, empty: '' },
     { title: 'Wildlife', count: `${fauna.length} kinds`, rows: fauna.map((f) => ({ name: cap(f), detail: 'Lives in your gardens', found: true })), empty: 'Wildlife arrives as gardens grow.' },
-    // (visits are an Old City thing: a classic game has nobody to sit with)
-    ...(sim.oldCity ? [visitors(sim)] : []),
+    visitors(sim),
     { title: 'Landmarks', count: `${woken.length} awake`, rows: woken.map((a) => ({ name: a.region ? (REGIONS.find((r) => r.id === a.region)?.landmark.name ?? a.landmarkName) : a.landmarkName, detail: a.region ? `In ${regionName(a.region)}` : 'Awake', found: true })), empty: 'Bring a place back to life to wake its landmark.' },
     { title: 'Plots', count: `${plots.length} of ${PLOT_OPTIONS.length}`, rows: plots.map((o) => ({ name: o.name, detail: o.blurb, found: true })), empty: '' },
     { title: 'Decorations', count: `${decor.length} of ${DECOR_OPTIONS.length}`, rows: decor.map((o) => ({ name: o.name, detail: o.blurb, found: true })), empty: '' },

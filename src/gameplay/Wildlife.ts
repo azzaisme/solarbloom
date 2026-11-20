@@ -87,9 +87,6 @@ export class WildlifeSystem {
     sim.bus.on('rest.stood', () => this.end());
   }
 
-  get on(): boolean {
-    return this.sim.oldCity;
-  }
 
   private get st() {
     return (this.sim.state.wildlife ??= { sits: 0, log: {} });
@@ -147,7 +144,6 @@ export class WildlifeSystem {
   begin() {
     this.visits = [];
     this.area = undefined;
-    if (!this.on) return;
     const at = this.seat();
     if (!at) return;
     const area = this.sim.areas.areaOf({ roofId: GROUND, x: Math.floor(at.x), z: Math.floor(at.z) });

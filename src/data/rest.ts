@@ -62,13 +62,16 @@ export const REST = {
   legSwing: { degrees: 26, perSecond: 0.75, driftSeconds: 11, calmest: 0.2, settle: 3 },
   /**
    * Sitting, bloombot settles onto what it sits on (the seat, the pad) from its real skinned surface
-   * (BloombotVisuals.settle), so its underside touches it rather than floating over it or sinking in: measured every
-   * `every` seconds (from `after` seconds into the pose, once it has bent into it), resting `gap` above it (on a
-   * bench its body and thighs do; its shins and feet hang over the front edge: anything they carry `hangShare` of,
-   * the knees too, which bob as the legs swing), and forward just far enough that nothing of its back is in the
-   * backrest and no shin is in the seat's slab. It eases there at `ease` a second, never more than `most` from where the pose put it.
+   * (BloombotVisuals.settle), so its underside touches it rather than floating over it or sinking in. From `after`
+   * seconds into the pose (once it has bent into it) it takes a first look and eases there (`ease` a second, for
+   * `easeFor` seconds); then, holding still, it looks every `watchEvery` seconds across `cycle` seconds (a whole
+   * breath: the by-hand breathing is 2π/1.6, about 3.9 s; a leg swing is 1/0.75 s) and comes up by the most any look
+   * needed, so it never dips in between; it watches again until that is within a `hair`, at most `passes` times, then
+   * holds. It rests `gap` above the top (on a bench its body and thighs do; its shins and feet hang over the front
+   * edge: anything they carry `hangShare` of, the knees too), and comes forward just far enough that nothing of its
+   * back is in the backrest and no shin is in the seat's slab; never more than `most` from where the pose put it.
    */
-  settle: { every: 0.5, after: 1.2, hangShare: 0.15, gap: 0.003, ease: 6, most: 0.2 },
+  settle: { after: 1.2, ease: 6, easeFor: 0.8, cycle: 4.5, watchEvery: 0.15, hair: 0.002, passes: 3, hangShare: 0.15, gap: 0.003, most: 0.2 },
   /** the music swells to this share above its level while sitting */
   musicSwell: 0.6,
   /**

@@ -87,6 +87,7 @@ import { Menu, type MenuHeader, type MenuItem } from '../ui/Menu';
 import { type SettingKey, SettingsScreen } from '../ui/SettingsScreen';
 import { settingsRows } from '../ui/SettingsRows';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
+import { benchBoxes, type WorldBox } from '../rendering/SeatBox';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
@@ -4412,47 +4413,14 @@ export class Game {
     const pad = r?.kind === 'charger' ? this.sim.machine(r.machineId) : undefined;
     // a frog on its knees: it keeps its legs still
     b.visuals.lapFull = this.sim.wildlife.visits.some((v) => v.perch === 'lap' && this.sim.time >= v.arrive - 1 && (v.leave === undefined || this.sim.time < v.leave));
-    // the bench under it: its footprint (REST.benchFoot, about its tile's middle), turned with it
-    let bench: { x0: number; x1: number; z0: number; z1: number } | undefined;
-    if (r?.kind === 'bench') {
-      const { along, back, front } = REST.benchFoot;
-      const c = Math.cos(r.bench.facing);
-      const s = Math.sin(r.bench.facing);
-      const xs: number[] = [];
-      const zs: number[] = [];
-      for (const u of [-along, along])
-        for (const w of [-back, front]) {
-          xs.push(r.bench.x + 0.5 + u * c + w * s);
-          zs.push(r.bench.z + 0.5 - u * s + w * c);
-        }
-      bench = { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) };
-    }
-    // and its solid parts (or the pad's), in the world, for the animals on bloombot to keep out of too
-    const solids: { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }[] = [];
-    if (r?.kind === 'bench') {
-      const c = Math.cos(r.bench.facing);
-      const s = Math.sin(r.bench.facing);
-      for (const part of REST.benchSolids) {
-        const xs: number[] = [];
-        const zs: number[] = [];
-        for (const u of part.x)
-          for (const w of part.z) {
-            xs.push(r.bench.x + 0.5 + u * c + w * s);
-            zs.push(r.bench.z + 0.5 - u * s + w * c);
-          }
-        solids.push({ x0: Math.min(...xs), x1: Math.max(...xs), y0: by + part.y[0], y1: by + part.y[1], z0: Math.min(...zs), z1: Math.max(...zs) });
-      }
-    } else if (pad) solids.push({ x0: pad.x, x1: pad.x + pad.size, y0: by, y1: by + 0.1, z0: pad.z, z1: pad.z + pad.size });
-    // bloombot settles onto the seat (out of the backrest) or the pad, from its real surface
-    if (r?.kind === 'bench') {
-      const at = { cx: r.bench.x + 0.5, cz: r.bench.z + 0.5, facing: r.bench.facing };
-      const [seat, back] = REST.benchSolids;
-      b.visuals.restingOn = { ...at, x: seat.x, z: seat.z, y: [by + seat.y[0], by + seat.y[1]] };
-      b.visuals.keepOutOf = { ...at, x: back.x, z: back.z, y: [by + back.y[0], by + back.y[1]] };
-    } else if (pad) {
-      b.visuals.restingOn = { cx: pad.x, cz: pad.z, facing: 0, x: [0, pad.size], z: [0, pad.size], y: [by, by + 0.1] };
-      b.visuals.keepOutOf = undefined;
-    } else b.visuals.restingOn = b.visuals.keepOutOf = undefined;
+    // the bench under it (SeatBox: turned with it): its footprint, which animals on the ground keep off; its solid
+    // parts (or the pad), which the animals on bloombot keep out of too; and the seat and backrest, which bloombot
+    // settles onto and keeps out of, from its real surface
+    const bb = r?.kind === 'bench' ? benchBoxes(r.bench, by) : undefined;
+    const bench = bb?.footprint;
+    const solids: WorldBox[] = bb ? bb.solids : pad ? [{ x0: pad.x, x1: pad.x + pad.size, y0: by, y1: by + 0.1, z0: pad.z, z1: pad.z + pad.size }] : [];
+    b.visuals.restingOn = bb ? bb.seat : pad ? { cx: pad.x, cz: pad.z, facing: 0, x: [0, pad.size], z: [0, pad.size], y: [by, by + 0.1] } : undefined;
+    b.visuals.keepOutOf = bb?.back;
     this.visitors.update(dt, this.sim.time, this.sim.wildlife.visits, {
       point: (p, out) => b.visuals.visitPoint(p, out),
       facing: b.pose.facing,
