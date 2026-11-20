@@ -3,7 +3,7 @@ name: Release (itch.io)
 # (index.html at the zip root) and keeps the zip as a workflow artifact.
 #
 # Automatic upload to itch.io (optional): add a repository secret BUTLER_API_KEY
-# (itch.io → Settings → API keys) and a repository variable ITCH_TARGET set to "user/game",
+# (itch.io → Settings → API keys) and ITCH_TARGET (a repository variable or secret) set to "user/game",
 # for example "yourname/solar-bloom". Without them the zip is still built; upload it by hand.
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 15
     env:
       BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-      ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+      ITCH_TARGET: ${{ vars.ITCH_TARGET || secrets.ITCH_TARGET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,7 +68,7 @@ jobs:
     timeout-minutes: 20
     env:
       BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-      ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+      ITCH_TARGET: ${{ vars.ITCH_TARGET || secrets.ITCH_TARGET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
