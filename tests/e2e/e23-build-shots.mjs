@@ -176,7 +176,7 @@ try {
       check(!errors.length, `${tag} keys: no page errors ${errors.join(' | ')}`);
       await page.close();
     }
-    // ── a pad: a Bench in hand; d-pad right walks the slots, d-pad up changes the view ──
+    // ── a pad: a Solar Panel in hand; d-pad right walks the slots, d-pad up changes the view ──
     {
       const { page, errors } = await open(w, h, q, true);
       await pressPad(page, 3); // Y: the build menu
@@ -207,7 +207,7 @@ try {
         view: document.querySelector('#buildbar .bmode.view .bl')?.textContent,
         prompt: document.querySelector('#prompt')?.textContent,
       }));
-      check(pad.keys === 0 && pad.edges === 2 && /^View: /.test(pad.view ?? '') && /Place the /.test(pad.prompt) && /Turn/.test(pad.prompt), `${tag} pad: no number keys, the d-pad at both ends, one View button, Place and Turn (${JSON.stringify(pad)})`);
+      check(pad.keys === 0 && pad.edges === 2 && /^View: /.test(pad.view ?? '') && /Build a Solar Panel/.test(pad.prompt) && !/Turn/.test(pad.prompt), `${tag} pad: no number keys, the d-pad at both ends, one View button, Build (a machine doesn't turn: Turn is for decorations) (${JSON.stringify(pad)})`);
       await pressPad(page, 15); // d-pad right: the next slot
       await page.waitForTimeout(200);
       const next = await page.evaluate(() => window.solarbloom.hud.currentTool);

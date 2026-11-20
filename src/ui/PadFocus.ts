@@ -24,13 +24,13 @@ export class PadFocus {
   panel(): HTMLElement | undefined {
     for (const sel of this.panels) {
       const el = this.root.querySelector<HTMLElement>(sel);
-      if (el && el.offsetParent !== null) return el;
+      if (el && shown(el)) return el;
     }
     return undefined;
   }
 
   private items(panel: HTMLElement): HTMLElement[] {
-    return [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => e.offsetParent !== null && e.getBoundingClientRect().width > 0);
+    return [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => shown(e) && e.getBoundingClientRect().width > 0);
   }
 
   /**
@@ -48,7 +48,7 @@ export class PadFocus {
         items[0]?.focus({ focusVisible: true } as FocusOptions);
         return true;
       }
-      const next = this.nearest(cur, items, dir);
+      const next = this.nearest(cur, trapped(cur, items), dir);
       if (next) {
         next.focus({ focusVisible: true } as FocusOptions);
         next.scrollIntoView({ block: 'nearest' });
@@ -92,4 +92,22 @@ export class PadFocus {
     }
     return best;
   }
+}
+
+/**
+ * #564: a group marked `data-pad-trap` (the build menu's slot picker) keeps the d-pad among its own buttons: a press
+ * past its edge stays put instead of landing on something outside, where A would do something else (take the
+ * piece instead of pinning it). B leaves the group as usual.
+ */
+export function trapped(cur: HTMLElement, items: readonly HTMLElement[]): HTMLElement[] {
+  const trap = cur.closest('[data-pad-trap]');
+  return trap ? items.filter((e) => trap.contains(e)) : [...items];
+}
+
+/**
+ * #564: on screen (laid out, not display: none). Not `offsetParent`, which is always null for a position: fixed
+ * element: the build menu is one, so the d-pad, the arrow keys and A never reached it.
+ */
+function shown(e: HTMLElement): boolean {
+  return !e.hidden && e.getClientRects().length > 0;
 }
