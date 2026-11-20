@@ -34,6 +34,7 @@ export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'battery', 'relay', '
 export const BUILD_TAB: Record<BuildableType | 'pipe', BuildTabId> = {
   solar: 'power',
   battery: 'power',
+  gridBattery: 'power',
   relay: 'power',
   windTurbine: 'power',
   charger: 'power',
@@ -57,6 +58,7 @@ export const BUILD_TAB: Record<BuildableType | 'pipe', BuildTabId> = {
 const LINES: Record<BuildableType | 'pipe', string> = {
   solar: 'Feeds the grid it stands on while the sun is up. Link it to a battery to keep the lights on after dark.',
   battery: 'Keeps what the grid has spare and gives it back after dark.',
+  gridBattery: 'A big store for a whole grid: it keeps the lights on through a long night.',
   relay: 'Carries power along: a line of them reaches a machine far from the panels.',
   windTurbine: 'Turns on windy days and in storms, and catches more wind up high.',
   charger: 'A pad on the grid. Sit on it and bloombot fills up fast.',
