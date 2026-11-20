@@ -117,6 +117,30 @@ describe('bloombot walking (G.2)', () => {
     expect(w.front(p)).toEqual({ x: 5, z: 4 });
   });
 
+  it('acts on the cell its facing ray enters first (depth), not the facing rounded to 8 ways', () => {
+    // near the right edge of its cell, facing 30° off +z: its face is at the cell to the right, right beside it
+    const p = { roofId: GROUND, x: 5.92, z: 5.1, facing: Math.PI / 6 };
+    expect(w.front(p)).toEqual({ x: 6, z: 5 });
+    // the same facing from the left edge: the ray goes out through the top first
+    p.x = 5.08;
+    p.z = 5.8;
+    expect(w.front(p)).toEqual({ x: 5, z: 6 });
+    // 36° from the middle of the cell (the old rounding said diagonal) leaves through the top, not the far corner
+    p.x = 5.5;
+    p.z = 5.5;
+    p.facing = (36 * Math.PI) / 180;
+    expect(w.front(p)).toEqual({ x: 5, z: 6 });
+    // through (nearly) the corner: the diagonal cell
+    p.facing = (44 * Math.PI) / 180;
+    expect(w.front(p)).toEqual({ x: 6, z: 6 });
+    // every way round, the cell it acts on touches bloombot's own cell
+    for (let a = 0; a < 360; a += 7) {
+      p.facing = (a * Math.PI) / 180;
+      const f = w.front(p);
+      expect(Math.max(Math.abs(f.x - 5), Math.abs(f.z - 5)), `${a}°`).toBe(1);
+    }
+  });
+
   it('is pushed to the nearest free cell when something solid appears under it', () => {
     const p = spawnPose(sim, w);
     const t = sim.grid.get(GROUND, Math.floor(p.x), Math.floor(p.z))!;

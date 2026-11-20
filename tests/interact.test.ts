@@ -1,19 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { type Candidate, holdFor, HOLD_SECONDS, pickTarget, PRIORITY, promptText } from '../src/app/Interact';
+import { type Candidate, holdFor, HOLD_SECONDS, pickTarget, PRIORITY, promptText, SAME_DEPTH } from '../src/app/Interact';
 import { promptHtml } from '../src/ui/Prompt';
 
 /** E22.2 (#339): one prompt, one obvious action. */
 const c = (kind: Candidate['kind'], distance: number, extra: Partial<Candidate> = {}): Candidate => ({ kind, id: `${kind}@${distance}`, verb: 'Use', name: kind, distance, ...extra });
 
 describe('E22.2: what Interact acts on', () => {
-  it('follows the epic priority for every pair, even when the lower one is nearer', () => {
+  it('follows the epic priority for every pair at the same depth, even when the lower one is a little nearer', () => {
     for (let i = 0; i < PRIORITY.length; i++)
       for (let j = i + 1; j < PRIORITY.length; j++) {
-        const hi = c(PRIORITY[i], 1.2);
-        const lo = c(PRIORITY[j], 0.4); // nearer, but lower in the list
+        const hi = c(PRIORITY[i], 0.9);
+        const lo = c(PRIORITY[j], 0.9 - SAME_DEPTH + 0.05); // nearer, but within the same depth
         expect(pickTarget([lo, hi])?.kind, `${PRIORITY[i]} over ${PRIORITY[j]}`).toBe(PRIORITY[i]);
         expect(pickTarget([hi, lo])?.kind, `${PRIORITY[i]} over ${PRIORITY[j]} (other order)`).toBe(PRIORITY[i]);
       }
+  });
+
+  it('is depth first: the nearest thing wins over a higher-priority one further off', () => {
+    for (let i = 0; i < PRIORITY.length; i++)
+      for (let j = i + 1; j < PRIORITY.length; j++) {
+        const far = c(PRIORITY[i], 1.4);
+        const near = c(PRIORITY[j], 0.6); // lower in the list, but right in front
+        expect(pickTarget([far, near])?.kind, `${PRIORITY[j]} in front over ${PRIORITY[i]} behind it`).toBe(PRIORITY[j]);
+        expect(pickTarget([near, far])?.kind, `${PRIORITY[j]} in front over ${PRIORITY[i]} (other order)`).toBe(PRIORITY[j]);
+      }
+    // a cat a step further on doesn't take the prompt from the machine bloombot is standing at
+    expect(pickTarget([c('cat', 1.5), c('machine', 0.7)])?.kind).toBe('machine');
   });
 
   it('chooses three or more at once by the same order', () => {

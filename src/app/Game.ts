@@ -1980,6 +1980,8 @@ export class Game {
       if (!v) continue;
       const d = Math.hypot(v.x - wx, v.z - wz);
       if (d >= BOT_REACH + 0.6) continue;
+      // in front of bloombot (within 70° of its facing, or right beside it): never a cat behind it
+      if (d > 0.5 && (Math.sin(b.pose.facing) * (v.x - wx) + Math.cos(b.pose.facing) * (v.z - wz)) / d < Math.cos((70 * Math.PI) / 180)) continue;
       // E23.12.3 (#530): before the first find, bloombot only offers to say hello to a cat the player can see
       if (!this.sim.cat.known && !this.catVisible(id)) continue;
       out.push({
