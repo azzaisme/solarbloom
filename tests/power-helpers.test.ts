@@ -140,6 +140,85 @@ describe('E23.6.3 drones on a real grid', () => {
   });
 });
 
+describe('E23.6.3 several hubs on one line', () => {
+  /** Scout hubs (4 W a drone at work) side by side on one line of `panels` solar panels (4 W each at noon). */
+  function line(hubs: number, panels: number) {
+    const sim = oldCity();
+    const hs: MachineData[] = [];
+    for (let i = 0; i < hubs; i++) {
+      const h = put(sim, 'droneHub', 30 + i * 2, 30, 2);
+      h.role = 'scout';
+      (h.roles ??= []).push('scout');
+      hs.push(h);
+    }
+    for (let i = 0; i < panels; i++) put(sim, 'solar', 29, 30 + i);
+    sim.state.drones = [];
+    sim.power.tick(1);
+    return { sim, hs };
+  }
+  /** A drone of this hub sets out, as the drone system does: the hub pays for the job, then the drone is out. */
+  function launch(sim: Sim, hub: MachineData): boolean {
+    if (!sim.droneFuel.take(hub, 'scout')) return false;
+    sim.state.drones.push({ id: sim.newId('d'), hubId: hub.id, role: 'scout', mode: 'flying', px: hub.x + 1, pz: hub.z + 1, timer: 0, jobs: 0 } as never);
+    return true;
+  }
+  const out = (sim: Sim) => sim.state.drones.length * DRONE_SUPPLY.scout.power;
+
+  it('within one tick, launches from two hubs never book the same room', () => {
+    const { sim, hs } = line(2, 3); // 12 W: room for three Scouts at work
+    expect(sim.power.headroom(hs[0])).toBeCloseTo(12, 6);
+    // both hubs try in turn, again and again, before the grid solves again
+    let ok = 0;
+    for (let i = 0; i < 4; i++) for (const h of hs) if (launch(sim, h)) ok++;
+    expect(ok).toBe(3);
+    expect(sim.power.headroom(hs[0])).toBeCloseTo(0, 6);
+    expect(sim.power.headroom(hs[1])).toBeCloseTo(0, 6);
+    // the grid solves: everything out is powered, nothing is shed
+    sim.power.tick(1);
+    for (const h of hs) expect(sim.power.isPowered(h)).toBe(true);
+    expect(out(sim)).toBeLessThanOrEqual(12 + 1e-9);
+  });
+
+  it('a new launch never sheds a busy hub, whichever hub comes first in the shed order', () => {
+    for (const hubs of [2, 3]) {
+      const { sim, hs } = line(hubs, 3);
+      // the last hub (last in the shed order) is busy first: two Scouts out
+      const busy = hs[hs.length - 1];
+      expect(launch(sim, busy)).toBe(true);
+      expect(launch(sim, busy)).toBe(true);
+      sim.power.tick(1);
+      expect(sim.power.isPowered(busy)).toBe(true);
+      // what is truly free is what is left after those two, for every hub on the line
+      for (const h of hs) expect(sim.power.headroom(h), `${hubs} hubs`).toBeCloseTo(4, 6);
+      // an earlier hub launches into the 4 W left, and no more
+      expect(launch(sim, hs[0])).toBe(true);
+      for (const h of hs) expect(launch(sim, h), `${hubs} hubs: full`).toBe(false);
+      sim.power.tick(1);
+      for (const h of hs) expect(sim.power.isPowered(h), `${hubs} hubs`).toBe(true); // the busy hub is still on
+      expect(out(sim)).toBe(12);
+      // one Scout home: its room comes back on the next solve, for any hub
+      (sim.state.drones[0] as { mode: string }).mode = 'idle';
+      sim.power.tick(1);
+      expect(sim.power.headroom(hs[1])).toBeCloseTo(4, 6);
+    }
+  });
+
+  it('in the game: three Scout hubs on a short line never shed one another over a minute of launches', () => {
+    const { sim, hs } = line(3, 3);
+    // fog edges in reach for the Scouts to push back (the park beside the Old City's fog)
+    let shed = 0;
+    let most = 0;
+    for (let t = 0; t < 60; t += 0.25) {
+      sim.advance(0.25);
+      for (const h of hs) if (sim.power.draw(h) > 0 && !sim.power.isPowered(h)) shed++;
+      most = Math.max(most, sim.state.drones.filter((d) => hs.some((h) => h.id === d.hubId) && d.mode !== 'idle' && d.mode !== 'cooldown').length);
+    }
+    expect(shed).toBe(0);
+    expect(most).toBeGreaterThan(0); // they did go out
+    expect(most).toBeLessThanOrEqual(3);
+  });
+});
+
 describe('E23.3.3 powered helpers', () => {
   it('extending poles into a new region lets bloombot recharge there and switches its helpers on', () => {
     const sim = oldCity();

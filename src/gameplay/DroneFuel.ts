@@ -102,8 +102,9 @@ export class DroneFuel {
   short(hub: MachineData, role: DroneRole | 'cultivator'): Shortage | undefined {
     const s = this.supply(role);
     const p = this.sim.power;
-    // off the grid, shed, or no room on its line for one more drone at work
-    if (!p.isPowered(hub) || p.headroom(hub) + 1e-9 < p.draw(hub) + s.power) return 'power';
+    // off the grid, shed, or no room on its line for one more drone at work (after every drone already out, on every
+    // hub on the line, and every launch booked since the grid last solved)
+    if (!p.isPowered(hub) || p.headroom(hub) + 1e-9 < s.power) return 'power';
     if (s.water && !this.waterBeside(hub, s.water) && !this.pipeBeside(hub, s.water)) return 'water';
     if (s.biomass && (!this.chestBeside(hub) || this.sim.inventory.stored('biomass') < this.biomassDue(hub, role))) return 'biomass';
     return undefined;
@@ -116,17 +117,28 @@ export class DroneFuel {
   take(hub: MachineData, role: DroneRole | 'cultivator'): boolean {
     if (this.short(hub, role)) return false;
     const s = this.supply(role);
+    // water first: a pipe may give less than it looked to hold, and then the job doesn't go and it all goes back
+    if (s.water) {
+      const body = this.waterBeside(hub, s.water);
+      if (body) this.sim.water.draw(body, s.water);
+      else {
+        const taken: [string, number][] = [];
+        const got = this.sim.water.pipes.drawAt(this.pipeBeside(hub, s.water)!, s.water, taken);
+        if (got + 1e-9 < s.water) {
+          for (const [id, n] of taken) this.sim.water.fill(id, n);
+          if (taken.length) this.sim.water.pipes.refreshFed(); // a reservoir it emptied holds water again
+          return false;
+        }
+      }
+    }
     if (s.biomass) {
       const due = this.biomassDue(hub, role);
       if (!this.sim.inventory.takeFromStore('biomass', due)) return false;
       const credit = (hub.fuelCredit ?? 0) + due - s.biomass;
       hub.fuelCredit = credit > 1e-9 ? credit : undefined;
     }
-    if (s.water) {
-      const body = this.waterBeside(hub, s.water);
-      if (body) this.sim.water.draw(body, s.water);
-      else this.sim.water.pipes.drawAt(this.pipeBeside(hub, s.water)!, s.water);
-    }
+    // the drone at work draws its power from now: booked on the line at once, so no other launch counts on it
+    this.sim.power.reserve(hub, s.power);
     return true;
   }
 
