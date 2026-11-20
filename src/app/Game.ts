@@ -4824,7 +4824,7 @@ export class Game {
     if (poolReflectOn(this.gfxTier, this.deck)) {
       const sun = this.scene.sun;
       const { low, high } = this.sky.reflectColours();
-      setPoolReflect(true, { low, high, toLight: sun.up, light: sun.light!.color, share: sun.light!.intensity / LOOK.sun.intensity });
+      setPoolReflect(true, { low, high, toLight: sun.up, light: sun.light!.color, share: sun.light!.intensity / LOOK.sun.intensity, day: this.dayNight.light });
     } else setPoolReflect(false);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.skyline.clarity = this.sky.clarity;

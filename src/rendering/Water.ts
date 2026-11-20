@@ -152,6 +152,9 @@ export function poolReflectOn(tier: GfxTier, deck: boolean): boolean {
 /** How strong the reflection is when it is on (the shader's `uPoolReflect`). */
 export const POOL_REFLECT = 1;
 
+/** How much of the sky wash is left at deep night. */
+export const POOL_NIGHT_SHEEN = 0.1;
+
 export interface PoolSky {
   /** sky colours near the horizon and higher up, 0–1 sRGB (Sky.reflectColours) */
   low: readonly [number, number, number];
@@ -161,6 +164,8 @@ export interface PoolSky {
   /** the key light's colour, 0–1 sRGB, and its strength as a share of the noon sun's */
   light: { r: number; g: number; b: number };
   share: number;
+  /** daylight now, 0 (night) … 1 (day): the sky wash fades with it, so night water stays dark (a faint sheen left) */
+  day: number;
 }
 
 const lin = (c: number) => Math.pow(Math.max(0, c), 2.2);
@@ -175,9 +180,11 @@ export function setPoolReflect(on: boolean, sky?: PoolSky) {
   if (!m) return;
   m.setParameter('uPoolReflect', on && sky ? POOL_REFLECT : 0);
   if (!on || !sky) return;
+  // by night the water is one of the darkest things in view: only a faint sheen of the sky and the moon's glint
+  const wash = POOL_NIGHT_SHEEN + (1 - POOL_NIGHT_SHEEN) * Math.max(0, Math.min(1, sky.day));
   for (let i = 0; i < 3; i++) {
-    low3[i] = lin(sky.low[i]);
-    high3[i] = lin(sky.high[i]);
+    low3[i] = lin(sky.low[i]) * wash;
+    high3[i] = lin(sky.high[i]) * wash;
   }
   dir3[0] = sky.toLight.x;
   dir3[1] = sky.toLight.y;
