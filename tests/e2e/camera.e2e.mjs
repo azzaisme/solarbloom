@@ -26,11 +26,10 @@ try {
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto('http://localhost:4198/');
+    await page.goto('http://localhost:4198/?slot=1');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
-    if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 
     for (const zoom of [0.3, 0.6, 1, 1.4, 1.9]) {
       const r = await page.evaluate(

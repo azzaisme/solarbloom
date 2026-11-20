@@ -1,4 +1,6 @@
 import * as pc from 'playcanvas';
+import { SOLID_SINK, type GeoBounds } from '../core/Solids';
+import { MODEL_NAMES } from '../data/oldcity';
 
 /**
  * Look 3.18/3.19: the hand-built models (assets/raw/models/final, built by assets/tools/build_props.py). Each model
@@ -12,7 +14,14 @@ import * as pc from 'playcanvas';
  * - `ModelLibrary.instantiate`: one entity, for landmarks, machines and the cat (moving parts stay their own nodes).
  * Until a model has loaded (or with `?models=classic`), callers keep their procedural look.
  */
-const URLS = import.meta.glob('../../assets/raw/models/final/*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+/**
+ * Every file here is fetched before the loading screen ends, so only what the game draws lives in `final`. Models made
+ * but not drawn yet wait in assets/raw/models/pending (committed, never fetched) until their system wires them in:
+ * move the file here and add its MACHINE_MODELS entry in the same change. The Keepers are left out: KeeperVisuals
+ * loads each one's own rigged file when that Keeper is first shown (and only the near version), so they are not
+ * fetched twice.
+ */
+const URLS = import.meta.glob(['../../assets/raw/models/final/*.glb', '!../../assets/raw/models/final/keeper-*.glb'], { query: '?url', import: 'default', eager: true }) as Record<string, string>;
 
 export const useModels = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('models') !== 'classic';
 
@@ -238,6 +247,32 @@ export class ModelLibrary {
     return this.loaded.has(name);
   }
 
+  private boundsCache = new Map<string, GeoBounds>();
+  /**
+   * E23.12.3: a loaded model's extent about its pivot (metres, unscaled): the furthest it reaches from its vertical
+   * axis and its height range, from its parts' bounds in the model. Undefined until loaded.
+   */
+  bounds(name: string): GeoBounds | undefined {
+    const hit = this.boundsCache.get(name);
+    if (hit) return hit;
+    const parts = this.parts(name);
+    if (!parts.length) return undefined;
+    const box = new pc.BoundingBox();
+    let first = true;
+    const tmp = new pc.BoundingBox();
+    for (const part of parts) {
+      tmp.setFromTransformedAabb(part.mesh.aabb, part.local);
+      if (first) box.copy(tmp);
+      else box.add(tmp);
+      first = false;
+    }
+    const lo = box.getMin();
+    const hi = box.getMax();
+    const b: GeoBounds = { r: Math.max(Math.hypot(lo.x, lo.z), Math.hypot(hi.x, hi.z), Math.hypot(lo.x, hi.z), Math.hypot(hi.x, lo.z)), y0: lo.y, y1: hi.y };
+    this.boundsCache.set(name, b);
+    return b;
+  }
+
   /** The parts to draw (far = the LOD1 version, falling back to the near one). */
   parts(name: string, far = false): ModelPart[] {
     const m = this.models.get(name);
@@ -345,6 +380,16 @@ function neglectedMaterial(src: pc.Material): pc.Material {
 }
 
 export let MODELS: ModelLibrary | null = null;
+
+/**
+ * E21: the model to draw for an Old City name (data/oldcity MODEL_NAMES): the file itself once it has landed in
+ * assets/raw/models/final, else its marked stand-in. undefined: draw the procedural stand-in.
+ */
+export function oldCityModel(name: string): string | undefined {
+  if (MODELS?.has(name)) return name;
+  const s = MODEL_NAMES[name]?.standIn;
+  return s && s !== 'procedural' && MODELS?.has(s) ? s : undefined;
+}
 export function createModels(app: pc.AppBase): ModelLibrary {
   MODELS = new ModelLibrary(app);
   MODELS.load();
@@ -373,6 +418,11 @@ export class ModelBatch {
   /** A copy at (x, y, z), turned rotY radians about +y, scaled (sx, sy, sz). E20.6: `neglected` draws its dusty look. */
   add(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy = sx, sz = sx, neglected = false): boolean {
     if (!this.lib.has(name)) return false;
+    // E23.12.3: the model as placed, at its loaded size, for the CPU line of sight
+    if (SOLID_SINK.current) {
+      const b = this.lib.bounds(name);
+      if (b) SOLID_SINK.current.model(b, x, y, z, sx, sy, sz);
+    }
     const key = neglected ? `${name}|neglected` : name;
     let list = this.placed.get(key);
     if (!list) this.placed.set(key, (list = []));

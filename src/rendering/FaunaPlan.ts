@@ -53,12 +53,11 @@ export function wanderStop(seed: number, actor: number, leg: number, home: { x: 
 /** A machine that is really working right now (drives its "active" effects; idle machines only breathe). */
 export function machineRunning(sim: Sim, m: MachineData): boolean {
   if (!isBuilt(m)) return false;
-  const e = sim.econ;
   switch (m.type) {
     case 'solar':
-      return !e.isFull('energy');
+      return sim.power.output(m) > 0; // E23.1.4: shining into the grid (not just a store with room)
     case 'condenser':
-      return !e.isFull('water');
+      return true; // it always fills its meter and waters the soil beside it
     case 'droneHub':
       return sim.state.drones.some((d) => d.hubId === m.id && d.mode !== 'idle');
     case 'core':
@@ -107,10 +106,10 @@ export const CAT_ANCHOR_CLEARANCE = 0.75;
 /**
  * Sleeping cats: a seeded share of finished machines on restored ground in view, curled up inside the machine's
  * own footprint (a cell no Lucky Cat can use: anchors need a free tile), never within CAT_ANCHOR_CLEARANCE of a
- * Lucky Cat anchor. Nearest the view centre first, at most `max`.
+ * Lucky Cat anchor. Nearest the view centre first, at most `max`. None before the first Lucky Cat is found (E23.12.3).
  */
 export function catSpots(sim: Sim, rect: Rect, max: number): CatSpot[] {
-  if (max <= 0) return [];
+  if (max <= 0 || !sim.cat.known) return []; // E23.12.3: no cat of any kind shows before the first Lucky Cat is found
   const cx = (rect.x0 + rect.x1) / 2;
   const cz = (rect.z0 + rect.z1) / 2;
   const share = TUNING.ecosystem.cats.share;
@@ -253,7 +252,6 @@ export const PLOT_VISITORS: Record<string, VisitorKind[]> = {
   stalls: ['pigeons', 'pigeons'],
   splash: ['pigeons'],
   mooring: ['ducks', 'ducks'],
-  boathouse: ['ducks'],
   reeds: ['ducks', 'frogs'],
   dipping: ['frogs', 'frogs'],
   hut: ['squirrels'],
@@ -271,6 +269,7 @@ export const DECOR_VISITORS: Record<string, VisitorKind> = {
   barrel: 'groundBirds',
   bunting: 'pigeons',
   lamppost: 'pigeons',
+  solarlamppost: 'pigeons',
   cratestack: 'squirrels',
   stones: 'frogs',
 };
@@ -309,6 +308,7 @@ export function visitorSlots(sim: Sim, rect: Rect, gen = sim.grid.layer(GROUND)?
         home = w;
         water = true;
       }
+      if (kind === 'cats' && !sim.cat.known) return; // E23.12.3: not before the first Lucky Cat is found
       if (kind === 'cats' && luckyAnchorsNear(sim, home.x, home.z).some(([ax, az]) => Math.hypot(ax - home.x, az - home.z) < CAT_ANCHOR_CLEARANCE)) return;
       out.push({ kind, key: `v:${id}:${i}`, home, water, d });
     });
@@ -324,6 +324,7 @@ export function visitorSlots(sim: Sim, rect: Rect, gen = sim.grid.layer(GROUND)?
     const free = sim.grid.neighbors(t0).filter((n) => n.ground === 'restored' && !n.blocked && !n.occupantId && (kind === 'frogs' || n.feature !== 'water'));
     const at = kind === 'cats' ? { x: dec.x + 0.5, z: dec.z + 0.5 } : free.length ? { x: free[h % free.length].x + 0.5, z: free[h % free.length].z + 0.5 } : undefined;
     if (!at) continue;
+    if (kind === 'cats' && !sim.cat.known) continue; // E23.12.3: not before the first Lucky Cat is found
     if (kind === 'cats' && luckyAnchorsNear(sim, at.x, at.z).some(([ax, az]) => Math.hypot(ax - at.x, az - at.z) < CAT_ANCHOR_CLEARANCE)) continue;
     out.push({ kind, key: `vd:${key}`, home: at, water: false, d: Math.hypot(at.x - cx, at.z - cz) });
   }

@@ -1,46 +1,228 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIONS, Bindings, DEFAULT_KEYS, DEFAULT_PAD } from '../src/app/Bindings';
+import { ACTIONS, type Action, BINDINGS_VERSION, Bindings, defaultKeys, defaultPad, keyLabel, migrateBindings, padLabel, SLOTS } from '../src/app/Bindings';
 
-describe('bloombot controls map (G.16)', () => {
-  it('gives no two actions the same key or button by default', () => {
-    expect(new Bindings().conflicts()).toEqual([]);
+/**
+ * E22.1 (#338): every default from the epic's table (docs/E22_CONTROLS_UI.md, "The new map"), on both devices,
+ * under both rule sets, and the one-time reset of bindings saved before it.
+ */
+const keys = (b: Bindings, a: Action) => b.keys[a];
+/** The epic's table, keyboard and mouse column. */
+const KEYS: [Action, string[]][] = [
+  ['up', ['KeyW', 'ArrowUp']],
+  ['down', ['KeyS', 'ArrowDown']],
+  ['left', ['KeyA', 'ArrowLeft']],
+  ['right', ['KeyD', 'ArrowRight']],
+  ['sprint', ['ShiftLeft', 'ShiftRight']],
+  ['look', ['Mouse2']],
+  ['zoomCamera', ['Wheel']],
+  ['recentre', ['KeyC']],
+  ['interact', ['KeyE']],
+  ['pulse', ['Mouse0', 'Space']],
+  ['buildMenu', ['KeyQ']],
+  ['rotate', ['KeyR', 'Wheel']],
+  ['removeMode', ['KeyX']],
+  ['powerOverlay', ['KeyO']], // E23.3.4
+  ['backpack', ['Tab', 'KeyI']],
+  ['map', ['KeyM']],
+  ['pinNext', ['KeyG']],
+  ['cancel', ['Escape']],
+  ['menu', ['Escape']],
+  ['photo', ['KeyP']],
+  ['prevTab', ['KeyQ']],
+  ['nextTab', ['KeyE']],
+  ['debug', ['F3']],
+];
+/** The gamepad column (standard mapping). */
+const PAD: [Action, number | undefined][] = [
+  ['sprint', 6], // left trigger, held
+  ['sprintToggle', 10], // click the left stick
+  ['zoomCamera', 13], // d-pad down cycles
+  ['recentre', 11], // click the right stick
+  ['interact', 0], // A
+  ['pulse', 2], // X
+  ['place', 0], // A also places in build mode
+  ['buildMenu', 3], // Y
+  ['rotateBack', 4], // LB
+  ['rotate', 5], // RB
+  ['removeMode', 7], // right trigger
+  ['powerOverlay', undefined], // E23.11: O on the keyboard; the pad's d-pad up changes the view instead
+  ['waterOverlay', undefined],
+  ['viewCycle', 12], // E23.11: d-pad up in build mode: off, Power, Water
+  ['slotPrev', 14], // d-pad left in build mode
+  ['slotNext', 15], // d-pad right in build mode
+  ['pinSlot', 2], // X in the build menu (Y opens and closes it)
+  ['backpack', 12], // d-pad up
+  ['map', 8], // View
+  ['cancel', 1], // B
+  ['menu', 9], // Menu
+  ['prevTab', 4],
+  ['nextTab', 5],
+  ['photo', undefined], // in the pause menu
+];
+
+describe('E22.1: the new button map', () => {
+  {
+    it('matches every keyboard and mouse default in the epic', () => {
+      const b = new Bindings();
+      for (const [a, k] of KEYS) expect(keys(b, a), a).toEqual(k);
+      for (let i = 0; i < 9; i++) expect(keys(b, SLOTS[i])).toEqual([`Digit${i + 1}`]);
+      // E23.2.1: F eats a snack (bloombot's charge); E23.1.4: Harvest Sunlight is gone, not just unbound
+      expect(keys(b, 'eat')).toEqual(['KeyF']);
+      expect(ACTIONS.map((a) => a.id) as string[]).not.toContain('harvest');
+      expect(b.actionForCode('KeyF')).toBe('eat');
+      expect([keys(b, 'loadPrev'), keys(b, 'loadNext')]).toEqual([['KeyZ'], ['KeyV']]); // E23.2.2: the load wheel
+    });
+
+  it('a saved pad binding for an action that no longer exists is ignored (E23.1.2: Bloom Frenzy)', () => {
+    const b = new Bindings({ pad: { frenzy: 7 } as never });
+    expect(b.actionForButton(7, ['build', 'world', 'any'])).toBe('removeMode');
+    expect(Object.keys(b.pad)).not.toContain('frenzy');
   });
 
-  it('matches the agreed map (docs/BLOOMBOT_EPIC.md §7)', () => {
-    const b = new Bindings();
-    expect([b.label('pulse'), b.label('interact'), b.label('tray'), b.label('harvest'), b.label('upgrades'), b.label('backpack')]).toEqual(['E', 'Q', 'B', 'F', 'U', 'Tab']);
-    expect([b.label('frenzy'), b.label('nextArea'), b.label('overview'), b.label('sprint')]).toEqual(['R', 'N', 'M', 'Shift']);
-    expect([DEFAULT_PAD.pulse, DEFAULT_PAD.interact, DEFAULT_PAD.tray, DEFAULT_PAD.cancel, DEFAULT_PAD.sprint]).toEqual([0, 2, 3, 1, 7]);
-    expect([DEFAULT_PAD.backpack, DEFAULT_PAD.harvest, DEFAULT_PAD.upgrades]).toEqual([12, 14, 15]);
-    // Turning the view: C or a right stick click recentres it.
-    expect([b.label('recentre'), DEFAULT_PAD.recentre]).toEqual(['C', 11]);
-  });
-
-  it('lists every action on the rebinding screen', () => {
-    expect(ACTIONS.map((a) => a.id).sort()).toEqual(Object.keys(DEFAULT_KEYS).sort());
-  });
-
-  it('swaps keys instead of leaving one action unbound', () => {
-    const b = new Bindings();
-    b.setKey('pulse', 'KeyQ');
-    expect(b.actionForCode('KeyQ')).toBe('pulse');
-    expect(b.actionForCode('KeyE')).toBe('interact');
+  it('a saved Harvest binding is ignored: F and d-pad left eat (E23.1.4)', () => {
+    const b = new Bindings({ v: BINDINGS_VERSION, keys: { harvest: ['KeyH'] } as never, pad: { harvest: 14 } as never });
+    expect(b.actionForCode('KeyH')).toBeUndefined();
+    expect(Object.keys(b.keys)).not.toContain('harvest');
+    expect(Object.keys(b.pad)).not.toContain('harvest');
+    expect(b.actionForCode('KeyF')).toBe('eat');
+    expect(b.actionForButton(14)).toBe('eat');
     expect(b.conflicts()).toEqual([]);
+  });
+
+    it('matches every gamepad default in the epic', () => {
+      const b = new Bindings();
+      for (const [a, p] of PAD) expect(b.pad[a], a).toBe(p);
+      for (const s of SLOTS) expect(b.pad[s]).toBeUndefined(); // the pad uses the build menu
+      expect(b.pad.pinNext).toBe(15); // d-pad right
+      expect(b.pad.eat).toBe(14); // d-pad left eats (E23.2.1)
+      expect(b.actionForButton(14)).toBe('eat');
+      expect(Object.keys(b.pad)).not.toContain('harvest');
+      expect([b.pad.loadPrev, b.pad.loadNext]).toEqual([4, 5]); // E23.2.2: the bumpers turn the load wheel
+    });
+
+    it('gives no two actions that can apply together the same input', () => {
+      expect(new Bindings().conflicts()).toEqual([]);
+    });
+  }
+
+  it('Interact is E and A, Pulse is the left mouse button and X', () => {
+    const b = new Bindings();
+    expect(b.actionForCode('KeyE')).toBe('interact');
+    expect(b.actionForCode('Mouse0')).toBe('pulse');
+    expect(b.actionForCode('Space')).toBe('pulse');
+    expect(b.actionForButton(0)).toBe('interact');
+    expect(b.actionForButton(2)).toBe('pulse');
+  });
+
+  it('reads the same input by context: build mode first, then walking; panels have their own', () => {
+    const b = new Bindings();
+    expect(b.actionForCode('Wheel', ['world', 'any'])).toBe('zoomCamera');
+    expect(b.actionForCode('Wheel', ['build', 'world', 'any'])).toBe('rotate'); // the wheel turns the piece
+    expect(b.actionForButton(0, ['build', 'world', 'any'])).toBe('place');
+    expect(b.actionForButton(7, ['build', 'world', 'any'])).toBe('removeMode');
+    expect(b.actionForCode('KeyQ', ['panel', 'any'])).toBe('prevTab');
+    // E23.3.4 / E23.4.5: the Power and Water views are O and V in build mode
+    expect(b.actionForCode('KeyO', ['build', 'world', 'any'])).toBe('powerOverlay');
+    expect(b.actionForCode('KeyV', ['build', 'world', 'any'])).toBe('waterOverlay');
+    // E23.11: in build mode the d-pad walks the hotbar (left / right) and changes the view (up); walking, the same
+    // buttons eat, pin the next request and open the backpack
+    expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('slotPrev');
+    expect(b.actionForButton(15, ['build', 'world', 'any'])).toBe('slotNext');
+    expect(b.actionForButton(12, ['build', 'world', 'any'])).toBe('viewCycle');
+    expect(b.actionForButton(14, ['world', 'any'])).toBe('eat');
+    expect(b.actionForButton(15, ['world', 'any'])).toBe('pinNext');
+    expect(b.actionForButton(12, ['world', 'any'])).toBe('backpack');
+    // the build menu: Y pins to a slot, P on the keyboard; walking, Y opens the menu and P takes a photo
+    expect(b.actionForButton(2, ['panel', 'any'])).toBe('pinSlot');
+    // Y is free in a panel, so the build menu's own button closes it again
+    expect(b.actionForButton(3, ['panel', 'any'])).toBeUndefined();
+    expect(b.actionForButton(3, ['world', 'any'])).toBe('buildMenu');
+    expect(b.actionForCode('KeyP', ['panel', 'any'])).toBe('pinSlot');
+    expect(b.actionForButton(3, ['world', 'any'])).toBe('buildMenu');
+    expect(b.actionForCode('KeyP', ['world', 'any'])).toBe('photo');
+    expect(b.actionForCode('KeyE', ['panel', 'any'])).toBe('nextTab');
+    expect(b.actionForButton(5, ['panel', 'any'])).toBe('nextTab');
+  });
+
+  it('E23.1.1: one map; the classic-only actions (next area, back to the park) are gone', () => {
+    const ids = ACTIONS.map((a) => a.id) as string[];
+    for (const a of ['nextArea', 'home', 'upgrades']) expect(ids, a).not.toContain(a);
+    // a saved binding for one of them is ignored
+    const b = new Bindings({ v: BINDINGS_VERSION, keys: { nextArea: ['KeyN'] } as never, pad: { home: 15 } as never });
+    expect(b.actionForCode('KeyN')).toBeUndefined();
+    expect(b.pad.pinNext).toBe(15);
+  });
+
+  it('lists every action on the rebinding screen, and every default is an action', () => {
+    expect(ACTIONS.map((a) => a.id).sort()).toEqual(Object.keys(defaultKeys()).sort());
+    for (const a of Object.keys(defaultPad())) expect(ACTIONS.some((d) => d.id === a)).toBe(true);
+  });
+
+  it('names keys, mouse inputs and pad buttons in plain words', () => {
+    expect(['KeyE', 'Mouse0', 'Mouse2', 'Wheel', 'Escape', 'ShiftLeft', 'Space'].map(keyLabel)).toEqual(['E', 'Left mouse', 'Right mouse', 'Mouse wheel', 'Esc', 'Shift', 'Space']);
+    expect([0, 3, 7, 8, 9, 11, 12].map(padLabel)).toEqual(['A', 'Y', 'RT', 'View', 'Menu', 'Right stick click', 'D-pad up']);
   });
 
   it('keeps a rebound key through a reload (the saved settings round trip)', () => {
     const b = new Bindings();
-    b.setKey('harvest', 'KeyH');
-    b.setButton('frenzy', 13);
-    const reloaded = new Bindings(JSON.parse(JSON.stringify(b.save())));
-    expect(reloaded.actionForCode('KeyH')).toBe('harvest');
-    expect(reloaded.actionForButton(13)).toBe('frenzy');
+    b.setKey('eat', 'KeyH');
+    b.setButton('backpack', 15);
+    b.unbind('sprintToggle', 'pad');
+    const saved = JSON.parse(JSON.stringify(b.save()));
+    expect(saved.v).toBe(BINDINGS_VERSION);
+    const reloaded = new Bindings(migrateBindings(saved).saved);
+    expect(reloaded.actionForCode('KeyH')).toBe('eat');
+    expect(reloaded.actionForButton(15)).toBe('backpack');
+    expect(reloaded.pad.sprintToggle).toBeUndefined();
     expect(reloaded.conflicts()).toEqual([]);
   });
 
-  it('never rebinds the build slots on the number row', () => {
+  it('the hotbar slots are ordinary actions: the number row can be rebound', () => {
     const b = new Bindings();
-    b.setKey('pulse', 'Digit5');
-    expect(b.label('pulse')).toBe('E');
+    expect(b.actionForCode('KeyJ')).toBeUndefined(); // a free key (Z turns the load wheel since E23.2.2)
+    expect(b.bindKey('slot3', 'KeyJ')).toEqual({ ok: true, swapped: undefined });
+    expect(b.actionForCode('KeyJ')).toBe('slot3');
+    expect(b.actionForCode('Digit3')).toBeUndefined();
+  });
+
+  it('E23.11: the new build-mode defaults reach a player with custom binds, with no reset', () => {
+    // a map saved before E23.11 (same version): Eat moved to H, the view toggles left where they were (no entry)
+    const before = { v: BINDINGS_VERSION, keys: { eat: ['KeyH'] }, pad: {} };
+    const m = migrateBindings(before);
+    expect(m.reset).toBe(false);
+    const b = new Bindings(m.saved);
+    expect(b.keys.eat).toEqual(['KeyH']); // the custom key is kept
+    expect([b.pad.slotPrev, b.pad.slotNext, b.pad.viewCycle]).toEqual([14, 15, 12]);
+    expect([b.pad.waterOverlay, b.pad.powerOverlay]).toEqual([undefined, undefined]);
+    expect(b.conflicts()).toEqual([]);
+  });
+
+  it('E23.11: a new default never takes a button the player gave to another action', () => {
+    // a player who put Turn the piece on d-pad left keeps it there; Previous build slot starts unbound
+    const b = new Bindings({ v: BINDINGS_VERSION, pad: { rotate: 14 } });
+    expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('rotate');
+    expect(b.pad.slotPrev).toBeUndefined();
+    expect(b.conflicts()).toEqual([]);
+    // and so it stays after a save and a reload
+    const again = new Bindings(JSON.parse(JSON.stringify(b.save())));
+    expect([again.pad.rotate, again.pad.slotPrev]).toEqual([14, undefined]);
+    // a key works the same way: the Water view moved to P in build mode, Pin to a slot (a menu key) is unaffected
+    const k = new Bindings({ v: BINDINGS_VERSION, keys: { waterOverlay: ['KeyP'] } });
+    expect(k.keys.pinSlot).toEqual(['KeyP']);
+    expect(k.conflicts()).toEqual([]);
+  });
+
+  it('resets bindings saved before the new map once, and says so', () => {
+    const old = { keys: { pulse: ['KeyQ'] }, pad: { pulse: 2 } }; // no version: saved before E22
+    const m = migrateBindings(old as never);
+    expect(m.reset).toBe(true);
+    const b = new Bindings(m.saved);
+    expect(b.keys.pulse).toEqual(['Mouse0', 'Space']);
+    // Saved again, it carries the version and is not reset a second time.
+    const again = migrateBindings(JSON.parse(JSON.stringify(b.save())));
+    expect(again.reset).toBe(false);
+    // Nothing customised before: nothing to reset, no notice.
+    expect(migrateBindings(undefined).reset).toBe(false);
+    expect(migrateBindings({ keys: {}, pad: {} }).reset).toBe(false);
   });
 });

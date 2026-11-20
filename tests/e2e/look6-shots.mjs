@@ -18,17 +18,16 @@ try {
   const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => errors.push(`page: ${e}`));
   page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
-  await page.goto('http://localhost:4198/?gfx=high');
+  await page.goto('http://localhost:4198/?slot=1&gfx=high');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
   await page.waitForTimeout(1000);
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   // A small living patch in the park to work from; HUD hidden so the ground shows.
   const base = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
-    document.querySelectorAll('#hud, .hud, #toolbar, #topbar, #side, #feed, #toasts').forEach((e) => (e.style.visibility = 'hidden'));
+    document.querySelectorAll('#hud, .hud, #toolbar, #topbar, #side, #toasts').forEach((e) => (e.style.visibility = 'hidden'));
     const [fx, fz] = s.areas.info('park').landmark;
     const free = s.areas.tiles('park').filter((t) => s.restoration.isEligible(t) && !t.occupantId && (t.feature ?? 'lawn') === 'lawn');
     free.sort((a, b) => Math.hypot(a.x - fx - 6, a.z - fz) - Math.hypot(b.x - fx - 6, b.z - fz));
@@ -92,7 +91,7 @@ try {
     const g = window.solarbloom, s = g.sim;
     const t = s.grid.get('g', b.x, b.z);
     t.ground = 'prepared'; t.pollution = 0; s.grid.touch(t);
-    s.state.resources.energy = s.state.caps.energy; s.state.resources.water = s.state.caps.water;
+    s.charge.refillForTest(); // E23.1.4: charge is the only meter
     s.restoration.pulse(t.id);
     const tr = t.tr;
     s.advance(1); // the sim restores it (0.8 s) while the visual is still early in the sequence

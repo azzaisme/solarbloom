@@ -4,7 +4,9 @@ import { createInitialState, GROUND, GROUND_GEN } from '../src/core/GameState';
 import { roadPlanFor } from '../src/core/RoadPlan';
 import { distToFootprint, Grid } from '../src/core/Grid';
 import { AREA_TYPE_LIST, AREA_TYPES, CITY_GEN } from '../src/data/city';
-import { roadCol, roadRow } from '../src/core/Generation';
+
+/** E23.1.1: games start on the Old City (generation 5); the city generator's own ground is generation 4. */
+const gen4 = (seed: number) => createInitialState(seed).layers.map((l) => ({ ...l, gen: GROUND_GEN }));
 
 const areasAround = (map: AreaMap, r: number) => {
   const ids = new Set<string>();
@@ -13,20 +15,6 @@ const areasAround = (map: AreaMap, r: number) => {
 };
 
 describe('city generator: skeleton (City 04.1)', () => {
-  it('generations 2–3: roads and canals are a pure function of the seed and run along whole chunk rows/columns', () => {
-    // Generation 4 plans roads on the area graph instead (tests/roads.test.ts); older saves keep this lattice.
-    const g = new Grid(5, createInitialState(5).layers.map((l) => ({ ...l, gen: 3 })));
-    for (let cz = -6; cz <= 6; cz++) {
-      if (!roadRow(5, cz) || cz === 0) continue;
-      for (let x = -40; x < 40; x += 3) {
-        const cx = Math.floor(x / 16);
-        if (cx === 0) continue; // the park keeps its own layout
-        expect(g.get(GROUND, x, cz * 16 + 7)!.feature).toBe('road');
-      }
-    }
-    expect(Array.from({ length: 40 }, (_, i) => roadCol(5, i))).toEqual(Array.from({ length: 40 }, (_, i) => roadCol(5, i)));
-  });
-
   it('district themes are coarse regions', () => {
     const map = new AreaMap(8);
     const n = CITY_GEN.districtChunks;
@@ -39,7 +27,7 @@ describe('city generator: area types and layouts (City 04.3)', () => {
     const seen = new Set<string>();
     for (const seed of [1, 2, 3, 4]) {
       const map = new AreaMap(seed, GROUND_GEN);
-      const g = new Grid(seed, createInitialState(seed).layers);
+      const g = new Grid(seed, gen4(seed));
       for (const id of areasAround(map, 10)) {
         const a = map.info(id);
         if (seen.has(a.type) && id !== PARK) continue;
@@ -123,54 +111,20 @@ describe('city generator: difficulty and variety (City 04.5–04.6)', () => {
       }
       expect(same / pairs).toBeLessThan(0.3);
       const near = new Set(areasAround(map, 12).map((id) => map.info(id).type));
-      expect([...near].sort()).toEqual([...AREA_TYPE_LIST].sort());
+      expect([...near].filter((t) => t !== 'rooftops').sort()).toEqual([...AREA_TYPE_LIST].sort()); // rooftops are placed, not picked
     }
   });
 });
 
 describe('city generator: buildings (City 07.5)', () => {
-  it('new games have buildings; saves from before generation 2 keep generating without them', () => {
-    const seed = 3;
-    const fresh = new Grid(seed, createInitialState(seed).layers.map((l) => ({ ...l, gen: 2 })));
-    const oldLayers = createInitialState(seed).layers.map((l) => ({ ...l, gen: undefined }));
-    const old = new Grid(seed, oldLayers);
-    let built = 0;
-    for (let cz = -6; cz <= 6; cz++)
-      for (let cx = -6; cx <= 6; cx++) {
-        const a = fresh.chunkAt(GROUND, cx, cz)!.tiles;
-        const b = old.chunkAt(GROUND, cx, cz)!.tiles;
-        a.forEach((t, i) => {
-          if (t!.feature === 'building') built++;
-          expect(b[i]!.feature).not.toBe('building');
-          if (t!.feature !== 'building') expect(b[i]).toEqual(t); // everything else is identical
-        });
-      }
-    expect(built).toBeGreaterThan(200);
-  });
-
   it('buildings never sit on roads, water, the park or near a landmark', () => {
     for (const seed of [1, 5, 9]) {
-      // Generation 4: never on a planned road or lane.
-      const g4 = new Grid(seed, createInitialState(seed).layers);
+      // Generation 4 (the city ground under the Old City): never on a planned road or lane.
+      const g4 = new Grid(seed, gen4(seed));
       const plan = roadPlanFor(seed, 4);
       for (let cz = -8; cz <= 8; cz++)
         for (let cx = -8; cx <= 8; cx++)
           for (const t of g4.chunkAt(GROUND, cx, cz)!.tiles) if (t!.feature === 'building') expect(plan.roadAt(t!.x, t!.z)).toBeUndefined();
-      // Generations 2–3: never on the row/column lattice.
-      const g = new Grid(seed, createInitialState(seed).layers.map((l) => ({ ...l, gen: 3 })));
-      const map = new AreaMap(seed, 3);
-      for (let cz = -8; cz <= 8; cz++)
-        for (let cx = -8; cx <= 8; cx++) {
-          const id = map.areaOfChunk(cx, cz);
-          for (const t of g.chunkAt(GROUND, cx, cz)!.tiles) {
-            if (t!.feature !== 'building') continue;
-            expect(id).not.toBe(PARK);
-            const lx = t!.x - cx * 16;
-            const lz = t!.z - cz * 16;
-            expect([7, 8].includes(lz) && roadRow(seed, cz)).toBe(false);
-            expect([7, 8].includes(lx) && roadCol(seed, cx)).toBe(false);
-          }
-        }
     }
   }, 20000);
 });
@@ -179,10 +133,10 @@ describe('park art stages (City 05.2)', () => {
   it('the park looks dilapidated at the start and cheers up at 25/50/75% of its goal, lush once the fountain wakes', async () => {
     const { createInitialState: create } = await import('../src/core/GameState');
     const { Sim: S } = await import('../src/gameplay/Sim');
-    const { TUNING: T } = await import('../src/data/tuning');
+    const { TIERS } = await import('../src/data/salvage');
     const sim = new S(create(5));
     expect(sim.progression.parkStage()).toBe(0);
-    const goal = T.park.restoredTiles;
+    const goal = TIERS[0].needs.parkTiles!; // E21.6: fountain tier 1 asks for these park tiles
     const tiles = sim.areas.tiles('park').filter((t) => !t.blocked && !t.occupantId && t.ground !== 'restored');
     const seen: number[] = [];
     let n = sim.areas.counts('park').restored;
@@ -199,7 +153,7 @@ describe('park art stages (City 05.2)', () => {
       if (n === Math.ceil(goal * 0.75)) expect(st).toBe(3);
     }
     expect(seen).toEqual([0, 1, 2, 3]); // never jumps to "lush" before the fountain
-    sim.state.progression.coreActivated = true;
+    sim.state.salvage.tier = 1; // the water returns
     expect(sim.progression.parkStage()).toBe(4);
   });
 });

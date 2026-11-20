@@ -4,6 +4,10 @@ A cozy solarpunk restoration game for the browser, set in an endless city lost i
 
 Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The camera is a perspective view that changes with the zoom (a low, wide three-quarter view close up with a sky and a distant skyline; near-isometric for the city overview), and the world is a logical square grid rendered in 3D. All art is procedural primitives and all sound is synthesised; there are no asset files.
 
+**Direction (E23, Nov 2026):** Solarbloom is becoming a cozy sandbox with the idle layer gone: bloombot restores a foggy island with power, water, a small farm, crafting and research, for its wildlife. The design is [docs/E23_LIVING_WORLD.md](docs/E23_LIVING_WORLD.md); it overrides E21 where they disagree.
+
+**Direction (E21, Nov 2026):** every game is the Old City: a fixed city of nine regions to explore, salvage and restore by hand. The design is [docs/E21_OLD_CITY.md](docs/E21_OLD_CITY.md). There is one rule set (E23.1.1); a save from an earlier version starts fresh.
+
 ![The park, early on](docs/park.png)
 
 ![A cleared stretch of the city: white buildings with roof gardens around the park](docs/city-overview.png)
@@ -37,8 +41,8 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm run shots:rooftops` | Build, then find a rooftop cluster, screenshot it out of reach, reach it with a Bloom Relay and restore part of it (fails if that doesn't work) into `docs/review/rooftop-cluster-*.png` | ~1 min |
 | `npm run shots:city` | Build, then render the city overview and a close-up of a cleared area of every type into `docs/review/` for visual review | ~2 min |
 | `npm run test:hud` | Build, then check the HUD at 320–430 px, phone landscape, tablet and desktop: no overlaps, Build tray on screen | ~2 min |
-| `npm run test:session` | Build, then play 15 minutes in the real page (taps, builds, upgrades, Frenzy, cats); fails on any page error | ~4 min |
-| `npm run shots:phase4` | Build, then before/after park screenshots (fresh, half, grown with Radiant tiles, Frenzy) into `docs/review/` | ~2 min |
+| `npm run test:session` | Build, then play 15 minutes in the real page (taps, builds, upgrades, cats); fails on any page error | ~4 min |
+| `npm run shots:phase4` | Build, then before/after park screenshots (fresh, half, grown with Radiant tiles) into `docs/review/` | ~2 min |
 | `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
 
 The browser scripts need Playwright with Chromium (`npm i -D playwright && npx playwright install chromium`) and run headless with software rendering, as in CI. GitHub Actions (`.github/workflows/ci.yml`) only builds (typecheck and production bundle, uploaded as `solarbloom-dist`) on pushes to `main` and pull requests. All tests run locally with the commands above.
@@ -66,7 +70,7 @@ rebound in Settings → Controls.
 | Recentre the view | `C` | Right stick click |
 | Overview (and back) | `M`; in the overview, click a woken landmark to travel there | View |
 | Settings / pause | `P` | Menu |
-| Bloom Frenzy (when full) | `R` | Left trigger |
+| Photo mode: depth of field | `R` | Left trigger |
 | Go to the area that needs you (camera only) | `N` | Left stick click |
 | Back to the park (camera only) | `Home` | |
 | Debug / FPS overlay | `F3` or `` ` `` | |

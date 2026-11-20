@@ -3,7 +3,7 @@ import { detailTextures } from './DetailTex';
 
 export type Prim = 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane' | 'torus';
 /** Vertex-coloured primitives; 'sphereHi' is a smoother sphere for big canopies and domes. */
-export type VPrim = Prim | 'sphereHi';
+export type VPrim = Prim | 'sphereHi' | 'disc';
 
 export function initLowPoly(device: pc.GraphicsDevice) {
   vcDevice = device;
@@ -42,6 +42,8 @@ export function lowGeometry(type: VPrim): pc.Geometry {
       return new pc.ConeGeometry({ baseRadius: 0.5, peakRadius: 0, height: 1, heightSegments: 1, capSegments: 6 });
     case 'cylinder':
       return new pc.CylinderGeometry({ radius: 0.5, height: 1, heightSegments: 1, capSegments: 6 });
+    case 'disc': // E23.13: a smooth round slab (the rounded tip of ground poking out into water)
+      return new pc.CylinderGeometry({ radius: 0.5, height: 1, heightSegments: 1, capSegments: 32 });
     case 'capsule':
       return new pc.CapsuleGeometry({ radius: 0.5, height: 2, heightSegments: 1, sides: 6 });
     default:

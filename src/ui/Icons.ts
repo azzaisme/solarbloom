@@ -149,6 +149,9 @@ const BODIES = {
   burst: P('M12 2l2 5 5-2-2 5 5 2-5 2 2 5-5-2-2 5-2-5-5 2 2-5-5-2 5-2-2-5 5 2z', 'orange') + C(12, 12, 3.4, 'sun'),
   // Machines and the city
   fountain: P('M3.5 15h17l-2 5h-13z', 'stone') + L('M12 15V7M12 7c-3 0-5 3-5.5 6.5M12 7c3 0 5 3 5.5 6.5', '#2ba0e0', 1.6) + P('M12 2.6c-1.2 1.8-2 2.8-2 3.8a2 2 0 0 0 4 0c0-1-.8-2-2-3.8z', 'water'),
+  battery: R(6, 5, 12, 16, 2, 'steel') + R(9.5, 3, 5, 2.4, .8, 'dark') + R(8.4, 13, 7.2, 5.6, 1, 'leaf') + R(8.4, 8.8, 7.2, 3, 1, 'leaf'),
+  charger: E(12, 18.5, 8.5, 3, 'cream') + E(12, 18, 6, 1.8, 'gold') + L('M12 17V8', '#3a2a1a', 1.8) + P('M13.6 2.5 9.4 9.2h3l-1.6 5.3 4.6-7h-3.2z', 'sun'),
+  windTurbine: L('M12 11.5V21.5M9 21.5h6', '#3a2a1a', 1.8) + P('M12 10.5 10.6 2.5c1.6-.6 2.8-.6 2.8 2z', 'cream') + P('M12.6 11.6l7.2 3.6c-.4 1.6-1.4 2.2-3 1.4z', 'cream') + P('M11.4 11.6 5 16.8c-1.2-1.2-1.2-2.4.2-3.4z', 'cream') + C(12, 11, 1.6, 'gold'),
   relay: L('M8.5 21l3.5-8.5 3.5 8.5M9.6 18.2h4.8', '#3a2a1a', 1.6) + P('M4.2 8.8a7.6 7.6 0 0 0 11.3 6.4L7.6 4.2a7.6 7.6 0 0 0-3.4 4.6z', 'steel') + L('M15 4a5 5 0 0 1 5 5M15 7a2 2 0 0 1 2 2', '#f2a91e', 1.6),
   drone: C(12, 13, 7, 'cream') + E(12, 13.4, 4.8, 2.8, 'dark') + `<ellipse cx="10.2" cy="13.4" rx="1.1" ry="1.3" fill="#8fe9ff"/><ellipse cx="13.8" cy="13.4" rx="1.1" ry="1.3" fill="#8fe9ff"/>` + L('M12 6V4.6', '#3a2a1a', 1.4) + P('M12 4.8c0-2 1.6-3.2 3.8-3 0 2-1.6 3.2-3.8 3z', 'leaf'),
   rocket: P('M12 2.5c3 2.2 4.4 5.6 4.4 9.6l-1.6 4.4H9.2l-1.6-4.4c0-4 1.4-7.4 4.4-9.6z', 'steel') + C(12, 9.4, 1.9, 'water') + P('M9.6 17h4.8L12 21.6z', 'orange') + P('M7.6 12.1 4.8 15.6l3.4.6zM16.4 12.1l2.8 3.5-3.4.6z', 'red'),
@@ -187,6 +190,11 @@ const BODIES = {
   robot: L('M12 3.5v2.4', '#3a2a1a', 1.6) + C(12, 3, 1.3, 'red') + R(5, 6, 14, 10, 3, 'steel') + `<rect x="8" y="9.4" width="2.6" height="2.6" rx="1" fill="#8fe9ff"/><rect x="13.4" y="9.4" width="2.6" height="2.6" rx="1" fill="#8fe9ff"/>` + R(7.5, 16.5, 9, 4.5, 1.5, 'steel'),
   wrench: P('M14.5 3.5a5 5 0 0 0-4.6 6.9L3.8 16.5a1.9 1.9 0 0 0 2.7 2.7l6.1-6.1a5 5 0 0 0 6.9-4.6l-3 3-2.6-.5-.5-2.6z', 'steel'),
   crane: L('M7 21V3.5h12.5M7 7l4.5-3.5M17 3.5V9', '#d9a03a', 2) + R(15, 9, 4, 3.4, .8, 'wood') + P('M4 20.5h7v1.5H4z', 'stone'),
+  // E23.4.2: the water network
+  reservoir: R(4, 7, 16, 13, 2.4, 'stone') + R(5.6, 11, 12.8, 7.4, 1.4, 'water') + L('M4 7h16M7.5 4.5v2.5M16.5 4.5v2.5', '#fff', 1.4),
+  pump: R(7, 9, 10, 11, 2, 'steel') + C(12, 14.5, 2.6, 'water') + L('M12 9V4.5M12 4.5h5.5M4 20.5h16', '#fff', 1.6) + P('M18 3.4c-.8 1.2-1.3 1.9-1.3 2.6a1.3 1.3 0 0 0 2.6 0c0-.7-.5-1.4-1.3-2.6z', 'water'),
+  desalination: P('M3.5 20.5h17v-7l-4-3-4 3v-3l-4-3-5 4z', 'stone') + R(15.5, 5, 3, 9, 1.2, 'water') + L('M2 21.5c2-1.2 4 1.2 6 0s4 1.2 6 0 4 1.2 6 0', '#2ba0e0', 1.5),
+  pipe: L('M3.5 9h9.5a3.5 3.5 0 0 1 3.5 3.5V21', '#5aa3c9', 4.6) + L('M3.5 9h9.5a3.5 3.5 0 0 1 3.5 3.5V21', '#9fe3f5', 1.4) + R(2.5, 6.6, 2.6, 4.8, 0.6, 'steel') + R(14.2, 18.5, 4.6, 2.6, 0.6, 'steel'),
   crate: R(4, 6, 16, 14, 1.8, 'wood') + L('M4 11h16M12 6v14', '#3a2a1a', 1.2) + P('M4 6l2.4-2.5h11.2L20 6z', 'wood'),
   // E19: plot options
   carrot: P('M14.5 9.5 5 20.5l11.2-8.8a2.6 2.6 0 0 0-1.7-2.2z', 'orange') + L('M9 15.6l1.6 1.2M11.6 12.8l1.4 1.2', '#b5560f', 1.1) + P('M15.4 8.6c-.4-2.6.6-4.6 2.8-5.4.6 2.4-.6 4.6-2.8 5.4z', 'leaf') + P('M16 9.4c2.2-1.2 4.4-.8 5.6 1-2 1.2-4.2.8-5.6-1z', 'leaf'),
@@ -199,6 +207,16 @@ const BODIES = {
   frog: E(12, 15, 8.5, 5.5, 'leaf') + C(8, 9.4, 3, 'leaf') + C(16, 9.4, 3, 'leaf') + C(8, 9.2, 1.4, 'cream') + C(16, 9.2, 1.4, 'cream') + C(8, 9.2, .7, 'dark') + C(16, 9.2, .7, 'dark') + L('M8.5 15.5q3.5 2.2 7 0', '#3a2a1a', 1.2),
   hut: P('M12 3 21 13h-2.5v7.5h-13V13H3z', 'wood') + P('M12 3 21 13H3z', 'gold') + R(10, 14.5, 4, 6, 1.6, 'dark') + P('M8.5 7.4c1.6-.6 3-.6 4.6 0', 'leaf'),
   glasshouse: P('M3.5 11 12 4l8.5 7v9.5h-17z', 'water') + L('M3.5 11 12 4l8.5 7M12 4v16.5M3.5 15.5h17M7.8 7.5v13M16.2 7.5v13', '#f4f1ea', 1.2) + P('M3 20.5h18v1H3z', 'stone'),
+  // E23.2.4 visitors (the visitor log)
+  bee: E(8.6, 8, 3.4, 2.4, 'steel') + E(14.4, 8, 3.4, 2.4, 'steel') + E(12, 14.5, 6.5, 4.6, 'gold') + L('M10 10.4v8.2M14 10.4v8.2', '#3a2a1a', 1.6) + C(5.6, 13.6, 1.8, 'dark'),
+  hedgehog: P('M3.5 17.5c0-6 4-10 9-10s8.5 3.6 8.5 7.4c0 1.6-1 2.6-2.4 2.6z', 'wood') + L('M7 10l-1.4-2.4M10 8.2l-.6-2.6M13.4 7.6l.4-2.6M16.8 8.8l1.4-2.2M19.4 11.6l2-1.4', '#3a2a1a', 1.4) + P('M18.6 17.5c1.8 0 2.4-1 2.8-2.6l1.1 1.6-1.2 1z', 'cream') + C(19.4, 14.4, .6, 'dark'),
+  squirrel: P('M9.5 20c-5 0-6.5-5-5-9.5S10.4 3.5 7.6 2.8c3.6-.4 6 2.6 5 7.6-.8 4-.2 6.6 1.4 9.6z', 'orange') + E(15.6, 15.8, 3.8, 4.4, 'orange') + C(17, 9.6, 2.8, 'orange') + P('M16.2 7.2l.4-2.6 1.6 2.4z', 'orange') + C(17.8, 9.2, .6, 'dark'),
+  fox: P('M4 5.5l4.5 4h7L20 5.5l-.6 7.4L12 20.5l-7.4-7.6z', 'orange') + P('M7.6 14.4 12 20.5l4.4-6.1c-1.4 1-2.8 1.4-4.4 1.4s-3-.4-4.4-1.4z', 'cream') + C(9.2, 12.6, .8, 'dark') + C(14.8, 12.6, .8, 'dark') + C(12, 19.4, .9, 'dark'),
+  owl: P('M5.5 9.5C5.5 5 8 3.5 12 3.5S18.5 5 18.5 9.5V16c0 3-3 5-6.5 5s-6.5-2-6.5-5z', 'wood') + C(9.2, 9.8, 2.6, 'cream') + C(14.8, 9.8, 2.6, 'cream') + C(9.2, 9.8, 1, 'dark') + C(14.8, 9.8, 1, 'dark') + P('M11 12.4h2L12 14.4z', 'gold') + L('M9.4 16.4l1.2.8M13.4 17.2l1.2-.8', '#3a2a1a', 1.2),
+  otter: P('M3.5 18c2-1.6 3-4.6 4.4-7.4C9.6 7 12 5.6 15 5.8c3.6.2 5.6 2.6 5.4 5.4-.2 2.6-2.4 4-5 4-2.2 0-3.2 1.4-4.4 3.4-1.4 2-4.6 1.8-7.5-.6z', 'wood') + C(17, 9.6, .7, 'dark') + C(20.2, 11.2, .8, 'dark') + L('M19 13.2l2.6.6M19 14.2l2.2 1.2', '#3a2a1a', 1.1),
+  badger: P('M3 16c0-4 3.6-7 8.4-7H15l6 4.5c.6.5.4 1.4-.4 1.6L16 16.4c-.8 2-2.6 3.1-5 3.1H6.4C4.4 19.5 3 18 3 16z', 'stone') + P('M15 9l6 4.5c.6.5.4 1.4-.4 1.6L16 16.4c-.4-2.6-.8-5-1-7.4z', 'cream') + L('M16.4 10.6l2.8 2.6', '#3a2a1a', 1.4) + C(21, 14.2, .7, 'dark'),
+  fawn: P('M7 10.5h8.4c1.4 0 2.2 1 2.2 2.2v1.6c0 1-.8 1.8-1.8 1.8H8.6c-1.8 0-3-1.2-3-2.8v-.4c0-1.4.6-2.4 1.4-2.4z', 'orange') + L('M8 16v4.5M10.6 16v4.5M14.2 16v4.5M16.4 16v4.5', '#3a2a1a', 1.5) + P('M15 10.5 16.2 5c.2-1 1.2-1.6 2.2-1.4l2.2.6c.6.2.6 1 0 1.4l-2 1.2L18 10.5z', 'orange') + C(9.2, 12.6, .6, 'cream') + C(12.2, 13, .6, 'cream') + C(18.6, 5.4, .5, 'dark'),
+  heron: L('M10 21v-6M12.6 21v-6', '#3a2a1a', 1.3) + P('M6 13c0-2.6 2.4-4 5.4-4H15c.8 0 1.4.8 1 1.6L14 15H9c-1.8 0-3-.8-3-2z', 'steel') + L('M14.6 9.4c-.4-2 .4-3.6 2-4.2', '#3a2a1a', 1.6) + P('M16.4 4.4l5.6 1-5.2 1.4z', 'gold') + C(16.6, 5, .4, 'dark'),
   // Drone roles (E18; used by the role picker and over drones)
   roleRestorer: P('M12 8l8.5 4.6L12 17.2 3.5 12.6z', 'leaf') + P('M3.5 12.6v2.2l8.5 4.6 8.5-4.6v-2.2L12 17.2z', 'wood') + P(sparkle(12, 5, 4.2), 'gold'),
   roleGardener: P('M4.5 10h10v8.5a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2z', 'water') + L('M14.5 12l5-4.5', '#3a2a1a', 2.2) + L('M7 10a3 3 0 0 1 5 0', '#3a2a1a', 1.6) + L('M20.5 9.5v1.6M19 11.4v1.6M21.6 12v1.4', '#7ad8f8', 1.2),
@@ -238,6 +256,27 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   reservoirGarden: 'fountain',
   relay: 'relay',
   cultivator: 'carrot', // the tiller: its tray slot showed 'undefined' without one
+  chest: 'parcel', // E21.1
+  planter: 'garden', // E23.5.2
+  compostBin: 'basket', // E23.5.3
+  bioDigester: 'energy', // E23.5.3
+  beehive: 'flower', // E23.5.4
+  fishPond: 'fish',
+  orchard: 'apple',
+  mushroomLog: 'tree',
+  wormBin: 'garden',
+  birdBox: 'bird',
+  batBox: 'moon',
+  hedgehogHouse: 'hut',
+  butterflyGarden: 'butterfly',
+  battery: 'battery', // E23.3.2
+  windTurbine: 'windTurbine', // E23.3.2
+  charger: 'charger', // E23.3.3
+  reservoir: 'reservoir', // E23.4.2
+  pump: 'pump', // E23.4.2
+  crate: 'basket', // E23.6.4
+  assembler: 'settings', // E23.6.5
+  desalination: 'desalination', // E23.4.3
   core: 'sparkle',
 };
 
@@ -261,7 +300,7 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '☀': 'sun', '🌞': 'sun', '🔆': 'sun', '🌙': 'moon', '🌈': 'rainbow', '🌊': 'wave', '🌫': 'fog', '🌧': 'rain', '🌟': 'star', '💥': 'burst',
   '🦋': 'butterfly', '🐦': 'bird', '🐟': 'fish', '🐱': 'cat', '🐾': 'paw', '🤖': 'robot',
   '⛲': 'fountain', '📡': 'relay', '🛰': 'satellite', '🛸': 'drone', '🚀': 'rocket', '💠': 'crystal', '🏺': 'vase', '🏢': 'building', '🏙': 'building', '🗼': 'building',
-  '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🏗': 'crane',
+  '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🔋': 'battery', '🌬': 'windTurbine', '🔦': 'bulb', '🔌': 'charger', '🏗': 'crane',
   '🔒': 'lock', '🔓': 'lock', '✅': 'check', '⬜': 'box', '⏳': 'hourglass', '🔗': 'link', '🔀': 'merge', '🔁': 'repeat', '⬆': 'up', '⚠': 'warning', '❔': 'question',
   '📋': 'clipboard', '🧹': 'broom', '🪑': 'bench', '💡': 'bulb', '💰': 'coins', '🧩': 'puzzle', '👑': 'crown', '🧠': 'brain', '🕸': 'web', '✋': 'hand',
   '⚙': 'settings', '🔧': 'wrench', '▶': 'play', '⏸': 'pause', '⏩': 'fastForward', '⏭': 'fastForward',
@@ -271,7 +310,19 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🚣': 'boat', '🐸': 'frog', '🛖': 'hut', '🪟': 'glasshouse',
   // E19.2 decorations.
   '🌷': 'flower', '🎏': 'rainbow', '🛢': 'vase',
+  // E23.8.3.2: the mainland's steel (its machines' 🔋 and 🚰 are mapped above and below)
+  '🔩': 'wrench',
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
+  // E23.6.1 components.
+  '➰': 'link', '🪵': 'build', '🔲': 'glasshouse', '🚰': 'water', '🌀': 'settings',
+  // E23.5.1 farm items (food is the carrot, compost the garden bed above).
+  '🧪': 'sparkle', '🍯': 'vase',
+  // E23.2.4 visitors (the magpie's 🐦‍⬛ is the bird, by its base emoji).
+  '🐝': 'bee', '🦔': 'hedgehog', '🐿': 'squirrel', '🦊': 'fox', '🦉': 'owl', '🦦': 'otter', '🦡': 'badger', '🪶': 'heron', '🦌': 'fawn',
+  // E23.6.5 the Assembler.
+  '🛠': 'wrench',
+  // E23.5.4 beyond planters (the bee and the hedgehog are the visitors' icons above)
+  '🍄': 'sprout', '🪱': 'sprout', '🦇': 'moon',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

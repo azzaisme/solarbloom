@@ -15,12 +15,11 @@ try {
     const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dpr });
     page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     page.on('console', (m) => m.type() === 'error' && errors.push(`${name}: ${m.text()}`));
-    await page.goto('http://localhost:4199/');
+    await page.goto('http://localhost:4199/?slot=1');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
-    if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
-    await page.addStyleTag({ content: '#toasts, #hint { display: none !important; }' });
+    await page.addStyleTag({ content: '#toasts { display: none !important; }' });
     const shot = async (label, fn) => {
       await page.evaluate(fn);
       await page.evaluate(() => {
@@ -50,12 +49,6 @@ try {
       s.areas.clear('park', true);
       s.production.markDirty();
     });
-    if (name === 'desktop')
-      await shot('3-frenzy', () => {
-        const s = window.solarbloom.sim;
-        s.state.frenzy = { charge: 100 };
-        s.frenzy.activate();
-      });
     await page.close();
   }
 } finally {

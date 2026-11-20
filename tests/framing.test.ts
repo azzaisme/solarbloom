@@ -7,7 +7,7 @@ import { calmHud, parseSettings, potterPace } from '../src/app/Settings';
 import type { Sim } from '../src/gameplay/Sim';
 import { CameraController } from '../src/rendering/CameraController';
 import { advisorStep, calmToast } from '../src/ui/Pace';
-import { runBot } from './bots';
+import { runOldCityBot } from './oldcity-bot';
 
 // E19.4 (#259): softer framing. Photo mode (#260), the calm HUD (#261, the default since E20.7 #290) and the
 // potter-about pace (#262) are presentation only.
@@ -51,17 +51,16 @@ describe('E19.4.3: the potter-about pace is presentation only', () => {
     let last: Sim | undefined;
     const shown: boolean[] = [];
     SaveService.clock = () => 0;
-    const report = runBot({
-      seed: 7,
-      minutes: 9,
-      roles: true,
+    const r = runOldCityBot(7, 9, 'keeper', {
       onSecond: (sim) => {
         last = sim;
         shown.push(!!advisorStep(sim, potter));
-        sim.advisor.nextPurchase();
+        sim.advisor.suggest();
         sim.advisor.nearestFrontier();
       },
     });
+    const { sim: _sim, ...report } = r;
+    void _sim;
     return { report, save: new SaveService(undefined).serialize(last!.state), shown };
   }
 
@@ -139,9 +138,9 @@ describe('E19.4.1: photo mode', () => {
     for (let i = 0; i < 30; i++) photo.update(1 / 30);
     photo.key('KeyW', false);
     photo.key('KeyD', false);
-    for (let i = 0; i < 20; i++) photo.action('zoomIn');
-    photo.action('nextTool');
-    photo.action('nextTool');
+    for (let i = 0; i < 20; i++) photo.action('zoomCamera');
+    photo.action('rotate');
+    photo.action('rotate');
     cam.orbit(70);
     expect(cam.goalPoint.distance(new pc.Vec3(10, 0, 12))).toBeGreaterThan(2);
     expect(cam.zoomTarget).toBeGreaterThan(4.2);
@@ -162,14 +161,14 @@ describe('E19.4.1: photo mode', () => {
     const { hud, photo } = setup();
     photo.enter();
     expect(photo.frozen).toBe(false);
-    photo.action('tray');
+    photo.action('buildMenu');
     expect(photo.frozen).toBe(true);
     expect(hud.bar?.freeze).toBe(true);
     photo.action('pulse');
     expect(hud.shots).toBe(1);
     photo.action('photo'); // the photo key leaves too
     expect(photo.frozen).toBe(false); // never frozen outside photo mode
-    photo.action('upgrades');
+    photo.action('map');
     expect(photo.active).toBe(false);
   });
 

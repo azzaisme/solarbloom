@@ -38,18 +38,17 @@ try {
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('http://localhost:4189/');
+  await page.goto('http://localhost:4189/?slot=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
-  if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 
   // A large city to pan across (the soak's fast player).
   const extent = await page.evaluate((AREAS) => {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.caps.energy = new (st.resources.energy.constructor)(1e9); st.caps.water = new (st.resources.energy.constructor)(1e9);
+    for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
     st.progression.coreActivated = true;
     s.areas.clear('park', true);
     for (let n = 1; n < AREAS; n++) {

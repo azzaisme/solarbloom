@@ -43,12 +43,18 @@ export class CatVisuals {
 
   anchorWorld(a: CatAnchor): pc.Vec3 {
     const r = this.sim.grid.roof(a.roofId)!;
-    return new pc.Vec3(r.origin[0] + a.pos[0], r.origin[1] + r.height + a.pos[1], r.origin[2] + a.pos[2]);
+    // E21.24: on its terrace
+    return new pc.Vec3(r.origin[0] + a.pos[0], r.origin[1] + r.height + a.pos[1] + this.sim.grid.groundOffset(a.roofId, Math.floor(a.pos[0]), Math.floor(a.pos[2])), r.origin[2] + a.pos[2]);
   }
 
   /** Ids of the cats on screen. */
   ids(): string[] {
     return [...this.views.keys()];
+  }
+
+  /** The entity a cat is drawn as (its meshes are what the player sees of it). */
+  rootOf(catId: string): pc.Entity | undefined {
+    return this.views.get(catId)?.root;
   }
 
   /** Click target centre (a little above the feet) of one cat (default: any). */

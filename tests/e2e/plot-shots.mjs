@@ -15,11 +15,10 @@ const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
 const hideToasts = () => page.addStyleTag({ content: '#toasts, .toast { display: none !important; }' });
 
 // 1. Each option, close up, on the park's first plot (the cursor camera frames it freely).
-await page.goto('http://localhost:4196/?cursor=1');
+await page.goto('http://localhost:4196/?slot=1&cursor=1');
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => !!window.solarbloom);
-if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 await hideToasts();
 await page.evaluate(() => window.solarbloom.fillPlots());
 const list = await page.evaluate(() => window.solarbloom.plotOptionIds());
@@ -54,9 +53,8 @@ await page.waitForTimeout(2500);
 await page.screenshot({ path: `${out}/plots-far.png` });
 
 // 3. Bloombot at a plot with the picker open, projecting the option it's looking at.
-await page.goto('http://localhost:4196/');
+await page.goto('http://localhost:4196/?slot=1');
 await page.waitForFunction(() => !!window.solarbloom?.bot);
-if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 await hideToasts();
 await page.evaluate(async () => {
   const g = window.solarbloom;

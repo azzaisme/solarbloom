@@ -12,7 +12,7 @@ const errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1100, height: 700 }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('http://localhost:4201/');
+  await page.goto('http://localhost:4201/?slot=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
@@ -20,8 +20,7 @@ try {
   const spot = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
-    s.state.caps.energy = new (s.state.resources.energy.constructor)(1e6); s.state.caps.water = new (s.state.resources.energy.constructor)(1e6);
-    s.state.resources.energy = new (s.state.resources.energy.constructor)(1e6); s.state.resources.water = new (s.state.resources.energy.constructor)(1e6); s.state.resources.biomass = new (s.state.resources.energy.constructor)(1e6);
+    for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) s.state.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
     for (const t of s.areas.tiles('park')) if (s.restoration.isEligible(t)) s.restoration.complete(t, 'pulse');
     s.state.progression.coreActivated = true;
     s.areas.clear('park', true);

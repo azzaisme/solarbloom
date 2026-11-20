@@ -1,6 +1,8 @@
 // Bloombot (G.7): a scripted player that uses only a virtual gamepad. It reads the game state to decide where
 // to go (as a player reads the screen), but every action goes through `navigator.getGamepads()`: the left
-// stick to walk and turn, A to pulse, X to wake the fountain, d-pad left to harvest. No mouse or keyboard.
+// stick to walk and turn, X to pulse, A to interact (wake the fountain), Y for the build menu (the d-pad moves
+// its focus ring, A takes a card), A to place in build mode, d-pad left to harvest (E22.1's map). No mouse or
+// keyboard.
 //
 // Loaded into the page by tests/e2e/gamepad.e2e.mjs (real time), and usable by hand from a dev console:
 //   installVirtualPad(); const d = padDriver(window.solarbloom); then call d.tick() every frame.
@@ -23,10 +25,13 @@ export function installVirtualPad() {
 
 export function padDriver(game) {
   const pad = window.__pad;
-  const PULSE = 0;
-  const WAKE = 2;
-  const NEXT_TOOL = 5;
-  const HARVEST = 14;
+  const A = 0;
+  const PULSE = 2;
+  const WAKE = A; // Interact
+  const PLACE = A; // in build mode
+  const BUILD_MENU = 3;
+  const EAT = 14;
+  const DPAD = { up: 12, down: 13, left: 14, right: 15 };
   /** The park's build goals, in the order the objective card lists them. */
   const NEEDED = { solar: 'Solar Panel', condenser: 'Water Condenser', pollinator: 'Pollinator Garden', droneHub: 'Drone Hub', motherTree: 'Mother Tree' };
   let release = [];
@@ -48,11 +53,45 @@ export function padDriver(game) {
   const still = () => {
     pad.axes[0] = 0;
     pad.axes[1] = 0;
+    pad.axes[2] = 0;
+    pad.axes[3] = 0;
   };
   let target; // { stand: {x, z}, face: {x, z}, kind }
+  /** the path to the target's stand, from bloombot's pathfinder (refreshed every second) */
+  let route;
   let nudge = 0;
   let lastPulseAt = -99;
-  const st = { pulses: 0, woke: false, frames: 0 };
+  const st = { pulses: 0, woke: false, frames: 0, interacts: 0 };
+
+  /** The build menu is open (the interim tray, or E22.7's menu). */
+  const menuOpen = () => !!document.querySelector('#buildMenu.open');
+  let tabTries = 0;
+  /** Walks the build menu's focus ring toward a card with the d-pad (as a player would), then takes it with A. */
+  function chooseCard(type) {
+    const card = document.querySelector(`#buildMenu.open [data-tool="${type}"]`);
+    if (!card) {
+      // E23.11: the card is on another tab: RB to the next one (as a player would), giving up after a full round
+      if (!menuOpen() || tabTries++ >= 8) return false;
+      press(5);
+      return true;
+    }
+    tabTries = 0;
+    const cur = document.activeElement;
+    if (cur === card) {
+      press(A);
+      return true;
+    }
+    if (!cur || !cur.closest?.('#buildMenu')) {
+      press(DPAD.right); // the first press lands the focus ring on the menu
+      return true;
+    }
+    const a = cur.getBoundingClientRect();
+    const b = card.getBoundingClientRect();
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+    const dy = b.top + b.height / 2 - (a.top + a.height / 2);
+    press(Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? DPAD.right : DPAD.left) : dy > 0 ? DPAD.down : DPAD.up);
+    return true;
+  }
 
   const sim = game.sim;
   const bot = game.bot;
@@ -133,8 +172,12 @@ export function padDriver(game) {
       pad.buttons[b].value = 0;
     }
     release = [];
-    if (game.hud.introOpen || game.hud.modalOpen) {
+    if (game.hud.modalOpen) {
       press(1); // B closes whatever is in the way
+      return st;
+    }
+    if (menuOpen() && target?.kind !== 'build') {
+      press(1);
       return st;
     }
     if (sim.areas.fog('park') === 'cleared') {
@@ -143,7 +186,7 @@ export function padDriver(game) {
       return st;
     }
     // Harvest sunlight whenever it's ready (free energy).
-    if (sim.state.harvestReadyAt <= sim.state.time && st.frames % 15 === 0) press(HARVEST);
+    if (sim.charge.empty && st.frames % 15 === 0 && !menuOpen()) press(EAT); // E23.1.4: pad 14 eats (no harvest)
     if (!target || (target.kind === 'pulse' && !pulsable(sim.grid.get(bot.pose.roofId, target.face.x, target.face.z))) || st.frames % 90 === 0) target = pickTarget();
     if (!target) {
       still();
@@ -153,32 +196,77 @@ export function padDriver(game) {
     const cx = target.stand.x + 0.5, cz = target.stand.z + 0.5;
     const d = Math.hypot(cx - p.x, cz - p.z);
     if (d > 0.18) {
-      // Walk straight there; if a wall is in the way, slide around it by aiming a little to the side.
+      // Walk there along the path bloombot's own pathfinder finds (a player walks round what's in the way: the
+      // machines it builds land wherever the crosshair put them); straight on for the last cell.
+      if (!route || route.to !== target || st.frames % 30 === 0) {
+        const goal = (x, z) => x === target.stand.x && z === target.stand.z;
+        route = { to: target, path: walk.path(p.roofId, p.x, p.z, goal, target.stand) ?? [] };
+      }
+      while (route.path.length && Math.hypot(route.path[0].x - p.x, route.path[0].z - p.z) < 0.3) route.path.shift();
+      const next = route.path.length > 1 ? route.path[0] : { x: cx, z: cz };
       const side = (st.frames >> 6) % 2 ? 1 : -1;
       const blocked = bot.speed < 0.2 && st.frames > 30;
-      const ax = cx - p.x, az = cz - p.z;
+      const ax = next.x - p.x, az = next.z - p.z;
       stick(blocked ? ax - az * side : ax, blocked ? az + ax * side : az, Math.min(1, 0.35 + d));
       nudge = 0;
       return st;
     }
     // At the spot: a brief tap toward the target turns bloombot to face it without leaving the cell.
+    // Third person: a build left in hand turns A into Place and has bloombot face the camera: B puts it away.
+    if (target.kind !== 'build' && game.hud.currentTool !== 'pulse' && game.hud.currentTool !== 'inspect') {
+      still();
+      if (st.frames % 4 === 0) press(1);
+      return st;
+    }
     const f = walk.front(p);
-    if (f.x !== target.face.x || f.z !== target.face.z) {
+    // (with a build in hand bloombot faces where the camera looks: the crosshair aims, not the facing)
+    const aiming = target.kind === 'build' && game.hud.currentTool === target.type;
+    if (!aiming && (f.x !== target.face.x || f.z !== target.face.z)) {
       // Keep a light push on until the turn completes (it may drift a little; walking puts it back).
       stick(target.face.x + 0.5 - p.x, target.face.z + 0.5 - p.z, 0.3);
       if (++nudge > 90) target = undefined; // can't line up: pick something else
       return st;
     }
     still();
-    if (target.kind === 'wake') press(WAKE);
-    else if (target.kind === 'build') {
-      // Bumpers step through the tools until the machine is in hand, then A builds it in front.
+    if (target.kind === 'wake') {
+      if (st.frames % 4 === 0) {
+        press(WAKE);
+        st.interacts++;
+      }
+    } else if (target.kind === 'build') {
+      // Y opens the build menu; the d-pad walks its focus ring to the machine's card and A takes it; A places it.
       if (game.hud.currentTool !== target.type) {
-        if (st.frames % 4 === 0) press(NEXT_TOOL);
-      } else {
-        press(PULSE);
-        st.built = (st.built ?? 0) + 1;
-        target = undefined;
+        if (st.frames % 4 === 0) {
+          if (!menuOpen()) press(BUILD_MENU);
+          else if (!chooseCard(target.type)) press(1);
+        }
+      } else if (!menuOpen()) {
+        // Third person: build mode places under the crosshair, so the right stick swings the camera to look from
+        // bloombot toward the tile and tilts it until the crosshair sits on it.
+        const aim = game.crosshairPick();
+        const onIt = aim?.tile && aim.tile.x === target.face.x && aim.tile.z === target.face.z;
+        if (!onIt) {
+          const tx = target.face.x + 0.5 - p.x, tz = target.face.z + 0.5 - p.z;
+          // steer by where the crosshair lands now (the shoulder offset shifts it off the camera's heading)
+          const want = (Math.atan2(tx, tz) * 180) / Math.PI;
+          const now = aim ? (Math.atan2(aim.fx - p.x, aim.fz - p.z) * 180) / Math.PI : game.camera.yaw + 180;
+          const yawErr = ((((want - now) % 360) + 540) % 360) - 180;
+          const aimD = aim ? Math.hypot(aim.fx - p.x, aim.fz - p.z) : 0;
+          const distErr = aimD - Math.hypot(tx, tz); // too far: tilt down
+          pad.axes[2] = Math.abs(yawErr) > 3 ? -Math.max(-1, Math.min(1, yawErr / 40)) : 0;
+          pad.axes[3] = Math.abs(yawErr) <= 25 ? Math.max(-1, Math.min(1, distErr)) * 0.8 : 0;
+          if (++nudge > 240) {
+            pad.axes[2] = pad.axes[3] = 0;
+            nudge = 0;
+            target = undefined; // can't line up: pick something else
+          }
+        } else if (!pad.buttons[PLACE].pressed && st.frames % 4 === 0) {
+          // a fresh press (A also chose the card: it must come up before it can place)
+          pad.axes[2] = pad.axes[3] = 0;
+          press(PLACE);
+          st.built = (st.built ?? 0) + 1;
+          target = undefined;
+        }
       }
     }
     else if (sim.restoration.checkPulse(sim.grid.get(p.roofId, f.x, f.z)).ok && sim.time - lastPulseAt > 0.4) {

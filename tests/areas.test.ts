@@ -1,6 +1,4 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
-import { meetSpecialty } from './city-helpers';
 import { SaveService } from '../src/app/SaveService';
 import { AreaMap, PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
@@ -14,9 +12,6 @@ function city(seed = 4) {
   const g = sim.grid.layer(GROUND)!;
   g.unlocked = true;
   g.preview = false;
-  const s = sim.state;
-  s.caps.energy = big(1e6); s.caps.water = big(1e6);
-  s.resources.energy = big(1e5); s.resources.water = big(1e5); s.resources.biomass = big(1e5);
   return sim;
 }
 
@@ -94,110 +89,51 @@ describe('areas: the fog (City 03.2–03.4)', () => {
     expect(sim.restoration.checkPulse(p).ok).toBe(true);
   });
 
-  it('waking the park reveals exactly its neighbours, as Frontier', () => {
+  // E23.1.1: one rule set. The park wakes with the fountain (E21.6), its neighbours come into view behind their gates
+  // (E21.5), and an open region can be restored anywhere: there is no receding Frontier any more.
+  it('waking the park reveals its neighbours, each sealed behind its gate until opened', () => {
     const sim = city();
     const revealed: string[] = [];
     sim.bus.on('area.revealed', ({ areaId }) => revealed.push(areaId));
-    expect(sim.areas.clear(PARK)).toBe(false); // not restored enough yet
-    restoreArea(sim, PARK);
-    expect(sim.areas.ready(PARK)).toBe(true);
-    expect(sim.areas.clear(PARK)).toBe(true);
+    const before = new Set(Object.keys(sim.state.areas));
+    expect(sim.areas.clear(PARK)).toBe(false); // the park is not a region: the fountain wakes it
+    expect(sim.areas.clear(PARK, true)).toBe(true);
     expect(sim.areas.fog(PARK)).toBe('cleared');
-    expect(revealed.sort()).toEqual([...sim.areas.info(PARK).neighbours].sort());
-    for (const id of revealed) {
-      expect(sim.areas.fog(id)).toBe('frontier');
-      expect(sim.areas.landmark(id)).toBeDefined();
-      for (const far of sim.areas.info(id).neighbours) if (far !== PARK && !revealed.includes(far)) expect(sim.areas.fog(far)).toBe('hidden');
+    const fresh = sim.areas.info(PARK).neighbours.filter((n) => !before.has(n) && sim.state.areas[n]);
+    expect(revealed.sort()).toEqual(fresh.sort());
+    for (const id of fresh) {
+      expect(sim.areas.sealed(id)).toBe(true);
+      expect(sim.areas.fog(id)).toBe('hidden'); // still fog to everything in the game
+      const t = sim.areas.tiles(id).find((x) => !x.occupantId && !x.blocked)!;
+      expect(sim.restoration.checkPulse(t).ok).toBe(false);
     }
-    expect(sim.areas.clear(PARK)).toBe(false); // claimed once
+    expect(sim.areas.clear(PARK, true)).toBe(false); // claimed once
   });
 
-  it('in Frontier fog only tiles touching clear ground can be restored, so the fog recedes tile by tile', () => {
+  it('an open region can be restored anywhere, not only at its edge, and its fog thins as it is restored', () => {
     const sim = city(12);
-    restoreArea(sim, PARK, 1);
-    sim.areas.clear(PARK);
-    const id = sim.areas.info(PARK).neighbours[0];
-    const tiles = sim.areas.tiles(id).filter((t) => !t.occupantId && !t.blocked);
-    const edge = tiles.filter((t) => sim.grid.neighbors(t).some((n) => sim.areas.isClear(n)));
+    const id = sim.areas.nextGoal()!;
+    expect(sim.areas.sealed(id)).toBe(false);
+    const tiles = sim.areas.tiles(id).filter((t) => !t.occupantId && !t.blocked && t.ground !== 'restored');
     const deep = tiles.filter((t) => !sim.grid.neighbors(t).some((n) => sim.areas.isClear(n)));
-    expect(edge.length).toBeGreaterThan(0);
     expect(deep.length).toBeGreaterThan(0);
-    for (const t of edge) expect(sim.restoration.isEligible(t)).toBe(true);
-    for (const t of deep) expect(sim.restoration.isEligible(t)).toBe(false);
-    // restore one edge tile: the tile behind it opens up
-    const first = edge[0];
-    const behind = sim.grid.neighbors(first).find((n) => deep.includes(n))!;
-    expect(behind).toBeDefined();
-    expect(sim.restoration.pulse(first.id)).toBe(true);
-    expect(sim.areas.fog(id)).toBe('frontier');
-    sim.advance(2);
-    expect(sim.areas.fog(id)).toBe('thinning');
-    expect(sim.restoration.isEligible(behind)).toBe(true);
-    // fog thins as the area is restored, and is gone once cleared
+    for (const t of deep.slice(0, 50)) expect(sim.areas.canTouch(t)).toBe(true);
     const d0 = sim.areas.density(id);
     restoreArea(sim, id);
     expect(sim.areas.density(id)).toBeLessThan(d0);
-    meetSpecialty(sim, id);
-    sim.areas.clear(id);
+    sim.areas.clear(id, true);
     expect(sim.areas.density(id)).toBe(0);
     expect(sim.areas.fog(id)).toBe('cleared');
   });
 
-  it('fog state, landmarks and repaired entries survive a save', () => {
+  it('fog state and landmarks survive a save', () => {
     const sim = city(5);
-    restoreArea(sim, PARK);
-    sim.areas.clear(PARK);
+    sim.areas.clear(PARK, true);
     const copy = new Sim(new SaveService(undefined).deserialize(new SaveService(undefined).serialize(sim.state))!);
     for (const id of sim.areas.revealed()) {
       expect(copy.areas.fog(id)).toBe(sim.areas.fog(id));
       expect(copy.areas.landmark(id)?.id).toBe(sim.areas.landmark(id)?.id);
     }
     expect(copy.state.machines.length).toBe(sim.state.machines.length);
-  });
-});
-
-describe('areas: reachability (City 03.5)', () => {
-  it('a Frontier area whose whole entry edge is blocked gets one obstacle cleared, and it is saved', () => {
-    const sim = city(6);
-    restoreArea(sim, PARK, 1);
-    const id = sim.areas.info(PARK).neighbours[0];
-    // Wall off the edge facing clear ground before it is revealed.
-    for (const t of sim.areas.tiles(id)) if (sim.grid.neighbors(t).some((n) => sim.areas.areaOf(n) === PARK)) t.blocked = true;
-    sim.areas.clear(PARK);
-    const entries = sim.areas.entryTiles(id);
-    expect(entries.length).toBeGreaterThan(0);
-    const fixed = sim.areas.tiles(id).find((t) => t.unblocked)!;
-    expect(fixed).toBeDefined();
-    const copy = new Sim(new SaveService(undefined).deserialize(new SaveService(undefined).serialize(sim.state))!);
-    expect(copy.grid.get(GROUND, fixed.x, fixed.z)).toMatchObject({ blocked: false, unblocked: true });
-  });
-
-  it('soak: 500 areas (2 seeds × 250) cleared in random order never leave a Frontier area without a way in', { timeout: 60000 }, () => {
-    for (const seed of [1, 2]) {
-      const sim = city(seed);
-      const rng = new Rng(seed * 7);
-      let cleared = 0;
-      restoreArea(sim, PARK);
-      sim.areas.clear(PARK);
-      cleared++;
-      const revealedNow: string[] = [];
-      sim.bus.on('area.revealed', ({ areaId }) => revealedNow.push(areaId));
-      while (cleared < 250) {
-        const frontier = sim.areas.revealed().filter((id) => sim.areas.fog(id) !== 'cleared');
-        // every newly revealed area has a way in; every 50 clears, re-check them all
-        for (const id of cleared % 50 === 0 ? frontier : revealedNow) expect(sim.areas.entryTiles(id).length, `area ${id}`).toBeGreaterThan(0);
-        revealedNow.length = 0;
-        const id = frontier[Math.floor(rng.next() * frontier.length)];
-        restoreArea(sim, id, TUNING.city.clearShare, true);
-        meetSpecialty(sim, id);
-        expect(sim.areas.clear(id)).toBe(true);
-        cleared++;
-      }
-      // reveals only ever reach neighbours of cleared areas
-      for (const id of sim.areas.revealed()) {
-        if (id === PARK) continue;
-        expect(sim.areas.info(id).neighbours.some((n) => sim.areas.fog(n) === 'cleared')).toBe(true);
-      }
-    }
   });
 });

@@ -152,23 +152,6 @@ describe('Look 6.2: saving and offline (#171)', () => {
     expect(saver.parse(json)).toBe('scrapped');
   });
 
-  it('offline progress finishes every visual transition, and a later-loaded chunk drops its stale ones', () => {
-    const sim = makeSim(14);
-    rich(sim);
-    const t = ground(sim, PAD, 4, 4, 'prepared');
-    sim.restoration.pulse(t.id);
-    sim.advance(1);
-    const r = sim.offline.apply(3600)!;
-    expect(r.settled).toBeGreaterThan(0);
-    expect(t.tr).toBeUndefined();
-    // a saved chunk that loads after offline progress: its old transitions are finished too
-    const u = ground(sim, PAD, 2, 2, 'restored');
-    sim.transitions.begin(u, 'bloom', 5, { from: 1 });
-    u.tr!.t0 = sim.transitions.finishedBefore - 1;
-    sim.transitions.adopt(u);
-    expect(u.tr).toBeUndefined();
-  });
-
   it('the deterministic run is unchanged by transitions: two sims with the same inputs end identical', () => {
     const run = () => {
       const sim = makeSim(21);

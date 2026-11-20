@@ -144,7 +144,7 @@ export function pavingGaps(layout: number): [number, number][] {
 export function buildPaving(layout: number, variant: number, alive: boolean, shades: string[], lod: Lod): TreeGeo {
   const B = new Buf();
   const R = rng(variant * 2654 + layout * 71 + (alive ? 9 : 0));
-  const gap = 0.022;
+  const gap = 0.008; // thin grout lines (owner, 18 Nov 2026: the ground should read less like a grid of tiles)
   const T = 0.05;
   for (const [x0, z0, x1, z1] of LAYOUTS[layout]) {
     const missing = R() < (alive ? 0.02 : 0.1);
@@ -363,15 +363,13 @@ export function buildClutter(kind: ClutterKind, alive: boolean, variant: number,
       break;
     }
     case 'niche': {
-      // a wall niche with a little lucky cat statue (CatVisuals' white and red)
+      // a wall niche with a little vase of flowers (E23.12.3: never a cat, which would give the Lucky Cats away)
       const col = alive ? CREAM : STONE_DEAD;
       bevelBox(B, [0, 0.16, -0.04], [0.12, 0.16, 0.04], r, col, { noBottom: true });
       plainBox(B, [0, 0.17, 0.005], [0.08, 0.1, 0.004], scaleC(col, 0.55));
       if (alive) {
-        puff(B, { c: [0, 0.12, 0.03], r: [0.035, 0.04, 0.03], base: hex(PALETTE.cat), light: [1, 1, 1], dark: hex(PALETTE.catShade), flex: 0, seed: 1, detail: 1, lump: 0 });
-        puff(B, { c: [0, 0.18, 0.03], r: [0.032, 0.028, 0.028], base: hex(PALETTE.cat), light: [1, 1, 1], dark: hex(PALETTE.catShade), flex: 0, seed: 2, detail: 1, lump: 0 });
-        plainBox(B, [0, 0.152, 0.045], [0.026, 0.005, 0.008], hex(PALETTE.catRed));
-        for (const s of [-1, 1]) card(B, [s * 0.016, 0.2, 0.03], norm([s * 0.3, 1, 0]), [0, 0, 1], 0.02, 0.018, hex(PALETTE.cat), hex(PALETTE.catEar), 0, 0, 0.3, 0);
+        puff(B, { c: [0, 0.12, 0.03], r: [0.03, 0.04, 0.03], base: hex(PALETTE.brass), light: [1, 1, 1], dark: scaleC(hex(PALETTE.brass), 0.7), flex: 0, seed: 1, detail: 1, lump: 0 });
+        puff(B, { c: [0, 0.19, 0.03], r: [0.04, 0.03, 0.035], base: hex(PALETTE.flowers.pink), light: [1, 1, 1], dark: scaleC(hex(PALETTE.flowers.pink), 0.7), flex: 0, seed: 2, detail: 1, lump: 0.2 });
       }
       break;
     }

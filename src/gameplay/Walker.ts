@@ -1,6 +1,9 @@
 import { decorKeyOf, parseDecorValue } from '../core/Decor';
 import { GROUND } from '../core/GameState';
 import { DECOR_OPTION } from '../data/cozy';
+import { LANDING } from '../data/oldcity';
+import { canStep, connected } from '../core/Height';
+import { mainlandClosedAt } from '../core/Mainland';
 import type { Sim } from './Sim';
 
 /**
@@ -54,10 +57,14 @@ export class Walker {
   walkable(roofId: string, cx: number, cz: number): boolean {
     const g = this.sim.grid;
     if (roofId === GROUND) {
+      // island release: the causeway and the mainland wait for a future update (bloombot turns back, see BotController)
+      if (mainlandClosedAt(cx, cz)) return false;
       if (this.sim.areas.fog(this.sim.areas.map.areaOfCell(cx, cz)) === 'hidden') return false;
     } else if (!g.isPlayable(roofId) || !g.inBounds(roofId, cx, cz)) return false;
     const t = g.get(roofId, cx, cz);
     if (!t || t.blocked) return false;
+    // E21.5: a deep-water gate (a canal, the basin's moat) is only crossed with Hover
+    if (t.feature === 'water' && t.prop?.startsWith('gate:') && !this.sim.state.salvage?.abilities.includes('hover') && !this.sim.gates.isOpen(t.prop.slice(5))) return false;
     // E19.2: a flat decoration (a flower patch, stepping stones) occupies its tile but can be walked over.
     if (t.occupantId && !this.flatDecor(t.occupantId)) return false;
     if (this.solid?.(roofId, cx, cz)) return false;
@@ -71,11 +78,22 @@ export class Walker {
     return !!v && DECOR_OPTION[parseDecorValue(v).kind]?.solid === false;
   }
 
-  /** Does a bloombot-sized circle at (x, z) touch only walkable cells? */
+  /** Does a bloombot-sized circle at (x, z) touch only walkable cells (E21.24: on its own terrace)? */
   fits(roofId: string, x: number, z: number, r: number = BOT.radius): boolean {
+    const terraced = this.sim.grid.terraced(roofId);
+    const ox = Math.floor(x);
+    const oz = Math.floor(z);
     for (let cx = Math.floor(x - r); cx <= Math.floor(x + r); cx++)
-      for (let cz = Math.floor(z - r); cz <= Math.floor(z + r); cz++) if (!this.walkable(roofId, cx, cz)) return false;
+      for (let cz = Math.floor(z - r); cz <= Math.floor(z + r); cz++) {
+        if (!this.walkable(roofId, cx, cz)) return false;
+        if (terraced && !connected(ox, oz, cx, cz)) return false;
+      }
     return true;
+  }
+
+  /** E21.24: may bloombot move from one cell to a touching one (a cliff edge blocks both ways)? */
+  stepOk(roofId: string, ax: number, az: number, bx: number, bz: number): boolean {
+    return !this.sim.grid.terraced(roofId) || connected(ax, az, bx, bz);
   }
 
   /** In water (bloombot wades: slower, with a splash)? */
@@ -96,13 +114,14 @@ export class Walker {
     const sz = dz / n;
     const x0 = p.x;
     const z0 = p.z;
+    const ok = (x: number, z: number) => this.fits(p.roofId, x, z) && this.stepOk(p.roofId, Math.floor(p.x), Math.floor(p.z), Math.floor(x), Math.floor(z));
     for (let i = 0; i < n; i++) {
-      if (this.fits(p.roofId, p.x + sx, p.z + sz)) {
+      if (ok(p.x + sx, p.z + sz)) {
         p.x += sx;
         p.z += sz;
       } else {
-        if (this.fits(p.roofId, p.x + sx, p.z)) p.x += sx;
-        if (this.fits(p.roofId, p.x, p.z + sz)) p.z += sz;
+        if (ok(p.x + sx, p.z)) p.x += sx;
+        if (ok(p.x, p.z + sz)) p.z += sz;
       }
     }
     return Math.hypot(p.x - x0, p.z - z0);
@@ -168,6 +187,7 @@ export class Walker {
     const heap = new MinHeap<[number, number, string]>();
     heap.push(h(sx, sz), [sx, sz, key(sx, sz)]);
     const closed = new Set<string>();
+    const terraced = this.sim.grid.terraced(roofId);
     let expanded = 0;
     while (heap.size) {
       const [x, z, k] = heap.pop()!;
@@ -190,6 +210,7 @@ export class Walker {
         const nz = z + dz;
         if (!this.walkable(roofId, nx, nz)) continue;
         if (dx && dz && (!this.walkable(roofId, x + dx, z) || !this.walkable(roofId, x, z + dz))) continue;
+        if (terraced && !(dx && dz ? canStep(x, z, x + dx, z) && canStep(x + dx, z, nx, nz) && canStep(x, z, x, z + dz) && canStep(x, z + dz, nx, nz) : canStep(x, z, nx, nz))) continue;
         const nk = key(nx, nz);
         const ng = gk + (dx && dz ? Math.SQRT2 : 1);
         if (ng >= (g.get(nk) ?? Infinity)) continue;
@@ -250,14 +271,11 @@ class MinHeap<T> {
   }
 }
 
-/** Where a new game (or a save from before bloombot) puts it: beside the park fountain, facing it. */
+/** Where a new game puts bloombot: the Landing (E21.26). */
 export function spawnPose(sim: Sim, walker: Walker): BotPose {
-  const p: BotPose = { roofId: GROUND, x: 8, z: 10.5, facing: Math.PI };
-  const fountain = sim.state.machines.find((m) => m.type === 'core' && m.roofId === GROUND && sim.areas.areaOf(m) === 'park');
-  if (fountain) {
-    p.x = fountain.x + fountain.size / 2;
-    p.z = fountain.z + fountain.size + 1.5;
-  }
-  walker.settle(p);
-  return p;
+  // E21.26: a new game starts at the Landing, the jetty on Saltwind Beach below the park's south steps
+  void sim;
+  const q: BotPose = { roofId: GROUND, x: LANDING.spawn[0], z: LANDING.spawn[1], facing: LANDING.facing };
+  walker.settle(q);
+  return q;
 }

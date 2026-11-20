@@ -70,8 +70,11 @@ export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'feature' | 'blocked'>, a
   };
 }
 
-/** The growth stage a tile shows (undefined: nothing grows there yet). */
-export function treeStage(t: Pick<TileData, 'ground' | 'bloom' | 'occupantId'>): TreeStage | undefined {
+/**
+ * The growth stage a tile shows (undefined: nothing grows there yet). `bloom` is the stage the tile shows, which
+ * low water nearby can fade (E23.4.4: pass `sim.water.bloomShown(t)`); it defaults to the tile's own.
+ */
+export function treeStage(t: Pick<TileData, 'ground' | 'bloom' | 'occupantId'>, bloom = t.bloom): TreeStage | undefined {
   if (t.ground !== 'restored' || t.occupantId) return undefined;
-  return Math.max(1, Math.min(4, t.bloom || 1)) as TreeStage;
+  return Math.max(1, Math.min(4, bloom || 1)) as TreeStage;
 }

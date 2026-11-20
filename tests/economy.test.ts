@@ -1,17 +1,14 @@
-import { big, toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../src/data/tuning';
 import { makeSim, setGround } from './helpers';
 
 describe('economy & restoration', () => {
-  it('pulse on polluted tile costs the right amount and restores once', () => {
+  it('pulse on polluted tile costs one pulse of charge and restores once', () => {
     const sim = makeSim();
     const t = setGround(sim, 5, 5, 'polluted');
-    const e0 = toNum(sim.state.resources.energy);
-    const w0 = toNum(sim.state.resources.water);
+    const c0 = sim.charge.value();
     expect(sim.restoration.pulse(t.id)).toBe(true);
-    expect(toNum(sim.state.resources.energy)).toBeCloseTo(e0 - TUNING.pulse.polluted.energy);
-    expect(toNum(sim.state.resources.water)).toBeCloseTo(w0 - 1);
+    expect(sim.charge.value()).toBeCloseTo(c0 - sim.charge.cost('pulse'));
     expect(t.ground).toBe('growing');
     sim.advance(1);
     expect(t.ground).toBe('restored');
@@ -19,48 +16,41 @@ describe('economy & restoration', () => {
     // Pulsing again nurtures (bloom level) but never re-grants the restoration.
     expect(sim.restoration.pulse(t.id)).toBe(true);
     expect(t.bloom).toBe(2);
-    sim.state.resources.energy = big(50);
-    sim.state.resources.water = big(20);
     expect(sim.restoration.pulse(t.id)).toBe(true);
     expect(t.bloom).toBe(3);
-    sim.state.resources.energy = big(50);
-    sim.state.resources.water = big(20);
     expect(sim.restoration.pulse(t.id)).toBe(true); // Phase 4 E05: Thriving → Radiant
     expect(t.bloom).toBe(4);
-    const b = toNum(sim.state.resources.biomass);
+    const c = sim.charge.value();
     expect(sim.restoration.pulse(t.id)).toBe(false);
     expect(sim.state.stats.tilesRestored).toBe(1);
-    expect(toNum(sim.state.resources.biomass)).toBe(b);
+    expect(sim.charge.value()).toBe(c); // a refused pulse costs nothing
   });
 
-  it('never drives balances negative', () => {
+  it('never drives the charge negative', () => {
     const sim = makeSim();
-    sim.state.resources.energy = big(3);
+    sim.charge.drainForTest();
     const t = setGround(sim, 5, 5, 'polluted');
     expect(sim.restoration.pulse(t.id)).toBe(false);
-    expect(toNum(sim.state.resources.energy)).toBe(3);
+    expect(sim.charge.value()).toBe(0);
+    sim.charge.refillForTest();
     for (let i = 0; i < 200; i++) {
       for (const tile of sim.grid.tilesOf('r1')) sim.restoration.pulse(tile.id);
       sim.tick();
-      for (const k of ['energy', 'water', 'biomass'] as const) {
-        expect(toNum(sim.state.resources[k])).toBeGreaterThanOrEqual(0);
-        const cap = sim.econ.cap(k);
-        if (cap) expect(toNum(sim.state.resources[k])).toBeLessThanOrEqual(toNum(cap) + 1e-9);
-      }
+      expect(sim.charge.value()).toBeGreaterThanOrEqual(0);
+      expect(sim.charge.value()).toBeLessThanOrEqual(sim.charge.max);
     }
   });
 
-  it('cannot softlock: energy and water always recover', () => {
+  it('cannot softlock: eating refills an empty charge and the pulse works again', () => {
     const sim = makeSim();
-    sim.state.resources.energy = big(0);
-    sim.state.resources.water = big(0);
+    sim.state.salvage.pack.biomass = 3;
+    sim.charge.drainForTest();
+    const t = setGround(sim, 5, 5, 'polluted');
+    expect(sim.restoration.checkPulse(t).ok).toBe(false);
+    expect(typeof sim.charge.eat('biomass')).toBe('object');
     sim.advance(10);
-    expect(toNum(sim.state.resources.energy)).toBeGreaterThan(TUNING.pulse.polluted.energy);
-    expect(toNum(sim.state.resources.water)).toBeGreaterThanOrEqual(1);
-    sim.state.resources.energy = big(0);
-    expect(sim.harvestSun()).toBe(true);
-    expect(toNum(sim.state.resources.energy)).toBe(TUNING.harvest.energy);
-    expect(sim.harvestSun()).toBe(false); // cooldown
+    expect(sim.charge.value()).toBeGreaterThan(0);
+    expect(sim.restoration.pulse(t.id)).toBe(true);
   });
 
   it('restoring seeps life into neighbours (polluted -> prepared)', () => {
@@ -75,27 +65,15 @@ describe('economy & restoration', () => {
     expect(mid.ground).toBe('prepared');
   });
 
-  it('upgrades change costs and caps', () => {
-    const sim = makeSim();
-    sim.state.resources.biomass = big(40);
-    expect(sim.upgrades.purchase('efficientPulse')).toBe(true);
-    expect(sim.restoration.pulseCost(setGround(sim, 6, 6, 'polluted')).energy).toBeCloseTo(TUNING.pulse.polluted.energy * 0.75);
-    sim.state.resources.biomass = big(40);
-    expect(sim.upgrades.purchase('seedVault')).toBe(true);
-    expect(toNum(sim.state.caps.energy)).toBe(TUNING.storageTiers.energy[1]);
-    expect(sim.econ.cap('biomass')).toBeUndefined();
-    expect(sim.upgrades.purchase('droneSpeed')).toBe(false); // needs hub
-  });
-
   it('broad pulse restores extra neighbours for free', () => {
     const sim = makeSim();
     sim.state.upgrades.broadPulse = 1;
     const t = setGround(sim, 5, 5, 'polluted');
-    const e0 = toNum(sim.state.resources.energy);
+    const c0 = sim.charge.value();
     sim.restoration.pulse(t.id);
     sim.advance(1.5);
     expect(sim.state.stats.tilesRestored).toBe(9); // Pulse Reach I (Sprout): the 3×3 around the target
-    expect(toNum(sim.state.resources.energy)).toBeGreaterThan(e0 - TUNING.pulse.polluted.energy - 0.01);
+    expect(sim.charge.value()).toBeGreaterThan(c0 - sim.charge.cost('pulse') - 0.01); // one pulse's charge, no more
   });
 
   it('Overcharge: every Nth manual pulse restores everything within 2 tiles', () => {
@@ -105,11 +83,7 @@ describe('economy & restoration', () => {
     const fired: boolean[] = [];
     sim.bus.on('pulse.fired', (e) => fired.push(e.overcharged));
     const ids = ['r1:2:3', 'r1:6:2', 'r1:2:6', 'r1:6:6', 'r1:4:7', 'r1:4:4'];
-    for (const id of ids.slice(0, every)) {
-      sim.state.resources.energy = big(50);
-      sim.state.resources.water = big(30);
-      expect(sim.restoration.pulse(id)).toBe(true);
-    }
+    for (const id of ids.slice(0, every)) expect(sim.restoration.pulse(id)).toBe(true);
     expect(fired.filter(Boolean)).toHaveLength(1);
     expect(fired[every - 1]).toBe(true);
     sim.advance(2);

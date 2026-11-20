@@ -2,10 +2,12 @@ import { CHUNK } from '../core/Hash';
 import { decorKey } from '../core/Decor';
 import { GROUND } from '../core/GameState';
 import { generateTile } from '../core/Generation';
-import { bloomCounts } from '../core/TilePack';
+import { bloomCounts, plantsOf } from '../core/TilePack';
+import { PLANT_LOAD, PULSE_LOAD } from '../data/pulse';
 import type { Chunk } from '../core/Grid';
 import type { TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
+import { DIVERSITY } from '../data/farmExtras';
 import { isBuilt } from '../data/machines';
 // Pure, deterministic placement (type-only imports from TreeGen): the same tree tiles the renderer draws.
 import { treeSpot } from '../rendering/TreePlacement';
@@ -46,6 +48,10 @@ export interface BioCounts {
   supers: number;
   /** whether the park's fountain flows */
   fountain: boolean;
+  /** E23.2.2.2: pollinators drawn by what loaded pulses grew (seeds and rare seeds some, a fertilised grove more) */
+  pollinators: number;
+  /** E23.2.2.2: tiles of rare plants (they alone draw the rare pollinators, hawk-moths) */
+  rarePollinators: number;
 }
 
 export interface Biodiversity {
@@ -53,11 +59,11 @@ export interface Biodiversity {
   rank: string;
   /** next rank's name and the score it needs (undefined at the top) */
   next?: { rank: string; at: number };
-  parts: { stages: number; species: number; features: number; landmarks: number; supers: number; fauna: number };
+  parts: { stages: number; species: number; features: number; landmarks: number; supers: number; fauna: number; farm: number };
 }
 
 /** The score from counts (pure). Blooming tiles count three times a freshly restored one, Radiant ten times. */
-export function biodiversity(c: BioCounts, faunaCount: number): Biodiversity {
+export function biodiversity(c: BioCounts, faunaCount: number, farm = 0): Biodiversity {
   const W = TUNING.ecosystem.score;
   const stages = c.stages.reduce((a, n, i) => a + n * (W.stage[i] ?? 0), 0);
   const parts = {
@@ -67,8 +73,10 @@ export function biodiversity(c: BioCounts, faunaCount: number): Biodiversity {
     landmarks: c.landmarks * W.landmark,
     supers: c.supers * W.superstructure,
     fauna: faunaCount * W.fauna,
+    // E23.5.4: hives, ponds, orchards, logs, worm bins and the creatures in wildlife homes
+    farm: farm * DIVERSITY.cityWeight,
   };
-  const score = parts.stages + parts.species + parts.features + parts.landmarks + parts.supers + parts.fauna;
+  const score = parts.stages + parts.species + parts.features + parts.landmarks + parts.supers + parts.fauna + parts.farm;
   const ranks = TUNING.ecosystem.ranks;
   let i = 0;
   while (i + 1 < ranks.length && score >= ranks[i + 1][0]) i++;
@@ -81,13 +89,13 @@ export function faunaConditionMet(id: FaunaId, c: BioCounts): boolean {
   const F = TUNING.ecosystem.fauna;
   switch (id) {
     case 'butterflies':
-      return c.stages[2] + c.stages[3] + c.stages[4] >= F.butterflies.bloomingTiles;
+      return c.stages[2] + c.stages[3] + c.stages[4] + c.pollinators >= F.butterflies.bloomingTiles;
     case 'birds':
       return c.thrivingTrees >= F.birds.thrivingTreeTiles;
     case 'koi':
       return (F.koi.fountain && c.fountain) || c.water >= F.koi.waterTiles;
     case 'robots':
-      return c.supers >= F.robots.superstructures;
+      return c.landmarks >= F.robots.landmarks;
   }
 }
 
@@ -96,13 +104,13 @@ export function faunaGoal(id: FaunaId, c: BioCounts): { label: string; have: num
   const F = TUNING.ecosystem.fauna;
   switch (id) {
     case 'butterflies':
-      return { label: 'blooming tiles', have: c.stages[2] + c.stages[3] + c.stages[4], need: F.butterflies.bloomingTiles };
+      return { label: 'blooming tiles', have: c.stages[2] + c.stages[3] + c.stages[4] + c.pollinators, need: F.butterflies.bloomingTiles };
     case 'birds':
       return { label: 'thriving tree tiles', have: c.thrivingTrees, need: F.birds.thrivingTreeTiles };
     case 'koi':
       return { label: F.koi.fountain ? 'a flowing fountain or restored water tiles' : 'restored water tiles', have: c.fountain ? F.koi.waterTiles : c.water, need: F.koi.waterTiles };
     case 'robots':
-      return { label: 'finished superstructures', have: c.supers, need: F.robots.superstructures };
+      return { label: 'landmarks woken', have: c.landmarks, need: F.robots.landmarks };
   }
 }
 
@@ -120,6 +128,8 @@ interface ChunkTally {
   /** bit per tree species / ground kind present */
   species: number;
   features: number;
+  pollinators: number;
+  rarePollinators: number;
 }
 
 const SPECIES_BIT: Record<string, number> = { oak: 1, cherry: 2, birch: 4, pine: 8, willow: 16 };
@@ -137,7 +147,7 @@ export class EcosystemSystem {
   /** saved chunks not loaded yet, still to estimate */
   private pendingTodo: string[] = [];
   private nextAt = 0;
-  private counts: BioCounts = { stages: [0, 0, 0, 0, 0], thrivingTrees: 0, species: 0, features: 0, water: 0, landmarks: 0, supers: 0, fountain: false };
+  private counts: BioCounts = { stages: [0, 0, 0, 0, 0], thrivingTrees: 0, species: 0, features: 0, water: 0, landmarks: 0, supers: 0, fountain: false, pollinators: 0, rarePollinators: 0 };
 
   constructor(private sim: Sim) {
     sim.grid.touchListeners.push((t) => this.dirty.add(chunkKeyOf(t)));
@@ -159,7 +169,7 @@ export class EcosystemSystem {
   }
 
   score(): Biodiversity {
-    return biodiversity(this.counts, this.unlocked().length);
+    return biodiversity(this.counts, this.unlocked().length, this.sim.farmExtras?.diversityIn() ?? 0);
   }
 
   tick() {
@@ -204,7 +214,7 @@ export class EcosystemSystem {
       }
     }
 
-    const c: BioCounts = { stages: [0, 0, 0, 0, 0], thrivingTrees: 0, species: 0, features: 0, water: 0, landmarks: 0, supers: 0, fountain: !!s.state.progression.coreActivated };
+    const c: BioCounts = { stages: [0, 0, 0, 0, 0], thrivingTrees: 0, species: 0, features: 0, water: 0, landmarks: 0, supers: 0, fountain: !!s.state.progression.coreActivated, pollinators: 0, rarePollinators: 0 };
     let species = 0;
     let features = 0;
     const playable = new Map<string, boolean>();
@@ -216,6 +226,8 @@ export class EcosystemSystem {
       for (let i = 1; i <= 4; i++) c.stages[i] += t.stages[i] ?? 0;
       c.thrivingTrees += t.thrivingTrees;
       c.water += t.water;
+      c.pollinators += t.pollinators;
+      c.rarePollinators += t.rarePollinators;
       species |= t.species;
       features |= t.features;
     }
@@ -244,16 +256,21 @@ export class EcosystemSystem {
   }
 
   private tallyChunk(ch: Chunk): ChunkTally {
-    const out: ChunkTally = { stages: [0, 0, 0, 0, 0], thrivingTrees: 0, water: 0, species: 0, features: 0 };
+    const out: ChunkTally = { stages: [0, 0, 0, 0, 0], thrivingTrees: 0, water: 0, species: 0, features: 0, pollinators: 0, rarePollinators: 0 };
     const type = this.areaTypeOfChunk(ch.layer, ch.cx, ch.cz);
     for (const t of ch.tiles) if (t) this.tallyTile(out, t, type);
     return out;
   }
 
-  private tallyTile(out: ChunkTally, t: Pick<TileData, 'ground' | 'bloom' | 'feature' | 'x' | 'z' | 'blocked' | 'occupantId'>, type: string | undefined) {
+  private tallyTile(out: ChunkTally, t: Pick<TileData, 'ground' | 'bloom' | 'feature' | 'x' | 'z' | 'blocked' | 'occupantId' | 'plant'>, type: string | undefined) {
     if (t.ground !== 'restored') return;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
     out.stages[stage]++;
+    if (t.plant) {
+      const load = PULSE_LOAD[PLANT_LOAD[t.plant]];
+      out.pollinators += load.pollinators;
+      if (load.rarePollinators) out.rarePollinators++;
+    }
     const f = t.feature ?? 'lawn';
     out.features |= FEATURE_BIT[f] ?? 0;
     if (f === 'water') {
@@ -269,7 +286,8 @@ export class EcosystemSystem {
 
   /** Estimate for a saved chunk that isn't loaded: stages from the packed columns, the rest from generation. */
   private tallyPacked(key: string, packed: string): ChunkTally {
-    const out: ChunkTally = { stages: bloomCounts(packed), thrivingTrees: 0, water: 0, species: 0, features: 0 };
+    const out: ChunkTally = { stages: bloomCounts(packed), thrivingTrees: 0, water: 0, species: 0, features: 0, pollinators: 0, rarePollinators: 0 };
+    const plants = plantsOf(packed);
     const [layerId, cxs, czs] = key.split('|');
     const layer = this.sim.grid.layer(layerId);
     if (!layer) return out;
@@ -287,7 +305,7 @@ export class EcosystemSystem {
       const occupied =
         this.sim.grid.machinesInChunk(key).some((m) => x >= m.x && x < m.x + m.size && z >= m.z && z < m.z + m.size) ||
         this.sim.grid.decorInChunk(key).includes(decorKey(layerId, x, z)); // E19.2: decorations occupy like machines
-      this.tallyTile(out, { ground: 'restored', bloom: Number(packed[N + i]) || 1, feature: g.feature, x, z, blocked: g.blocked, occupantId: occupied ? 'm' : undefined }, type);
+      this.tallyTile(out, { ground: 'restored', bloom: Number(packed[N + i]) || 1, feature: g.feature, x, z, blocked: g.blocked, occupantId: occupied ? 'm' : undefined, plant: plants.get(i) }, type);
     }
     return out;
   }

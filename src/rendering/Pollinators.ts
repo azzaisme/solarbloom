@@ -6,6 +6,7 @@ import { SLAB_TOP } from './SceneBuilder';
 import { hash01, tilesIn, type Rect } from './FaunaPlan';
 import { treeSpot, treeStage, type TreeSpot } from './TreePlacement';
 import { PALETTE } from './Materials';
+import { PLANT_LOAD, PULSE_LOAD } from '../data/pulse';
 
 /**
  * Look 3.16 (#143): small ambient life — bees and hoverflies working the flower drifts on Thriving / Radiant
@@ -17,7 +18,7 @@ import { PALETTE } from './Materials';
  * (no Math.random), capped per quality tier, and gathered once a second rather than every frame. Reduced motion
  * and still screenshot runs (`?still`) switch it off.
  */
-type Kind = 'bee' | 'hoverfly' | 'leaf' | 'petal' | 'treeLeaf';
+type Kind = 'bee' | 'hoverfly' | 'moth' | 'leaf' | 'petal' | 'treeLeaf';
 interface Crown {
   t: TileData;
   spot: TreeSpot;
@@ -39,9 +40,9 @@ interface Mote {
 }
 
 const CAPS = {
-  high: { bee: 12, hoverfly: 6, leaf: 8, petal: 16, treeLeaf: 12 },
-  medium: { bee: 8, hoverfly: 4, leaf: 5, petal: 10, treeLeaf: 7 },
-  low: { bee: 4, hoverfly: 2, leaf: 3, petal: 5, treeLeaf: 3 },
+  high: { bee: 12, hoverfly: 6, moth: 4, leaf: 8, petal: 16, treeLeaf: 12 },
+  medium: { bee: 8, hoverfly: 4, moth: 3, leaf: 5, petal: 10, treeLeaf: 7 },
+  low: { bee: 4, hoverfly: 2, moth: 1, leaf: 3, petal: 5, treeLeaf: 3 },
 };
 
 export class Pollinators {
@@ -49,6 +50,9 @@ export class Pollinators {
   private time = 0;
   private recount = 0;
   private flowers: TileData[] = [];
+  /** E23.2.2.2: extra pollinators drawn by what loaded pulses grew in view; rare plants (hawk-moths come to them) */
+  private pull = 0;
+  private rare: TileData[] = [];
   private paving: TileData[] = [];
   private cherries: Crown[] = [];
   private broadleaves: Crown[] = [];
@@ -69,7 +73,17 @@ export class Pollinators {
   private make(kind: Kind, i: number): Mote {
     const root = group(this.parent, kind);
     let wings: pc.Entity[] | undefined;
-    if (kind === 'bee' || kind === 'hoverfly') {
+    if (kind === 'moth') {
+      // E23.2.2.2: a hummingbird hawk-moth: a stout rusty body and broad wings, hovering at the rare flowers
+      vshape(root, 'sphere', PALETTE.mothBody, { scale: [0.03, 0.026, 0.05] });
+      vshape(root, 'sphere', PALETTE.insectDark, { pos: [0, 0.002, 0.026], scale: 0.016 });
+      wings = [];
+      for (const s of [-1, 1]) {
+        const w = group(root, 'wing', [s * 0.012, 0.012, 0]);
+        vshape(w, 'box', PALETTE.mothWing, { pos: [s * 0.024, 0, 0], scale: [0.05, 0.003, 0.03] });
+        wings.push(w);
+      }
+    } else if (kind === 'bee' || kind === 'hoverfly') {
       const body = kind === 'bee' ? PALETTE.bee : PALETTE.hoverfly;
       vshape(root, 'sphere', body, { scale: kind === 'bee' ? [0.026, 0.022, 0.04] : [0.018, 0.014, 0.036] });
       vshape(root, 'box', PALETTE.insectDark, { pos: [0, 0, -0.004], scale: kind === 'bee' ? [0.027, 0.023, 0.008] : [0.019, 0.015, 0.006] });
@@ -97,7 +111,7 @@ export class Pollinators {
 
   private place(m: Mote) {
     if (m.kind === 'petal' || m.kind === 'treeLeaf') return this.placeFall(m);
-    const pool = m.kind === 'leaf' ? this.paving : this.flowers;
+    const pool = m.kind === 'leaf' ? this.paving : m.kind === 'moth' ? this.rare : this.flowers;
     if (!pool.length) return false;
     m.life++;
     const t = pool[Math.floor(hash01(this.sim.state.seed, m.i + (m.kind === 'hoverfly' ? 500 : m.kind === 'leaf' ? 900 : 0), m.life, 3) * pool.length)];
@@ -149,27 +163,30 @@ export class Pollinators {
     if (this.recount <= 0) {
       this.recount = 1;
       const on = this.enabled && !!rect;
-      this.flowers = on ? tilesIn(this.sim, rect!, (t) => t.ground === 'restored' && t.bloom >= 3 && !t.occupantId && t.feature !== 'water' && t.feature !== 'paving', 80) : [];
+      this.flowers = on ? tilesIn(this.sim, rect!, (t) => t.ground === 'restored' && (this.sim.water.bloomShown(t) >= 3 || !!t.plant) && !t.occupantId && t.feature !== 'water' && t.feature !== 'paving', 80) : [];
+      this.pull = this.flowers.reduce((a, t) => a + (t.plant ? PULSE_LOAD[PLANT_LOAD[t.plant]].pollinators : 0), 0);
+      this.rare = this.flowers.filter((t) => t.plant === 'rare');
       this.paving = on ? tilesIn(this.sim, rect!, (t) => t.ground === 'restored' && t.feature === 'paving' && !t.blocked, 60) : [];
       const type = (t: TileData) => this.sim.areas.info(this.sim.areas.areaOf(t) ?? 'park').type;
       // grown trees (saplings drop nothing): cherries shed petals, other broadleaves the odd leaf, pines nothing
       const crowns: Crown[] = [];
       if (on)
-        for (const t of tilesIn(this.sim, rect!, (t) => (treeStage(t) ?? 0) >= 2, 120)) {
+        for (const t of tilesIn(this.sim, rect!, (t) => (treeStage(t, this.sim.water.bloomShown(t)) ?? 0) >= 2, 120)) {
           const spot = treeSpot(t, type(t));
-          if (spot && spot.species !== 'pine') crowns.push({ t, spot, stage: treeStage(t)! });
+          if (spot && spot.species !== 'pine') crowns.push({ t, spot, stage: treeStage(t, this.sim.water.bloomShown(t))! }); // E23.4.4: faded by low water
         }
       this.cherries = crowns.filter((c) => c.spot.species === 'cherry').slice(0, 24);
       this.broadleaves = crowns.filter((c) => c.spot.species !== 'cherry').slice(0, 24);
       const cap = CAPS[this.quality];
       const want: Record<Kind, number> = {
-        bee: Math.min(cap.bee, Math.floor(this.flowers.length / 4)),
-        hoverfly: Math.min(cap.hoverfly, Math.floor(this.flowers.length / 8)),
+        bee: Math.min(cap.bee, Math.floor((this.flowers.length + this.pull) / 4)),
+        hoverfly: Math.min(cap.hoverfly, Math.floor((this.flowers.length + this.pull) / 8)),
+        moth: Math.min(cap.moth, Math.ceil(this.rare.length / 3)),
         leaf: Math.min(cap.leaf, Math.floor(this.paving.length / 6)),
         petal: Math.min(cap.petal, this.cherries.length * 3),
         treeLeaf: Math.min(cap.treeLeaf, this.broadleaves.length),
       };
-      for (const kind of ['bee', 'hoverfly', 'leaf', 'petal', 'treeLeaf'] as Kind[]) {
+      for (const kind of ['bee', 'hoverfly', 'moth', 'leaf', 'petal', 'treeLeaf'] as Kind[]) {
         const mine = this.motes.filter((m) => m.kind === kind);
         while (mine.length < want[kind]) {
           const m = this.make(kind, mine.length);
@@ -190,6 +207,7 @@ export class Pollinators {
       const ph = m.i * 1.37;
       let s = Math.min(1, m.t * 2);
       switch (m.kind) {
+        case 'moth':
         case 'bee': {
           // a lazy figure-of-eight over its drift, a hop to another every so often
           const a = this.time * 1.6 + ph;

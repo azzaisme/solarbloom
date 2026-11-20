@@ -1,7 +1,14 @@
 /**
- * Bloombot (G.16): the controls map (docs/BLOOMBOT_EPIC.md §7) as one table of actions → keys and gamepad
- * buttons, which the settings screen can rebind. Keys are `KeyboardEvent.code` values (so WASD stays where it
- * is on AZERTY and other layouts); pad buttons are standard-mapping indices. Pure: tests use it directly.
+ * E22.1 (#338): the controls map (docs/E22_CONTROLS_UI.md, "The new map") as one table of actions → keys and
+ * gamepad buttons, which Settings › Controls can rebind (E22.4). Keys are `KeyboardEvent.code` values (so WASD
+ * stays where it is on AZERTY and other layouts), plus mouse inputs (`Mouse0` left, `Mouse1` middle, `Mouse2`
+ * right, `Mouse3` / `Mouse4` side buttons, `Wheel`). Pad buttons are standard-mapping indices. Pure: tests use it
+ * directly.
+ *
+ * Every action belongs to a context. Two actions may share an input only when their contexts never apply at the
+ * same time: walking (`world`), build mode (`build`, which sits on top of walking and wins while it is open), an
+ * open panel or menu (`panel`), or always (`any`). That is how Q is the build menu while walking and "previous
+ * tab" in a panel, and how A is Interact while walking and Place in build mode.
  */
 export type Action =
   | 'up'
@@ -9,125 +16,271 @@ export type Action =
   | 'left'
   | 'right'
   | 'sprint'
-  | 'pulse'
-  | 'interact'
-  | 'tray'
-  | 'cancel'
-  | 'harvest'
-  | 'upgrades'
-  | 'backpack'
-  | 'prevTool'
-  | 'nextTool'
-  | 'zoomIn'
-  | 'zoomOut'
-  | 'overview'
-  | 'pause'
-  | 'frenzy'
-  | 'nextArea'
-  | 'home'
+  | 'sprintToggle'
+  | 'look'
+  | 'zoomCamera'
   | 'recentre'
+  | 'interact'
+  | 'pulse'
+  | 'place'
+  | 'buildMenu'
+  | 'rotate'
+  | 'rotateBack'
+  | 'removeMode'
+  | 'waterOverlay'
+  | 'powerOverlay'
+  | 'viewCycle'
+  | 'slotPrev'
+  | 'slotNext'
+  | 'pinSlot'
+  | 'slot1'
+  | 'slot2'
+  | 'slot3'
+  | 'slot4'
+  | 'slot5'
+  | 'slot6'
+  | 'slot7'
+  | 'slot8'
+  | 'slot9'
+  | 'backpack'
+  | 'map'
+  | 'eat'
+  | 'loadNext'
+  | 'loadPrev'
+  | 'pinNext'
+  | 'cancel'
+  | 'menu'
   | 'photo'
-  | 'debug';
+  | 'prevTab'
+  | 'nextTab'
+  | 'debug'
+;
 
-/** Labels for the rebinding screen, in the order shown. */
-export const ACTIONS: readonly { id: Action; label: string; pad: boolean }[] = [
-  { id: 'up', label: 'Move up', pad: false },
-  { id: 'down', label: 'Move down', pad: false },
-  { id: 'left', label: 'Move left', pad: false },
-  { id: 'right', label: 'Move right', pad: false },
-  { id: 'sprint', label: 'Sprint', pad: true },
-  { id: 'pulse', label: 'Pulse / confirm', pad: true },
-  { id: 'interact', label: 'Interact / inspect', pad: true },
-  { id: 'tray', label: 'Build tray', pad: true },
-  { id: 'cancel', label: 'Cancel / close', pad: true },
-  { id: 'harvest', label: 'Harvest', pad: true },
-  { id: 'upgrades', label: 'Upgrades', pad: true },
-  { id: 'backpack', label: 'Backpack', pad: true },
-  { id: 'prevTool', label: 'Previous tool (turns a decoration on the pad)', pad: true },
-  { id: 'nextTool', label: 'Next tool (turns a decoration on the pad)', pad: true },
-  // E19.2: building no longer zooms; these keys (and the mouse wheel) turn a decoration in hand. The ids stay so
-  // saved bindings keep working.
-  { id: 'zoomIn', label: 'Turn a decoration clockwise', pad: false },
-  { id: 'zoomOut', label: 'Turn a decoration anticlockwise', pad: false },
-  { id: 'overview', label: 'Overview', pad: true },
-  { id: 'pause', label: 'Settings / pause', pad: true },
-  { id: 'frenzy', label: 'Bloom Frenzy', pad: true },
-  { id: 'nextArea', label: 'Go to the area that needs you', pad: true },
-  { id: 'home', label: 'Back to the park', pad: true },
-  { id: 'recentre', label: 'Recentre the camera', pad: true },
-  { id: 'photo', label: 'Photo mode', pad: true },
-  { id: 'debug', label: 'Debug overlay', pad: false },
+export type Context = 'world' | 'build' | 'panel' | 'any';
+/** The rebinding screen's groups (E22.4). */
+export type Group = 'move' | 'act' | 'build' | 'menus';
+export const GROUPS: readonly { id: Group; label: string }[] = [
+  { id: 'move', label: 'Move and look' },
+  { id: 'act', label: 'Act' },
+  { id: 'build', label: 'Build' },
+  { id: 'menus', label: 'Menus' },
 ];
 
-export const DEFAULT_KEYS: Record<Action, string[]> = {
-  up: ['KeyW', 'ArrowUp'],
-  down: ['KeyS', 'ArrowDown'],
-  left: ['KeyA', 'ArrowLeft'],
-  right: ['KeyD', 'ArrowRight'],
-  sprint: ['ShiftLeft', 'ShiftRight'],
-  pulse: ['KeyE'],
-  interact: ['KeyQ'],
-  tray: ['KeyB'],
-  cancel: ['Escape'],
-  harvest: ['KeyF'],
-  upgrades: ['KeyU'],
-  backpack: ['Tab'],
-  prevTool: ['Digit1'],
-  nextTool: ['Digit2'],
-  zoomIn: ['Equal', 'NumpadAdd'],
-  zoomOut: ['Minus', 'NumpadSubtract'],
-  overview: ['KeyM'],
-  pause: ['KeyP'],
-  frenzy: ['KeyR'],
-  nextArea: ['KeyN'],
-  home: ['Home'],
-  recentre: ['KeyC'],
-  photo: ['KeyO'],
-  debug: ['F3', 'Backquote'],
-};
+export interface ActionDef {
+  id: Action;
+  label: string;
+  group: Group;
+  context: Context;
+  /** can be put on a keyboard key or mouse input */
+  keys: boolean;
+  /** can be put on a pad button (movement and look are the sticks) */
+  pad: boolean;
+}
+
+const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true): ActionDef => ({ id, label, group, context, keys, pad });
+
+/** Every action, in the order the rebinding screen lists them. */
+export const ACTIONS: readonly ActionDef[] = [
+  A('up', 'Move forward', 'move', 'world', true, false),
+  A('down', 'Move back', 'move', 'world', true, false),
+  A('left', 'Move left', 'move', 'world', true, false),
+  A('right', 'Move right', 'move', 'world', true, false),
+  A('sprint', 'Hover (sprint, hold)', 'move', 'world'),
+  A('sprintToggle', 'Hover on or off', 'move', 'world'),
+  A('look', 'Look around (hold and drag)', 'move', 'world', true, false),
+  A('zoomCamera', 'Zoom the camera', 'move', 'world'),
+  A('recentre', 'Recentre the camera', 'move', 'world'),
+  A('interact', 'Interact', 'act', 'world'),
+  A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
+  A('eat', 'Eat a snack (recharge)', 'act', 'world'),
+  A('loadNext', 'Pulse load: next', 'act', 'world'),
+  A('loadPrev', 'Pulse load: previous', 'act', 'world'),
+  A('pinNext', 'Pin the next request', 'act', 'world'),
+  A('buildMenu', 'Build menu', 'build', 'world'),
+  A('place', 'Place (in build mode)', 'build', 'build'),
+  A('rotate', 'Turn the piece', 'build', 'build'),
+  A('rotateBack', 'Turn the piece back', 'build', 'build'),
+  A('removeMode', 'Remove mode', 'build', 'build'),
+  A('waterOverlay', 'Water view (in build mode)', 'build', 'build'),
+  A('powerOverlay', 'Power view (in build mode)', 'build', 'build'),
+  // E23.11: the pad's build dock: d-pad up changes the view, left and right walk the hotbar slots
+  A('viewCycle', 'Change the view', 'build', 'build'),
+  A('slotPrev', 'Previous build slot', 'build', 'build'),
+  A('slotNext', 'Next build slot', 'build', 'build'),
+  A('slot1', 'Hotbar slot 1', 'build', 'world'),
+  A('slot2', 'Hotbar slot 2', 'build', 'world'),
+  A('slot3', 'Hotbar slot 3', 'build', 'world'),
+  A('slot4', 'Hotbar slot 4', 'build', 'world'),
+  A('slot5', 'Hotbar slot 5', 'build', 'world'),
+  A('slot6', 'Hotbar slot 6', 'build', 'world'),
+  A('slot7', 'Hotbar slot 7', 'build', 'world'),
+  A('slot8', 'Hotbar slot 8', 'build', 'world'),
+  A('slot9', 'Hotbar slot 9', 'build', 'world'),
+  // E23.11 (#344): in the build menu, pin the piece shown to a hotbar slot
+  A('pinSlot', 'Pin to a hotbar slot', 'build', 'panel'),
+  A('backpack', 'Backpack', 'menus', 'world'),
+  A('map', 'Map', 'menus', 'world'),
+  A('photo', 'Photo mode', 'menus', 'world'),
+  A('cancel', 'Back', 'menus', 'any'),
+  A('menu', 'Pause and menu', 'menus', 'any'),
+  A('prevTab', 'Previous tab', 'menus', 'panel'),
+  A('nextTab', 'Next tab', 'menus', 'panel'),
+  A('debug', 'Debug overlay', 'menus', 'any', true, false),
+];
+export const ACTION: Record<Action, ActionDef> = Object.fromEntries(ACTIONS.map((a) => [a.id, a])) as Record<Action, ActionDef>;
+
+export const SLOTS = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'] as const satisfies readonly Action[];
+
+/** Escape is fixed: back, or the menu when nothing is open. It can't be bound to anything else or removed. */
+export const FIXED_KEY = 'Escape';
+/** The pad's Menu button always opens the menu (it can't be unbound or moved). */
+export const FIXED_PAD: Partial<Record<Action, number>> = { menu: 9 };
+
+/**
+ * Saved bindings carry this version; older ones are reset once, with a notice (decision 6). Bump it only when a
+ * saved map can no longer be read: a save holds just what differs from the defaults, so new or moved defaults
+ * reach everyone who never rebound them without a bump (E23.11 kept 2 when the d-pad got its build-mode jobs).
+ */
+export const BINDINGS_VERSION = 2;
+
+/** The keyboard defaults from the epic's table. */
+export function defaultKeys(): Record<Action, string[]> {
+  const k: Record<Action, string[]> = {
+    up: ['KeyW', 'ArrowUp'],
+    down: ['KeyS', 'ArrowDown'],
+    left: ['KeyA', 'ArrowLeft'],
+    right: ['KeyD', 'ArrowRight'],
+    sprint: ['ShiftLeft', 'ShiftRight'],
+    sprintToggle: [],
+    look: ['Mouse2'],
+    zoomCamera: ['Wheel'],
+    recentre: ['KeyC'],
+    interact: ['KeyE'],
+    pulse: ['Mouse0', 'Space'],
+    place: [],
+    buildMenu: ['KeyQ'],
+    rotate: ['KeyR', 'Wheel'],
+    rotateBack: [],
+    removeMode: ['KeyX'],
+    waterOverlay: ['KeyV'],
+    powerOverlay: ['KeyO'],
+    // E23.11: the pad's d-pad jobs in build mode (keys can be given to them in Settings)
+    viewCycle: [],
+    slotPrev: [],
+    slotNext: [],
+    pinSlot: ['KeyP'],
+    slot1: ['Digit1'],
+    slot2: ['Digit2'],
+    slot3: ['Digit3'],
+    slot4: ['Digit4'],
+    slot5: ['Digit5'],
+    slot6: ['Digit6'],
+    slot7: ['Digit7'],
+    slot8: ['Digit8'],
+    slot9: ['Digit9'],
+    backpack: ['Tab', 'KeyI'],
+    map: ['KeyM'],
+    eat: ['KeyF'],
+    // E23.2.2: the pulse load wheel
+    loadNext: ['KeyV'],
+    loadPrev: ['KeyZ'],
+    pinNext: ['KeyG'],
+    cancel: [FIXED_KEY],
+    menu: [FIXED_KEY],
+    photo: ['KeyP'],
+    prevTab: ['KeyQ'],
+    nextTab: ['KeyE'],
+    debug: ['F3'],
+  };
+  return k;
+}
 
 /**
  * Standard gamepad buttons: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 8 View, 9 Menu, 10 LS, 11 RS,
- * 12–15 d-pad up, down, left, right. Movement and zoom are the sticks.
+ * 12–15 d-pad up, down, left, right. Movement, looking and the camera's turn are the sticks.
  */
-export const DEFAULT_PAD: Partial<Record<Action, number>> = {
-  sprint: 7,
-  pulse: 0,
-  cancel: 1,
-  interact: 2,
-  tray: 3,
-  prevTool: 4,
-  nextTool: 5,
-  frenzy: 6,
-  overview: 8,
-  pause: 9,
-  nextArea: 10,
-  recentre: 11, // right stick click, beside the stick that turns the view
-  backpack: 12,
-  // 13 (d-pad down) is left for menu focus (G.7)
-  harvest: 14,
-  upgrades: 15,
-  // photo (E19.4.1): no free button is left on a standard pad; it opens from Settings and can be bound here.
-};
-
-/** Build tool shortcuts stay on the number row (3–9, 0) and can't be rebound. */
-export const BUILD_DIGITS = ['Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'] as const;
-
-export interface SavedBindings {
-  keys?: Partial<Record<Action, string[]>>;
-  pad?: Partial<Record<Action, number>>;
+export function defaultPad(): Partial<Record<Action, number>> {
+  const p: Partial<Record<Action, number>> = {
+    sprint: 6,
+    sprintToggle: 10,
+    recentre: 11,
+    zoomCamera: 13,
+    interact: 0,
+    pulse: 2,
+    place: 0,
+    buildMenu: 3,
+    rotate: 5,
+    rotateBack: 4,
+    removeMode: 7,
+    // E23.11: in build mode d-pad up changes the view (off, Power, Water) and left / right walk the hotbar slots;
+    // walking, the same buttons open the backpack, eat and pin the next request. Water and Power views stay V / O.
+    viewCycle: 12,
+    slotPrev: 14,
+    slotNext: 15,
+    pinSlot: 2, // X in the build menu (Y stays the build menu's own toggle: it closes it again)
+    backpack: 12,
+    map: 8,
+    cancel: 1,
+    menu: 9,
+    prevTab: 4,
+    nextTab: 5,
+    pinNext: 15,
+  };
+  p.eat = 14; // E23.2.1: d-pad left eats
+  // E23.2.2: the bumpers turn the load wheel while walking (in build mode they turn the piece)
+  p.loadPrev = 4;
+  p.loadNext = 5;
+  return p;
 }
 
-const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'LS', 'RS', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →'];
+export interface SavedBindings {
+  /** BINDINGS_VERSION when written; missing means before E22 */
+  v?: number;
+  keys?: Partial<Record<Action, string[]>>;
+  /** null: unbound on purpose */
+  pad?: Partial<Record<Action, number | null>>;
+}
 
-/** A key code as a short label ("KeyE" → "E", "ShiftLeft" → "Shift"). */
+/**
+ * Bindings saved before this map (no version, or an older one) are dropped once. `reset` is true when there was
+ * something to drop, so the game can say so ("Controls were updated. Your custom keys were reset.").
+ */
+export function migrateBindings(saved: SavedBindings | undefined): { saved: SavedBindings; reset: boolean } {
+  if (!saved) return { saved: {}, reset: false };
+  if (saved.v === BINDINGS_VERSION) return { saved, reset: false };
+  const had = Object.keys(saved.keys ?? {}).length > 0 || Object.keys(saved.pad ?? {}).length > 0;
+  return { saved: { v: BINDINGS_VERSION }, reset: had };
+}
+
+const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'Left stick click', 'Right stick click', 'D-pad up', 'D-pad down', 'D-pad left', 'D-pad right'];
+
+/** A key code as a short label ("KeyE" → "E", "ShiftLeft" → "Shift", "Mouse0" → "Left mouse"). */
 export function keyLabel(code: string): string {
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return `Num ${code.slice(6)}`;
   if (code.startsWith('Shift')) return 'Shift';
   if (code.startsWith('Control')) return 'Ctrl';
   if (code.startsWith('Alt')) return 'Alt';
-  const named: Record<string, string> = { Escape: 'Esc', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Equal: '+', Minus: '-', NumpadAdd: 'Num +', NumpadSubtract: 'Num -', Backquote: '`', Space: 'Space' };
+  const named: Record<string, string> = {
+    Escape: 'Esc',
+    ArrowUp: 'Up',
+    ArrowDown: 'Down',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right',
+    Equal: '=',
+    Minus: '-',
+    Backquote: '`',
+    Space: 'Space',
+    Mouse0: 'Left mouse',
+    Mouse1: 'Middle mouse',
+    Mouse2: 'Right mouse',
+    Mouse3: 'Mouse back',
+    Mouse4: 'Mouse forward',
+    Wheel: 'Mouse wheel',
+    PageUp: 'Page Up',
+    PageDown: 'Page Down',
+  };
   return named[code] ?? code;
 }
 
@@ -135,30 +288,57 @@ export function padLabel(button: number | undefined): string {
   return button === undefined ? '—' : (PAD_NAMES[button] ?? `Button ${button}`);
 }
 
+/** Can these two contexts apply at the same moment? (Build mode is its own layer: it wins while open.) */
+export function contextsMeet(a: Context, b: Context): boolean {
+  return a === b || a === 'any' || b === 'any';
+}
+
+/** What a rebind did: `ok`, or why not ("locked"), or which action already has that input (a clash). */
+export type BindResult = { ok: true; swapped?: Action } | { ok: false; reason: 'locked' | 'clash' | 'not-allowed'; other?: Action };
+
 export class Bindings {
   readonly keys: Record<Action, string[]>;
   readonly pad: Partial<Record<Action, number>>;
-
   constructor(saved?: SavedBindings) {
-    this.keys = Object.fromEntries(Object.entries(DEFAULT_KEYS).map(([a, k]) => [a, [...(saved?.keys?.[a as Action] ?? k)]])) as Record<Action, string[]>;
-    this.pad = { ...DEFAULT_PAD, ...(saved?.pad ?? {}) };
+    const dk = defaultKeys();
+    this.keys = Object.fromEntries(Object.entries(dk).map(([a, k]) => [a, [...(saved?.keys?.[a as Action] ?? k)]])) as Record<Action, string[]>;
+    this.pad = { ...defaultPad() };
+    for (const [a, b] of Object.entries(saved?.pad ?? {})) {
+      if (!ACTIONS.some((x) => x.id === a)) continue; // an action that no longer exists (E23.1.2: Bloom Frenzy)
+      if (b === null || b === undefined) delete this.pad[a as Action];
+      else this.pad[a as Action] = b;
+    }
+    // E23.11: a default added after a player rebound something never takes that player's input: when a new
+    // default lands on a button or key the save gave to another action (where both apply), the new one starts
+    // unbound instead. No version bump is needed: saves hold only what differs from the defaults.
+    for (const a of ACTIONS) {
+      const b = this.pad[a.id];
+      if (b !== undefined && !(saved?.pad && a.id in saved.pad) && ACTIONS.some((o) => o.id !== a.id && saved?.pad?.[o.id] === b && contextsMeet(a.context, o.context))) delete this.pad[a.id];
+      if (!saved?.keys?.[a.id]) this.keys[a.id] = this.keys[a.id].filter((c) => !ACTIONS.some((o) => o.id !== a.id && saved?.keys?.[o.id]?.includes(c) && contextsMeet(a.context, o.context)));
+    }
+    // The fixed inputs are always where they belong, whatever a save says.
+    this.keys.cancel = [FIXED_KEY];
+    this.keys.menu = [FIXED_KEY];
+    this.pad.menu = FIXED_PAD.menu;
   }
 
-  /** Back to the default map. */
-  reset() {
-    for (const [a, k] of Object.entries(DEFAULT_KEYS)) this.keys[a as Action] = [...k];
-    for (const a of Object.keys(this.pad) as Action[]) delete this.pad[a];
-    Object.assign(this.pad, DEFAULT_PAD);
+  /** Back to the default map (both columns, or one: `keys` or `pad`). */
+  reset(column?: 'keys' | 'pad') {
+    if (column !== 'pad') for (const [a, k] of Object.entries(defaultKeys())) this.keys[a as Action] = [...k];
+    if (column !== 'keys') {
+      for (const a of Object.keys(this.pad) as Action[]) delete this.pad[a];
+      Object.assign(this.pad, defaultPad());
+    }
   }
 
-  /** The action a key triggers, if any. */
-  actionForCode(code: string): Action | undefined {
-    for (const [a, codes] of Object.entries(this.keys)) if (codes.includes(code)) return a as Action;
+  /** The action a key triggers in the given contexts, earliest context first (e.g. build before world). */
+  actionForCode(code: string, contexts: readonly Context[] = ['world', 'any']): Action | undefined {
+    for (const c of contexts) for (const a of ACTIONS) if (a.context === c && this.keys[a.id].includes(code)) return a.id;
     return undefined;
   }
 
-  actionForButton(button: number): Action | undefined {
-    for (const [a, b] of Object.entries(this.pad)) if (b === button) return a as Action;
+  actionForButton(button: number, contexts: readonly Context[] = ['world', 'any']): Action | undefined {
+    for (const c of contexts) for (const a of ACTIONS) if (a.context === c && this.pad[a.id] === button) return a.id;
     return undefined;
   }
 
@@ -171,54 +351,103 @@ export class Bindings {
     return keyLabel(this.keys[action][0] ?? '');
   }
 
+  /** Is this input the fixed one for this action (it can't be moved)? */
+  locked(action: Action, kind: 'key' | 'pad'): boolean {
+    if (kind === 'key') return action === 'cancel' || action === 'menu';
+    return FIXED_PAD[action] !== undefined;
+  }
+
+  /** The other action that already has this key where `action` applies, if any. */
+  clashForKey(action: Action, code: string): Action | undefined {
+    const ctx = ACTION[action].context;
+    for (const a of ACTIONS) if (a.id !== action && contextsMeet(ctx, a.context) && this.keys[a.id].includes(code)) return a.id;
+    return undefined;
+  }
+
+  clashForButton(action: Action, button: number): Action | undefined {
+    const ctx = ACTION[action].context;
+    for (const a of ACTIONS) if (a.id !== action && contextsMeet(ctx, a.context) && this.pad[a.id] === button) return a.id;
+    return undefined;
+  }
+
   /**
-   * Binds a key to an action as its main key. A key belongs to one action only: if another action had it, the
-   * two swap (that action gets this one's old main key), so nothing is ever left unbound by accident.
+   * E22.4: binds a key (or mouse input) as an action's main key. A clash is refused unless `swap` is set: then
+   * the other action takes this one's old main key. Escape and the cancel / menu keys can't be moved.
    */
-  setKey(action: Action, code: string) {
-    if (BUILD_DIGITS.includes(code as (typeof BUILD_DIGITS)[number])) return;
-    const other = this.actionForCode(code);
+  bindKey(action: Action, code: string, swap = false): BindResult {
+    if (!ACTION[action].keys) return { ok: false, reason: 'not-allowed' };
+    if (this.locked(action, 'key') || code === FIXED_KEY) return { ok: false, reason: 'locked' };
+    const other = this.clashForKey(action, code);
+    if (other && this.locked(other, 'key')) return { ok: false, reason: 'locked', other };
+    if (other && !swap) return { ok: false, reason: 'clash', other };
     const old = this.keys[action][0];
-    if (other && other !== action) {
-      this.keys[other] = this.keys[other].filter((c) => c !== code);
-      if (old && !this.keys[other].length) this.keys[other].push(old);
-    }
     this.keys[action] = [code, ...this.keys[action].filter((c) => c !== code && c !== old)];
+    if (other) {
+      this.keys[other] = this.keys[other].filter((c) => c !== code);
+      if (old && !this.keys[other].includes(old) && !this.clashForKey(other, old)) this.keys[other].unshift(old);
+    }
+    return { ok: true, swapped: other };
+  }
+
+  /** E22.4: binds a pad button. As `bindKey`; the Menu button can't be moved or taken. */
+  bindButton(action: Action, button: number, swap = false): BindResult {
+    if (!ACTION[action].pad) return { ok: false, reason: 'not-allowed' };
+    if (this.locked(action, 'pad')) return { ok: false, reason: 'locked' };
+    const other = this.clashForButton(action, button);
+    if (other && this.locked(other, 'pad')) return { ok: false, reason: 'locked', other };
+    if (other && !swap) return { ok: false, reason: 'clash', other };
+    const old = this.pad[action];
+    this.pad[action] = button;
+    if (other) {
+      delete this.pad[other];
+      if (old !== undefined && !this.clashForButton(other, old)) this.pad[other] = old;
+    }
+    return { ok: true, swapped: other };
+  }
+
+  /** E22.4: removes an action's keys or button (never the fixed ones). */
+  unbind(action: Action, kind: 'key' | 'pad'): BindResult {
+    if (this.locked(action, kind)) return { ok: false, reason: 'locked' };
+    if (kind === 'key') this.keys[action] = [];
+    else delete this.pad[action];
+    return { ok: true };
+  }
+
+  /** Before E22.4's checks: binds and swaps without asking (the old screen's behaviour; tools use it). */
+  setKey(action: Action, code: string) {
+    this.bindKey(action, code, true);
   }
 
   setButton(action: Action, button: number) {
-    const other = this.actionForButton(button);
-    if (other && other !== action) this.pad[other] = this.pad[action];
-    this.pad[action] = button;
+    this.bindButton(action, button, true);
   }
 
   /** Only what differs from the defaults is saved. */
   save(): SavedBindings {
+    const dk = defaultKeys();
+    const dp = defaultPad();
     const keys: Partial<Record<Action, string[]>> = {};
-    for (const [a, k] of Object.entries(this.keys)) if (k.join() !== DEFAULT_KEYS[a as Action].join()) keys[a as Action] = k;
-    const pad: Partial<Record<Action, number>> = {};
-    for (const [a, b] of Object.entries(this.pad)) if (b !== DEFAULT_PAD[a as Action]) pad[a as Action] = b;
-    return { keys, pad };
+    for (const [a, k] of Object.entries(this.keys)) if (k.join() !== dk[a as Action].join()) keys[a as Action] = [...k];
+    const pad: Partial<Record<Action, number | null>> = {};
+    for (const a of ACTIONS) {
+      const b = this.pad[a.id];
+      if (b !== dp[a.id]) pad[a.id] = b ?? null;
+    }
+    return { v: BINDINGS_VERSION, keys, pad };
   }
 
-  /** Every key or button claimed by more than one action (empty for a sane map). */
+  /** Every input claimed by two actions that can apply at the same time (empty for a sane map). */
   conflicts(): string[] {
-    const seen = new Map<string, Action>();
     const out: string[] = [];
-    for (const [a, codes] of Object.entries(this.keys))
-      for (const c of codes) {
-        const was = seen.get(c);
-        if (was) out.push(`${c}: ${was} and ${a}`);
-        seen.set(c, a as Action);
+    for (let i = 0; i < ACTIONS.length; i++)
+      for (let j = i + 1; j < ACTIONS.length; j++) {
+        const a = ACTIONS[i];
+        const b = ACTIONS[j];
+        if (!contextsMeet(a.context, b.context)) continue;
+        for (const c of this.keys[a.id]) if (c !== FIXED_KEY && this.keys[b.id].includes(c)) out.push(`${c}: ${a.id} and ${b.id}`);
+        const pa = this.pad[a.id];
+        if (pa !== undefined && pa === this.pad[b.id]) out.push(`pad ${pa}: ${a.id} and ${b.id}`);
       }
-    for (const c of BUILD_DIGITS) if (seen.has(c)) out.push(`${c}: ${seen.get(c)} and a build slot`);
-    const pads = new Map<number, Action>();
-    for (const [a, b] of Object.entries(this.pad)) {
-      if (b === undefined) continue;
-      const was = pads.get(b);
-      if (was) out.push(`pad ${b}: ${was} and ${a}`);
-      pads.set(b, a as Action);
-    }
     return out;
   }
 }

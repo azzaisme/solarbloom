@@ -24,7 +24,7 @@ try {
 
   /** A fresh game on `seed`, with its ground at generation `gen`. */
   const fresh = async (gen) => {
-    await page.goto('http://localhost:4196/');
+    await page.goto('http://localhost:4196/?slot=1');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
@@ -42,10 +42,6 @@ try {
     // Saving a state with a new seed: reload into it (the game rebuilds the world from the seed).
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
-    await page.evaluate(() => {
-      document.querySelector('#hint')?.remove();
-      document.querySelector('#intro')?.setAttribute('hidden', '');
-    });
   };
   const shot = async (name, x, z, zoom, wait = 8000) => {
     await page.evaluate(({ x, z, zoom }) => {

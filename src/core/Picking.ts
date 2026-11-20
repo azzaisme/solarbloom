@@ -85,3 +85,35 @@ export function polyDist(poly: [number, number][], x: number, z: number): number
   }
   return inside ? 0 : best;
 }
+
+/**
+ * E21.24: picking on terraced ground. The ray is followed down from where it crosses the highest terrace top until it
+ * first goes below the ground under it (so a cliff in front hides the street behind, and ramps and stairs are hit
+ * on their slope); the crossing is refined by bisection. `baseY` is the world y of level 1's walkable top;
+ * `heightOf` reads the ground's height in levels under a point (undefined: level 1). Pure, for tests.
+ */
+export function pickTerraced(o: V3, d: V3, baseY: number, heightOf: (px: number, pz: number) => number | undefined, top = 4, levelHeight = 1.2): { fx: number; fz: number } | undefined {
+  if (d.y > -1e-6) return undefined;
+  const ground = (t: number) => baseY + ((heightOf(o.x + d.x * t, o.z + d.z * t) ?? 1) - 1) * levelHeight;
+  const yTop = baseY + (top - 1) * levelHeight;
+  const yLow = baseY - levelHeight - 1.2; // the sea's level, and hidden ground drawn sunk below it
+  let t0 = Math.max(0, (yTop - o.y) / d.y);
+  const t1 = (yLow - o.y) / d.y;
+  const len = Math.hypot(d.x, d.y, d.z);
+  const step = 0.08 / len; // well under a tile along the ground
+  for (let t = t0; t <= t1; t += step) {
+    if (o.y + d.y * t > ground(t)) {
+      t0 = t;
+      continue;
+    }
+    let a = t0;
+    let b = t;
+    for (let i = 0; i < 24; i++) {
+      const m = (a + b) / 2;
+      if (o.y + d.y * m > ground(m)) a = m;
+      else b = m;
+    }
+    return { fx: o.x + d.x * b, fz: o.z + d.z * b };
+  }
+  return undefined;
+}

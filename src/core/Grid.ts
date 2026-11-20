@@ -1,6 +1,7 @@
 import { decorChunkKey } from './Decor';
 import { CHUNK, generateTile, tileId } from './Generation';
 import type { LayerData, MachineData, TileData } from './types';
+import { levelY } from './Height';
 
 export { tileId };
 
@@ -329,7 +330,20 @@ export class Grid {
   /** World position of a tile centre (top surface). */
   tileWorld(t: TileData): [number, number, number] {
     const r = this.layers.get(t.roofId)!;
-    return [r.origin[0] + t.x + 0.5, r.origin[1] + r.height, r.origin[2] + t.z + 0.5];
+    // E21.24: an Old City tile stands at its terrace's height
+    return [r.origin[0] + t.x + 0.5, r.origin[1] + r.height + (t.level !== undefined ? levelY(t.level) : 0), r.origin[2] + t.z + 0.5];
+  }
+
+  /** E21.24: world y offset of the ground at a cell (0 on flat ground and every raised layer). */
+  groundOffset(layerId: string, x: number, z: number): number {
+    const t = this.get(layerId, x, z);
+    return t?.level !== undefined ? levelY(t.level) : 0;
+  }
+
+  /** E21.24: is this layer terraced (the Old City's ground)? */
+  terraced(layerId: string): boolean {
+    const l = this.layers.get(layerId);
+    return !!l && l.kind === 'ground' && (l.gen ?? 1) >= 5;
   }
 
   /** Converts a world-space point on a layer's plane into an integer cell. */

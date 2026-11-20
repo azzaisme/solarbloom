@@ -12,7 +12,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   page.on('pageerror', (e) => errors.push(`${e.message}\n${e.stack}`));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await page.goto('http://localhost:4200/');
+  await page.goto('http://localhost:4200/?slot=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
@@ -27,7 +27,7 @@ try {
     for (let i = 0; i < steps; i++) {
       if (i % 30 === 0) {
         const want = order[next];
-        if (want && s.build.isUnlocked(want) && s.econ.canAfford(s.build.cost(want))) {
+        if (want && s.build.isUnlocked(want) && s.inventory.canPay(s.build.recipe(want) ?? {})) {
           const spot = s.areas.tiles('park').find((t) => s.build.check(want, 'g', t.x, t.z).ok);
           if (spot && s.build.place(want, 'g', spot.x, spot.z)) next++;
         }
@@ -39,10 +39,6 @@ try {
           if (id === 'park') s.progression.activateCore();
           else s.areas.clear(id);
         } else if (sug.action.kind === 'build') s.build.place(sug.action.type, 'g', sug.action.x, sug.action.z);
-        else if (sug.action.kind === 'harvest') s.harvestSun();
-        const up = s.upgrades.all().find((u) => s.upgrades.status(u).ok);
-        if (up) s.upgrades.purchase(up.id);
-        if (s.frenzy.ready()) s.frenzy.activate();
         if (s.state.cat.active) s.cat.claim();
       }
       s.tick();
@@ -58,7 +54,6 @@ try {
     return {
       fountain: s.state.progression.coreActivated ? Math.round(s.state.progression.coreActivatedAt) : -1,
       areas: s.areas.clearedCount?.() ?? 0,
-      frenzies: s.state.frenzy?.count ?? 0,
       cats: s.state.cat.found,
       tiles: s.state.stats.tilesRestored,
       medianFrameMs: Math.round(frames[Math.floor(frames.length / 2)]),

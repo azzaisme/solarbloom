@@ -24,6 +24,10 @@ export class LookController {
   /** Look 1.7: restoration of the area in view, 0 (dead, fogged) … 1 (restored); the grade follows it. */
   moodTarget = 0;
   mood = 0;
+  /** E23.7.1: the rim's share by the time of day (DayNight sets it: weaker at night) */
+  rimShare = 1;
+  /** E23.7.5: how far into night it is, 0 … 1 (DayNight): bloom grows at night */
+  night = 0;
   /** Settings: high contrast flattens the grade and drops the vignette so outlines and text stay readable. */
   highContrast = false;
 
@@ -104,12 +108,13 @@ export class LookController {
     const fwd = cam.entity.forward;
     const focus = (g.x - p.x) * fwd.x + (g.y - p.y) * fwd.y + (g.z - p.z) * fwd.z;
     this.post.follow(cam.viewHeight, focus);
+    this.post.setNight(this.night);
     const G = LOOK.grade;
     this.mood += (this.moodTarget - this.mood) * (1 - Math.exp(-dt / Math.max(0.01, G.follow)));
     if (this.highContrast) this.post.grade(G.contrast, G.contrast, 0, 0);
     else this.post.grade(G.dead, G.warm, this.mood, LOOK.vignette.intensity);
     this.atmosphere.update(dt, g, Math.max(6, cam.viewHeight * 1.2), this.toSun, fwd);
     const R = LOOK.rim;
-    setLookRim(this.app.graphicsDevice, this.rimColour, LOOK.tiers[this.tier].rim ? R.intensity : 0, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
+    setLookRim(this.app.graphicsDevice, this.rimColour, LOOK.tiers[this.tier].rim ? R.intensity * this.rimShare : 0, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
   }
 }

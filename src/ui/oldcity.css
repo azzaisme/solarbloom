@@ -1,0 +1,83 @@
+/* E21, E23.11 (Sunlit Glass): the panel the Old City's places open. A machine card docked on the right (a planter,
+   a compost bin, the Bio Digester, the fountain, Tally's trade) or, for the storage table, a centre sheet. The shell
+   (paper, border, the action bar) is in panels.css; this file the card's head and its own pieces. */
+#ocPanel { display: none; z-index: 9; }
+#ocPanel.open { display: flex; }
+#ocPanel.sheet { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, calc(100vw / var(--ui-zoom, 1) - 32px)); height: auto; max-height: min(680px, calc(100vh / var(--ui-zoom, 1) - 32px)); }
+#ocPanel .oc-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; font: 700 16px/1.4 var(--font-ui); }
+#ocPanel .oc-x { position: absolute; right: 14px; top: 14px; z-index: 1; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--line-2); background: var(--key-bg); color: var(--ink); cursor: pointer; }
+#ocPanel .oc-x:hover { background: var(--leaf-soft); border-color: var(--leaf); }
+#ocPanel .oc-x .pn-ic { width: 20px; height: 20px; }
+.oc-head { display: flex; align-items: center; gap: 14px; padding: 18px 70px 12px 22px; flex: none; }
+.oc-head .grow { flex: 1; min-width: 0; }
+.oc-head .pn-badge { font-size: 26px; }
+.oc-head .pn-badge .pn-ic.l, .oc-head .pn-badge .pn-ic { width: 26px; height: 26px; }
+.oc-head .pn-badge svg.mi { width: 32px; height: 32px; }
+#ocPanel h2 { margin: 0; font: 900 24px/1.15 var(--font-ui); letter-spacing: -.01em; color: var(--ink); }
+.oc-mood { margin: 2px 0 0; font: 800 16px/1.35 var(--font-ui); color: var(--ink-2); }
+.oc-mood.leaf { color: var(--leaf-ink); }
+.oc-mood.clay { color: var(--clay-ink); }
+.oc-mood.sky { color: var(--sky-ink); }
+.oc-content { display: flex; flex-direction: column; gap: 12px; padding: 4px 22px 18px; }
+.oc-content > .pn-label { margin-top: 4px; }
+.oc-content p { margin: 0; }
+.oc-tile { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--r-tile); background: var(--paper-2); }
+.oc-tile-row { display: flex; align-items: center; gap: 12px; }
+.oc-tile-row b { flex: 1; min-width: 0; font: 900 18px var(--font-ui); color: var(--ink); }
+.oc-crop-ic { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--key-bg); font-size: 26px; line-height: 1; }
+.oc-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.oc-row > .pn-btn { flex: 1 1 auto; }
+.oc-row.oc-col { flex-direction: column; }
+.oc-row.oc-col > .pn-btn { justify-content: flex-start; }
+.pn-btn.oc-done:disabled { background: var(--leaf-soft); border-color: transparent; color: var(--leaf-ink); }
+.pn-btn .pn-ic.s, .oc-gives .pn-ic.s, .pn-chip .pn-ic.s { width: 18px; height: 18px; }
+.oc-mat-btn svg.mi { flex: none; }
+/* the planter's seeds: a grid of three */
+.oc-crops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.oc-crop { min-height: 124px; }
+.oc-crop b { font: 900 16px/1.2 var(--font-ui); }
+.oc-crop small { font: 700 16px/1.2 var(--font-ui); color: var(--ink-2); }
+.pn-cell:disabled { cursor: default; color: var(--ink-3); border-color: transparent; }
+.pn-cell:disabled small { color: var(--ink-3); }
+/* Tally's trade: material cells */
+.oc-mats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.oc-mat { min-height: 92px; }
+.oc-mat.on { background: var(--leaf-soft); border-color: var(--leaf); color: var(--leaf-ink); }
+/* the fountain's list */
+.oc-needs, .oc-gives { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.oc-need { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 12px; border-radius: var(--r-tile); background: var(--paper-2); color: var(--ink); }
+.oc-need .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; font-weight: 900; }
+.oc-need small { font: 700 16px var(--font-ui); color: var(--ink-2); }
+.oc-need > .pn-ic { width: 26px; height: 26px; color: var(--leaf-ink); }
+.oc-need .pn-chip { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oc-gives li { display: flex; align-items: center; gap: 10px; color: var(--ink); }
+.oc-gives .pn-ic { color: var(--sun-ink); }
+/* the storage table */
+.oc-store { width: 100%; border-collapse: separate; border-spacing: 0 6px; font: 800 16px var(--font-ui); color: var(--ink); }
+.oc-store thead th { padding: 0 10px 2px; text-align: left; font: 900 16px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+.oc-store tbody th, .oc-store td { padding: 6px 10px; background: var(--paper-2); }
+.oc-store tbody th { border-radius: var(--r-tile) 0 0 var(--r-tile); text-align: left; white-space: nowrap; }
+.oc-store tbody td:last-child { border-radius: 0 var(--r-tile) var(--r-tile) 0; }
+.oc-mat-name { display: inline-flex; align-items: center; gap: 10px; }
+.oc-store td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oc-store td.mv { white-space: nowrap; }
+.oc-store td.mv .pn-btn { min-width: 52px; margin-right: 6px; }
+.oc-store .oc-empty { text-align: center; padding: 16px; color: var(--ink-2); border-radius: var(--r-tile); }
+@media (max-width: 1000px) { .oc-store thead th:nth-child(3), .oc-store thead th:nth-child(4) { white-space: normal; } }
+body.contrast .oc-tile, body.contrast .oc-need, body.contrast .oc-store tbody th, body.contrast .oc-store td { border: 1px solid var(--ink-2); }
+
+/* E21.2: salvage fly-ups */
+.oc-fly { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font: 700 16px var(--font-display); color: var(--gold-hi); text-shadow: var(--shadow-sm); animation: oc-fly 1.4s ease-out forwards; z-index: 8; white-space: nowrap; }
+@keyframes oc-fly { from { opacity: 0; margin-top: 0; } 15% { opacity: 1; } to { opacity: 0; margin-top: -48px; } }
+
+/* E21.8: Keeper speech bubbles */
+.oc-bubble { position: absolute; transform: translate(-50%, -100%); max-width: 300px; padding: 10px 14px; border-radius: 18px 18px 18px 6px; background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow-sm); color: var(--ink); font: 700 16px/1.4 var(--font-ui); pointer-events: none; z-index: 7; }
+.oc-bubble b { display: block; font: 900 16px var(--font-ui); color: var(--leaf-ink); margin-bottom: 2px; }
+.oc-bubble p { margin: 0; }
+
+
+/* E23.2.1 / E23.2.2: the charge, the load wheel and the load chip are styled in hud.css (E23.11). */
+
+/* E23.2.3: sitting on a bench or meditating: the HUD fades away, only the prompt (and toasts) stay */
+#hud > * { transition: opacity .8s; }
+body.resting #hud > :not(#prompt):not(#toasts):not(#cine) { opacity: 0 !important; pointer-events: none !important; }

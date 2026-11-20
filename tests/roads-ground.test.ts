@@ -1,10 +1,9 @@
-// City 16.5–16.7: the road network in generated ground (generation 4), and older generations untouched.
+// City 16.5–16.7: the road network in generated ground (generation 4; E23.1.1: generations 2–3 are gone with old saves).
 // Heavier than tests/roads.test.ts (whole grids), so it runs in the full suite only.
 import { describe, expect, it } from 'vitest';
-import { createInitialState, GROUND_GEN } from '../src/core/GameState';
+import { createInitialState, GROUND_GEN, OLD_CITY_GEN } from '../src/core/GameState';
 import { buildingAt } from '../src/core/Generation';
 import { Grid } from '../src/core/Grid';
-import { hashString } from '../src/core/Hash';
 import { roadPlanFor } from '../src/core/RoadPlan';
 
 const SEEDS = [1, 42, 9001];
@@ -12,9 +11,9 @@ const SEEDS = [1, 42, 9001];
 describe('City 16.5–16.7: generation 4 ground', { timeout: 60000 }, () => {
   const groundOf = (seed: number, gen: number) => new Grid(seed, createInitialState(seed).layers.map((l) => ({ ...l, gen })));
 
-  it('new games start on generation 4', () => {
+  it('the city generator is generation 4; new games start on the Old City (generation 5)', () => {
     expect(GROUND_GEN).toBe(4);
-    expect(createInitialState(5).layers.find((l) => l.kind === 'ground')!.gen).toBe(4);
+    expect(createInitialState(5).layers.find((l) => l.kind === 'ground')!.gen).toBe(OLD_CITY_GEN); // E23.1.1: every game
   });
 
   it('no building, rooftop or obstacle sits on a road or lane, and road tiles are road or paving', () => {
@@ -55,22 +54,4 @@ describe('City 16.5–16.7: generation 4 ground', { timeout: 60000 }, () => {
     // Most buildings front a street rather than standing back in a yard.
     expect(fronting / all).toBeGreaterThan(0.6);
   });
-
-  it('generation 2 and 3 saves keep their layout exactly (fingerprints from main before City 16)', () => {
-    const want: Record<string, number> = FINGERPRINTS;
-    for (const gen of [2, 3])
-      for (const seed of [7, 42]) {
-        const g = groundOf(seed, gen);
-        let s = '';
-        for (let z = -96; z < 112; z++)
-          for (let x = -96; x < 112; x++) {
-            const t = g.get('g', x, z)!;
-            s += `${t.feature}${t.blocked ? 1 : 0}${t.prop ?? ''}${t.pollution};`;
-          }
-        expect(hashString(s), `gen ${gen} seed ${seed}`).toBe(want[`${gen}|${seed}`]);
-      }
-  });
 });
-
-/** `hashString` of generation 2/3 tiles over chunks −6…6, computed on main before City 16 (tests/tmp script). */
-const FINGERPRINTS: Record<string, number> = { '2|7': 3069799308, '2|42': 2236606599, '3|7': 187224603, '3|42': 2275860230 };

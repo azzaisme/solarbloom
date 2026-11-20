@@ -45,7 +45,8 @@ export class Butterflies {
 
   /** Blooming (stage 2+) tiles in view on the ground, plus any unlocked rooftops. */
   private gardenTiles(rect: Rect | undefined): TileData[] {
-    const ok = (t: TileData) => t.ground === 'restored' && t.bloom >= 2 && !t.occupantId && t.feature !== 'water';
+    const ok = (t: TileData) => t.ground === 'restored' && this.sim.water.bloomShown(t) >= 2 && // E23.4.4: not to faded banks
+      !t.occupantId && t.feature !== 'water';
     const out = rect ? tilesIn(this.sim, rect, ok, 120) : [];
     for (const r of this.sim.grid.rooftops) if (r.unlocked && !r.preview && out.length < 160) for (const t of this.sim.grid.tilesOf(r.id)) if (ok(t)) out.push(t);
     return out;
@@ -58,7 +59,7 @@ export class Butterflies {
     const t = tiles[Math.floor(hash01(this.sim.state.seed, i, f.leg, 1) * tiles.length)];
     const [x, y, z] = this.sim.grid.tileWorld(t);
     // Land a bit higher on lush tiles (flowers / shrubs).
-    f.target.set(x + (hash01(this.sim.state.seed, i, f.leg, 2) - 0.5) * 0.5, y + SLAB_TOP + 0.12 + t.bloom * 0.1, z + (hash01(this.sim.state.seed, i, f.leg, 3) - 0.5) * 0.5);
+    f.target.set(x + (hash01(this.sim.state.seed, i, f.leg, 2) - 0.5) * 0.5, y + SLAB_TOP + 0.12 + this.sim.water.bloomShown(t) * 0.1, z + (hash01(this.sim.state.seed, i, f.leg, 3) - 0.5) * 0.5);
   }
 
   private spawn() {

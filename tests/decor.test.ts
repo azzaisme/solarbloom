@@ -11,16 +11,22 @@ import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
 import { Walker } from '../src/gameplay/Walker';
 import { DECOR_ART, drawDecor } from '../src/rendering/DecorArt';
-import { runBot } from './bots';
+import { runOldCityBot } from './oldcity-bot';
 import { fill, makeSim, PAD, rich } from './helpers';
+import { DECOR_RECIPES } from '../src/data/crafting';
+
+/** E23.6.1: a decoration with a recipe is placed once it has been made at the crafting table: make them all. */
+function madeAll(sim: Sim): Sim {
+  sim.state.salvage!.decorMade = DECOR_RECIPES.map((r) => r.id).sort();
+  return sim;
+}
 
 /** The test pad, fully restored and in full bloom, with a Drone Hub: only tiles left at bloom 1 can be nurtured. */
 function padScene() {
-  const sim = makeSim();
+  const sim = madeAll(makeSim());
   rich(sim);
   fill(sim, 0, 0, 7, 7, 'restored');
   for (const t of sim.grid.tilesOf(PAD)) if (t.ground === 'restored') t.bloom = TUNING.restore.maxBloom;
-  sim.production.markDirty();
   const cozy = new Cozy(sim);
   cozy.groundOnly = false; // the pad is a raised layer
   return { sim, cozy };
@@ -28,7 +34,7 @@ function padScene() {
 
 /** A city whose park is cleared, with a row of restored ground beside the park's starting panel. */
 function parkScene(seed = 77) {
-  const sim = new Sim(createInitialState(seed));
+  const sim = madeAll(new Sim(createInitialState(seed)));
   sim.areas.clear(PARK, true);
   const cozy = new Cozy(sim);
   const cells: TileData[] = [];
@@ -78,7 +84,7 @@ describe('E19.2.1 decorations occupy their tile like a machine', () => {
     expect(free.d.bloom).toBeGreaterThan(1);
     const taken = run(true);
     for (const t of [taken.m, taken.d]) {
-      expect(t.ground).toBe('restored'); // the tile stays restored (and counts for milestones)
+      expect(t.ground).toBe('restored'); // the tile stays restored (and counts as restored)
       expect(t.bloom, t.id).toBe(1); // never nurtured
       expect(taken.touched.has(t.id), t.id).toBe(false); // never a drone's or a pulse's target
     }
@@ -93,10 +99,10 @@ describe('E19.2.1 decorations occupy their tile like a machine', () => {
     expect(taken.cozy.canDecorate('lantern', PAD, M.x, M.z)).toMatch(/already here/);
     expect(taken.cozy.canDecorate('lantern', PAD, D.x, D.z)).toBe(DECOR_IN_WAY);
     // Removing is free and instant: the tile is free at once.
-    const before = JSON.stringify(taken.sim.state.resources);
+    const before = JSON.stringify(taken.sim.state.salvage);
     expect(taken.cozy.removeDecor(PAD, D.x, D.z)?.kind).toBe('bench');
     expect(taken.d.occupantId).toBeUndefined();
-    expect(JSON.stringify(taken.sim.state.resources)).toBe(before);
+    expect(JSON.stringify(taken.sim.state.salvage)).toBe(before); // nothing paid, nothing handed back
     expect(taken.sim.build.check('condenser', PAD, D.x, D.z).ok).toBe(true);
     expect(taken.sim.state.cozy?.decor).toBeUndefined(); // sparse: nothing left behind
   });
@@ -107,7 +113,10 @@ describe('E19.2.1 decorations occupy their tile like a machine', () => {
     t.ground = 'polluted';
     expect(cozy.canDecorate('bench', PAD, 5, 5)).toMatch(/Restore/);
     expect(cozy.canDecorate('nope', PAD, 4, 2)).toBeDefined();
-    expect(cozy.canDecorate('lamppost', PAD, 4, 2)).toMatch(/Unlocks/); // not earned yet
+    // not earned yet: E23.6.1, a decoration not yet made at the crafting table
+    const sv = sim.state.salvage!;
+    sv.decorMade = sv.decorMade!.filter((id) => id !== 'lamppost');
+    expect(cozy.canDecorate('lamppost', PAD, 4, 2)).toMatch(/Not made yet/);
     expect(cozy.canDecorate('bench', PAD, 7, 0)).toBeDefined(); // a vent
     const city = new Cozy(sim);
     expect(city.canDecorate('bench', PAD, 4, 2)).toMatch(/ground/); // rooftops come later
@@ -160,10 +169,10 @@ describe('E19.2.1 decorations are saved', () => {
 });
 
 describe('E19.2.2 decoration set and unlocks', () => {
-  it('about a dozen decorations, ids unique, each with art inside a small budget, keepsakes from cats', () => {
+  it('about a dozen decorations, ids unique, each with art inside a small budget, some only from cats', () => {
     expect(DECOR_OPTIONS.length).toBeGreaterThanOrEqual(12);
     expect(new Set(DECOR_OPTIONS.map((o) => o.id)).size).toBe(DECOR_OPTIONS.length);
-    expect(DECOR_OPTIONS.some((o) => 'keepsake' in o.unlock)).toBe(true);
+    expect(DECOR_OPTIONS.some((o) => 'cat' in o.unlock)).toBe(true);
     expect(DECOR_OPTIONS.some((o) => o.solid) && DECOR_OPTIONS.some((o) => !o.solid)).toBe(true);
     for (const o of DECOR_OPTIONS) {
       expect(DECOR_ART, o.id).toContain(o.id);
@@ -180,26 +189,31 @@ describe('E19.2.2 decoration set and unlocks', () => {
     for (const o of DECOR_OPTIONS) expect(PLOT_OPTIONS.some((p) => p.id === o.id), o.id).toBe(false);
   });
 
-  it('an unlock happens once, survives a reload, and a keepsake waits for a cat', () => {
+  it('an unlock happens once, survives a reload, and a cat-only decoration waits for a cat', () => {
     const saver = new SaveService(undefined);
     const sim = new Sim(createInitialState(5));
     const cozy = new Cozy(sim);
     expect(cozy.checkDecorUnlocks()).toEqual([]);
     expect(sim.state.cozy).toBeUndefined(); // nothing earned, nothing written
-    sim.areas.clearedCount = () => 2;
+    // E23.6.1: a decoration with a recipe opens once it is made at the crafting table (its recipe found in a cache)
+    const sv = sim.state.salvage!;
+    sv.caches.push('c-oldMarket-1', 'c-saltwind-1', 'c-saltwind-2');
+    for (const m of ['planks', 'seeds'] as const) sv.pack[m] = 20;
+    for (const id of ['bunting', 'cratestack', 'barrel']) expect(sim.crafting.makeDecor(id), id).toBe(true);
     const got = cozy.checkDecorUnlocks().map((o) => o.id);
     expect(got).toEqual(['bunting', 'cratestack', 'barrel']);
     expect(cozy.checkDecorUnlocks()).toEqual([]); // once each
     expect(cozy.isDecorUnlocked(DECOR_OPTION.catstatue)).toBe(false);
-    sim.state.stats.catsFound = 1;
+    sim.state.stats.catsFound = 1; // a count alone opens nothing: the cat leaves the piece itself (E23.12.2)
+    expect(cozy.checkDecorUnlocks()).toEqual([]);
+    expect(sim.crafting.giveDecor('catstatue')).toBe(true);
     expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['catstatue']);
     const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
-    copy.areas.clearedCount = () => 2;
     const c2 = new Cozy(copy);
     expect(c2.checkDecorUnlocks()).toEqual([]);
     expect(c2.isDecorUnlocked(DECOR_OPTION.barrel)).toBe(true);
     expect(c2.isDecorUnlocked(DECOR_OPTION.catstatue)).toBe(true);
-    expect(c2.decorChoices().find((c) => c.option.id === 'topiary')?.hint).toMatch(/4 areas/);
+    expect(c2.decorChoices().find((c) => c.option.id === 'topiary')?.unlocked).toBe(false); // its recipe not found yet
   });
 });
 
@@ -213,12 +227,10 @@ describe('E19.2 stays cosmetic for the pacing bots', () => {
       return JSON.stringify(o);
     };
     let plain: Sim | undefined;
-    runBot({ seed: 21, minutes: 12, onSecond: (sim) => (plain = sim) });
+    runOldCityBot(21, 12, 'keeper', { onSecond: (sim) => (plain = sim) });
     let checked: Sim | undefined;
     let earned = 0;
-    runBot({
-      seed: 21,
-      minutes: 12,
+    runOldCityBot(21, 12, 'keeper', {
       onSecond: (sim) => {
         checked = sim;
         const cozy = ((sim as unknown as { __cozy?: Cozy }).__cozy ??= new Cozy(sim));
@@ -233,18 +245,20 @@ describe('E19.2 stays cosmetic for the pacing bots', () => {
     expect(JSON.stringify(checked!.ecosystem.score())).toBe(JSON.stringify(plain!.ecosystem.score()));
   });
 
-  it('E20.5: keepsakes come only from Lucky Cat finds: five finds, a Golden Cat, a Rainbow Cat', () => {
+  it('E23.12.2: cat-only decorations come only from a Lucky Cat, and a locked one never says so', () => {
     const sim = new Sim(createInitialState(6));
     const cozy = new Cozy(sim);
-    sim.state.stats.catsFound = 1;
-    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['catstatue']);
-    sim.state.cat.log = [{ anchorId: 'park-bench', reward: 'luckyHarvest', at: 10, variant: 'golden' }];
-    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['goldlantern']);
+    // E20.5's milestones open nothing now: five finds, a Golden Cat and a Rainbow Cat in the log
     sim.state.stats.catsFound = 5;
-    sim.state.cat.log.push({ anchorId: 'hedge-gap', reward: 'jackpot', at: 20, variant: 'rainbow' });
-    expect(cozy.checkDecorUnlocks().map((o) => o.id).sort()).toEqual(['pawstones', 'rainbowbunting']);
+    sim.state.cat.log = [
+      { anchorId: 'park-bench', reward: 'luckyHarvest', at: 10, variant: 'golden' },
+      { anchorId: 'hedge-gap', reward: 'jackpot', at: 20, variant: 'rainbow' },
+    ];
     expect(cozy.checkDecorUnlocks()).toEqual([]);
-    const fresh = new Cozy(new Sim(createInitialState(6)));
-    expect(fresh.decorChoices().find((c) => c.option.id === 'rainbowbunting')?.hint ?? '').toMatch(/Rainbow Cat/);
+    // the tray's hint for a locked one names no cat (epic rule 8)
+    for (const id of ['catstatue', 'pawstones', 'goldlantern', 'rainbowbunting']) expect(cozy.decorChoices().find((c) => c.option.id === id)?.hint ?? '', id).not.toMatch(/cat/i);
+    expect(sim.crafting.giveDecor('rainbowbunting')).toBe(true);
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['rainbowbunting']);
+    expect(sim.crafting.giveDecor('rainbowbunting')).toBe(false); // given once
   });
 });

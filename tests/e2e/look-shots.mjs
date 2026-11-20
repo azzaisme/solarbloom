@@ -1,7 +1,7 @@
 // Look 1.1: the look comparison harness (`npm run shots:look`), the baseline for every Look epic.
 //
 // Captures fixed scenes (dead park, half-restored park with a pulse in progress, fully restored park, a machine
-// cluster, the drone mid-spray, the same drone during Bloom Frenzy, mid and far zoom) at 1280×800 and 390×844,
+// cluster, the drone mid-spray, mid and far zoom) at 1280×800 and 390×844,
 // each next to the target reference (docs/reference/target-look.png) as a side-by-side image, and records draw
 // calls and frame time per scene.
 //
@@ -50,9 +50,7 @@ const SCENES = {
     title: 'Half-restored park, pulse in progress',
     setup: `
       const s = g.sim, st = s.state;
-      const B = st.resources.energy.constructor;
-      st.caps.energy = new B(1e6); st.caps.water = new B(1e6);
-      st.resources.energy = new B(1e6); st.resources.water = new B(1e6); st.resources.biomass = new B(1e6);
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
       const tiles = s.areas.tiles('park').filter((t) => !t.blocked && !t.occupantId && t.ground !== 'restored');
       tiles.sort((a, b) => Math.hypot(a.x - 3, a.z - 3) - Math.hypot(b.x - 3, b.z - 3));
       const half = Math.floor(tiles.length / 2);
@@ -90,9 +88,7 @@ const SCENES = {
     title: 'Machine cluster (solar, condenser, core)',
     setup: `
       const s = g.sim, st = s.state;
-      const B = st.resources.energy.constructor;
-      st.caps.energy = new B(1e6); st.caps.water = new B(1e6);
-      st.resources.energy = new B(1e6); st.resources.water = new B(1e6); st.resources.biomass = new B(1e6);
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
       for (const t of s.areas.tiles('park')) if (s.restoration.isEligible(t)) { s.restoration.complete(t, 'pulse'); t.bloom = 2 + ((t.x + t.z) % 2); s.grid.touch(t); }
       st.progression.coreActivated = true;
       s.areas.clear('park', true);
@@ -124,9 +120,7 @@ const SCENES = {
     title: 'Drone roles at work (Restorer, Gardener, Scout, Courier, Spark, Harvester)',
     setup: `
       const s = g.sim, st = s.state;
-      const B = st.resources.energy.constructor;
-      st.caps.energy = new B(1e6); st.caps.water = new B(1e6);
-      st.resources.energy = new B(1e6); st.resources.water = new B(1e6); st.resources.biomass = new B(1e6);
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
       const park = s.areas.tiles('park');
       park.forEach((t, i) => { if (s.restoration.isEligible(t) && i % 3) { s.restoration.complete(t, 'pulse'); t.bloom = 1 + ((t.x + t.z) % 2); s.grid.touch(t); } });
       st.progression.coreActivated = true;
@@ -135,22 +129,11 @@ const SCENES = {
       for (const type of ['condenser', 'motherTree', 'pollinator', 'pollinator', 'pollinator', 'solar']) at(type);
       const roles = ['restorer', 'gardener', 'scout', 'courier', 'spark', 'harvester'];
       for (const r of roles) { const h = at('droneHub'); if (h && r !== 'restorer') { h.roles = [r]; h.role = r; } }
-      st.caps.energy = new B(400); st.resources.energy = new B(400); // a full store, so the Harvester works too
       g.chunks.markAll();
       g.camera.glide(8, 0, 8, 1.15);
       return {};`,
     until: `() => new Set(g.sim.state.drones.filter((d) => d.mode === 'working' || d.mode === 'flying').map((d) => g.sim.roles.roleFor(d, g.sim.machine(d.hubId)))).size >= 4`,
     settle: 2500,
-  },
-  // Look 3.20 (#209): the same shot as `drone`, mid-Frenzy, so the two can be compared for gold accents and
-  // frame time. The accents fade in over 0.3 s, so the shot lands well after that.
-  frenzy: {
-    title: 'Drone mid-spray during Bloom Frenzy',
-    setup: `g.camera.glide(8, 0, 8, 1.5); return {};`,
-    until: `() => g.sim.state.drones.some((d) => d.mode === 'working')`,
-    after: `() => { g.sim.state.frenzy = { ...(g.sim.state.frenzy ?? {}), charge: 100 }; if (!g.sim.frenzy.activate()) throw new Error('Frenzy did not start'); const d = g.sim.state.drones.find((d) => d.mode === 'working'); const p = g.drones.worldPos(d.id); g.camera.glide(p.x, 0, p.z, 1.75); for (let i = 0; i < 240; i++) g.camera.update(0.05); }`,
-    settle: 400,
-    afterSettle: 600,
   },
   mid: {
     title: 'Mid zoom (restored park)',
@@ -216,7 +199,7 @@ async function shoot(sceneKey, sizeKey) {
   // The fake clock flows in real time after install unless paused: pause it so time moves only by runFor.
   await page.clock.install({ time: new Date('2026-06-21T16:30:00') });
   await page.clock.pauseAt(new Date('2026-06-21T16:30:01'));
-  await page.goto(`http://localhost:${PORT}/${query}`);
+  await page.goto(`http://localhost:${PORT}/${query ? query + '&' : '?'}slot=1`);
   // Boot with the fake clock frozen (the save loads through promises, not timers), so the game always starts
   // at the same fake time; only then do frames begin.
   let booted = false;
@@ -227,8 +210,7 @@ async function shoot(sceneKey, sizeKey) {
   if (!booted) throw new Error(`${sceneKey}/${sizeKey}: game did not boot`);
   // Let every asset finish loading (real time, clock still frozen) before anything moves.
   await page.waitForLoadState('networkidle');
-  await page.addStyleTag({ content: '#hud, #toasts, .toast, #intro, #boot, #tip, .tip, #labels, .area-label { display: none !important; }' });
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
+  await page.addStyleTag({ content: '#hud, #toasts, .toast, #boot, #tip, .tip, #labels, .area-label { display: none !important; }' });
   // Settling only needs the update loop; skip rendering until the last frames (SwiftShader frames are slow).
   const render = (on) => page.evaluate((on) => (window.solarbloom.app.autoRender = on), on);
   await render(false);

@@ -1,0 +1,178 @@
+/* ───────── E23.11: build mode, Sunlit Glass ─────────
+   The build dock (#buildbar, src/ui/Hotbar.ts BuildBar), "Stop building" (#buildStop), the build crosshair and the
+   build menu sheet (#buildMenu, src/ui/BuildMenu.ts). Boards: docs/art/ui-sunlit-glass/Build.dc.html (keyboard),
+   BuildPad.dc.html (gamepad, a decoration in hand) and BuildMenu.dc.html. Every colour is a token from the first
+   :root of styles.css. Dock labels are 14 px bold; the menu's text is 16 px or more. */
+
+/* ── the build dock: a paper pill at the bottom centre ──
+   (as wide as what it holds: placed at left 50%, it would otherwise only get the right half of the screen to lay
+   out in, and squeeze its slots' names) */
+#buildbar { position: absolute; left: 50%; bottom: calc(18px + var(--safe-b)); transform: translateX(-50%); z-index: 3; display: flex; align-items: stretch; gap: 10px; padding: 10px 14px; width: max-content; max-width: calc(100vw / var(--ui-zoom, 1) - 24px - var(--safe-l) - var(--safe-r)); border-radius: 26px; background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); backdrop-filter: blur(10px) saturate(1.15); -webkit-backdrop-filter: blur(10px) saturate(1.15); font-family: var(--font-ui); color: var(--ink); }
+#buildbar[hidden] { display: none; }
+#buildbar button { font: inherit; color: inherit; margin: 0; cursor: pointer; }
+#buildbar .vsep { width: 1px; align-self: stretch; margin: 6px 0; background: var(--line); flex: none; }
+
+/* Every slot and mode button is the same three lines, so the dock reads as one tidy row between two lines: the
+   icon, the name (one line, never broken), the key. Slots are paper tiles; the mode buttons sit bare on the dock. */
+#buildbar .bslot, #buildbar .bmode { box-sizing: border-box; display: grid; grid-template-rows: 40px 18px 24px; row-gap: 4px; justify-items: center; align-items: center; min-width: 64px; padding: 6px 8px; font-weight: 800; font-size: 14px; line-height: 18px; text-align: center; }
+#buildbar .bslot, #buildbar .bmode { grid-template-columns: minmax(0, auto); }
+/* each part on its own line, whatever a button holds (an empty slot has no icon; a pad's slots have no key) */
+#buildbar .si, #buildbar .round { grid-row: 1; }
+#buildbar .bl { grid-row: 2; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#buildbar .bg { grid-row: 3; display: grid; place-items: center; height: 24px; }
+/* a slot: icon and name, its key under them, all on the tile */
+#buildbar .bslot { position: relative; flex: 0 1 auto; border: 0; border-radius: 16px; background: var(--paper-2); transition: box-shadow .14s, background .14s; }
+#buildbar .bslot .si { display: grid; place-items: center; width: 30px; height: 30px; }
+#buildbar .bslot .si .icon, #buildbar .bslot .si svg { width: 30px; height: 30px; display: block; }
+/* a slot is as wide as its name; a name never breaks (only if the dock runs out of room does it end in …) */
+#buildbar .bslot:hover { background: var(--paper-3); }
+/* the slot in hand: a ring drawn inside the tile and a soft glow (neither moves anything) */
+#buildbar .bslot.on { background: var(--key-bg); box-shadow: inset 0 0 0 3px var(--leaf), 0 4px 14px var(--leaf-glow); }
+#buildbar .bslot.empty { background: transparent; outline: 2px dashed var(--line-2); outline-offset: -2px; color: var(--ink-3); font-weight: 700; }
+#buildbar .bslot.locked { color: var(--ink-3); }
+#buildbar .bslot.locked .si { opacity: .75; }
+#buildbar .bslot.t-power .bl { color: var(--sun-ink); }
+#buildbar .bslot.t-water .bl { color: var(--sky-ink); }
+#buildbar .bslot.t-farm .bl, #buildbar .bslot.t-decorations .bl { color: var(--leaf-ink); }
+#buildbar .bslot.on .bl, #buildbar .bslot.t-machines .bl, #buildbar .bslot.t-storage .bl { color: var(--ink); }
+#buildbar .bslot.locked .bl { color: var(--ink-3); }
+#buildbar .bg svg.glyph { width: 32px; height: 24px; }
+
+/* a mode button (a view, Remove, All builds): a round icon, its name, its key */
+#buildbar .bmode { position: relative; flex: 0 1 auto; border: 0; background: none; }
+#buildbar .bmode .round { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--paper-2); transition: background .14s, box-shadow .14s; }
+#buildbar .bmode .round .icon, #buildbar .bmode .round svg { width: 24px; height: 24px; display: block; }
+#buildbar .bmode:hover .round { background: var(--paper-3); }
+#buildbar .bmode.on .round { background: var(--sun); color: var(--ink-dark); box-shadow: 0 0 0 3px var(--key-bg), 0 0 16px var(--gold-ring); }
+#buildbar .bmode.water.on .round, #buildbar .bmode.view.water .round { background: var(--sky-soft); box-shadow: 0 0 0 3px var(--sky), 0 0 16px var(--sky); }
+#buildbar .bmode.remove.on .round { background: var(--clay-soft); box-shadow: 0 0 0 3px var(--clay), 0 0 14px var(--clay); }
+#buildbar .bmode.remove.on .bl { color: var(--clay-ink); }
+/* the pad: the d-pad's left and right at the two ends of the slot row */
+#buildbar .bedge { align-self: center; display: grid; place-items: center; flex: none; }
+#buildbar .bedge svg.glyph { width: 34px; height: 26px; }
+#buildbar :focus-visible { outline: none; }
+#buildbar .bslot:focus-visible, #buildbar .bmode:focus-visible .round { box-shadow: var(--focus-ring); }
+
+/* "Stop building", above the dock's right end, on the scene */
+#buildStop { position: absolute; right: calc(22px + var(--safe-r)); bottom: calc(150px + var(--safe-b)); z-index: 3; display: flex; align-items: center; gap: 8px; font: 800 16px var(--font-ui); color: var(--on); text-shadow: 0 1px 3px var(--scrim), 0 0 2px var(--ink); pointer-events: none; }
+#buildStop[hidden] { display: none; }
+#buildStop .bstop-g svg.glyph { width: 36px; height: 27px; }
+
+/* in build mode the prompt sits over the dock, and the walking dock steps aside */
+body.building #hud #prompt { bottom: calc(150px + var(--safe-b)); }
+body.building #hud #dock { display: none; }
+
+/* ── the build crosshair: a white ring with a dot (only while aiming a build) ── */
+#hud > .crosshair { position: fixed; left: 50%; top: 50%; width: 30px; height: 30px; margin: 0; transform: translate(-50%, -50%); border-radius: 50%; border: 2.5px solid var(--on); box-shadow: 0 0 0 1.5px var(--shade), inset 0 0 0 1.5px var(--shade); pointer-events: none; display: none; }
+#hud.aiming > .crosshair { display: block; }
+#hud > .crosshair::before { content: none; }
+#hud > .crosshair::after { content: ''; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--on); box-shadow: 0 0 0 1px var(--shade); }
+
+/* ── the build menu: a sheet over the paused world ── */
+#buildMenu { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; font-family: var(--font-ui); color: var(--ink); }
+#buildMenu[hidden] { display: none; }
+#buildMenu .bm-veil { position: absolute; inset: 0; background: var(--scrim); backdrop-filter: blur(5px) saturate(.9); -webkit-backdrop-filter: blur(5px) saturate(.9); }
+#buildMenu .bm-sheet { position: relative; width: min(1120px, calc(100vw / var(--ui-zoom, 1) - 32px)); height: min(680px, calc(100vh / var(--ui-zoom, 1) - 32px)); display: flex; flex-direction: column; overflow: hidden; border-radius: var(--r); background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); animation: bmIn .18s ease-out; }
+@keyframes bmIn { from { opacity: 0; transform: translateY(12px); } }
+#buildMenu button { font: inherit; color: inherit; margin: 0; cursor: pointer; }
+#buildMenu :focus-visible { outline: none; box-shadow: var(--focus-ring); }
+#buildMenu .bm-grow { flex: 1; }
+#buildMenu .bm-head { display: flex; align-items: center; gap: 14px; padding: 18px 22px 12px; }
+#buildMenu .bm-badge { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50% 50% 50% 6px; background: var(--leaf-soft); color: var(--leaf-ink); }
+#buildMenu .bm-badge .icon { width: 22px; height: 22px; }
+#buildMenu h2 { margin: 0; font: 900 28px/1.1 var(--font-ui); }
+#buildMenu .bm-g { display: inline-grid; place-items: center; }
+#buildMenu .bm-g svg.glyph { width: 34px; height: 26px; }
+#buildMenu .bm-act { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 14px 4px 6px; border: 0; border-radius: 999px; background: none; font-weight: 800; font-size: 16px; white-space: nowrap; }
+#buildMenu .bm-act:hover { background: var(--paper-2); }
+#buildMenu .bm-act.dim { color: var(--ink-3); }
+#buildMenu .bm-act.dim .bm-g { opacity: .5; }
+#buildMenu .bm-act[hidden] { display: none; }
+#buildMenu .bm-back { color: var(--ink-2); }
+
+/* tabs, with the bumpers at the ends */
+#buildMenu .bm-tabrow { display: flex; align-items: center; gap: 10px; padding: 0 22px 14px; border-bottom: 1px solid var(--line); }
+#buildMenu .bm-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+#buildMenu .bm-tabs [role=tab] { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px; border: 0; border-radius: 999px; background: none; font-weight: 800; font-size: 16px; color: var(--ink-2); }
+#buildMenu .bm-tabs [role=tab]:hover { background: var(--paper-2); }
+#buildMenu .bm-tabs [role=tab][aria-selected=true] { background: var(--ink); color: var(--paper); }
+#buildMenu .bm-tic { display: grid; place-items: center; }
+#buildMenu .bm-tic .icon, #buildMenu .bm-tic svg { width: 18px; height: 18px; display: block; }
+
+/* the grid and the detail pane */
+#buildMenu .bm-body { flex: 1; min-height: 0; display: flex; gap: 18px; padding: 18px 22px; }
+#buildMenu .bm-cells { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-content: start; overflow-y: auto; padding: 8px; margin: -8px; }
+#buildMenu .bm-card { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 112px; padding: 10px 8px; border: 0; border-radius: var(--r-tile); background: var(--paper-2); font-weight: 800; font-size: 16px; line-height: 1.15; text-align: center; }
+#buildMenu .bm-card:hover { background: var(--paper-3); }
+#buildMenu .bm-card.sel { background: var(--key-bg); box-shadow: 0 0 0 3px var(--leaf); }
+#buildMenu .bm-card.sel:focus-visible { box-shadow: var(--focus-ring); }
+#buildMenu .bm-ic { display: grid; place-items: center; }
+#buildMenu .bm-ic .icon, #buildMenu .bm-ic svg { width: 36px; height: 36px; display: block; }
+#buildMenu .bm-card.locked { color: var(--ink-3); }
+#buildMenu .bm-slot { font-size: 16px; font-weight: 700; color: var(--ink-2); }
+#buildMenu .bm-why { font-size: 16px; font-weight: 800; color: var(--clay-ink); }
+#buildMenu .bm-card.t-power .bm-nm { color: var(--sun-ink); }
+#buildMenu .bm-card.t-water .bm-nm { color: var(--sky-ink); }
+#buildMenu .bm-card.t-farm .bm-nm, #buildMenu .bm-card.t-decorations .bm-nm { color: var(--leaf-ink); }
+#buildMenu .bm-card.locked .bm-nm { color: var(--ink-3); }
+
+#buildMenu .bm-detail { width: 380px; flex: none; padding: 18px; border-radius: var(--r); background: var(--paper-2); display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+#buildMenu .bm-dhead { display: flex; align-items: center; gap: 14px; }
+#buildMenu .bm-dic { display: grid; place-items: center; width: 64px; height: 64px; flex: none; border-radius: 50% 50% 50% 8px; background: var(--leaf-soft); color: var(--leaf-ink); }
+#buildMenu .bm-dic.t-power { background: var(--sun-soft); color: var(--sun-ink); }
+#buildMenu .bm-dic.t-water { background: var(--sky-soft); color: var(--sky-ink); }
+#buildMenu .bm-dic.t-machines, #buildMenu .bm-dic.t-storage { background: var(--paper-3); color: var(--ink); }
+#buildMenu .bm-dic .icon, #buildMenu .bm-dic svg { width: 36px; height: 36px; display: block; }
+#buildMenu .bm-dname { margin: 0; font: 900 22px/1.15 var(--font-ui); }
+#buildMenu .bm-kind { font-size: 16px; font-weight: 700; color: var(--ink-2); }
+#buildMenu .bm-line { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.4; }
+#buildMenu .bm-label { font-size: 16px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+#buildMenu .bm-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+#buildMenu .bm-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 2px 12px 2px 8px; border-radius: 999px; font-weight: 800; font-size: 16px; }
+#buildMenu .bm-chip svg { width: 18px; height: 18px; flex: none; }
+#buildMenu .bm-chip.ok { background: var(--leaf-soft); color: var(--leaf-ink); }
+#buildMenu .bm-chip.need { background: var(--clay-soft); color: var(--clay-ink); }
+#buildMenu .bm-warn { margin: 0; font-size: 16px; font-weight: 700; color: var(--clay-ink); }
+#buildMenu .bm-onbar { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: var(--r-tile); background: var(--paper); font-size: 16px; font-weight: 700; }
+#buildMenu .bm-onbar.off { color: var(--ink-2); }
+#buildMenu .bm-onbar svg.glyph { width: 34px; height: 26px; }
+#buildMenu .bm-n { display: grid; place-items: center; min-width: 30px; height: 30px; border-radius: var(--r-key); background: var(--key-bg); border: 1.5px solid var(--line-2); border-bottom-width: 3px; font-weight: 900; font-size: 16px; }
+/* the slot picker (Pin to a slot) */
+#buildMenu .bm-pick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+#buildMenu .bm-pslot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 62px; border: 0; border-radius: 12px; background: var(--paper); }
+#buildMenu .bm-pslot.empty { border: 2px dashed var(--line-2); }
+#buildMenu .bm-pslot.here { box-shadow: 0 0 0 3px var(--leaf); }
+#buildMenu .bm-pslot.here:focus-visible { box-shadow: var(--focus-ring); }
+#buildMenu .bm-pn { font-weight: 900; font-size: 16px; }
+#buildMenu .bm-pi .icon, #buildMenu .bm-pi svg { width: 24px; height: 24px; display: block; }
+
+#buildMenu .bm-foot { display: flex; align-items: center; gap: 14px; padding: 10px 22px; border-top: 1px solid var(--line); background: var(--paper-2); }
+#buildMenu .bm-live { margin: 0; min-width: 0; font-size: 16px; font-weight: 700; color: var(--ink-2); }
+
+/* ── high contrast, reduced motion, the Deck, bigger interface sizes ── */
+body.contrast #buildbar, body.contrast #buildMenu .bm-sheet { background: var(--paper); border: 2px solid var(--ink); }
+body.contrast #buildbar .bslot { outline: 2px solid var(--ink-2); }
+body.contrast #buildbar .bslot.on { outline: 4px solid var(--leaf-ink); }
+body.contrast #buildbar .bslot.locked, body.contrast #buildbar .bslot.locked .bl, body.contrast #buildbar .bslot.empty { color: var(--ink-2); }
+body.contrast #buildMenu .bm-card { outline: 2px solid var(--ink-2); }
+body.contrast #buildMenu .bm-card.sel { outline: 4px solid var(--leaf-ink); }
+body.contrast #buildMenu .bm-card.locked, body.contrast #buildMenu .bm-card.locked .bm-nm, body.contrast #buildMenu .bm-act.dim { color: var(--ink-2); }
+body.contrast #buildStop { background: var(--paper); color: var(--ink); text-shadow: none; padding: 6px 14px 6px 6px; border-radius: 999px; border: 2px solid var(--ink); }
+body.reduced #buildbar .bslot, body.reduced #buildbar .bmode .round { transition: none; }
+body.reduced #buildMenu .bm-sheet { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  #buildbar .bslot, #buildbar .bmode .round { transition: none; }
+  #buildMenu .bm-sheet { animation: none; }
+}
+/* a narrow view (the Deck at 125 or 150%): slots and modes give up width, gaps close up */
+@media (max-width: 1100px) {
+  #buildbar { gap: 8px; padding: 10px 10px 20px; }
+  #buildMenu .bm-detail { width: 320px; }
+}
+@media (max-height: 560px) {
+  #buildMenu .bm-card { min-height: 92px; }
+}
+
+/* One live blur at a time: while a sheet is open (the game pauses under it) the dock under its veil drops its own
+   blur (stacked live blurs cost every frame on a Deck or a weak GPU, and under software GL stalled for minutes). */
+body.paused #buildbar { backdrop-filter: none; -webkit-backdrop-filter: none; }

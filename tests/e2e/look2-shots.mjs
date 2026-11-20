@@ -62,8 +62,8 @@ const SCENES = {
         }
       });
       s.areas.clear('park', true);
-      const st = s.state, B = st.resources.energy.constructor;
-      st.caps.energy = new B(1e9); st.caps.water = new B(1e9); st.resources.energy = new B(1e9); st.resources.water = new B(1e9); st.resources.biomass = new B(1e9);
+      const st = s.state;
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
       // the pollinator stands just below the Blooming block, on restored ground
       const px = x0 + 8, pz = z0 + 3;
       for (let dx = -1; dx <= 2; dx++) for (let dz = 0; dz <= 2; dz++) { const t = at(px + dx, pz + dz); if (t && !t.blocked && !t.occupantId) { s.restoration.complete(t, 'pulse'); t.bloom = 2; s.grid.touch(t); } }
@@ -101,7 +101,7 @@ for (const key of pick(process.env.LOOK_SCENES, SCENES)) {
   await page.addInitScript(() => { try { localStorage.clear(); } catch {} });
   await page.clock.install({ time: new Date('2026-06-21T16:30:00') });
   await page.clock.pauseAt(new Date('2026-06-21T16:31:00')); // headroom: the clock runs from install until paused
-  await page.goto(`http://localhost:${PORT}/${query}`, { timeout: 180000 });
+  await page.goto(`http://localhost:${PORT}/${query ? query + '&' : '?'}slot=1`, { timeout: 180000 });
   let booted = false;
   for (let i = 0; i < 300 && !booted; i++) {
     booted = await page.evaluate(() => !!window.solarbloom);
@@ -109,8 +109,7 @@ for (const key of pick(process.env.LOOK_SCENES, SCENES)) {
   }
   if (!booted) throw new Error(`${key}: game did not boot`);
   await page.waitForLoadState('networkidle');
-  await page.addStyleTag({ content: '#hud, #toasts, .toast, #intro, #boot, #tip, .tip, #labels, .area-label { display: none !important; }' });
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
+  await page.addStyleTag({ content: '#hud, #toasts, .toast, #boot, #tip, .tip, #labels, .area-label { display: none !important; }' });
   const render = (on) => page.evaluate((on) => (window.solarbloom.app.autoRender = on), on);
   await render(false);
   await page.clock.runFor(500);

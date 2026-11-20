@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Planter card, gamepad</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="sb.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="screen" style="width: 1280px; height: 800px">
+  <div style="position: absolute; inset: 0; background: linear-gradient(90deg, rgba(40,32,12,0) 30%, rgba(40,32,12,.3) 62%)"></div>
+  <div style="position: absolute; left: 330px; top: 470px; width: 200px; height: 90px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.25), 0 0 26px rgba(255,255,255,.7)"></div>
+
+  <section class="card side" role="dialog" aria-label="Planter">
+    <header class="sheet-head" style="align-items: flex-start">
+      <div class="badge" style="width: 52px; height: 52px"><span class="ic l i-sprout"></span></div>
+      <div class="grow"><h2 class="h1" style="margin: 0">Planter</h2><div class="body" style="color: #a23d1c">Thirsty: the soil is drying out</div></div>
+    </header>
+    <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px; padding: 4px 22px 18px">
+      <div class="tile" style="padding: 14px; display: flex; flex-direction: column; gap: 10px">
+        <div class="row"><span class="mat m-food"></span><span class="h3 grow">Radish</span><span class="small soft">Ready tomorrow</span></div>
+        <div class="bar"><i style="width: 45%"></i></div>
+        <div class="small soft">Grows faster with water and compost.</div>
+      </div>
+      <div class="label">Tend</div>
+      <div class="row" style="gap: 10px">
+        <button class="btn focus grow"><span class="mat m-compost" style="width: 20px; height: 20px"></span>Add compost</button>
+        <button class="btn off grow"><span class="ic s i-lock"></span>Fertiliser</button>
+      </div>
+      <div class="small soft" style="margin-top: -6px">Fertiliser: you have none. Compost bins turn Greens into it.</div>
+      <div class="label">Next to plant</div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+        <button class="cell" style="height: 92px; border: 0; font: inherit"><span class="mat m-food"></span>Radish<span class="n">4 seeds</span></button>
+        <button class="cell" style="height: 92px; border: 0; font: inherit"><span class="mat m-greens"></span>Lettuce<span class="n">2 seeds</span></button>
+        <button class="cell" style="height: 92px; border: 0; font: inherit; color: #7b8574"><span class="mat m-unknown"></span>Not found</button>
+      </div>
+    </div>
+    <footer class="sheet-foot acts" style="gap: 18px">
+      <span class="act"><span class="g pad pa">A</span>Add compost</span>
+      <span class="act"><span class="g pad pb">B</span>Back</span>
+    </footer>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

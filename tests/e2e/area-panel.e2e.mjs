@@ -9,11 +9,10 @@ let ok = true;
 const fail = (m) => { ok = false; console.error('  ✗', m); };
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await page.goto('http://localhost:4190/?cursor=1');
+  await page.goto('http://localhost:4190/?slot=1&cursor=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
-  if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
   const id = await page.evaluate(() => {
     const g = window.solarbloom;
     g.sim.state.progression.coreActivated = true;

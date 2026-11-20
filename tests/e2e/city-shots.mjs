@@ -18,7 +18,7 @@ const server = await preview({ preview: { port: 4195, strictPort: true }, logLev
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await page.goto('http://localhost:4195/');
+  await page.goto('http://localhost:4195/?slot=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
@@ -43,8 +43,6 @@ try {
       byType[type] ??= s.areas.info(id).landmark;
     }
     byType.park = s.areas.info('park').landmark;
-    document.querySelector('#hint')?.remove();
-    document.querySelector('#intro')?.setAttribute('hidden', '');
     g.chunks.markAll?.();
     return byType;
   });

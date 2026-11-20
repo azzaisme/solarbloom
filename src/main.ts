@@ -1,20 +1,18 @@
 import './ui/styles.css';
-import { Game } from './app/Game';
-import { SaveService } from './app/SaveService';
+import './ui/hud.css';
+import './ui/build.css';
+import './ui/panels.css';
+import './ui/title.css';
+import { boot } from './app/Boot';
 
 const canvas = document.getElementById('app') as HTMLCanvasElement;
-// Saves are compressed, so loading is asynchronous; the game boots once the save is read.
-new SaveService()
-  .loadResultAsync()
-  .then((lr) => {
-    const game = new Game(canvas, lr);
-    (window as unknown as { solarbloom: Game }).solarbloom = game;
-    // Debug tools (Phase 4 E00.5) exist only on the dev server; production builds drop this branch.
-    if (import.meta.env.DEV) void import('./app/DevTools').then((m) => m.installDevTools(game));
-    requestAnimationFrame(() => document.getElementById('boot')?.classList.add('gone'));
-  })
-  .catch((err) => {
-    console.error(err);
-    const boot = document.getElementById('boot');
-    if (boot) boot.textContent = 'Solarbloom needs WebGL to grow. Please try another browser.';
-  });
+// E22.12: splash → title → loading → the game (src/app/Boot.ts). Saves are compressed, so loading is asynchronous.
+boot(canvas).catch((err) => {
+  console.error(err);
+  document.getElementById('loading')?.remove();
+  const el = document.getElementById('boot');
+  if (el) {
+    el.classList.remove('gone');
+    el.textContent = 'Solarbloom needs WebGL to grow. Please try another browser.';
+  }
+});

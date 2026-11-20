@@ -1,10 +1,8 @@
-import { big, toNum } from '../../src/core/Big';
 /**
  * City 15.1: headless soak. Generates and simulates a 1,000-area city over 6 hours of game time and fails on
  * any violation: memory, save size, tick time, determinism, unreachable frontiers or stalls.
  * Run with `npm run test:soak`. Set SOAK_AREAS / SOAK_HOURS to shorten it locally.
  */
-import { meetSpecialty } from '../city-helpers';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../../src/app/SaveService';
 
@@ -45,14 +43,12 @@ function insert(sim: Sim, type: MachineType, x: number, z: number) {
   sim.state.machines.push(m);
   sim.grid.indexMachine(m);
   t.occupantId = m.id;
-  sim.production.markNear(GROUND, x, z);
 }
 
 /** A deterministic "very fast player": clears the next goal (or a random frontier), builds a little, finds cats. */
 async function play(seed: number, areas: number, hours: number, check: boolean) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = big(1e9); st.caps.water = big(1e9);
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   const ticks: number[] = [];
@@ -81,7 +77,6 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
           t.pollution = 0;
           sim.grid.touch(t);
         }
-        meetSpecialty(sim, id);
         if (sim.areas.clear(id)) {
           cleared++;
           // A little building in the new area: a garden or two, a solar panel, sometimes a drone hub.
@@ -101,7 +96,6 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
       const goal = sim.areas.nextGoal();
       const t = goal ? sim.areas.entryTiles(goal)[0] : undefined;
       if (t) {
-        st.resources.energy = big(1e5); st.resources.water = big(1e5);
         sim.restoration.pulse(t.id);
       }
     }
@@ -110,22 +104,16 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
     if (env.SOAK_PROFILE && check) {
       const parts: [string, () => void][] = [
         // Every system Sim.tick runs, in its order (keep in step with Sim.tick).
-        ['frenzy', () => sim.frenzy.tick()],
         ['prod', () => sim.production.tick(step)],
         ['rest', () => sim.restoration.tick(step)],
         ['transitions', () => sim.transitions.tick()],
         ['chains', () => sim.chains.tick()],
         ['drones', () => sim.drones.tick(step)],
-        ['roles', () => sim.roles.tick(step)],
         ['cultivators', () => sim.cultivators.tick(step)],
-        ['supers', () => sim.supers.tick(step)],
         ['cat', () => sim.cat.tick()],
-        ['events', () => sim.events.tick()],
         ['prog', () => sim.progression.tick()],
-        ['milestones', () => sim.milestones.tick()],
         ['ecosystem', () => sim.ecosystem.tick()],
         ['metrics', () => sim.metrics.tick(step)],
-        ['ledger', () => sim.ledger.tick()],
       ];
       st.time += step;
       st.buffs = st.buffs.filter((b) => b.until > st.time);
@@ -177,10 +165,6 @@ describe('soak: the endless city (City 15.1)', () => {
     expect(mean).toBeLessThan(LIMITS.tickMeanMs);
     expect(p99).toBeLessThan(LIMITS.tickP99Ms);
     expect(worst).toBeLessThan(LIMITS.tickWorstMs);
-    // Incremental production bookkeeping agrees with a full re-sum.
-    const live = toNum(sim.production.rates().biomass);
-    sim.production.markDirty();
-    expect(toNum(sim.production.rates().biomass)).toBeCloseTo(live, 3);
     expect(saveMB).toBeLessThan(LIMITS.saveMB);
     // E19.1.5 / E19.2.3 (#251, #255): the same city with every plot chosen and the decoration cap placed still saves
     // inside the limit (cozy state is written by the game, so it is added here directly).

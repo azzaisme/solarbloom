@@ -62,7 +62,6 @@ const LIMITS = {
   },
   chainMinCombo: CHAIN,
   saveStepMs: 16, // each main-thread step of an autosave (serialize, base64, storage write) fits in a frame
-  catchUpSimMs: 16, // City 06.5: catching up 5 minutes away never spends more than this on simulation in one frame
   // Look 3.17: triangle budget for the heaviest loaded chunk (ground + props + foliage), High tier; Medium and
   // Low thin grass, flowers and clutter further (see docs/art/surfaces.md). Raised from 200k to 450k (#144, Nov
   // 2026) for the desktop target: leafy trees and dense beds (d2e3efc) put the heaviest chunk at 319k (real GPU,
@@ -75,7 +74,7 @@ const PORT = Number(process.env.PORT ?? 4183);
 const server = await preview({ preview: { port: PORT, strictPort: true }, build: process.env.DIST ? { outDir: process.env.DIST } : undefined, logLevel: 'silent' });
 const MAIN_TIER = process.env.PERF_TIER ?? 'high';
 const TIERS = (process.env.PERF_TIERS ?? 'low,medium,high').split(',').filter((t) => ['low', 'medium', 'high'].includes(t));
-const url = `http://localhost:${PORT}/?gfx=${MAIN_TIER}`;
+const url = `http://localhost:${PORT}/?slot=1&gfx=${MAIN_TIER}`;
 // City 15.4: PERF_GPU runs a visible window on the real GPU (a headless or hidden window is throttled and may fall
 // back to software), so frame times are a device measurement rather than a regression check.
 const GPU = !!process.env.PERF_GPU;
@@ -117,7 +116,6 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'commit' });
   await page.waitForFunction(() => !!window.solarbloom, null, { timeout: READY_MS });
-  if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 
   phase('page ready');
   // 1. Build a big city: the soak's fast player clears AREAS areas and builds a few machines in each.
@@ -125,7 +123,7 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.caps.energy = new (st.resources.energy.constructor)(1e9); st.caps.water = new (st.resources.energy.constructor)(1e9);
+    for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
     st.progression.coreActivated = true;
     s.areas.clear('park', true);
     const insert = (type, t) => {
@@ -316,7 +314,7 @@ try {
   // Look 1.11: the same city at each graphics tier (pan and zoom), then back to the main tier for the rest.
   results.tiers = {};
   for (const tier of TIERS) {
-    await page.goto(`http://localhost:${PORT}/?gfx=${tier}`, { waitUntil: 'commit' });
+    await page.goto(`http://localhost:${PORT}/?slot=1&gfx=${tier}`, { waitUntil: 'commit' });
     await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: READY_MS });
     await page.evaluate(() => new Promise((r) => setTimeout(r, 1500)));
     const got = await page.evaluate(() => window.solarbloom.gfxTier ?? 'n/a');
@@ -353,30 +351,29 @@ try {
     await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: READY_MS });
     await page.evaluate(() => new Promise((r) => setTimeout(r, 1000)));
   }
-  // 4b. Back after 5 minutes in another tab: the city catches up within the per-frame simulation budget.
-  results.catchUp = await page.evaluate(
+  // 4b. E23.1: a hidden tab waits: five seconds hidden advance the game not at all.
+  results.hidden = await page.evaluate(
     () =>
       new Promise((resolve) => {
         const g = window.solarbloom;
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
         const t0 = g.sim.time;
-        g.simMsWorst = 0;
-        g.awayFor(300);
-        let frames = 0;
-        const tick = () => {
-          frames++;
-          if (g.catchUpDebt > 0 && frames < 3000) return requestAnimationFrame(tick);
-          resolve({ frames, simMsWorst: g.simMsWorst, simulated: g.sim.time - t0 });
-        };
-        requestAnimationFrame(tick);
+        setTimeout(() => {
+          const t1 = g.sim.time;
+          Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+          document.dispatchEvent(new Event('visibilitychange'));
+          resolve({ advanced: t1 - t0 });
+        }, 5000);
       }),
   );
-  phase(`caught up ${results.catchUp.simulated.toFixed(0)} s in ${results.catchUp.frames} frames`);
+  phase(`hidden for 5 s: the game advanced ${results.hidden.advanced.toFixed(2)} s`);
   // 5. A ×500 chain: a long green corridor of street gardens through the cleared city, set off by one pulse.
   const setup = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.resources.energy = new (st.resources.energy.constructor)(1e6); st.resources.water = new (st.resources.energy.constructor)(1e6); st.resources.biomass = new (st.resources.energy.constructor)(1e6);
+    for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
     const cleared = new Set(s.areas.revealed().filter((id) => s.areas.fog(id) === 'cleared'));
     const ok = (x, z) => {
       const t = s.grid.get('g', x, z);
@@ -448,9 +445,7 @@ try {
       const g = window.solarbloom;
       const s = g.sim;
       if (!s.transitions) return { skipped: true };
-      const B = s.state.resources.energy.constructor;
-      s.state.resources.energy = new B(1e6);
-      s.state.caps.energy = new B(1e6);
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) s.state.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
       for (let x = row.from; x <= row.from + row.len; x++)
         for (let dz = -27; dz <= 27; dz++) {
           const t = s.grid.get('g', x, row.z + dz);
@@ -538,8 +533,7 @@ try {
     }
   }
   for (const k of ['pan', 'zoom', 'chain']) if ((r[k].detail?.worstChunk ?? 0) > LIMITS.chunkTris) failures.push(`${k} heaviest chunk ${r[k].detail.worstChunk} triangles > ${LIMITS.chunkTris}`);
-  if (r.catchUp.simMsWorst > LIMITS.catchUpSimMs) failures.push(`catch-up spent ${r.catchUp.simMsWorst.toFixed(1)} ms of simulation in one frame > ${LIMITS.catchUpSimMs}`);
-  if (r.catchUp.simulated < 299) failures.push(`catch-up simulated only ${r.catchUp.simulated.toFixed(0)} s of 300`);
+  if (r.hidden && r.hidden.advanced > 0) failures.push(`a hidden tab advanced the game by ${r.hidden.advanced.toFixed(2)} s`);
   if (r.chainCombo < LIMITS.chainMinCombo) failures.push(`chain reached ×${r.chainCombo} < ×${LIMITS.chainMinCombo}`);
 } finally {
   await browser.close();
@@ -554,7 +548,7 @@ for (const k of ['pan', 'zoom', 'chain', 'transitions']) {
   if (r) console.log(`${k.padEnd(5)} ${r.frames} frames · update median ${f(r.updateMedian)} p95 ${f(r.updateP95)} worst ${f(r.updateWorst)} ms · hitches ${r.hitches} · draw calls ${r.drawCalls} (worst ${r.drawCallsWorst}) · render ${f(r.renderMedian)} ms · frame ${f(r.median)} ms`);
   if (r && GPU) console.log(`      fps: median ${(1000 / r.median).toFixed(0)} · p95 frame ${f(r.p95)} ms (${(1000 / r.p95).toFixed(0)} fps) · worst frame ${f(r.worst)} ms`);
 }
-if (results.catchUp) console.log(`catch-up: 300 s away → ${results.catchUp.simulated.toFixed(0)} s simulated over ${results.catchUp.frames} frames · worst frame ${f(results.catchUp.simMsWorst)} ms of simulation`);
+if (results.hidden) console.log(`hidden tab: advanced ${results.hidden.advanced.toFixed(2)} s in 5 s hidden`);
 if (results.autosave) console.log(`autosave (main thread, worst of 5): serialize ${f(results.autosave.serialize)} ms · base64 ${f(results.autosave.encode)} ms · write ${f(results.autosave.write)} ms`);
 console.log(`chain: ×${results.chainCombo} along a ${results.chainSetup?.row.len}-tile corridor of ${results.chainSetup?.gardens} gardens`);
 if (results.trSetup && !results.trSetup.skipped) console.log(`transitions (Look 6): a second ×500 chain + an area wave + ${results.trSetup.cultivators} Cultivators + ${results.trSetup.tiles} tiles set mid-transition (${results.trSetup.live} live in the sim at the start; ${results.trCounts?.sim} live, ${results.trCounts?.drawn} drawn as transitions after 150 frames)`);

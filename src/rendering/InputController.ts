@@ -8,8 +8,15 @@ export interface InputHandlers {
   zoom(factor: number, x?: number, y?: number): void;
   /** A two-finger pinch finished: its overall zoom factor (spread end / start) and how long it took. */
   pinchEnd?(factor: number, ms: number): void;
-  /** A right-button drag moved sideways by dx pixels. Return true if it was used (else it pans). */
-  orbit?(dx: number): boolean;
+  /** A drag with `button` held moved by dx, dy pixels (it turns and tilts the view). Return true if it was used (else it pans). */
+  orbit?(dx: number, dy: number, button: number): boolean;
+  /**
+   * Third person: the mouse is captured (pointer lock) and moved by dx, dy pixels. While captured there is no
+   * cursor: moves only turn the view and a press is a click at once (no drags, no hover).
+   */
+  look?(dx: number, dy: number): void;
+  /** A press on the canvas while the mouse is free. Return true to swallow it (it captured the mouse). */
+  capture?(button: number): boolean;
 }
 
 /**
@@ -19,8 +26,8 @@ export interface InputHandlers {
 export class InputController {
   private pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
   private dragging = false;
-  /** the current drag began with the right mouse button */
-  private rightDrag = false;
+  /** the mouse button the current press began with */
+  private downButton = 0;
   private pinchDist = 0;
   /** spread and time when the current pinch began */
   private pinchStart?: { d: number; at: number };
@@ -39,6 +46,10 @@ export class InputController {
       if (!this.pointers.size) this.h.leave();
     });
     el.addEventListener('wheel', this.wheel, { passive: false });
+    // Captured, a mouse button acts the moment it goes down (every button, also pressed together with another).
+    el.addEventListener('mousedown', (e) => {
+      if (this.locked) this.h.click(this.el.clientWidth / 2, this.el.clientHeight / 2, e.button);
+    });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -47,7 +58,20 @@ export class InputController {
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
+  /** Is the mouse captured by the canvas (pointer lock)? */
+  get locked(): boolean {
+    return typeof document !== 'undefined' && document.pointerLockElement === this.el;
+  }
+
+  /** a press that captured the mouse: its release does nothing */
+  private swallowUp = false;
+
   private down = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && this.locked) return; // captured: the press acted already (mousedown)
+    if (e.pointerType === 'mouse' && this.h.capture?.(e.button)) {
+      this.swallowUp = true;
+      return;
+    }
     const p = this.local(e);
     try {
       this.el.setPointerCapture?.(e.pointerId);
@@ -57,7 +81,7 @@ export class InputController {
     this.pointers.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y });
     if (this.pointers.size === 1) {
       this.dragging = e.button === 1 || e.button === 2;
-      this.rightDrag = e.button === 2;
+      this.downButton = e.button;
       this.suppressClick = this.dragging;
     } else {
       this.suppressClick = true;
@@ -73,6 +97,10 @@ export class InputController {
   }
 
   private move = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && this.locked) {
+      if (e.movementX || e.movementY) this.h.look?.(e.movementX, e.movementY);
+      return;
+    }
     const p = this.local(e);
     const ptr = this.pointers.get(e.pointerId);
     if (!ptr) {
@@ -98,11 +126,16 @@ export class InputController {
       this.suppressClick = true;
     }
     if (this.dragging) {
-      if (!(this.rightDrag && this.h.orbit?.(dx))) this.h.pan(dx, dy, p.x, p.y);
+      if (!(e.pointerType === 'mouse' && this.h.orbit?.(dx, dy, this.downButton))) this.h.pan(dx, dy, p.x, p.y);
     } else if (e.pointerType === 'mouse') this.h.hover(p.x, p.y);
   };
 
   private up = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && (this.locked || this.swallowUp)) {
+      this.swallowUp = false;
+      this.pointers.delete(e.pointerId);
+      return;
+    }
     const p = this.local(e);
     const had = this.pointers.has(e.pointerId);
     this.pointers.delete(e.pointerId);
