@@ -11,6 +11,8 @@ import { MATERIALS, TIERS, tierGives } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
 import { itemCells } from '../src/ui/BackpackModel';
 import { Walker } from '../src/gameplay/Walker';
+import { TurnBack } from '../src/gameplay/TurnBack';
+import { tradeHtml } from '../src/ui/OldCityPanel';
 
 /**
  * Island release: the mainland is a future update. It stays in the code, unreachable behind `MAINLAND.open`:
@@ -95,6 +97,9 @@ describe('island release: the island needs nothing from the mainland', () => {
     for (const t of TIERS) expect(tierGives(t)).not.toContain('Grid Battery');
     expect(itemCells(sim).map((c) => c.id)).not.toContain('steel');
     expect(sim.landmarks.tradeTargets()).not.toContain('steel');
+    // Tally's trade panel: neither the give row nor the get row offers Steel
+    expect(tradeHtml(sim, undefined)).not.toMatch(/Steel|data-arg="steel"/);
+    expect(tradeHtml(sim, 'scrap')).not.toMatch(/Steel|data-arg="steel"/);
     // and they come back with the mainland
     MAINLAND.open = true;
     expect(tierGives(TIERS[4])).toContain('Grid Battery');
@@ -110,5 +115,52 @@ describe('island release: the island needs nothing from the mainland', () => {
       if ('repair' in n && n.repair) for (const m of Object.keys(n.repair)) expect(mainlandOnly(m), `${r.id} gate: ${m}`).toBe(false);
     }
     for (const h of HOUSE) for (const m of Object.keys(h.delivery)) expect(mainlandOnly(m), `house ${h.level}: ${m}`).toBe(false);
+  });
+});
+
+describe('island release: bloombot turns back at the causeway', () => {
+  // walking east along the causeway's row, from the island side
+  const z = C.z0 + 0.5;
+  const east = [1, 0] as const;
+
+  it('heading onto the causeway starts a short turn back towards the island, and the card shows', () => {
+    const tb = new TurnBack();
+    expect(tb.bump(C.x0 - 3.5, z, ...east)).toBe(false); // still a way off
+    expect(tb.bump(C.x0 - 0.5, z, ...east)).toBe(true); // the edge: turn back, show the card
+    expect(tb.active).toBe(true);
+    const step = tb.tick(1 / 60)!;
+    expect(step.x).toBeLessThan(0); // back west, towards the island
+    expect(step.z).toBeCloseTo(0);
+  });
+
+  it('wins over steering for its moment, then hands back', () => {
+    const tb = new TurnBack();
+    tb.bump(C.x0 - 0.5, z, ...east);
+    let t = 0;
+    while (tb.tick(1 / 60)) t += 1 / 60;
+    expect(t).toBeCloseTo(MAINLAND_CLOSED.turnSeconds, 1);
+    expect(tb.active).toBe(false);
+  });
+
+  it('shows the card once per approach: holding the stick into it only turns bloombot back again', () => {
+    const tb = new TurnBack();
+    expect(tb.bump(C.x0 - 0.5, z, ...east)).toBe(true);
+    while (tb.tick(1 / 60));
+    // still pushing into the causeway: it turns back again, without another card
+    expect(tb.bump(C.x0 - 0.5, z, ...east)).toBe(false);
+    expect(tb.active).toBe(true);
+    while (tb.tick(1 / 60));
+    // walks away from the causeway, then comes back: the card shows again
+    expect(tb.bump(C.x0 - MAINLAND_CLOSED.rearmCells - 2, z, -1, 0)).toBe(false);
+    expect(tb.bump(C.x0 - 0.5, z, ...east)).toBe(true);
+  });
+
+  it('walking past along the island never trips it, and an open mainland never turns bloombot back', () => {
+    const tb = new TurnBack();
+    expect(tb.bump(C.x0 - 1.5, C.z0 - 2.5, ...east)).toBe(false); // the avenue north of the causeway
+    expect(tb.bump(0.5, 0.5, ...east)).toBe(false);
+    MAINLAND.open = true;
+    expect(tb.bump(C.x0 - 0.5, z, ...east)).toBe(false);
+    expect(tb.active).toBe(false);
   });
 });

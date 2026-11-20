@@ -70,10 +70,14 @@ export const MAINLAND_CLOSED = {
   detail: 'More coming soon.',
   /** how long the card stays (s) */
   seconds: 4,
-  /** at most one card (and one turn back) in this many seconds */
-  cooldown: 6,
-  /** how far back towards the island bloombot walks (cells) */
-  backCells: 2,
+  /** how long bloombot turns and walks back towards the island (s), steering ignored */
+  turnSeconds: 0.7,
+  /** its pace while turning back, as a share of the walk */
+  turnSpeed: 0.7,
+  /** how far ahead (cells) a step looks for the closed causeway */
+  probe: 0.75,
+  /** the card shows again only after bloombot has been this many cells from the causeway */
+  rearmCells: 4,
 };
 
 /**

@@ -1,5 +1,5 @@
 import type { MaterialId } from '../core/types';
-import { MATERIALS, MATERIAL_IDS, tierGives } from '../data/salvage';
+import { MATERIALS, MATERIAL_IDS, tierGives, visibleMaterials } from '../data/salvage';
 import { giftLabel } from '../gameplay/KeeperSystem';
 import type { Sim } from '../gameplay/Sim';
 import { iconize } from './Icons';
@@ -183,7 +183,7 @@ export class SpeechBubble {
 /** HTML of Tally's trade panel: 3 of one material for 1 of another. */
 export function tradeHtml(sim: Sim, give: MaterialId | undefined): string {
   const can = sim.landmarks.tradable();
-  const gives = MATERIAL_IDS.map((m) => `<button data-act="give" data-arg="${m}" ${can.includes(m) ? '' : 'disabled'} class="${give === m ? 'on' : ''}">${MATERIALS[m].icon} ${MATERIALS[m].name}${give === m ? ' ✓' : ''}</button>`).join('');
+  const gives = visibleMaterials().map((m) => `<button data-act="give" data-arg="${m}" ${can.includes(m) ? '' : 'disabled'} class="${give === m ? 'on' : ''}">${MATERIALS[m].icon} ${MATERIALS[m].name}${give === m ? ' ✓' : ''}</button>`).join('');
   const gets = sim.landmarks.tradeTargets().filter((m) => m !== give).map((m) => `<button data-act="get" data-arg="${m}" ${give ? '' : 'disabled'}>${MATERIALS[m].icon} ${MATERIALS[m].name}</button>`).join('');
   // E23.9.2: when bloombot carries something Tally loves, it can be given as a gift (a choice, never a surprise)
   const gift = sim.keepers.giftFor('tally');

@@ -6,12 +6,10 @@ import { KEEPER_STORIES } from '../data/keepers';
 import { BLUEPRINTS, ITEMS, KEEPERS, KEEPSAKES, PAGES, REGIONS } from '../data/oldcity';
 import { DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { MACHINES } from '../data/machines';
-import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
+import { MATERIALS, visibleMaterials } from '../data/salvage';
 import { itemDef } from '../data/items';
-import { MAINLAND } from '../data/mainland';
 
-/** The backpack's materials: the mainland's own (Steel) only once the mainland is open (island release). */
-export const visibleMaterials = (): MaterialId[] => MATERIAL_IDS.filter((m) => MAINLAND.open || !MATERIALS[m].mainlandOnly);
+export { visibleMaterials };
 import type { Sim } from '../gameplay/Sim';
 
 /**

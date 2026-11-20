@@ -173,3 +173,6 @@ export function tierGives(t: TierDef): string[] {
   if (MAINLAND.open) return t.gives;
   return t.gives.filter((g) => !Object.values(MACHINES).some((m) => m.mainlandOnly && m.name === g));
 }
+
+/** Island release: the materials the player sees (backpack, trade): the mainland's own (Steel) only once the mainland is open. */
+export const visibleMaterials = (): MaterialId[] => MATERIAL_IDS.filter((m) => MAINLAND.open || !MATERIALS[m].mainlandOnly);

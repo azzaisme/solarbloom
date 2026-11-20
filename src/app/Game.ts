@@ -541,18 +541,9 @@ export class Game {
         this.padListener(i);
         this.swallowPad = i;
       };
-      // Island release: the mainland is a future update (data/mainland MAINLAND.open). Walking onto the causeway turns
-      // bloombot back towards the island, and a card says so in the world's own words.
-      let turnedAt = -Infinity;
-      bot.onMainlandClosed = (ax) => {
-        const now = performance.now();
-        if (now - turnedAt < MAINLAND_CLOSED.cooldown * 1000) return;
-        turnedAt = now;
-        const p = bot.pose;
-        const away = ax >= Math.floor(p.x) ? -1 : 1;
-        bot.goTo(p.roofId, Math.floor(p.x) + away * MAINLAND_CLOSED.backCells, Math.floor(p.z), 1, undefined, true);
-        this.hud.toast(`${MAINLAND_CLOSED.title}<small>${MAINLAND_CLOSED.detail}</small>`, 'gold', MAINLAND_CLOSED.seconds);
-      };
+      // Island release: the mainland is a future update (data/mainland MAINLAND.open). Heading onto the causeway,
+      // bloombot turns back towards the island (BotController.turnBack) and a card says so, once per approach.
+      bot.onMainlandClosed = () => this.hud.toast(`${MAINLAND_CLOSED.title}<small>${MAINLAND_CLOSED.detail}</small>`, 'gold', MAINLAND_CLOSED.seconds);
       this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
       this.keepers.reducedMotion = !!this.settings.reducedMotion;
       this.oc = new OldCityController(this.oldCityHost());
