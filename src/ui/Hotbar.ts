@@ -188,22 +188,45 @@ export class BuildBar extends HudPart {
 
   /**
    * The dock sits centred on the screen; where that would run it under the minimap (bottom left) it moves to the
-   * right of it, and where even that is too narrow it fills the room there (its names then end in …). In the HUD's
-   * own pixels, so the 125 and 150% sizes work out the same.
+   * right of it. #565: where its slots don't fit there, it draws tighter (narrower slots, names end in …), and where
+   * even that doesn't fit (a big UI scale on a small screen) the minimap steps aside while building and the dock takes
+   * the whole width. In the HUD's own pixels (measured on screen and divided by the HUD's zoom: offset sizes inside a
+   * zoomed HUD don't agree between browsers).
    */
-  private place() {
+  place() {
     const el = $(this.root, '#buildbar');
     if (el.hidden) return;
     const gap = 16;
+    const z = Number(getComputedStyle(this.root).zoom) || 1;
+    const hud = this.root.getBoundingClientRect();
     const mm = this.root.querySelector<HTMLElement>('#minimap');
-    const vw = this.root.clientWidth;
-    const from = mm && !mm.hidden && mm.offsetWidth ? mm.offsetLeft + mm.offsetWidth + gap : gap;
-    const room = Math.max(200, vw - from - gap);
-    if (el.style.maxWidth !== `${room}px`) el.style.maxWidth = `${room}px`;
-    const w = el.offsetWidth;
+    const mr = mm && !mm.hidden ? mm.getBoundingClientRect() : undefined; // (still laid out while stepped aside)
+    const vw = hud.width / z;
+    const beside = mr && mr.width ? (mr.right - hud.left) / z + gap : gap;
+    // the plainest that fits: beside the minimap, then tighter, then the whole width
+    const tries: [from: number, tight: boolean, wide: boolean][] = [[beside, false, false], [beside, true, false], [gap, true, true]];
+    let pick = tries[tries.length - 1];
+    for (const t of tries) {
+      this.layout(el, vw, gap, t);
+      if (el.scrollWidth <= el.clientWidth + 1) {
+        pick = t;
+        break;
+      }
+    }
+    if (pick === tries[tries.length - 1]) this.layout(el, vw, gap, pick);
+    const from = pick[0];
+    const w = el.getBoundingClientRect().width / z;
     const left = `${Math.round(Math.max(from, Math.min((vw - w) / 2, vw - gap - w)))}px`;
     if (el.style.left !== left) el.style.left = left;
     if (el.style.transform !== 'none') el.style.transform = 'none';
+  }
+
+  /** One way of fitting the dock: from `from` to the right edge, drawn tight or not, the minimap aside or not. */
+  private layout(el: HTMLElement, vw: number, gap: number, [from, tight, wide]: [number, boolean, boolean]) {
+    const room = `${Math.max(200, vw - from - gap)}px`;
+    if (el.style.maxWidth !== room) el.style.maxWidth = room;
+    el.classList.toggle('tight', tight);
+    this.root.classList.toggle('dock-wide', wide);
   }
 
   /** Locks and unlocks show as they change (cheap: compared before the DOM is touched). */
