@@ -60,7 +60,11 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export function promptHtml(m: PromptModel): string {
   const glyph = `<span class="pr-glyph${m.hold ? ' pr-hold' : ''}">${m.hold ? '<i class="pr-ring" aria-hidden="true"></i>' : ''}${m.glyph}</span>`;
   const words = `${m.hold ? 'Hold ' : ''}${esc(m.text)}`;
-  const main = m.refused ? `<div class="pr-main pr-refused sg-card">${glyph}<span class="pr-text">${words}</span><span class="pr-why">${esc(m.refused)}</span></div>` : `<div class="pr-main sg-card">${glyph}<span class="pr-text">${words}</span></div>`;
+  // #590: refused, the words keep to one line and the reason wraps under them (side by side, a long reason squeezed
+  // the words to one per line)
+  const main = m.refused
+    ? `<div class="pr-main pr-refused sg-card">${glyph}<span class="pr-body"><span class="pr-text">${words}</span><span class="pr-why">${esc(m.refused)}</span></span></div>`
+    : `<div class="pr-main sg-card">${glyph}<span class="pr-text">${words}</span></div>`;
   const chips = (m.chips ?? []).map((c) => `<span class="pr-chip ${c.ok ? 'ok' : 'need'}">${esc(c.text)}</span>`).join('');
   const lead = m.pulse ? `<span class="pr-glyph">${m.pulse.glyph}</span><span class="pr-text">${esc(m.pulse.text)}</span>` : '';
   const pulse = lead || chips ? `<div class="pr-sub sg-card">${lead}${chips}</div>` : '';
