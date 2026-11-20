@@ -3,6 +3,7 @@
 //   1 day-high: High graphics by day: a soft wash of sky across the water and a sun glint
 //   2 day-medium: the same view switched live to Medium: the water as it always was (no reflection)
 //   3 night-high: back on High, at midnight: the reflection goes dark blue, with a moon glint
+//   4 night-medium: the same night on Medium, for comparison
 // Prints ✓/✗ checks and exits non-zero if any fails. Requires Playwright.
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -108,6 +109,10 @@ try {
   await settle(8000);
   const night = await shot('3-night-high');
   check(night[2] >= night[0], `night water reads blue (${night})`);
+  await gfx('medium');
+  await settle(5000);
+  const nightMed = await shot('4-night-medium');
+  console.log(`  night pond High ${night} vs Medium ${nightMed}`);
   check(errors.length === 0, `no page errors (${errors.slice(0, 3).join(' | ')})`);
 } catch (e) {
   console.log(`✗ crashed: ${e.message}`);
