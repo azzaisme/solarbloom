@@ -4,8 +4,10 @@ import { levelY } from '../core/Height';
 import type { MachineData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import type { WaterBody } from '../gameplay/WaterSystem';
+import { SLAB_TOP } from '../core/Picking';
 import { mat } from './Materials';
 import { PALETTE } from './Palette';
+import { PIPE_SIZE, pipeHeight, type V3 } from './PipeVisuals';
 
 /** Sizes (tiles): how high above the ground the view floats, the arrows, the level gauges. */
 const VIEW = { lift: 0.24, tile: 0.86, arrow: 0.22, gaugeH: 1.1, gaugeW: 0.16, ring: 0.62, reach: 40, every: 0.4 };
@@ -129,6 +131,33 @@ export class WaterOverlay {
     return out;
   }
 
+  /**
+   * The flow arrows: a chevron from each pipe tile's middle toward each side its water runs to, pointing downstream.
+   * Each lies along its pipe, where the pipe runs (a hair under its centre, inside the hologram): level on flat ground,
+   * tilted with the pipe where it runs up or down a stair or ramp.
+   */
+  static arrows(sim: Sim, flow = sim.water.pipes.flow()): [V3, V3, V3][] {
+    const out: [V3, V3, V3][] = [];
+    // on flat ground: where the view always drew them (its float above the ground), relative to the pipe's centre there
+    const dy = VIEW.lift + 0.01 - (SLAB_TOP + PIPE_SIZE.clear + PIPE_SIZE.r);
+    for (const [k, sides] of flow) {
+      const [x, z] = k.split(',').map(Number);
+      const cx = x + 0.5;
+      const cz = z + 0.5;
+      for (const [dx, dz] of sides) {
+        const a = VIEW.arrow;
+        // the pipe's height at a point on its centre line, within this tile
+        const at = (d: number) => pipeHeight(sim, cx + dx * d, cz + dz * d) + dy;
+        const tip: V3 = [cx + dx * 0.38, at(0.38), cz + dz * 0.38];
+        const yb = at(0.38 - a);
+        const bx = cx + dx * (0.38 - a);
+        const bz = cz + dz * (0.38 - a);
+        out.push([tip, [bx + dz * a, yb, bz + dx * a], [bx - dz * a, yb, bz - dx * a]]);
+      }
+    }
+    return out;
+  }
+
   private clear() {
     for (const c of [...this.root.children]) c.destroy();
     for (const m of this.meshes) m.destroy();
@@ -159,15 +188,8 @@ export class WaterOverlay {
       const cx = x + 0.5;
       const cz = z + 0.5;
       (p.carries(x, z) ? wet : dry).quad([cx - h, y, cz - h], [cx - h, y, cz + h], [cx + h, y, cz + h], [cx + h, y, cz - h]);
-      for (const [dx, dz] of flow.get(k) ?? []) {
-        // a chevron from the middle toward that side, pointing downstream
-        const a = VIEW.arrow;
-        const tip: [number, number, number] = [cx + dx * 0.38, y + 0.01, cz + dz * 0.38];
-        const back = [cx + dx * (0.38 - a), cz + dz * (0.38 - a)];
-        const side = [dz * a, dx * a];
-        arrows.tri(tip, [back[0] + side[0], y + 0.01, back[1] + side[1]], [back[0] - side[0], y + 0.01, back[1] - side[1]]);
-      }
     }
+    for (const [tip, l, r] of WaterOverlay.arrows(this.sim, flow)) arrows.tri(tip, l, r);
     // level gauges in the water near bloombot
     const bodies = new Set<WaterBody>(w.live());
     const R = VIEW.reach;
