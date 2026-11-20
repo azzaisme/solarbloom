@@ -38,6 +38,8 @@ const PALM = new pc.Vec3(0.06, 0.46, 0.34);
 
 export type BotLoop = 'idle' | 'walk' | 'hover' | 'sit' | 'meditate';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
+/** the one-shot clips into and out of sitting (oneShot) */
+type SeatClip = typeof BOT_CLIPS.sitDown | typeof BOT_CLIPS.standUp;
 const LOOPS: readonly string[] = ['idle', 'walk', 'hover', 'sit', 'meditate', 'doze'];
 
 export class BloombotVisuals {
@@ -48,7 +50,7 @@ export class BloombotVisuals {
   private asset?: pc.Asset;
   private clips = new Map<string, number>();
   private loop: BotLoop = 'idle';
-  private action?: { name: BotAction; until: number };
+  private action?: { name: BotAction | SeatClip; until: number };
   private clock = 0;
   private destroyed = false;
   private faceMat?: pc.StandardMaterial;
@@ -219,14 +221,25 @@ export class BloombotVisuals {
     this.pose = pose;
     this.seat = seat;
     if (pose !== was) {
-      this.settleUp = this.wantUp = 0;
-      this.settleOut = this.wantOut = 0;
+      // where it has always settled to on a bench with its sit clip (REST.settle.bench); the looks fine-tune it
+      const from = pose === 'sit' && this.clips.has(BOT_CLIPS.sit) ? REST.settle.bench : undefined;
+      this.settleUp = this.wantUp = from?.up ?? 0;
+      this.settleOut = this.wantOut = from?.out ?? 0;
       this.settling = 'look';
       this.settlePasses = 0;
       this.posedAt = this.clock;
     }
     if (pose === 'meditate') this.setFace('blink', 1e9);
     else if (this.face === 'blink') this.setFace('happy');
+    // #576: sitting again before it has finished standing up: straight into the new pose, not the rest of the
+    // stand-up (6 s of it, played under the meditating pose, and holding off its settle)
+    if (pose && this.action?.name === BOT_CLIPS.standUp) {
+      this.action = undefined;
+      if (this.clips.has(pose)) {
+        this.model?.anim?.baseLayer?.transition(pose, BLEND);
+        this.loop = pose;
+      }
+    }
     if (pose === 'sit' && this.clips.has(BOT_CLIPS.sitDown)) this.oneShot(BOT_CLIPS.sitDown);
     if (!pose && was === 'sit' && this.clips.has(BOT_CLIPS.standUp)) this.oneShot(BOT_CLIPS.standUp);
     if (!pose) {
@@ -294,13 +307,13 @@ export class BloombotVisuals {
 
 
   /** A one-shot clip by name (the sitting transitions), back to the loop afterwards. */
-  private oneShot(name: string) {
+  private oneShot(name: SeatClip) {
     const anim = this.model?.anim;
     const len = this.clips.get(name);
     if (!anim || !len) return;
     anim.speed = 1;
     anim.baseLayer?.transition(name, 0.12);
-    this.action = { name: name as BotAction, until: this.clock + len * 0.95 };
+    this.action = { name, until: this.clock + len * 0.95 };
   }
 
   private posed() {
@@ -477,7 +490,12 @@ export class BloombotVisuals {
     return dur;
   }
 
-  get busy(): BotAction | undefined {
+  /** Sitting or meditating, and settled onto what it sits on (REST.settle: its looks are done; tests). */
+  get settled(): boolean {
+    return !!this.pose && this.settling === 'held';
+  }
+
+  get busy(): BotAction | SeatClip | undefined {
     return this.action?.name;
   }
 
