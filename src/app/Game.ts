@@ -90,10 +90,13 @@ import { Menu, type MenuHeader, type MenuItem } from '../ui/Menu';
 import { type SettingKey, SettingsScreen } from '../ui/SettingsScreen';
 import { settingsRows } from '../ui/SettingsRows';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
+import { benchBoxes, type WorldBox } from '../rendering/SeatBox';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
+import { Visitors } from '../rendering/Visitors';
+import { VISITORS } from '../data/wildlife';
 import { Cozy } from '../gameplay/Cozy';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
@@ -307,6 +310,8 @@ export class Game {
   private keepers?: KeeperVisuals;
   /** E23.2.3: sitting on benches and meditating at chargers */
   private resting?: Resting;
+  /** E23.2.4.2: the animals that come over while bloombot sits */
+  private visitors?: Visitors;
   private inspectTimer = 0;
   private cinematic = false;
   private specialtyToasted = new Set<string>();
@@ -545,6 +550,13 @@ export class Game {
           const sc = at ? this.botTileScreen(at) : undefined;
           this.hud.showFail(msg, sc?.x, sc?.y);
         },
+      });
+      this.visitors = new Visitors(this.scene.world, this.app);
+      // E23.2.4.3: a kind that has never visited before goes in the log (Backpack → Collection → Visitors)
+      this.sim.bus.on('wildlife.logged', (e) => {
+        if (!e.first) return;
+        const d = VISITORS.find((v) => v.id === e.id);
+        if (d) this.hud.toast(`${d.icon} ${d.name} came to sit with you<small>New in your visitor log</small>`, '', 3);
       });
       this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
       // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
@@ -4559,6 +4571,39 @@ export class Game {
     }
   }
 
+  /** E23.2.4.2: places the animals visiting bloombot (they ride its rig while it sits). */
+  private updateVisitors(dt: number) {
+    const b = this.bot;
+    if (!this.visitors || !b) return;
+    const [, by] = b.world();
+    const r = this.sim.rest.sitting;
+    const pad = r?.kind === 'charger' ? this.sim.machine(r.machineId) : undefined;
+    // a frog on its knees: it keeps its legs still
+    b.visuals.lapFull = this.sim.wildlife.visits.some((v) => v.perch === 'lap' && this.sim.time >= v.arrive - 1 && (v.leave === undefined || this.sim.time < v.leave));
+    // the bench under it (SeatBox: turned with it): its footprint, which animals on the ground keep off; its solid
+    // parts (or the pad), which the animals on bloombot keep out of too; and the seat and backrest, which bloombot
+    // settles onto and keeps out of, from its real surface
+    const bb = r?.kind === 'bench' ? benchBoxes(r.bench, by) : undefined;
+    const bench = bb?.footprint;
+    const solids: WorldBox[] = bb ? bb.solids : pad ? [{ x0: pad.x, x1: pad.x + pad.size, y0: by, y1: by + 0.1, z0: pad.z, z1: pad.z + pad.size }] : [];
+    b.visuals.restingOn = bb ? bb.seat : pad ? { cx: pad.x, cz: pad.z, facing: 0, x: [0, pad.size], z: [0, pad.size], y: [by, by + 0.1] } : undefined;
+    b.visuals.keepOutOf = bb?.back;
+    this.visitors.update(dt, this.sim.time, this.sim.wildlife.visits, {
+      point: (p, out) => b.visuals.visitPoint(p, out),
+      facing: b.pose.facing,
+      groundY: () => by,
+      surface: () => b.visuals.surface(),
+      corners: () => b.visuals.corners(),
+      bones: () => b.visuals.skinBones(),
+      // up on the seat beside bloombot when there is room (Resting keeps the free end for it)
+      benchSpot: r?.kind === 'bench' ? this.resting?.benchSpot : undefined,
+      // what it sits on (the charger's pad, the bench), which animals on the ground keep off
+      raised: pad ? { x0: pad.x, x1: pad.x + pad.size, z0: pad.z, z1: pad.z + pad.size } : bench,
+      solids,
+      reducedMotion: !!this.settings.reducedMotion,
+    });
+  }
+
   /** Runs simulation ticks within the frame budget: the frame's own time (E23.1: nothing owed is ever paid back). */
   private runSim(dt: number) {
     const t0 = performance.now();
@@ -4704,6 +4749,7 @@ export class Game {
       this.oc?.update(wdt);
       this.keepers?.update(wdt);
       this.resting?.update(wdt);
+      this.updateVisitors(wdt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
