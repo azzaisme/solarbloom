@@ -18,7 +18,8 @@
  * that: W_dst(frame) = D * A * W_dst(rest). A seated Keeper's thighs are then level and its shins hang down, as
  * bloombot's do.
  *
- * The hips' travel (how far it drops onto the seat) is scaled by the ratio of the two rigs' leg lengths (thigh plus
+ * The hips' travel (how far it drops onto the seat) is scaled by the ratio of the two rigs' leg lengths, then raised
+ * or lowered on each frame so the Keeper's lowest toe stays where it is at rest: feet on the ground, as bloombot's (thigh plus
  * shin, at rest), so a Keeper with longer legs drops further and one with short legs under a high body (Fern, Tally)
  * doesn't sink through its own seat. Every other joint keeps its own rest translation and scale.
  *
@@ -173,6 +174,18 @@ function legAlign(S, D) {
   }
   return out;
 }
+/** the lower toe's height in the Armature's space, for world rotations `w` and the hips at `hips` */
+function lowestToe(R, w, hips) {
+  const p = {};
+  for (const i of R.order) {
+    const par = R.parent[i];
+    if (par !== undefined && p[par]) {
+      const v = qmul(qmul(w[par], [...R.rest[i].t, 0]), qinv(w[par]));
+      p[i] = [p[par][0] + v[0], p[par][1] + v[1], p[par][2] + v[2]];
+    } else p[i] = i === R.byName.Hips ? hips : R.rest[i].t;
+  }
+  return Math.min(p[R.byName.LeftToeBase][1], p[R.byName.RightToeBase][1]);
+}
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 function legLength(R) {
   const p = restPos(R);
@@ -233,6 +246,8 @@ function retarget(src, S, dst, D, name) {
   const dRestW = worldRot(D, dRestLocal);
   const sHips = S.byName.Hips, dHips = D.byName.Hips;
   const k = legLength(D) / legLength(S);
+  const restP = restPos(D);
+  const restToeY = Math.min(restP[D.byName.LeftToeBase][1], restP[D.byName.RightToeBase][1]);
   const align = legAlign(S, D);
 
   const outRot = Object.fromEntries(D.joints.map((i) => [i, []]));
@@ -258,7 +273,11 @@ function retarget(src, S, dst, D, name) {
     }
     const st = clip.tr[sHips] ? clip.tr[sHips](t) : S.rest[sHips].t;
     const sr = S.rest[sHips].t, dr = D.rest[dHips].t;
-    hipsT.push([dr[0] + (st[0] - sr[0]) * k, dr[1] + (st[1] - sr[1]) * k, dr[2] + (st[2] - sr[2]) * k]);
+    const hips = [dr[0] + (st[0] - sr[0]) * k, dr[1] + (st[1] - sr[1]) * k, dr[2] + (st[2] - sr[2]) * k];
+    // feet on the ground: bloombot's clips keep its feet flat on every frame, but a Keeper's legs are not bloombot's
+    // in proportion, so its hips are raised or lowered until its lowest toe is where it stands at rest
+    hips[1] += restToeY - lowestToe(D, dW, hips);
+    hipsT.push(hips);
   }
 
   const anim = { name, channels: [], samplers: [] };

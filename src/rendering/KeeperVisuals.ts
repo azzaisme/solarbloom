@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { benchClip, benchMode, benchOffset, SEAT_CLIPS } from './KeeperSeat';
 import { foldLegs, hipsAbove, SEAT_HIPS } from './SeatPose';
 import { GROUND } from '../core/GameState';
 import { KEEPER_HELP } from '../data/keepers';
@@ -8,7 +9,8 @@ import { MODELS, oldCityModel } from './Models';
 import { SLAB_TOP } from './SceneBuilder';
 import { color } from './Materials';
 
-/** The Keepers' own rigged models (assets/raw/models/final/keeper-<id>.glb: clips idle, wave, sleep), when they land. */
+/** The Keepers' own rigged models (assets/raw/models/final/keeper-<id>.glb: clips idle, wave, sleep, and B5's
+ * sit-down, sit and stand-up). */
 const KEEPER_URLS = import.meta.glob('../../assets/raw/models/final/keeper-*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
 /** STAND-IN until a Keeper's model lands: bloombot's rig, tinted, with the Keeper's prop. Not the finished art. */
 const STAND_IN_URL = new URL('../../assets/raw/bloombot/bloombot.glb', import.meta.url).href;
@@ -32,6 +34,10 @@ interface KeeperView {
   facing: number;
   waveUntil: number;
   clip?: string;
+  /** its model's clips and their lengths (seconds) */
+  lens: Map<string, number>;
+  /** on a bench beside bloombot (E23.2.3): where, since when, and when it began to get up */
+  bench?: { x: number; y: number; z: number; facing: number; seat: number; since: number; upAt?: number };
 }
 
 /**
@@ -80,7 +86,7 @@ export class KeeperVisuals {
     const body = new pc.Entity('body');
     root.addChild(body);
     this.root.addChild(root);
-    const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, facing: Math.PI, waveUntil: 0 };
+    const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, facing: Math.PI, waveUntil: 0, lens: new Map() };
     const own = KEEPER_URLS[`../../assets/raw/models/final/keeper-${def.id}.glb`];
     v.standIn = !own;
     // in the map before loading: a model already in the cache calls back at once, before make() returns
@@ -98,7 +104,9 @@ export class KeeperVisuals {
       e.addComponent('anim', { activate: true });
       for (const a of res.animations) {
         const track = a.resource as pc.AnimTrack;
-        e.anim!.assignAnimation(track.name, track, undefined, 1, track.name === 'idle' || track.name === 'sleep' || track.name === 'walk');
+        const loop = track.name === 'idle' || track.name === 'sleep' || track.name === 'walk' || track.name === SEAT_CLIPS.sit;
+        e.anim!.assignAnimation(track.name, track, undefined, 1, loop);
+        v.lens.set(track.name, track.duration);
       }
       v.rig = e;
       v.clip = undefined;
@@ -166,6 +174,45 @@ export class KeeperVisuals {
       const seat = v.root.findByName('seat') as pc.Entity | null;
       const dozing = step === 'asleep' || (step === 'settled' && night);
       if (seat) seat.enabled = dozing && !v.standIn;
+      // E23.2.3: on a bench beside bloombot (handled first, so its own clip choice below doesn't fight the sitting)
+      const b = this.beside?.id === def.id ? this.beside : undefined;
+      if (b) {
+        // sat down (or sat again while still getting up): a new sitting begins; else it follows the bench spot
+        if (!v.bench || v.bench.upAt !== undefined) v.bench = { ...b, since: this.clock };
+        else Object.assign(v.bench, b);
+      } else if (v.bench && v.bench.upAt === undefined) v.bench.upAt = this.clock;
+      const bench = v.bench;
+      if (bench && v.rig && !v.standIn && benchMode(def.id, v.lens.keys()) === 'clips') {
+        // B5: its own sitting clips (bloombot's, retargeted onto its rig): sit-down once, sit while bloombot sits,
+        // stand-up once when bloombot gets up, then back to where it was
+        const sitting = bench.upAt === undefined;
+        const { clip, phase } = benchClip(sitting, this.clock - (sitting ? bench.since : bench.upAt!), {
+          down: v.lens.get(SEAT_CLIPS.down)!,
+          up: v.lens.get(SEAT_CLIPS.up)!,
+        });
+        if (phase !== 'done') {
+          this.play(v, clip);
+          v.root.setPosition(bench.x, bench.y, bench.z);
+          v.root.setEulerAngles(0, (bench.facing * 180) / Math.PI, 0);
+          v.body.setLocalEulerAngles(0, 0, 0);
+          const at = benchOffset(def.id, bench.seat, MODEL_SCALE, SEAT_HIPS.sit);
+          v.body.setLocalPosition(0, at.y, at.z);
+          if (v.prop) v.prop.enabled = false;
+          continue;
+        }
+        v.bench = undefined;
+      } else if (b) {
+        // no sitting clips (the stand-in, or a model without them): the legs bent by hand (SeatPose: the Keepers
+        // share bloombot's rig), the hips down on the seat; its prop set down while it sits
+        this.play(v, 'idle');
+        v.root.setPosition(b.x, b.y, b.z);
+        v.root.setEulerAngles(0, (b.facing * 180) / Math.PI, 0);
+        v.body.setLocalEulerAngles(0, 0, 0);
+        v.body.setLocalPosition(0, 0, 0); // measured from standing height each frame (this runs before the reset below)
+        if (v.rig && foldLegs(v.rig, v.root, 'sit')) v.body.setLocalPosition(0, b.seat + SEAT_HIPS.sit - hipsAbove(v.rig, v.root), -0.08);
+        if (v.prop) v.prop.enabled = false;
+        continue;
+      } else v.bench = undefined;
       if (step === 'asleep') {
         // the real model dozes on its seat; the stand-in slumps forward, visor dark
         if (v.standIn) v.body.setLocalEulerAngles(28, 0, 8);
@@ -190,20 +237,6 @@ export class KeeperVisuals {
           } else this.play(v, 'idle');
         } else if (step === 'settled' && night && !waving) this.play(v, 'sleep');
         else this.play(v, waving ? 'wave' : 'idle', waving ? 'interact' : 'idle');
-      }
-      const b = this.beside?.id === def.id ? this.beside : undefined;
-      if (b) {
-        // sitting beside bloombot: down on the bench seat (the sit-down clip the Keepers doze with, which is seat
-        // height), then back to where it was afterwards. The stand-in has no sitting clip: it just stands there.
-        this.play(v, 'idle');
-        v.root.setPosition(b.x, b.y, b.z);
-        v.root.setEulerAngles(0, (b.facing * 180) / Math.PI, 0);
-        v.body.setLocalEulerAngles(0, 0, 0);
-        // the legs bent by hand (SeatPose: the Keepers share bloombot's rig, and have no sitting clip), the hips
-        // down on the seat; its prop set down while it sits
-        if (v.rig && foldLegs(v.rig, v.root, 'sit')) v.body.setLocalPosition(0, v.body.getLocalPosition().y + b.seat + SEAT_HIPS.sit - hipsAbove(v.rig, v.root), -0.08);
-        if (v.prop) v.prop.enabled = false;
-        continue;
       }
       if (v.prop) v.prop.enabled = true;
       v.root.setPosition(v.x, this.y(v.x, v.z), v.z);
