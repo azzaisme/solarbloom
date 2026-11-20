@@ -1,0 +1,61 @@
+name: Release (itch.io)
+# Runs when testing is merged into main. Builds the game, zips dist/ for itch.io's HTML player
+# (index.html at the zip root) and keeps the zip as a workflow artifact.
+#
+# Automatic upload to itch.io (optional): add a repository secret BUTLER_API_KEY
+# (itch.io → Settings → API keys) and a repository variable ITCH_TARGET set to "user/game",
+# for example "yourname/solar-bloom". Without them the zip is still built; upload it by hand.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  itch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      - name: Work out the version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Check the build fits itch.io's HTML limits
+        run: |
+          test -f dist/index.html || { echo "dist/index.html missing"; exit 1; }
+          files=$(find dist -type f | wc -l)
+          bytes=$(du -sb dist | cut -f1)
+          echo "dist: $files files, $((bytes / 1024 / 1024)) MB"
+          [ "$files" -le 1000 ] || { echo "itch.io allows at most 1000 files"; exit 1; }
+          [ "$bytes" -le 524288000 ] || { echo "itch.io allows at most 500 MB unzipped"; exit 1; }
+
+      - name: Zip for itch.io
+        run: cd dist && zip -qr "../solar-bloom-itch-${{ steps.version.outputs.version }}.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: solar-bloom-itch-${{ steps.version.outputs.version }}
+          path: solar-bloom-itch-${{ steps.version.outputs.version }}.zip
+
+      - name: Push to itch.io with butler
+        if: env.BUTLER_API_KEY != '' && env.ITCH_TARGET != ''
+        run: |
+          curl -fsSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler && chmod +x butler/butler
+          ./butler/butler push dist "$ITCH_TARGET:html5" --userversion "${{ steps.version.outputs.version }}"
+
+      - name: Note when the itch.io upload is skipped
+        if: env.BUTLER_API_KEY == '' || env.ITCH_TARGET == ''
+        run: echo "::notice::BUTLER_API_KEY or ITCH_TARGET not set; zip built as an artifact only."
