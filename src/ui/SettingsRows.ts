@@ -1,4 +1,5 @@
 import type { Row, SettingsTab } from './SettingsScreen';
+import { canFullScreen, isFullScreen, setFullScreen } from '../app/FullScreen';
 
 /**
  * E22.11: what each Settings tab holds, shared by the title screen and the in-game menu. `inGame` adds what only
@@ -48,6 +49,8 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         { kind: 'check', key: 'lowVfx', label: 'Fewer particles and softer sparkles' },
         { kind: 'check', key: 'lowFog', label: 'Simple fog (faster on small devices)' },
         { kind: 'check', key: 'fireflies', label: 'Fireflies at night', defaultOn: true },
+        // in a browser: the page's own full screen keeps Esc for the game (the browser's F11 takes Esc for itself)
+        ...(canFullScreen() ? [{ kind: 'toggle', id: 'fullScreen', label: 'Full screen', hint: 'Esc stays with the game. Hold Esc to leave full screen', get: isFullScreen, set: setFullScreen } as Row] : []),
       ];
     case 'sound':
       return [
