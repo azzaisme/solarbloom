@@ -1,4 +1,5 @@
 import type { TileData, TileTransition } from '../../core/types';
+import { onJetty, regionWater } from '../../core/OldCityLayout';
 
 /**
  * Look 6 end-state hooks. Every transition animates toward *today's* stage visuals. The end state is whatever
@@ -23,6 +24,8 @@ export function surfaceState(t: TileData): number {
   if (t.blocked || t.occupantId) return STATE.hard;
   const f = t.feature ?? 'lawn';
   if (f === 'water') return STATE.hard;
+  // E23.13: a deck over water (the jetty, a canal's bridge) is water underneath: never dead paving's grime and cracks
+  if (t.level !== undefined && (onJetty(t.x, t.z) || (f === 'obstacle' && regionWater(t.x, t.z)))) return STATE.hard;
   switch (t.ground) {
     case 'polluted':
       return STATE.concrete;
