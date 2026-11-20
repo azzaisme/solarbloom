@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import { keeperById } from '../src/core/OldCityLayout';
+import { keeperById, regionWater, seaCell, surfCell } from '../src/core/OldCityLayout';
 import type { MachineData, MachineType } from '../src/core/types';
 import { COMPOST } from '../src/data/compost';
 import { CROP_IDS, CROPS, type CropId } from '../src/data/crops';
@@ -491,6 +491,11 @@ describe('E23.5.4.6: Keeper gardens', () => {
         for (let x = q.x; x < q.x + q.w; x++)
           for (let z = q.z; z < q.z + q.d; z++)
             for (const [a, b] of hot) expect(Math.max(Math.abs(a - x), Math.abs(b - z)), `${r.id} pond ${x},${z} by ${a},${b}`).toBeGreaterThan(2);
+    // and never on the sea, the surf or a canal (the shoreline's widened canal mouth and surf band included)
+    for (const r of REGIONS)
+      for (const q of r.ponds ?? [])
+        for (let x = q.x; x < q.x + q.w; x++)
+          for (let z = q.z; z < q.z + q.d; z++) expect(seaCell(x, z) || surfCell(x, z) || regionWater(x, z), `${r.id} pond ${x},${z}`).toBe(false);
   });
 
   it('every Keeper’s garden has fresh water: a silted pond beside it fills once restored, and waters the garden', () => {

@@ -188,8 +188,48 @@ export function inRect(r: { x: number; z: number; w: number; d: number }, x: num
   return x >= r.x && z >= r.z && x < r.x + r.w && z < r.z + r.d;
 }
 
+/** A smooth 0…1 wobble along the shore (two waves and a little per-column noise), the same every game. */
+function shoreWobble(x: number, salt: number): number {
+  const s = Math.sin(x * 0.43 + salt) * 0.45 + Math.sin(x * 1.07 + salt * 2.3) * 0.3 + (Math.sin(x * 12.9898 + salt * 78.233) * 43758.5453 % 1) * 0.25;
+  return Math.max(0, Math.min(1, 0.5 + s * 0.5));
+}
+
+/**
+ * E23.13: how many rows of wadable surf a beach column has before the bay (2…5, so the sand meets the water along a
+ * ragged line, not a ruler). A column with a salvage pile in its last sand row keeps the pile on dry sand.
+ */
+export function surfDepth(x: number): number {
+  const known = depths.get(x);
+  if (known !== undefined) return known;
+  let d = Math.round(2 + 3 * shoreWobble(x, 1.7));
+  const edge = OLD_CITY.seaMinZ * 16; // the bay's first row
+  // a pile, a cache or a gate in the band stays on dry sand, on a little spit of beach: the surf stops short of it
+  const dry = (dz: number) => [-1, 0, 1].some((ox) => !!setPieceAt(x + ox, edge - dz)); // with a tile of sand either side
+  let ok = 0;
+  for (let k = 1; k <= d && !dry(k); k++) ok = k;
+  d = ok;
+  depths.set(x, d);
+  return d;
+}
+const depths = new Map<number, number>();
+
+/** E23.13: inside a beach's surf band (by its ragged depth), whatever stands there. */
+export function inSurfBand(x: number, z: number): boolean {
+  const cx = Math.floor(x / 16);
+  return isSeaChunk(cx, Math.floor((z + surfDepth(x)) / 16)) && regionOfCell(x, z)?.type === 'beach';
+}
+
 /** The beach's shallow surf: the wadable rows just before the bay (it reads as shallow sea, not a dried canal bed). */
 export function surfCell(x: number, z: number): boolean {
-  const cx = Math.floor(x / 16);
-  return !seaCell(x, z) && isSeaChunk(cx, Math.floor((z + OLD_CITY.surfRows) / 16)) && regionOfCell(x, z)?.type === 'beach';
+  return !seaCell(x, z) && inSurfBand(x, z);
+}
+
+/**
+ * E23.13: the bay's first rows off a beach are a shallow shelf, ragged like the surf (0…2 rows), so the shallows
+ * fade into deep water along a wavy line rather than at the bay's straight edge. Drawing only: still open sea.
+ */
+export function shallowSea(x: number, z: number): boolean {
+  const edge = OLD_CITY.seaMinZ * 16;
+  if (z < edge || !seaCell(x, z) || regionOfCell(x, edge - 1)?.type !== 'beach') return false;
+  return z < edge + Math.round(2 * shoreWobble(x, 4.1));
 }
