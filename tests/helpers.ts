@@ -1,3 +1,4 @@
+import * as pc from 'playcanvas';
 import { createInitialState, GROUND, placeFixed } from '../src/core/GameState';
 import type { GroundState, LayerData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
@@ -160,4 +161,21 @@ export function openNextGoal(sim: Sim): string | undefined {
     return sim.areas.nextGoal();
   }
   return undefined;
+}
+
+/**
+ * A headless PlayCanvas app for tests that build meshes (no WebGL: a null device on a stand-in canvas), with a root
+ * entity to build under. `destroy` when done.
+ */
+export function headlessApp() {
+  const canvas = { width: 1, height: 1, getContext: () => null, addEventListener() {}, removeEventListener() {}, style: {} } as unknown as HTMLCanvasElement;
+  const device = new pc.NullGraphicsDevice(canvas);
+  const app = new pc.AppBase(canvas);
+  const opts = new pc.AppOptions();
+  opts.graphicsDevice = device;
+  opts.componentSystems = [pc.RenderComponentSystem];
+  app.init(opts);
+  const root = new pc.Entity('root', app);
+  app.root.addChild(root);
+  return { app, device, root, destroy: () => app.destroy() };
 }

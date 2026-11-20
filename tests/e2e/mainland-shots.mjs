@@ -83,6 +83,73 @@ try {
   });
   if (field) await shot('mainland-salvage-field', field[0] + 0.5, field[1] + 0.5, 1.4, 0);
   else console.log('  ✗ no salvage field near the landing');
+  // E23.8.3.2: a steel field in the industrial ruins, and the mainland's two machines built from steel
+  const steel = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const s = g.sim;
+    let at;
+    for (let cx = 9; cx < 40 && !at; cx++)
+      for (let cz = -12; cz < 12 && !at; cz++) {
+        const id = s.areas.map.areaOfChunk(cx, cz);
+        if (s.areas.info(id).type !== 'downtown') continue;
+        for (let z = cz * 16; z < cz * 16 + 16 && !at; z++)
+          for (let x = cx * 16; x < cx * 16 + 16 && !at; x++) {
+            s.grid.get('g', x, z); // generate the chunk
+            if (s.salvage.pileAt(x, z)?.material === 'steel') at = [x, z, id];
+          }
+      }
+    if (at) { s.state.areas[at[2]] ??= { fog: 'frontier', revealedAt: 0 }; s.areas.clear(at[2], true); }
+    // the Grid Battery, on restored ground in the landing district
+    for (const m of ['steel', 'copper', 'gears', 'clay']) s.inventory.add(m, 60);
+    // the recipes are on the crafting table: battery cells made there (data/crafting MACHINE_RECIPES)
+    for (const c of ['batteryCell']) s.inventory.add(c, 10);
+    const built = [];
+    for (const type of ['gridBattery']) {
+      let done = false;
+      for (let z = 2; z < 30 && !done; z++)
+        for (let x = 150; x < 175 && !done; x++) {
+          const cells = s.grid.footprint('g', x, z, 2);
+          if (cells.some((c) => !c || c.blocked || c.occupantId || c.ramp)) continue;
+          for (const c of cells) { c.ground = 'restored'; c.pollution = 0; s.grid.touch(c); }
+          const m = s.build.place(type, 'g', x, z);
+          if (m) { built.push([type, x, z]); done = true; }
+        }
+    }
+    const island = s.build.check('gridBattery', 'g', 6, 6).reason;
+    g.chunks.markAll();
+    return { at, built, island, steelInPack: s.inventory.count('steel') };
+  });
+  console.log('  steel:', JSON.stringify(steel));
+  if (steel.built.length !== 1 || !/only on the mainland/.test(steel.island ?? '')) {
+    failed = true;
+    console.log('  ✗ the Grid Battery should build past the causeway and refuse the island');
+  }
+  if (steel.built[0]) await shot('mainland-machines', steel.built[0][1] + 3, steel.built[0][2] + 1, 1.0, 0, 15000);
+  if (steel.at) await shot('mainland-steel-field', steel.at[0] + 0.5, steel.at[1] - 1.5, 0.9, 30, 15000);
+  else { failed = true; console.log('  ✗ no steel field in the industrial ruins nearby'); }
+  // E23.8.3: fresh water on the mainland: the landing district's canal (bridged by its avenues) and a reservoir basin
+  await shot('mainland-canal', 168, 15, 0.7, 90, 12000);
+  const basin = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const s = g.sim;
+    for (let r = 1; r < 12; r++)
+      for (let dz = -r; dz <= r; dz++)
+        for (let dx = 4; dx <= 4 + r; dx++) {
+          const id = `ml_${dx}_${dz}`;
+          if (s.areas.info(id).type !== 'reservoir') continue;
+          s.state.areas[id] ??= { fog: 'frontier', revealedAt: 0 };
+          s.areas.clear(id, true);
+          g.chunks.markAll();
+          const [x, z] = [dx * 32 + 16, dz * 32 + 28];
+          let water = 0;
+          for (let j = -4; j <= 4; j++) for (let i = -8; i <= 8; i++) if (s.grid.get('g', x + i, z + j)?.feature === 'water') water++;
+          return { id, x, z, water };
+        }
+    return undefined;
+  });
+  console.log('  basin:', JSON.stringify(basin));
+  if (!basin || basin.water < 40) { failed = true; console.log('  ✗ a reservoir district should hold an open basin of fresh water'); }
+  else await shot('mainland-reservoir-basin', basin.x, basin.z, 0.8, 30, 15000);
   if (errors.length) {
     failed = true;
     console.log('  ✗ page errors:\n   ', errors.join('\n    '));

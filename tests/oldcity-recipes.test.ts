@@ -44,6 +44,7 @@ describe('E21.3: recipes', () => {
       const z = 12;
       ground(sim, x, z);
       if (MACHINES[type].areaTypes) continue; // needs its area type (the Reservoir Garden)
+      if (MACHINES[type].mainlandOnly) continue; // only past the causeway: paid exactly in tests/mainland-steel
       if (type === 'pump' || type === 'desalination') continue; // on a bank / the shore only: paid exactly in tests/water-*.test.ts
       if (sim.water.unlockFor(type)) sim.state.salvage!.keepers.sluice = { step: 'request1' }; // E23.4: Cistern Basin's unlocks
       stock(sim, type);

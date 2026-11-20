@@ -4,6 +4,7 @@ import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
 import { MATERIALS, STORE, type MaterialCost } from '../data/salvage';
 import { regionById } from '../core/OldCityLayout';
+import { isMainlandCell } from '../core/Mainland';
 import type { MaterialId } from '../core/types';
 import { isMaterial, itemDef } from '../data/items';
 import type { Sim } from './Sim';
@@ -128,8 +129,9 @@ export class BuildSystem {
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 
-  /** " — Mast Row" once a region holding the material has been seen (revealed), else nothing. */
+  /** " — Mast Row" once a region holding the material has been seen (revealed), else nothing; a place outside the regions always (steel's industrial ruins). */
   whereFrom(m: MaterialId): string {
+    if (MATERIALS[m].place) return ` — ${MATERIALS[m].place}`;
     for (const home of MATERIALS[m].home) {
       if (home === 'park' || home === 'backstreet') continue;
       const r = regionById(home);
@@ -151,6 +153,8 @@ export class BuildSystem {
     }
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
+    // E23.8.3.2: the mainland's big machines stand only past the causeway
+    if (def.mainlandOnly && (roofId !== GROUND || !isMainlandCell(x) || !isMainlandCell(x + def.size - 1))) return fail(`${def.name}: only on the mainland`);
     if (type === 'chest' && s.machinesOfType('chest').length >= STORE.maxChests) return fail(`At most ${STORE.maxChests} Storage Chests`);
     if (roofId === GROUND && def.areaTypes) {
       const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];

@@ -909,6 +909,11 @@ export class ChunkRenderer {
       const rot = dhash(t.x, t.z, 213) * Math.PI * 2;
       const model = oldCityModel(pile.model); // the file once it lands, else its stand-in
       if (model && this.batch?.add(model, x, y, z, rot, sc, sc, sc, this.neglected)) return true;
+      // E23.8.3.2: steel lies as a crossed stack of rusting I-beams (until E23.10.2's salvage-steel model)
+      if (pile.material === 'steel') {
+        this.girders(b, t, x, y, z, pile.size === 'large' ? 5 : pile.size === 'medium' ? 4 : 3, 0.55 + 0.45 * k);
+        return true;
+      }
       // no model (or not loaded yet): a heap in the material's colour
       const hex = MATERIALS[pile.material].colour;
       b.add('sphere', hex, [x, y + 0.12 * sc, z], [0.8 * sc, 0.35 * sc, 0.7 * sc]);
@@ -941,6 +946,10 @@ export class ChunkRenderer {
       return true;
     }
     if (prop.startsWith('keeper:')) return true;
+    if (prop.startsWith('ruin:')) {
+      this.ruin(b, t, prop, x, y, z);
+      return true;
+    }
     if (prop.startsWith('lookout:')) {
       // E21.24: a lookout: its model once it lands, else a bench and a brass telescope on a tripod (stand-in)
       const model = oldCityModel('lookout-telescope');
@@ -977,6 +986,116 @@ export class ChunkRenderer {
       return true;
     }
     return false;
+  }
+
+  /**
+   * E23.8.3.2: one I-beam (a web between two flanges), along x or z. The Sink draws unturned shapes, so a beam
+   * lies along an axis; a stack crosses its layers like a crib.
+   */
+  private ibeam(b: Sink, hex: string, x: number, y: number, z: number, len: number, alongX: boolean, d = 0.16) {
+    const L = (l: number, w: number): [number, number, number] => (alongX ? [l, 0, w] : [w, 0, l]);
+    const [fx, , fz] = L(len, d);
+    const [wx, , wz] = L(len, d * 0.22);
+    b.add('box', hex, [x, y + 0.015, z], [fx, 0.03, fz]);
+    b.add('box', hex, [x, y + d / 2, z], [wx, d - 0.04, wz]);
+    b.add('box', hex, [x, y + d - 0.015, z], [fx, 0.03, fz]);
+  }
+
+  /** E23.8.3.2: a steel pile: layers of I-beams, each crossing the one below, shrinking as it is salvaged. */
+  private girders(b: Sink, t: TileData, x: number, y: number, z: number, layers: number, k: number) {
+    const tones = [PALETTE.metal.steel, PALETTE.metal.iron, PALETTE.metal.slate, PALETTE.metal.steel, PALETTE.props.girderRust];
+    const first = dhash(t.x, t.z, 231) < 0.5;
+    const n = Math.max(1, Math.round(layers * k));
+    const d = 0.18;
+    for (let i = 0; i < n; i++) {
+      const alongX = (i % 2 === 0) === first;
+      const len = 0.98 - i * 0.07;
+      const per = i === n - 1 && n > 1 ? 2 : 3;
+      for (let j = 0; j < per; j++) {
+        const off = (j - (per - 1) / 2) * 0.29 + (dhash(t.x + i, t.z + j, 233) - 0.5) * 0.06;
+        const slide = (dhash(t.x + j, t.z + i, 235) - 0.5) * 0.14;
+        const tone = tones[Math.floor(dhash(t.x + i * 3, t.z + j * 5, 237) * tones.length)];
+        this.ibeam(b, tone, x + (alongX ? slide : off), y + i * d, z + (alongX ? off : slide), len, alongX, d);
+      }
+    }
+    // one beam slid off the stack, its end on the ground
+    if (n >= 2) {
+      const alongX = !first;
+      this.ibeam(b, PALETTE.props.girderRust, x + (alongX ? 0.1 : 0.42), y, z + (alongX ? 0.42 : 0.1), 0.6, alongX, 0.12);
+    }
+    // rust run-off round its foot
+    b.add('sphere', PALETTE.props.rustStain, [x, y + 0.004, z], [1.05, 0.01, 0.95]);
+  }
+
+  /**
+   * E23.8.3.2: the industrial ruins round a steel field (core/Mainland chunkRuins): a rusted steel frame still
+   * standing, a gantry whose girder snapped and fell (drawn from its first leg; you walk under it) and rust stains.
+   */
+  private ruin(b: Sink, t: TileData, prop: string, x: number, y: number, z: number) {
+    const [, kind, turnS, part, spanS] = prop.split(':');
+    const alongX = turnS === '0';
+    const rust = PALETTE.metal.iron;
+    const deep = PALETTE.props.girderRust;
+    const at = (along: number, across: number): [number, number] => (alongX ? [x + along, z + across] : [x + across, z + along]);
+    if (kind === 'stain') {
+      if (t.ground === 'restored') return;
+      const j = (s: number) => (dhash(t.x, t.z, s) - 0.5) * 0.4;
+      b.add('sphere', PALETTE.props.rustStain, [x + j(241), y + 0.004, z + j(242)], [0.7 + j(243), 0.012, 0.55 + j(244)]);
+      b.add('sphere', PALETTE.ground.rustStreak, [x + j(245), y + 0.008, z + j(246)], [0.3, 0.012, 0.22]);
+      return;
+    }
+    // stained ground under every piece
+    b.add('sphere', PALETTE.props.rustStain, [x, y + 0.004, z], [1.0, 0.01, 0.9]);
+    if (kind === 'frame') {
+      // a portal frame: two posts, a cross-girder, one brace rung half gone; it leans a little (one post shorter)
+      const H = 1.5 + dhash(t.x, t.z, 251) * 0.5;
+      const lean = 0.18;
+      for (const [s, h] of [[-0.38, H], [0.38, H - lean]] as const) {
+        const [px, pz] = at(s, 0);
+        b.add('box', rust, [px, y + h / 2, pz], [0.13, h, 0.13]);
+        b.add('box', deep, [px, y + 0.04, pz], [0.26, 0.08, 0.26]); // its base plate
+      }
+      const [tx, tz] = at(0, 0);
+      this.ibeam(b, deep, tx, y + H - lean - 0.02, tz, 0.98, alongX, 0.18);
+      const [rx, rz] = at(-0.16, 0);
+      b.add('box', rust, [rx, y + H * 0.45, rz], alongX ? [0.44, 0.07, 0.07] : [0.07, 0.07, 0.44]);
+      // a torn sheet of cladding still bolted on
+      if (dhash(t.x, t.z, 253) < 0.6) {
+        const [cx, cz] = at(0.15, 0.08);
+        b.add('box', PALETTE.metal.grey, [cx, y + H * 0.7, cz], alongX ? [0.42, 0.5, 0.02] : [0.02, 0.5, 0.42]);
+      }
+      return;
+    }
+    if (kind === 'gantry') {
+      if (part !== 'a') return; // drawn whole from its first leg
+      const span = Number(spanS) || 3;
+      const H = 2.3;
+      // a leg pair at each end, tied by a cross-beam
+      for (const s of [0, span]) {
+        for (const w of [-0.34, 0.34]) {
+          const [px, pz] = at(s, w);
+          b.add('box', rust, [px, y + H / 2, pz], [0.14, H, 0.14]);
+        }
+        const [cx, cz] = at(s, 0);
+        b.add('box', deep, [cx, y + H - 0.08, cz], alongX ? [0.18, 0.16, 0.86] : [0.86, 0.16, 0.18]);
+        b.add('box', rust, [cx, y + H * 0.35, cz], alongX ? [0.08, 0.08, 0.7] : [0.7, 0.08, 0.08]);
+      }
+      // the runway girders: one still spans most of the way, the other snapped and fell
+      const keep = span * 0.62;
+      const [gx, gz] = at(keep / 2, -0.34);
+      this.ibeam(b, deep, gx, y + H, gz, keep + 0.2, alongX, 0.22);
+      const [sx, sz] = at(span, 0.34);
+      this.ibeam(b, deep, sx - (alongX ? 0.3 : 0), y + H, sz - (alongX ? 0 : 0.3), 0.7, alongX, 0.22);
+      // its broken end hangs from the far stub; the rest lies on the ground below
+      const [hx, hz] = at(span - 0.68, 0.34);
+      b.add('box', rust, [hx, y + H - 0.45, hz], [0.08, 0.9, 0.08]);
+      const [fx, fz] = at(span * 0.45, 0.42);
+      this.ibeam(b, PALETTE.metal.rust, fx, y, fz, span * 0.8, alongX, 0.2);
+      // the hoist's hook block, still on the standing girder
+      const [kx, kz] = at(keep * 0.5, -0.34);
+      b.add('box', PALETTE.metal.dark, [kx, y + H - 0.25, kz], [0.03, 0.4, 0.03]);
+      b.add('box', PALETTE.metal.iron, [kx, y + H - 0.5, kz], [0.16, 0.14, 0.12]);
+    }
   }
 
   private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
@@ -1141,6 +1260,11 @@ export class ChunkRenderer {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
         if (this.raisedPaving(t)) this.pavedTop(b, t, th, gtex, k);
         else addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);
+      }
+      // E23.8.3.2: a rust stain in the industrial ruins, laid over the ground (and its pavers, when they are raised)
+      if (!v.far && !t.blocked && t.prop?.startsWith('ruin:stain')) {
+        this.sink = b;
+        this.ruin(b, t, t.prop, t.x + 0.5, th + 0.086 + (gt && this.raisedPaving(t) ? PAVING_RAISE.lift : 0), t.z + 0.5);
       }
       yield; // a tile done: `update` decides whether this frame has time for the next
     }
