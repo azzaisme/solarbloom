@@ -5,10 +5,9 @@ import { areaMapFor, genKey, PARK, SEA, type AreaInfo } from './Areas';
 import { canalRow } from './Arterials';
 import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
-import { coastSand, inRect, isSeaChunk, onJetty, regionById, regionWater, seaCell, setPieceAt } from './OldCityLayout';
+import { coastSand, inRect, inSurfBand, onJetty, regionById, regionWater, seaCell, setPieceAt } from './OldCityLayout';
 import { rampAt, tileLevel } from './Height';
 import { causewayBroken, mainlandWater, onCauseway } from './Mainland';
-import { OLD_CITY } from '../data/oldcity';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
 
@@ -330,7 +329,7 @@ function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, 
   const road = oldCityRoad(x, z, area);
   if (road) feature = 'road';
   // the beach: shallow surf (wadable) in the rows before the sea
-  if (area.type === 'beach' && isSeaChunk(Math.floor(x / CHUNK), Math.floor((z + OLD_CITY.surfRows) / CHUNK))) feature = 'water';
+  if (area.type === 'beach' && inSurfBand(x, z)) feature = 'water'; // E23.13: a ragged band (surfDepth)
   if (coastSand(x, z) && !road) feature = 'sand';
   const clear = oldCityKeepClear(x, z, area);
   const building = !road && !clear && !!buildingAt(seed, x, z, layer.gen ?? 5);

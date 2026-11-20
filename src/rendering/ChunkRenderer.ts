@@ -13,7 +13,7 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
-import { onJetty, pileById, pondCell, seaCell, setPieceAt, surfCell } from '../core/OldCityLayout';
+import { inSurfBand, onJetty, pileById, pondCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
@@ -1295,7 +1295,7 @@ export class ChunkRenderer {
       }
       // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
       // (not the jetty: its tiles are paving underneath, but its wooden deck is the model's)
-      const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !onJetty(t.x, t.z) ? this.paintedGround(t) : undefined;
+      const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !this.overWater(t) ? this.paintedGround(t) : undefined;
       if (gt) {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
         if (this.raisedPaving(t)) this.pavedTop(b, t, th, gtex, k);
@@ -1761,6 +1761,16 @@ export class ChunkRenderer {
       if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
       return;
     }
+    // E23.13: a gate or bridge standing on a canal keeps the canal under it: the water, then the barricade on it while
+    // it's shut, or a plank boardwalk across once it's open (planks run along the canal, so you walk across them)
+    if (t.feature === 'obstacle' && this.overWater(t)) {
+      const sea = PALETTE.ground.sea;
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      if (t.blocked && t.prop && this.oldCityProp(b, t, x, h + 0.08, z)) return;
+      for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x - 0.375 + i * 0.25, h + 0.06, z], [0.22, 0.05, 0.98]);
+      b.add('cylinder', PALETTE.wood.deep, [x, h - 0.25, t.z % 2 ? z + 0.42 : z - 0.42], [0.09, 0.7, 0.09]);
+      return;
+    }
     // E23.8.3.1: the Long Causeway's broken middle: its low deck under the sea, a few deck stones breaking the surface,
     // until the Great Bloom raises it (then it draws as the road it is)
     if (t.blocked && t.prop === 'causeway-broken') {
@@ -1774,7 +1784,8 @@ export class ChunkRenderer {
     if (f === 'water' && t.blocked && pondCell(t.x, t.z)) return this.waterTile(b, t, h, x, z, r);
     // E21.4: the Old City's open sea: deep water, never restored
     if (t.blocked && f === 'water') {
-      const sea = PALETTE.ground.sea;
+      // E23.13: the bay's ragged shallow shelf, and a canal where it runs out through the surf, are the shallows' colour
+      const sea = shallowSea(t.x, t.z) || (t.level !== undefined && regionWater(t.x, t.z) && inSurfBand(t.x, t.z)) ? PALETTE.ground.shallows : PALETTE.ground.sea;
       this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
       if (t.variant % 5 === 0) b.add('box', PALETTE.ground.seaFoam, [x + r.range(-0.3, 0.3), h + 0.085 - WATER.drop, z + r.range(-0.3, 0.3)], [r.range(0.2, 0.5), 0.006, 0.05]);
       return;
@@ -1879,7 +1890,7 @@ export class ChunkRenderer {
 
   /** The painted texture a tile's top wears now (dead, unoccupied Old City ground), if any. */
   private paintedTop(t: TileData | undefined): GroundTexName | undefined {
-    return t && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !onJetty(t.x, t.z) ? this.paintedGround(t) : undefined;
+    return t && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !this.overWater(t) ? this.paintedGround(t) : undefined;
   }
 
   /** Dead painted paving: it stands a little above the earth beside it. */
@@ -2037,6 +2048,19 @@ export class ChunkRenderer {
     return !!t && !t.occupantId && t.feature === 'water' && (!t.blocked || pondCell(t.x, t.z));
   }
 
+  /**
+   * E23.13: a neighbour a pool's bank never walls off: other water (surf, the open bay, a canal) or a deck standing
+   * over water (the jetty, a canal's boardwalk bridge), which has water under it too.
+   */
+  private bankless(n: TileData): boolean {
+    return n.feature === 'water' || this.overWater(n); // (isWater's pools and ponds are water too)
+  }
+
+  /** E23.13: a tile that stands over water and keeps the water drawn under it (the jetty; a gate or bridge on a canal). */
+  private overWater(t: TileData): boolean {
+    return t.level !== undefined && (onJetty(t.x, t.z) || (t.feature === 'obstacle' && regionWater(t.x, t.z)));
+  }
+
   /** The colour of a tile's top, as `tile` draws it (pool banks borrow it from the neighbouring tile). */
   private topColour(t: TileData): string {
     const f = t.feature ?? 'lawn';
@@ -2119,7 +2143,7 @@ export class ChunkRenderer {
     const g = this.sim.grid;
     const water = (dx: number, dz: number) => {
       const n = g.peek(t.roofId, t.x + dx, t.z + dz);
-      return !n || this.isWater(n);
+      return !n || this.bankless(n);
     };
     return CORNERS.map(([sx, sz]) => (water(sx, 0) || water(0, sz) ? 0 : water(-sx, 0) && water(0, -sz) && water(-sx, -sz) ? WATER.wide : WATER.fillet));
   }
@@ -2201,7 +2225,7 @@ export class ChunkRenderer {
     // a land neighbour (one not generated yet counts as water: canals run on across chunks)
     const side = (dx: number, dz: number) => {
       const n = g.peek(t.roofId, t.x + dx, t.z + dz);
-      return n && !this.isWater(n) ? n : undefined;
+      return n && !this.bankless(n) ? n : undefined;
     };
     const radius = this.poolCorners(t);
     for (let i = 0; i < 4; i++) {
