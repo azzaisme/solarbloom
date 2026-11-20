@@ -18,6 +18,7 @@ export type ItemCost = Partial<Record<ItemId, number>>;
  * - `research`: a finished research project (E23.6.2), by project id
  * - `find`: a cache opened, by cache id (data/oldcity caches)
  * - `tier`: a step of the fountain (E21.6), for the Old City's own machines
+ * - `gift`: handed over by a Keeper's garden (E23.5.4.6), by machine id (`salvage.recipes`)
  * - `cat`: E23.12.2 (#529), a cat-only decoration, known once a Lucky Cat has left it (it comes made)
  * - `hand`: a job done by hand enough times (E23.6.4's automation; data/automation HAND_JOBS)
  * - `all`: every one of several (the Assembler: its Keeper, and crafting by hand)
@@ -30,7 +31,8 @@ export type Unlock =
   | { tier: number }
   | { cat: string }
   | { hand: import('./automation').HandJob }
-  | { all: Unlock[] };
+  | { gift: string }
+  | { all: Unlock[] }
 
 export interface ComponentDef {
   id: ComponentId;
@@ -97,7 +99,18 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'solar', name: 'Solar panel', cost: { scrap: 4, glassPane: 2, wire: 1 }, unlock: { keeper: 'oldMarket' }, builds: 'solar' },
   { id: 'windTurbine', name: 'Wind turbine', cost: { planks: 6, scrap: 4, wire: 2 }, unlock: { keeper: 'saltwind' }, builds: 'windTurbine' },
   { id: 'chest', name: 'Storage chest', cost: { planks: 4, scrap: 2 }, unlock: { keeper: 'saltwind' }, builds: 'chest' },
-  { id: 'beehive', name: 'Beehive', cost: { planks: 4, seeds: 2 }, unlock: { keeper: 'elderGrove' }, owner: 'E23.5' },
+  { id: 'beehive', name: 'Beehive', cost: { planks: 4, seeds: 2 }, unlock: { keeper: 'elderGrove' }, builds: 'beehive' },
+  // E23.5.4: beyond planters. Elder Grove hands over the fruit tree, the Glasshouse the mushroom log, and Saltwind
+  // (Timber) the bird box and hedgehog house; Keeper gardens hand over the worm bin, fish pond, butterfly garden
+  // and bat box (`gift`).
+  { id: 'orchard', name: 'Fruit tree', cost: { seeds: 4, biomass: 6 }, unlock: { keeper: 'elderGrove' }, builds: 'orchard' },
+  { id: 'mushroomLog', name: 'Mushroom log', cost: { planks: 3, compost: 1 }, unlock: { keeper: 'glasshouse' }, builds: 'mushroomLog' },
+  { id: 'birdBox', name: 'Bird box', cost: { planks: 2 }, unlock: { keeper: 'saltwind' }, builds: 'birdBox' },
+  { id: 'hedgehogHouse', name: 'Hedgehog house', cost: { planks: 3, biomass: 2 }, unlock: { keeper: 'saltwind' }, builds: 'hedgehogHouse' },
+  { id: 'wormBin', name: 'Worm bin', cost: { planks: 3, scrap: 2 }, unlock: { gift: 'wormBin' }, builds: 'wormBin' },
+  { id: 'fishPond', name: 'Fish pond', cost: { clay: 8, scrap: 4 }, unlock: { gift: 'fishPond' }, builds: 'fishPond' },
+  { id: 'butterflyGarden', name: 'Butterfly garden', cost: { seeds: 4, biomass: 4 }, unlock: { gift: 'butterflyGarden' }, builds: 'butterflyGarden' },
+  { id: 'batBox', name: 'Bat box', cost: { planks: 2, scrap: 1 }, unlock: { gift: 'batBox' }, builds: 'batBox' },
   { id: 'reservoir', name: 'Reservoir', cost: { clay: 10, scrap: 4 }, unlock: { keeper: 'cistern' }, builds: 'reservoir', owner: 'E23.4' },
   { id: 'pump', name: 'Pump', cost: { scrap: 6, wire: 2, clay: 2 }, unlock: { keeper: 'cistern' }, builds: 'pump', owner: 'E23.4' },
   { id: 'desalination', name: 'Desalination plant', cost: { scrap: 10, pipe: 4, glassPane: 4, wire: 2 }, unlock: { keeper: 'cistern' }, builds: 'desalination', owner: 'E23.4' },

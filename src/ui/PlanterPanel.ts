@@ -4,6 +4,7 @@ import { MATERIALS, type MaterialCost } from '../data/salvage';
 import type { Sim } from '../gameplay/Sim';
 import { cardHead, escHtml } from './OldCityPanel';
 import { icon } from './PanelShell';
+import { keeperById } from '../core/OldCityLayout';
 
 /** A price from data as words ("2 Timber", "1 Fertiliser"). */
 const price = (c: MaterialCost) =>
@@ -37,6 +38,10 @@ const LIKE_WORDS: Record<Like, string> = {
  */
 export function planterHtml(sim: Sim, m: MachineData): string {
   const f = sim.farm;
+  // E23.5.4.6: a planter by a woken Keeper is its garden: say what it would like grown here
+  const keeper = sim.farmExtras.gardenOf(m);
+  const req = keeper ? sim.farmExtras.request(keeper) : undefined;
+  const garden = keeper && req ? `<p class="oc-say">${escHtml(keeperById(keeper)?.name ?? '')}'s garden: “${escHtml(req.ask)}”</p>` : '';
   const st = f.bed(m);
   const lk = f.look(m);
   const inv = sim.inventory;
@@ -56,7 +61,7 @@ export function planterHtml(sim: Sim, m: MachineData): string {
     for (const [a, b] of f.crosses()) crops.push(cell(`${a}+${b}`, CROPS[a].icon, crossName(a, b), 'A cross: happy with what either likes'));
     return (
       cardHead({ icon: icon('sprout', 'l'), title: 'An empty planter', mood: ok ? 'Choose what to grow. Each planting takes a Seed.' : 'Bring Seeds to plant something.', tone: ok ? '' : 'clay', choose: 'Plant' }) +
-      `<div class="oc-content"><h3 class="pn-label">Next to plant</h3><div class="oc-crops">${crops.join('')}</div>${extras}</div>`
+      `<div class="oc-content">${garden}<h3 class="pn-label">Next to plant</h3><div class="oc-crops">${crops.join('')}</div>${extras}</div>`
     );
   }
   const d = CROPS[lk.crop as CropId];
@@ -82,7 +87,7 @@ export function planterHtml(sim: Sim, m: MachineData): string {
   const why = !st.fed && !canFeed ? `<p class="pn-note">You have no Fertiliser. Compost bins turn Greens and food scraps into it.</p>` : '';
   return (
     cardHead({ icon: icon('sprout', 'l'), title: name, mood, tone: thirsty ? 'clay' : lk.ripe ? 'leaf' : '', choose: lk.ripe ? 'Harvest' : 'Choose' }) +
-    `<div class="oc-content"><div class="oc-tile"><div class="oc-tile-row"><span class="oc-crop-ic">${d.icon}</span><b>${escHtml(name)}</b><span class="pn-soft">${lk.ripe ? 'Ripe' : lk.resting ? 'Resting' : thirsty ? 'Wilting' : 'Growing'}</span></div>` +
+    `<div class="oc-content">${garden}<div class="oc-tile"><div class="oc-tile-row"><span class="oc-crop-ic">${d.icon}</span><b>${escHtml(name)}</b><span class="pn-soft">${lk.ripe ? 'Ripe' : lk.resting ? 'Resting' : thirsty ? 'Wilting' : 'Growing'}</span></div>` +
     `<div class="pn-bar${thirsty ? ' sun' : ''}" aria-hidden="true"><i style="width:${Math.round(lk.progress * 100)}%"></i></div><p class="pn-note">${escHtml(d.use)}.</p></div>` +
     `<h3 class="pn-label">Tend</h3><div class="oc-row">${lk.ripe ? `<button class="pn-btn primary" data-act="harvest">${icon('check', 's')}Harvest</button>` : ''}${feed}</div>${why}${extras}</div>`
   );

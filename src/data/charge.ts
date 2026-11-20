@@ -9,7 +9,7 @@ const FULL = 100;
 
 export interface EdibleDef {
   /** the backpack item eaten (E23.5.1's farm items) */
-  id: 'biomass' | 'food';
+  id: 'biomass' | 'food' | 'honey';
   name: string;
   /** charge one unit gives back (from E23.5.1's FARM_USES: its share of a full battery) */
   charge: number;
@@ -38,6 +38,8 @@ export const CHARGE = {
   lowShare: 0.2,
   /** what bloombot can eat anywhere, best first when eating picks for you (slow, uses items) */
   edibles: [
+    // E23.5.4.1: honey from beehives, a strong snack
+    { id: 'honey', name: 'Honey', charge: FARM_USES.honey.charge * FULL, seconds: 3 },
     { id: 'food', name: 'Food', charge: FARM_USES.food.charge * FULL, seconds: 3 },
     { id: 'biomass', name: 'Biomass', charge: FARM_USES.biomass.charge * FULL, seconds: 2 },
   ] as EdibleDef[],

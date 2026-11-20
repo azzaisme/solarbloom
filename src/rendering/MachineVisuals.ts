@@ -19,7 +19,7 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
-import { compostBinBody, digesterBody } from './FarmBodies';
+import { batBoxBody, beehiveBody, birdBoxBody, butterflyGardenBody, compostBinBody, digesterBody, fishPondBody, hedgehogHouseBody, mushroomLogBody, orchardBody, wormBinBody } from './FarmBodies';
 import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
 
@@ -109,6 +109,13 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   // until their files are in assets/raw/models/final (MODELS loads whatever is there)
   compostBin: ['compost-bin', 0.82],
   bioDigester: ['bio-digester', 0.8],
+  // E23.5.4: E23.10's models, used once their files are in assets/raw/models/final (today they wait in pending/, so
+  // the procedural bodies draw them)
+  beehive: ['beehive', 0.8],
+  mushroomLog: ['mushroom-log', 0.8],
+  birdBox: ['bird-box', 0.9],
+  batBox: ['bat-box', 0.9],
+  hedgehogHouse: ['hedgehog-house', 0.8],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };
@@ -687,6 +694,34 @@ export class MachineVisuals {
         break;
       case 'bioDigester': // E23.5.3 (its glow is drawn by CropVisuals)
         digesterBody(v.body);
+        break;
+      // E23.5.4 (what is ready, and the creatures, are drawn by CropVisuals)
+      case 'beehive':
+        beehiveBody(v.body);
+        break;
+      case 'fishPond':
+        fishPondBody(v.body);
+        break;
+      case 'orchard':
+        orchardBody(v.body);
+        break;
+      case 'mushroomLog':
+        mushroomLogBody(v.body);
+        break;
+      case 'wormBin':
+        wormBinBody(v.body);
+        break;
+      case 'birdBox':
+        birdBoxBody(v.body);
+        break;
+      case 'batBox':
+        batBoxBody(v.body);
+        break;
+      case 'hedgehogHouse':
+        hedgehogHouseBody(v.body);
+        break;
+      case 'butterflyGarden':
+        butterflyGardenBody(v.body);
         break;
       case 'reservoir': // E23.4.2.1
         this.waterTank(v);

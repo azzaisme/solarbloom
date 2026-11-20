@@ -7,6 +7,7 @@ import { LIGHTS } from '../src/data/lights';
 import { ITEM_DEFS } from '../src/data/items';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { GARDEN_REQUESTS } from '../src/data/farmExtras';
 import { PROJECTS } from '../src/data/research';
 import { HAND_JOBS } from '../src/data/automation';
 import { Sim } from '../src/gameplay/Sim';
@@ -30,6 +31,8 @@ function reachable(u: Unlock): boolean {
   if ('keeper' in u) return KEEPERS.some((k) => k.region === u.keeper);
   if ('find' in u) return CACHES.has(u.find);
   if ('tier' in u) return u.tier >= 1 && u.tier <= 5;
+  // E23.5.4.6: a garden gift is handed over by some Keeper's garden request
+  if ('gift' in u) return Object.values(GARDEN_REQUESTS).some((rs) => rs.some((r) => r.reward.kind === 'recipe' && r.reward.machine === u.gift));
   if ('cat' in u) return CAT_DECOR.includes(u.cat); // E23.12.2: a cat-only decoration (a Lucky Cat leaves it)
   if ('hand' in u) return u.hand in HAND_JOBS; // E23.6.4: a job done by hand
   if ('all' in u) return u.all.every(reachable);

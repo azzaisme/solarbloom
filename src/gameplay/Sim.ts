@@ -2,6 +2,8 @@ import { machinesStamp } from '../core/GameState';
 import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Grid } from '../core/Grid';
+import { inRect } from '../core/OldCityLayout';
+import { REGIONS } from '../data/oldcity';
 import { hasGrowth, unpackChunk } from '../core/TilePack';
 import { Rng } from '../core/Rng';
 import type { GameState, MachineData, TileData } from '../core/types';
@@ -49,6 +51,7 @@ import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
 import { FarmSystem } from './FarmSystem';
 import { CompostSystem } from './CompostSystem';
+import { FarmExtras } from './FarmExtras';
 import { Weather } from './Weather';
 
 /**
@@ -133,6 +136,8 @@ export class Sim {
   readonly farm: FarmSystem;
   /** E23.5.3: compost bins and Bio Digesters (old-city rules). */
   readonly compost: CompostSystem;
+  /** E23.5.4: hives, ponds, orchards, logs, worm bins, wildlife homes and Keeper gardens (old-city rules). */
+  readonly farmExtras: FarmExtras;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -143,6 +148,7 @@ export class Sim {
     readonly state: GameState,
     readonly bus: EventBus = new EventBus(),
   ) {
+    dryOccupiedPonds(state); // before any tile is generated
     this.grid = new Grid(state.seed, state.layers);
     this.transitions = new Transitions(this);
     // Saved tile deltas are applied as each chunk is generated; occupancy is rebuilt from the machines.
@@ -196,6 +202,7 @@ export class Sim {
     this.gather = new GatherSystem(this);
     this.farm = new FarmSystem(this);
     this.compost = new CompostSystem(this);
+    this.farmExtras = new FarmExtras(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -320,6 +327,7 @@ export class Sim {
     this.weather.tick();
     this.farm.tick(dt);
     this.compost.tick(dt);
+    this.farmExtras.tick(dt);
     this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
     this.cat.tick();
     this.progression.tick();
@@ -333,5 +341,26 @@ export class Sim {
   advance(seconds: number) {
     const steps = Math.round(seconds / TUNING.simStep);
     for (let i = 0; i < steps; i++) this.tick(TUNING.simStep);
+  }
+}
+
+/**
+ * E23.5.4.6: the Keeper ponds came after some games began. On a save's first load since then (never again), a pond
+ * whose spot already holds something the player built (a machine or a decoration) stays dry land in that save (`dryPonds` on the ground layer), and its Keeper's garden is
+ * watered by rain or pipes as any other. Nothing the player made ends up under water.
+ */
+export function dryOccupiedPonds(state: GameState) {
+  const ground = state.layers.find((l) => l.kind === 'ground');
+  if (!ground || ground.pondsChecked) return; // once per save: later builds can't stand on a pond (BuildSystem)
+  ground.pondsChecked = true;
+  const cells: { x: number; z: number }[] = [];
+  for (const m of state.machines) if (m.roofId === ground.id) for (let dx = 0; dx < m.size; dx++) for (let dz = 0; dz < m.size; dz++) cells.push({ x: m.x + dx, z: m.z + dz });
+  for (const k of Object.keys(state.cozy?.decor ?? {})) {
+    const at = parseDecorKey(k);
+    if (at && at.roofId === ground.id) cells.push(at);
+  }
+  for (const r of REGIONS) {
+    if (ground.dryPonds?.includes(r.id)) continue;
+    if (r.ponds?.some((q) => cells.some((c) => inRect(q, c.x, c.z)))) (ground.dryPonds ??= []).push(r.id);
   }
 }

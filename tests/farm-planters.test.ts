@@ -263,6 +263,50 @@ describe('E23.5.2.1: planter growth', () => {
   });
 });
 
+describe('E23.5.2.2: running water (watercress) is real fresh water', () => {
+  it('a dead silted bed, a drained pond and the sea are not running water; a restored pond with water in it is', () => {
+    const sim = farm();
+    const m = planter(sim, 12, 16);
+    const side = sim.grid.get(GROUND, 12, 17)!;
+    // a silted bed beside it: water on the map, but dead
+    Object.assign(side, { feature: 'water', ground: 'polluted', pollution: 60, blocked: false });
+    sim.grid.touch(side);
+    expect(sim.water.isFresh(side)).toBe(false);
+    expect(sim.farm.runningWater(m)).toBe(false);
+    // restored: fresh water, and it holds some
+    Object.assign(side, { ground: 'restored', pollution: 0 });
+    sim.grid.touch(side);
+    expect(sim.farm.runningWater(m)).toBe(true);
+    // drained dry: no longer running
+    const b = sim.water.bodyAt(side)!;
+    sim.water.draw(b.id, b.capacity);
+    expect(sim.farm.runningWater(m)).toBe(false);
+    sim.water.fill(b.id, b.capacity);
+    expect(sim.farm.runningWater(m)).toBe(true);
+  });
+
+  it('the sea and the surf beside a bed are not running water', () => {
+    const sim = farm();
+    // a land tile on the beach with the sea or the surf on one side
+    let spot: { x: number; z: number } | undefined;
+    const beach = regionCell(sim, 'saltwind'); // Saltwind Beach meets the surf
+    for (let z = beach.z - 24; z <= beach.z + 24 && !spot; z++)
+      for (let x = beach.x - 24; x <= beach.x + 24 && !spot; x++) {
+        const t = sim.grid.get(GROUND, x, z);
+        if (!t || t.feature === 'water' || t.blocked) continue;
+        const sea = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => {
+          const o = sim.grid.get(GROUND, x + dx, z + dz);
+          return o?.feature === 'water' && !sim.water.isFresh(o);
+        });
+        const fresh = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => sim.water.isFresh(sim.grid.get(GROUND, x + dx, z + dz)));
+        if (sea && !fresh) spot = { x, z };
+      }
+    expect(spot, 'a shore tile').toBeDefined();
+    const bed = { id: 'probe', type: 'planter', roofId: GROUND, x: spot!.x, z: spot!.z, size: 1 } as unknown as MachineData;
+    expect(sim.farm.runningWater(bed)).toBe(false);
+  });
+});
+
 describe('E23.5.2.2: every crop’s likes change its growth', () => {
   /** Puts a planter in each condition for a like (true = met). */
   const set: Record<Like, (sim: Sim, m: MachineData, on: boolean) => void> = {
@@ -282,7 +326,8 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
     fertiliser: (sim, m, on) => void (on && (sim.inventory.add('fertiliser', 1), sim.farm.feed(m))),
     runningWater: (sim, m, on) => {
       const t = sim.grid.get(GROUND, m.x, m.z + 1)!;
-      t.feature = on ? 'water' : undefined;
+      t.feature = on ? 'water' : undefined; // a little restored pool beside the bed: fresh water
+      if (on) Object.assign(t, { ground: 'restored', pollution: 0, blocked: false });
       sim.grid.touch(t);
     },
     night: (sim, _m, on) => at(sim, on ? 0.85 : 0.2),

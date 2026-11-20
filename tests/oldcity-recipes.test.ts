@@ -5,6 +5,7 @@ import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { TIERS } from '../src/data/salvage';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { KEEPERS } from '../src/data/oldcity';
+import { KEEPER_RECIPES } from '../src/data/farmExtras';
 import { HAND_JOBS } from '../src/data/automation';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -40,6 +41,7 @@ describe('E21.3: recipes', () => {
     for (const type of MACHINE_RECIPES.flatMap((r) => (r.builds ? [r.builds] : []))) {
       const sim = oldSim();
       wakeKeepers(sim);
+      sim.state.salvage!.recipes = [...KEEPER_RECIPES]; // E23.5.4.6: these recipes come from Keeper gardens (tested there)
       const x = 12;
       const z = 12;
       ground(sim, x, z);

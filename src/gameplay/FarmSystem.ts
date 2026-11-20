@@ -1,4 +1,6 @@
 import { PARK } from '../core/Areas';
+import { GROUND } from '../core/GameState';
+import { WATER_NET } from '../data/water';
 import { regionOfCell } from '../core/OldCityLayout';
 import { PARK_SET, REGIONS } from '../data/oldcity';
 import type { MachineData, PlanterState } from '../core/types';
@@ -11,12 +13,8 @@ import type { Sim } from './Sim';
 /**
  * Water is E23.4.1's real levels (`sim.water`): a bed drinks from the canal or pond within reach, wilts while that
  * runs dry and grows on once it fills again; rain waters every bed. Weather is E23.7.2's (`sim.weather`), day and
- * night E23.7.1's game clock (`sim.clock`). Only E23.4.2's pipes (`isRunning`, #514) are still optional.
+ * night E23.7.1's game clock (`sim.clock`). Watercress wants running water: E23.4.2's pipes, or fresh water beside it.
  */
-type At = { roofId: string; x: number; z: number };
-interface FarmHooks {
-  water?: { isRunning?(t: At): boolean };
-}
 
 /** Why a planter is (or isn't) growing right now, for tests, tooltips and the crop visuals. */
 export interface PlanterLook {
@@ -71,10 +69,6 @@ export class FarmSystem {
   /** E23.6.2: the farm reads research's Kind soil and Crossbreeds, so the station may offer them. */
   get researchReady(): boolean {
     return this.on;
-  }
-
-  private get hooks(): FarmHooks {
-    return this.sim as unknown as FarmHooks;
   }
 
   // ───────────── state ─────────────
@@ -177,13 +171,18 @@ export class FarmSystem {
     return false;
   }
 
-  /** Water flowing beside the planter (E23.4's network when it lands, else a canal or the sea next to it). */
-  private runningWater(m: MachineData): boolean {
-    const hook = this.hooks.water?.isRunning?.(m);
-    if (hook !== undefined) return hook;
+  /**
+   * Water flowing beside the planter (watercress): a pipe carrying water on one of its sides (E23.4.2), or fresh water
+   * beside it that still holds some (a canal or a restored pond). A dead silted bed, a drained pond, the sea and the
+   * surf never count.
+   */
+  runningWater(m: MachineData): boolean {
+    if (m.roofId !== GROUND) return false;
+    const w = this.sim.water;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const t = this.sim.grid.peek(m.roofId, m.x + dx, m.z + dz);
-      if (t?.feature === 'water') return true;
+      if (w.pipes.carries(m.x + dx, m.z + dz)) return true;
+      const b = w.bodyAt(this.sim.grid.peek(GROUND, m.x + dx, m.z + dz));
+      if (b && w.levelOf(b.id) > WATER_NET.dryBelow) return true;
     }
     return false;
   }
@@ -196,9 +195,10 @@ export class FarmSystem {
     return false;
   }
 
-  /** Fed with fertiliser, or beans growing next door. */
+  /** Fed with fertiliser, beans growing next door, or water from a fish pond (E23.5.4.2). */
   fertilised(m: MachineData): boolean {
     if (this.bed(m).fed) return true;
+    if (this.sim.farmExtras.pondFeeds(m)) return true;
     return this.near(m, PLANTER.beansReach, (o) => o.type === 'planter' && this.bed(o).crop === 'beans');
   }
 
@@ -261,6 +261,7 @@ export class FarmSystem {
       // a crop that likes fertiliser (data/crops) gets it through that like, not the general boost as well
       if (!def.likes.includes('fertiliser') && this.fertilised(m)) rate *= PLANTER.fertilisedBoost;
       if (this.pollinated(m)) rate *= PLANTER.pollinatorBoost;
+      rate *= this.sim.farmExtras.cropBoost(m); // E23.5.4.1: settled beehives in reach
       rate *= machineStrengthAt('planter', m.x, m.z); // E23.8.1: fertile soil (Elder Grove) grows faster
       rate *= 1 + (this.sim.research?.effect('cropGrowth') ?? 0); // E23.6.2: Kind soil (research)
     }

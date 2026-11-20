@@ -129,6 +129,11 @@ export interface RegionDef {
    * a canal, drawn as a pool (rounded painted banks, rocks and reeds, the pool's surface) instead of open water.
    */
   water?: WaterRect[];
+  /**
+   * E23.5.4.6: shallow ponds beside the Keeper's garden. A silted bed while the ground is dead; restored, it is fresh
+   * water (E23.4.1) that waters the planters within reach. Walkable, like the park's pond.
+   */
+  ponds?: CellRect[];
 }
 
 const P = (id: string, x: number, z: number, material: MaterialId, size: PileSize, model: string): PileDef => ({ id, x, z, material, size, model });
@@ -144,6 +149,8 @@ export const REGIONS: RegionDef[] = [
     material: 'copper',
     landmark: { kind: 'mast', name: 'Signal Mast', x: 18, z: -26 },
     keeper: 'pylon',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 9, z: -8, w: 2, d: 3 }],
     seam: { name: 'the Pipeworks', x: 23, z: -8 },
     gate: { id: 'g-mastRow', kind: 'barricade', cells: [[7, -1], [8, -1]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
     patch: { name: 'The tram stop', x: 10, z: -20, w: 5, d: 3 },
@@ -196,6 +203,8 @@ export const REGIONS: RegionDef[] = [
     material: 'glass',
     landmark: { kind: 'hall', name: 'Market Hall', x: 32, z: 14 },
     keeper: 'tally',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 21, z: 9, w: 2, d: 3 }],
     seam: { name: 'the Glassworks', x: 40, z: 24 },
     gate: { id: 'g-oldMarket', kind: 'barricade', cells: [[16, 7], [16, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
     patch: { name: 'The market square', x: 26, z: 18, w: 6, d: 4 },
@@ -246,6 +255,8 @@ export const REGIONS: RegionDef[] = [
     material: 'timber',
     landmark: { kind: 'sealock', name: 'The Sea Lock', x: -6, z: 40 },
     keeper: 'tide',
+    // E23.5.4.6: a freshwater rock pool above the tide line beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 7, z: 16, w: 2, d: 3 }],
     seam: { name: 'the Driftline', x: -12, z: 28 },
     // The boat lands here, so the beach is open from the start. The Sea Lock stands across the canal that runs down
     // to the bay; the barricade blocks the boardwalk bridge over it.
@@ -399,6 +410,8 @@ export const REGIONS: RegionDef[] = [
     material: 'clay',
     landmark: { kind: 'cistern', name: 'Old Cistern', x: 56, z: 48 },
     keeper: 'sluice',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 36, z: 33, w: 2, d: 3 }],
     seam: { name: 'the Claypits', x: 70, z: 58 },
     gate: { id: 'g-cistern', kind: 'water', cells: [[40, 32], [41, 32], [40, 33], [41, 33], [40, 34], [41, 34]], needs: { ability: 'hover' }, blocked: 'Deep water — needs Hover (fountain tier 2)' },
     patch: { name: 'The spillway', x: 44, z: 52, w: 4, d: 6 },
@@ -484,6 +497,8 @@ export const REGIONS: RegionDef[] = [
     material: 'gears',
     landmark: { kind: 'clock', name: 'Clock Tower', x: 64, z: 4 },
     keeper: 'tock',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 53, z: 4, w: 2, d: 3 }],
     seam: { name: 'the Escapement', x: 72, z: -12 },
     gate: { id: 'g-clockPlaza', kind: 'lockBridge', cells: [[48, 7], [49, 7], [48, 8], [49, 8]], needs: { landmark: 'saltwind', ability: 'hover' }, blocked: 'The canal is too deep — the lock bridge rises when the Sea Lock wakes (or Hover)' },
     patch: { name: 'The plaza', x: 60, z: 12, w: 8, d: 4 },
@@ -535,6 +550,8 @@ export const REGIONS: RegionDef[] = [
     material: 'sunstone',
     landmark: { kind: 'crystal', name: 'Rooftop Core', x: 6, z: -52 },
     keeper: 'gable',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 7, z: -40, w: 2, d: 3 }],
     seam: { name: 'the Sunvein', x: -10, z: -60 },
     gate: { id: 'g-terraces', kind: 'climb', cells: [[8, -33]], needs: { ability: 'climb' }, blocked: 'Only the roofs go on from here — needs Climb (fountain tier 3)' },
     patch: { name: 'The roof garden', x: 18, z: -46, w: 4, d: 4 },
@@ -586,6 +603,8 @@ export const REGIONS: RegionDef[] = [
     material: 'glass',
     landmark: { kind: 'greenhouse', name: 'Great Greenhouse', x: -50, z: -10 },
     keeper: 'fern',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: -41, z: 2, w: 2, d: 3 }],
     seam: { name: 'the Potting Sheds', x: -60, z: -28 },
     gate: { id: 'g-glasshouse', kind: 'bridge', cells: [[-36, 0], [-35, 0], [-34, 0], [-33, 0], [-36, 1], [-35, 1], [-34, 1], [-33, 1]], needs: { repair: { timber: 30, copper: 20, gears: 10 } }, blocked: 'The bridge is broken — repair it with 30 Timber, 20 Copper and 10 Gears' },
     patch: { name: 'The nursery beds', x: -46, z: 6, w: 4, d: 4 },
@@ -654,6 +673,8 @@ export const REGIONS: RegionDef[] = [
     material: 'copper',
     landmark: { kind: 'observatory', name: 'Sky Observatory', x: 60, z: -66 },
     keeper: 'vega',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: 33, z: -45, w: 2, d: 3 }],
     seam: { name: 'the Lens Grinders', x: 72, z: -40 },
     gate: { id: 'g-observatory', kind: 'cliff', cells: [[33, -48]], needs: { ability: 'glide' }, blocked: 'A cliff too high to climb — glide here from the edge of The Terraces (fountain tier 4)' },
     patch: { name: 'The hilltop', x: 56, z: -74, w: 6, d: 4 },
@@ -724,6 +745,8 @@ export const REGIONS: RegionDef[] = [
     material: 'gears',
     landmark: { kind: 'spire', name: 'Solar Spire', x: -50, z: -66 },
     keeper: 'atlas',
+    // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
+    ponds: [{ x: -27, z: -40, w: 2, d: 3 }],
     seam: { name: 'the Foundry Vaults', x: -70, z: -50 },
     gate: { id: 'g-spireHeights', kind: 'climb', cells: [[-24, -33], [-23, -33]], needs: { ability: 'climb' }, blocked: 'A collapsed skybridge blocks the avenue — needs Climb (fountain tier 3)' },
     patch: { name: 'Spire Square', x: -54, z: -58, w: 8, d: 4 },

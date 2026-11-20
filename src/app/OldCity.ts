@@ -10,6 +10,7 @@ import { GATHER } from '../data/farm';
 import { crossName, CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
 import { compostHtml, digesterHtml } from '../ui/CompostPanel';
+import { extraHtml } from '../ui/ExtrasPanel';
 import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
@@ -89,6 +90,22 @@ export class OldCityController {
       const parts = (['food', 'biomass', 'seeds'] as const).filter((k) => e[k] > 0).map((k) => `+${e[k]} ${MATERIALS[k].icon}`);
       flyUp(host.hud.root, parts.join('  '), sc.x, sc.y);
       host.sound('salvage', 'seeds');
+    });
+    host.sim.bus.on('farm.harvested', (e) => {
+      const m = host.sim.machine(e.machineId);
+      if (!m) return;
+      const sc = host.screenOf(m.x, m.z);
+      flyUp(host.hud.root, `+${e.n} ${MATERIALS[e.item].icon} ${MATERIALS[e.item].name}`, sc.x, sc.y);
+    });
+    host.sim.bus.on('garden.fulfilled', (e) => {
+      const r = e.reward;
+      const got = r.kind === 'seeds' ? `${CROPS[r.crop].name} seeds` : r.kind === 'items' ? `${r.n} Seeds` : r.kind === 'recipe' ? `the ${r.name} recipe` : `a ${r.name} to place`;
+      this.sim.bus.emit('keeper.said', { keeperId: e.keeperId, lines: [`Thank you. Here: ${got}.`] });
+      host.sound('deliver');
+    });
+    // a newly built planter beside a woken Keeper: the Keeper asks for what it would like grown there
+    host.sim.bus.on('machine.built', (e) => {
+      if (e.machine?.type === 'planter') this.gardenAsk(e.machine);
     });
     host.sim.bus.on('seeds.found', (e) => {
       const c = CROPS[e.crop as CropId];
@@ -332,6 +349,27 @@ export class OldCityController {
         if (act === 'feed' && this.sim.compost.feed(m) > 0) this.host.sound('deliver');
       },
     );
+  }
+
+  /** E23.5.4: a hive, pond, fruit tree, mushroom log, worm bin or wildlife home's panel. */
+  extra(m: MachineData) {
+    const x = this.sim.farmExtras;
+    this.host.sound('click');
+    this.panel.open(
+      () => extraHtml(this.sim, m),
+      (act) => {
+        const n =
+          act === 'honey' ? x.takeHoney(m) : act === 'pick' ? x.pick(m) : act === 'prune' ? x.prune(m) : act === 'mushrooms' ? x.pickMushrooms(m) : act === 'inoculate' ? +x.inoculate(m) : act === 'worms' ? +x.feedWorms(m) : 0;
+        if (n > 0) this.host.sound(act === 'inoculate' || act === 'worms' ? 'deliver' : 'salvage', 'seeds');
+      },
+    );
+  }
+
+  /** E21.8 + E23.5.4.6: a Keeper asks for its garden crop once a planter stands in its garden. */
+  gardenAsk(m: MachineData) {
+    const keeper = this.sim.farmExtras.gardenOf(m);
+    const req = keeper ? this.sim.farmExtras.request(keeper) : undefined;
+    if (keeper && req) this.sim.bus.emit('keeper.said', { keeperId: keeper, lines: [req.ask] });
   }
 
   /** E23.5.1: clip restored ground for biomass: hold Interact 0.6 s, like salvaging. */

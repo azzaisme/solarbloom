@@ -260,6 +260,15 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   planter: 'garden', // E23.5.2
   compostBin: 'basket', // E23.5.3
   bioDigester: 'energy', // E23.5.3
+  beehive: 'flower', // E23.5.4
+  fishPond: 'fish',
+  orchard: 'apple',
+  mushroomLog: 'tree',
+  wormBin: 'garden',
+  birdBox: 'bird',
+  batBox: 'moon',
+  hedgehogHouse: 'hut',
+  butterflyGarden: 'butterfly',
   battery: 'battery', // E23.3.2
   windTurbine: 'windTurbine', // E23.3.2
   charger: 'charger', // E23.3.3
@@ -307,11 +316,13 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   // E23.6.1 components.
   '➰': 'link', '🪵': 'build', '🔲': 'glasshouse', '🚰': 'water', '🌀': 'settings',
   // E23.5.1 farm items (food is the carrot, compost the garden bed above).
-  '🧪': 'sparkle',
+  '🧪': 'sparkle', '🍯': 'vase',
   // E23.2.4 visitors (the magpie's 🐦‍⬛ is the bird, by its base emoji).
   '🐝': 'bee', '🦔': 'hedgehog', '🐿': 'squirrel', '🦊': 'fox', '🦉': 'owl', '🦦': 'otter', '🦡': 'badger', '🪶': 'heron', '🦌': 'fawn',
   // E23.6.5 the Assembler.
   '🛠': 'wrench',
+  // E23.5.4 beyond planters (the bee and the hedgehog are the visitors' icons above)
+  '🍄': 'sprout', '🪱': 'sprout', '🦇': 'moon',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

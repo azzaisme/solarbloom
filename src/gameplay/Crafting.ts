@@ -41,6 +41,7 @@ export class Crafting {
     }
     if ('research' in u) return this.sim.research.done(u.research);
     if ('tier' in u) return sv.tier >= u.tier;
+    if ('gift' in u) return !!sv.recipes?.includes(u.gift); // E23.5.4.6: a Keeper's garden handed it over
     if ('cat' in u) return !!sv.decorMade?.includes(u.cat); // E23.12.2: a Lucky Cat left it
     if ('hand' in u) return !!this.sim.automation?.handDone(u.hand);
     if ('all' in u) return u.all.every((x) => this.unlocked(x));
@@ -57,6 +58,7 @@ export class Crafting {
     }
     if ('research' in u) return '🔒 Research';
     if ('tier' in u) return `🔒 Fountain tier ${u.tier}`;
+    if ('gift' in u) return '🔒 A Keeper hands it over: grow what one asks for in their garden';
     if ('hand' in u) {
       const job = HAND_JOBS[u.hand];
       return `🔒 ${job.name} (${this.sim.automation?.handCount(u.hand) ?? 0} of ${job.times})`;

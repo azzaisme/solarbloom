@@ -14,6 +14,8 @@ SaveService.clock = () => 0;
 function farm(): Sim {
   const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 2;
+  // E23.8.2: Tock (Clock Plaza) hands over the Bio Digester; the compost bin is home kit
+  sim.state.salvage!.keepers.tock = { step: 'request1' };
   sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
   // the digester's recipe is handed over by Clock Plaza's Keeper (data/crafting)
   sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'clockPlaza')!.id] = { step: 'settled' };
@@ -41,6 +43,17 @@ function run(sim: Sim, seconds: number) {
     sim.compost.tick(dt);
   }
 }
+
+describe('E23.8.2: unlocks', () => {
+  it('the compost bin is home kit from the start; the Bio Digester waits for Tock in Clock Plaza', () => {
+    const sim = new Sim(createInitialState(7));
+    expect(sim.build.isUnlocked('compostBin')).toBe(true);
+    expect(sim.build.isUnlocked('planter')).toBe(false); // planters open with Timber (Tide, Saltwind)
+    expect(sim.build.isUnlocked('bioDigester')).toBe(false);
+    sim.state.salvage!.keepers.tock = { step: 'request1' };
+    expect(sim.build.isUnlocked('bioDigester')).toBe(true);
+  });
+});
 
 describe('E23.5.3: the compost bin', () => {
   it('biomass and food scraps rot down into compost, then compost matures into fertiliser, over game days', () => {

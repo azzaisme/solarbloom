@@ -40,6 +40,7 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
   food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
   compost: { id: 'compost', name: 'Compost', icon: '🟫', models: [], home: [], colour: '#8a6a4a', from: 'Made in a compost bin' },
+  honey: { id: 'honey', name: 'Honey', icon: '🍯', models: [], home: [], colour: '#f2b632', from: 'From beehives settled near flowers' },
   fertiliser: { id: 'fertiliser', name: 'Fertiliser', icon: '🧪', models: [], home: [], colour: '#c9b06a', from: 'Compost left to mature in a compost bin' },
 };
 

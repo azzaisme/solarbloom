@@ -5,7 +5,7 @@ export interface GameEvents {
   /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
   'charge.empty': Record<string, never>;
   'charge.full': { source: import('../gameplay/Charge').ChargeSource };
-  'charge.eat': { item: 'biomass' | 'food' };
+  'charge.eat': { item: import('../data/charge').EdibleDef['id'] };
   /** E23.2.2: the wheel picked a load; a load just ran out (the next pulse fires empty); a pulse's reveal ripple. */
   'pulse.load': { load: import('../data/pulse').PulseLoadId };
   'pulse.loadEmpty': { load: import('../data/pulse').PulseLoadId };
@@ -60,6 +60,12 @@ export interface GameEvents {
   'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
   /** E23.5.3: a compost bin or Bio Digester changed (filled, made something, emptied). */
   'farm.machine': { machineId: string };
+  /** E23.5.4: something tended gave something (honey, fruit, mushrooms, timber). */
+  'farm.harvested': { machineId: string; item: import('../core/types').MaterialId; n: number };
+  /** E23.5.4.5: a creature moved into (or gently out of) a wildlife home. */
+  'wildlife.moved': { machineId: string; creature: string; in: boolean };
+  /** E23.5.4.6: a Keeper's garden request was grown. */
+  'garden.fulfilled': { keeperId: string; crop: string; reward: import('../data/farmExtras').GardenReward };
   /**
    * E21.10 caches: one was opened (emitted by whoever opens caches; E23.5.2.3 listens for the seeds inside).
    * Nothing opens caches yet: the E21.10 data lists them but no system emits this so far.

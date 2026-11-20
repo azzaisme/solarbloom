@@ -135,6 +135,79 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared', 'polluted'],
     blurb: 'Feed it biomass and it powers its grid, day or night. When it runs empty it simply stops.',
   },
+  // E23.5.4: beyond planters (wild creatures attracted, never kept)
+  beehive: {
+    type: 'beehive',
+    name: 'Beehive',
+    icon: '🐝',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Bees settle once flowers or herbs grow nearby: they make honey and speed up crops around them.',
+  },
+  fishPond: {
+    type: 'fishPond',
+    name: 'Fish Pond',
+    icon: '🐟',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Kept filled from the water nearby. Its water feeds the planters it reaches, so they need no fertiliser.',
+  },
+  orchard: {
+    type: 'orchard',
+    name: 'Fruit Tree',
+    icon: '🍎',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Planted once, it fruits every few days. Prune it now and then for timber.',
+  },
+  mushroomLog: {
+    type: 'mushroomLog',
+    name: 'Mushroom Log',
+    icon: '🍄',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Feed it compost and keep it shaded: mushrooms come up at night and in fog.',
+  },
+  wormBin: {
+    type: 'wormBin',
+    name: 'Worm Bin',
+    icon: '🪱',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Feed the worms scraps and the compost bins beside it work twice as fast.',
+  },
+  birdBox: {
+    type: 'birdBox',
+    name: 'Bird Box',
+    icon: '🐦',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Songbirds move in when there are trees or tall shrubs nearby.',
+  },
+  batBox: {
+    type: 'batBox',
+    name: 'Bat Box',
+    icon: '🦇',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Bats move in near water, and fly at night.',
+  },
+  hedgehogHouse: {
+    type: 'hedgehogHouse',
+    name: 'Hedgehog House',
+    icon: '🦔',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Hedgehogs move in among shrubs, away from machines.',
+  },
+  butterflyGarden: {
+    type: 'butterflyGarden',
+    name: 'Butterfly Garden',
+    icon: '🦋',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Butterflies come when flowers or herbs grow nearby.',
+  },
   // E23.3.2: the grid's storage and its weather power.
   battery: {
     type: 'battery',
@@ -225,7 +298,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 };
 
 /** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter; E23.4 the water; E23.6.4 / E23.6.5 automation). */
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator', 'crate', 'assembler'];
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'beehive', 'fishPond', 'orchard', 'mushroomLog', 'wormBin', 'birdBox', 'batBox', 'hedgehogHouse', 'butterflyGarden', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator', 'crate', 'assembler'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

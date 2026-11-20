@@ -7,6 +7,16 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   // E23.5.3: the end of the farm chain
   | 'compostBin'
   | 'bioDigester'
+  // E23.5.4: beyond planters
+  | 'beehive'
+  | 'fishPond'
+  | 'orchard'
+  | 'mushroomLog'
+  | 'wormBin'
+  | 'birdBox'
+  | 'batBox'
+  | 'hedgehogHouse'
+  | 'butterflyGarden'
   // E23.4.2: the water network
   | 'reservoir'
   | 'pump'
@@ -112,6 +122,13 @@ export interface LayerData {
   preview: boolean; // visible but not yet playable
   /** Ground generation version: 4 the city generator's ground, 5 the Old City (every game since E23.1.1). */
   gen?: number;
+  /**
+   * E23.5.4.6: regions whose Keeper pond stays dry land in this save: something the player built already stood on
+   * its spot when the ponds came (`Sim.dryOccupiedPonds`), so nothing they made ends up under water.
+   */
+  dryPonds?: string[];
+  /** E23.5.4.6: the check above has run for this save (once, on the first load after the ponds came; never again) */
+  pondsChecked?: boolean;
   /** City 12.1: a generated rooftop uses this template's layout and look ('seed', 'reservoir' or 'canopy'). */
   template?: string;
   /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */
@@ -333,7 +350,7 @@ export interface LinkState {
 
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
-export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser'
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser' | 'honey'
   // E23.8.3.2: from the mainland's industrial ruins only
   | 'steel';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
@@ -433,6 +450,32 @@ export interface SalvageState {
   bins?: Record<string, BinState>;
   /** E23.5.3: biomass in each Bio Digester's hopper, by machine id */
   digesters?: Record<string, number>;
+  /** E23.5.4: hives, orchards, logs, worm bins and wildlife homes, by machine id */
+  extras?: Record<string, ExtraState>;
+  /** E23.5.4.6: Keeper garden requests fulfilled, by Keeper id */
+  gardens?: Record<string, number>;
+  /** E23.5.4.6: machine recipes handed over by Keeper gardens */
+  recipes?: string[];
+}
+
+/** E23.5.4: the state of one tended thing (each kind uses the fields it needs; progress in game days). */
+export interface ExtraState {
+  /** honey combs, fruit or mushrooms ready to take */
+  ready?: number;
+  /** progress toward the next */
+  growing?: number;
+  /** orchard: days since planting, since the last pruning, crops so far, whether the waiting crop grew overgrown */
+  age?: number;
+  sincePrune?: number;
+  crops?: number;
+  overgrownCrop?: boolean;
+  /** mushroom log: crops left before it wants compost again */
+  flushes?: number;
+  /** worm bin: game days of feeding left */
+  fed?: number;
+  /** wildlife home: the creature lives here; days its habitat has been right while waiting */
+  settled?: boolean;
+  waiting?: number;
 }
 
 /** E23.5.3: what is in a compost bin (feed in feed units; progress in game days). */
