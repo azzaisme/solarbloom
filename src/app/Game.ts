@@ -3637,7 +3637,7 @@ export class Game {
   }
 
   /** E18: what a drone of this role is doing, in words. */
-  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy'): string {
+  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy' | 'docked', short?: string, lit = false): string {
     const work: Record<DroneRole, string> = {
       restorer: 'restoring a tile',
       gardener: 'watering tiles',
@@ -3654,7 +3654,10 @@ export class Game {
       spark: 'resting — one chain per 30 s, or no garden cluster in reach',
       harvester: 'napping — nothing in reach has flowered',
     };
-    const wait = 'waiting at home — its hub has no power'; // E23.3.3: the only wait is the grid
+    // E23.3.3: the only wait is the grid: off it, or (E23.6.3) on a line with no room left for one more drone at work
+    const wait = lit ? 'waiting at home — not enough power on its line' : 'waiting at home — its hub has no power';
+    // E23.6.3: docked until its hub has what the role runs on again
+    if (status === 'docked') return `docked — waiting for ${short === 'water' ? 'water beside the hub (a pond, canal or pipe)' : short === 'biomass' ? 'Biomass in the store, through a chest beside the hub' : 'power'}`;
     return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
   }
 
@@ -3729,7 +3732,7 @@ export class Game {
         extra = ds
           .map((d, i) => {
             const role = s.roles.roleFor(d, m);
-            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d))} · ${d.jobs} jobs</p>`;
+            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d), s.droneFuel.short(m, role), s.power.isPowered(m))} · ${d.jobs} jobs</p>`;
           })
           .join('') +
           this.rolePicker(m);

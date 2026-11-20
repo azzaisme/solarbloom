@@ -36,8 +36,6 @@ export const WATER_NET = {
   fadeBelow: 0.35,
   /** largest body one flood fill walks (safety cap) */
   maxTiles: 6000,
-  /** what the helpers draw (units per tile they work); planters and pumps bring their own (E23.5, E23.4.2) */
-  draw: { cultivatorPerTile: 2, gardenerPerTile: 1 },
   /**
    * E23.4.4: land around low water fades. Restored ground within `fadeReach` of a body below `fadeBelow` shows up to
    * `fadeSteps` bloom stages less, more the emptier it is: the whole bloom range (TUNING's maxBloom 4 down to 1), so

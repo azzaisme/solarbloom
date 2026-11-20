@@ -86,6 +86,15 @@ export class Inventory {
     this.sim.bus.emit('store.changed', { material: m, delta: Math.floor(n) });
   }
 
+  /** Takes units straight out of the store (all or nothing): what machines and drones use from it (E23.6.3). */
+  takeFromStore(m: ItemId, n: number): boolean {
+    if (n <= 0) return true;
+    if (this.stored(m) < n) return false;
+    this.set('store', m, this.stored(m) - n);
+    this.sim.bus.emit('store.changed', { material: m, delta: -n });
+    return true;
+  }
+
   /** Moves units from the backpack to the store (default: the whole stack). Returns how many moved. */
   deposit(m: ItemId, n = this.count(m), hand = true): number {
     const k = Math.min(Math.floor(n), this.count(m));

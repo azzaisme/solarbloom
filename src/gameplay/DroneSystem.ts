@@ -4,7 +4,8 @@ import type { DroneData, DroneRole, MachineData, TileData } from '../core/types'
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
-export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling';
+/** E23.6.3: 'docked' = its hub is short of power, water or biomass; it waits at home and starts again by itself. */
+export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling' | 'docked';
 
 /**
  * Drone AI runs purely on grid targets. Positions are roof-local continuous coordinates;
@@ -357,6 +358,19 @@ export class DroneSystem {
       d.timer = TUNING.drone.retrySeconds;
       return;
     }
+    // E23.6.3: the job's water, biomass and power; should that come up short after all, the job doesn't start
+    if (!s.droneFuel.take(hub, role)) {
+      this.setTarget(d, undefined);
+      d.targetMachineId = undefined;
+      d.role = undefined;
+      d.route = undefined;
+      d.reserve = undefined;
+      d.cargo = undefined;
+      this.status.set(d.id, 'docked');
+      d.timer = TUNING.drone.retrySeconds;
+      return;
+    }
+    d.homing = undefined;
     d.mode = 'flying';
     const p = s.roles.targetPoint(d)!;
     if (this.roofOf(d) === hub.roofId && this.isFar(hub)) {
@@ -434,12 +448,29 @@ export class DroneSystem {
             this.status.set(d.id, 'waitingEnergy');
             const hx = hub.x + hub.size / 2;
             const hz = hub.z + hub.size / 2;
-            if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
+            if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) {
+              d.mode = 'returning';
+              d.homing = true; // E23.6.3: no load on the way home
+            }
             d.timer = TUNING.drone.retrySeconds;
             break;
           }
           // E18: a hub with another role sends its drones on that role's job (Restorers carry on below, unchanged).
           const role = s.roles.roleFor(d, hub);
+          // E23.6.3: a hub short of what this role runs on: the drone docks and waits (the old drone runs on sunlight).
+          // No room on the grid for one more drone at work reads as waiting for power, like a hub off the grid.
+          const missing = d.old ? undefined : s.droneFuel.short(hub, role);
+          if (missing) {
+            this.status.set(d.id, missing === 'power' ? 'waitingEnergy' : 'docked');
+            const hx = hub.x + hub.size / 2;
+            const hz = hub.z + hub.size / 2;
+            if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) {
+              d.mode = 'returning';
+              d.homing = true; // no load on the way home: it isn't at work, and nothing was booked for it
+            }
+            d.timer = TUNING.drone.retrySeconds;
+            break;
+          }
           if (role !== 'restorer') {
             this.roleIdle(d, hub, role);
             break;
@@ -453,8 +484,14 @@ export class DroneSystem {
             d.timer = TUNING.drone.retrySeconds;
             break;
           }
-          // E23.1.4: a job costs no energy or water; the hub runs on the grid (above), E23.6.3 adds each role's inputs
+          // E23.1.4: a job costs no energy; the hub runs on the grid (above). E23.6.3: the role's water or biomass
+          if (!d.old && !s.droneFuel.take(hub, 'restorer')) {
+            this.status.set(d.id, 'docked');
+            d.timer = TUNING.drone.retrySeconds;
+            break;
+          }
           this.setTarget(d, job.id);
+          d.homing = undefined;
           d.mode = 'flying';
           // Far from the camera the flight is timed, not stepped: same arrival tick, no per-tick moves.
           if (job.roofId === hub.roofId && this.roofOf(d) === hub.roofId && this.isFar(hub)) {
@@ -561,9 +598,17 @@ export class DroneSystem {
         }
         case 'returning': {
           if (this.travel(d, hub.roofId, hub.x + hub.size / 2, hub.z + hub.size / 2, dt)) {
+            d.homing = undefined;
             d.mode = 'idle';
             d.timer = TUNING.drone.retrySeconds;
-          } else if (this.roofOf(d) === hub.roofId && s.roles.roleFor(d, hub) === 'restorer' && this.findJob(d)) {
+          } else if (
+            this.roofOf(d) === hub.roofId &&
+            s.roles.roleFor(d, hub) === 'restorer' &&
+            // E23.6.3: only when its hub can pay for the job; a docked drone goes all the way home and waits there
+            (d.old || !s.droneFuel.short(hub, 'restorer')) &&
+            this.findJob(d)
+          ) {
+            d.homing = undefined;
             d.mode = 'idle';
             d.timer = 0;
           }

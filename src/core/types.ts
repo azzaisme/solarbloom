@@ -151,6 +151,8 @@ export interface MachineData {
   tripped?: boolean;
   /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
   cult?: { units: CultivatorUnit[]; done: number };
+  /** E23.6.3: a drone hub's (or Cultivator dock's) share of a Biomass item paid ahead (Lighter drones makes a job cost a fraction) */
+  fuelCredit?: number;
   /** E18: a Drone Hub's role (unset = restorer; slot 1 on a Fleet Hub). */
   role?: DroneRole;
   /** E18: roles this hub has been refitted for (Restorer is always owned, so never listed). */
@@ -211,6 +213,8 @@ export interface DroneData {
   cargo?: { item: import('./types').ItemId; n: number }[];
   /** E23.6.4: units of room it booked in the route's target before fetching (no two baskets count on the same room) */
   reserve?: number;
+  /** E23.6.3: sent home short of power or supply: it draws nothing from its hub on the way back */
+  homing?: boolean;
 }
 
 export type BuffType = 'solarFrenzy' | 'megaflower' | 'droneParty';
