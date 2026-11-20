@@ -393,6 +393,27 @@ try {
     check(await moveTo(page, wireBtn, dev), T('reach Wire in the Assembler panel'));
     await go(page, dev);
     check(await page.evaluate((id) => window.solarbloom.sim.automation.recipeOf(window.solarbloom.sim.machine(id)), ids.asm) === 'wire', T('the Assembler makes Wire'));
+    // #594: each crate button reads its name and its crate a line each, at every interface size (not a letter a line)
+    for (const pct of [100, 125, 150]) {
+      await page.evaluate((pct) => window.solarbloom.hud.setUiScale(pct), pct);
+      await page.waitForTimeout(150);
+      const lines = await page.evaluate((id) => {
+        // the lines a text is set on: its line boxes' distinct tops (whatever the zoom)
+        const count = (e) => {
+          const r = document.createRange();
+          r.selectNodeContents(e);
+          return new Set([...r.getClientRects()].map((b) => Math.round(b.top))).size;
+        };
+        return [...document.querySelectorAll(`[data-asm-io^="${id}|"]`)].map((b) => {
+          const [n, p] = [b.querySelector('.rn'), b.querySelector('.rp')];
+          return `${n.textContent} ${p.textContent}: ${count(n)} + ${count(p)} lines${p.getBoundingClientRect().top >= n.getBoundingClientRect().bottom - 1 ? ', stacked' : ''}`;
+        });
+      }, ids.asm);
+      check(lines.length === 2 && lines.every((l) => /: 1 \+ 1 lines, stacked$/.test(l)), T(`at ${pct}%, the crate buttons read a line each: ${lines.join('; ')}`));
+      if (pct !== 100) await page.screenshot({ path: `${dir}/ui-assembler-${dev}-${pct}.png` });
+    }
+    await page.evaluate(() => window.solarbloom.hud.setUiScale(100));
+    await page.waitForTimeout(150);
     await page.screenshot({ path: `${dir}/ui-assembler-${dev}.png` });
     await back(page, dev);
     await page.waitForTimeout(200);

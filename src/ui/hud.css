@@ -122,10 +122,13 @@
 #prompt .pr-hold svg.glyph { position: relative; width: 32px; height: 24px; }
 #prompt .pr-hold kbd { position: relative; }
 /* refused: clay, and the reason after the verb */
-#prompt .pr-refused { background: var(--clay-soft); border-color: var(--clay); }
+#prompt .pr-refused { background: var(--clay-soft); border-color: var(--clay); border-radius: 28px; padding-top: 8px; padding-bottom: 8px; }
+/* #590: the words on one line, the reason wrapping under them */
+#prompt .pr-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#prompt .pr-refused .pr-text { white-space: nowrap; }
 #prompt .pr-refused .pr-glyph { opacity: .6; }
 #prompt .pr-refused .pr-text { color: var(--ink-2); }
-#prompt .pr-why { font: 800 16px var(--font-ui); color: var(--clay-ink); white-space: nowrap; }
+#prompt .pr-why { font: 800 16px/1.25 var(--font-ui); color: var(--clay-ink); white-space: normal; overflow-wrap: anywhere; }
 #prompt kbd { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 8px; border-radius: var(--r-key); background: var(--key-bg); border: 1.5px solid var(--key-edge); border-bottom-width: 3px; font: 900 15px/1 var(--font-ui); color: var(--key-ink); }
 body.photo #prompt { display: none; }
 

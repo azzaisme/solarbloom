@@ -218,6 +218,9 @@
 #inspect .role-btn { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; min-height: 48px; padding: 6px 10px; border-radius: 12px; border: 1.5px solid var(--line-2); background: var(--key-bg); color: var(--ink); text-align: left; font: 800 16px var(--font-ui); cursor: pointer; }
 #inspect .role-btn .ri { grid-row: 1 / 3; font-size: 20px; }
 #inspect .role-btn .rp { font: 700 16px var(--font-ui); color: var(--ink-2); overflow-wrap: anywhere; }
+/* #594: a button with no icon (the Assembler's "Takes from" / "Puts in" crates) stacks its name over its pick; side
+   by side, the name took the auto column and squeezed the pick to one letter per line */
+#inspect .role-btn:not(:has(.ri)) { grid-template-columns: minmax(0, 1fr); }
 #inspect .role-btn:disabled { background: var(--paper-2); color: var(--ink-3); cursor: default; }
 #inspect .role-btn.on { background: var(--leaf-soft); border-color: var(--leaf-ink); }
 #inspect .role-btn.mini { display: inline-flex; min-height: 44px; min-width: 44px; }
