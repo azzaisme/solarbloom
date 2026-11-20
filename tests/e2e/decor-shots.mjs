@@ -1,4 +1,4 @@
-// E19.2 (#254): every decoration near and at the far level of detail, the Build tray's Decorate row, and build
+// E19.2 (#254): every decoration near and at the far level of detail, the build menu's Decorations tab, and build
 // mode (bloombot projecting the decoration in hand, and the remove tool lighting one up). Screenshots into
 // docs/review/e19-decor/.
 //
@@ -7,6 +7,7 @@
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { preview } from 'vite';
+import { closeBuildMenu, openBuildMenu, startGame } from './lib/start-game.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const out = process.argv[2] ?? 'docs/review/e19-decor';
@@ -15,13 +16,10 @@ const server = process.env.BASE ? undefined : await preview({ preview: { port: 4
 const base = process.env.BASE ?? 'http://localhost:4197';
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
-const quiet = () => page.addStyleTag({ content: '#toasts, .toast, #hint, #fail { display: none !important; }' });
+const quiet = () => page.addStyleTag({ content: '#toasts, .toast, #fail { display: none !important; }' });
 
-await page.goto(`${base}/`);
-await page.evaluate(() => localStorage.clear());
-await page.reload();
-await page.waitForFunction(() => !!window.solarbloom?.bot);
-if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
+// a fresh garden straight from the URL (without ?slot the page stops on the title)
+await startGame(page, base);
 await quiet();
 
 // A gallery: every decoration in two rows on restored park ground, turned to face the camera.
@@ -68,14 +66,14 @@ await frame(1.5, 'decor-near.png');
 await frame(0.42, 'decor-far.png');
 
 // The build menu on its Decorations tab (E23.11: #buildMenu).
+await openBuildMenu(page);
 await page.evaluate(async () => {
   const g = window.solarbloom;
-  g.hud.toggleTray(true);
   for (let i = 0; i < 8 && document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent !== 'Decorations'; i++) g.hud.buildMenu.tab(1);
 });
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${out}/tray.png` });
-await page.evaluate(() => window.solarbloom.hud.toggleTray(false));
+await closeBuildMenu(page);
 
 // Build mode: bloombot holds a lamp post and projects it on the tile in front (keys/pad aim).
 const hold = async (tool, file, setup) => {

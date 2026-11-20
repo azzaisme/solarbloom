@@ -37,7 +37,6 @@ await page.addInitScript(() => {
 // a new garden straight in (?slot= skips the title)
 await page.goto(`${base}/?slot=1`, { timeout: 180000, waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180000 });
-if (await page.locator('#introGo').isVisible().catch(() => false)) await page.click('#introGo');
 await page.waitForTimeout(1500);
 
 // The camera follows bloombot (third person): a shot stands bloombot in the middle of what it shows.
@@ -112,7 +111,7 @@ check(rest.all, 'six cats later, all six cat-only decorations are found');
 check(rest.got.length === 7 && !/to place in your gardens/.test(rest.got[6]), `a cat after all six leaves only its reward (${rest.got[6]})`);
 
 // The six placed in a row on the park's grass, near and far.
-await page.addStyleTag({ content: '#toasts, .toast, #hint, #fail, #catPanel, #loadWheel, .load-wheel { display: none !important; }' });
+await page.addStyleTag({ content: '#toasts, .toast, #fail, #catPanel, #loadWheel, .load-wheel { display: none !important; }' });
 const placed = await page.evaluate(() => {
   const g = window.solarbloom;
   const ids = ['catstatue', 'catbench', 'pawstones', 'catfountain', 'goldlantern', 'rainbowbunting'];
@@ -195,7 +194,7 @@ check(grow.beds.length === 3 && grow.targets === 3, `three planters growing near
 await page.waitForTimeout(2500);
 await shot('ripe-before.png');
 await page.evaluate(() => document.querySelectorAll('style').forEach((s) => s.textContent.includes('#catPanel') && s.remove()));
-await page.addStyleTag({ content: '#toasts, .toast, #hint, #fail, #loadWheel { display: none !important; }' }); // the reward panel shows
+await page.addStyleTag({ content: '#toasts, .toast, #fail, #loadWheel { display: none !important; }' }); // the reward panel shows
 const ripe = await page.evaluate(() => {
   const g = window.solarbloom;
   const s = g.sim;

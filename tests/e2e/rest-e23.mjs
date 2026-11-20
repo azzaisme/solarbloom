@@ -78,7 +78,6 @@ try {
   await page.goto(`${URL0}?slot=1&new=1&gfx=${process.env.GFX ?? 'high'}`);
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
   await page.evaluate(() => window.solarbloom.pause.clear('blur'));
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   console.log('renderer', await page.evaluate(() => { const gl = document.createElement('canvas').getContext('webgl2'); const d = gl?.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : 'unknown'; }));
   await page.evaluate(() => {
     const s = window.solarbloom.sim;

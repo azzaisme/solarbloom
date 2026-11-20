@@ -42,7 +42,7 @@ const shot = async (name) => {
   console.log(`  ${out}/${name}.png`);
 };
 const run = (fn, arg) => page.evaluate(fn, arg);
-await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
+await page.addStyleTag({ content: '.toast, #toasts { display: none !important; }' });
 /** Frames a spot from above at a zoom and heading (bloombot's follow camera off), then waits for the chunks. */
 const frame = async (x, z, zoom, yaw = 0, ms = 8000) => {
   await run(({ x, z, zoom, yaw }) => {

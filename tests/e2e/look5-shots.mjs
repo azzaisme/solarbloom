@@ -21,7 +21,6 @@ async function open(w, h) {
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
   await page.waitForTimeout(1200);
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;

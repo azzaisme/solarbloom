@@ -42,7 +42,6 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
-  if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 
   // A large city to pan across (the soak's fast player).
   const extent = await page.evaluate((AREAS) => {

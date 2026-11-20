@@ -26,7 +26,6 @@ async function open(w, h, query) {
   await page.reload();
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 240000 });
   await page.evaluate(() => window.solarbloom.pause.clear('blur'));
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   await wait(page, 1500);
   // some materials, so the backpack and the table have things in them
   await page.evaluate(() => {

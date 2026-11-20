@@ -43,7 +43,6 @@ try {
   await page.goto(`${URL0}?slot=1&new=1&gfx=${process.env.GFX ?? 'high'}`);
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
   await page.evaluate(() => window.solarbloom.pause.clear('blur'));
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
 
   // where a path's rounded corners meet dead earth, in the park
   const spot = await page.evaluate(() => {

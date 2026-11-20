@@ -61,7 +61,7 @@ async function moveTo(page, sel, dev) {
 }
 /**
  * Takes a build from the build menu as a player does: Q (Y on the pad) opens it, the arrows / d-pad reach the card,
- * Enter / A takes it. Returns the tray's size as it opened (it must be seen: the Old City hides the hotbar it sits in)
+ * Enter / A takes it. Returns the tray's size as it opened (it must be seen: the sheet covers the world)
  * and whether the build is in hand.
  */
 async function pick(page, dev, tool) {

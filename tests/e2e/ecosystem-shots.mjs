@@ -23,7 +23,6 @@ try {
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
   await page.waitForTimeout(1000);
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   const frame = async (x, z, zoom, wait = 2500) => {
     await page.evaluate(
       ([x, z, zoom]) => {

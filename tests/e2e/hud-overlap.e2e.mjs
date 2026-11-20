@@ -4,6 +4,7 @@
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { preview } from 'vite';
+import { BUILD_HUD, WALKING_HUD } from './lib/start-game.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const dir = process.env.SHOTS_DIR ?? 'docs/review';
@@ -11,7 +12,8 @@ mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4197, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let fails = 0;
-const PANELS = ['#res', '#obj', '#hotbar', '#inspect', '#toasts', '#catPanel', '#minimap', '#prompt', '#dock'];
+// E23.11: the walking HUD, the area panel and the cat panel, and the build dock (#buildbar, #buildStop) when it is up
+const PANELS = [...WALKING_HUD, '#inspect', '#catPanel', ...BUILD_HUD];
 try {
   for (const [name, w, h] of [['phone', 390, 844], ['desktop', 1280, 800]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
@@ -23,7 +25,6 @@ try {
     }, !!process.env.NUMBERS);
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
-    if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
     await page.evaluate(() => {
       const g = window.solarbloom;
       const s = g.sim;

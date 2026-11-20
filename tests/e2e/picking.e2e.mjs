@@ -44,7 +44,6 @@ try {
     await page.reload();
     // the loading screen covers the world (and takes clicks) until the first view is complete
     await page.waitForFunction(() => window.solarbloom && (document.querySelector('#loading')?.classList.contains('gone') ?? true));
-    if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
     await page.evaluate(() => window.solarbloom.pause.clear('blur'));
     // The city ground, focused at a few spots (the park and its surroundings), at each zoom.
     for (const [fx, fz] of [[8, 8], [24, -10], [-12, 20]]) {

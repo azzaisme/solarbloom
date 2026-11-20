@@ -8,6 +8,7 @@
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { preview } from 'vite';
+import { BUILD_HUD, WALKING_HUD } from './lib/start-game.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const dir = process.env.SHOTS_DIR ?? 'docs/review';
@@ -15,10 +16,11 @@ const strict = !!process.env.STRICT;
 mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4198, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-/** Everything that can be on the walking view. */
-const PARTS = ['#res', '#obj', '#hotbar', '#toasts', '#prompt', '#minimap', '#buildbar', '#dock'];
+/** Everything that can be on the walking view (E23.11: the build dock #buildbar / #buildStop and the build menu sheet
+ *  #buildMenu show only while building or on purpose, so they must not be up while plainly walking). */
+const PARTS = [...WALKING_HUD, ...BUILD_HUD, '#buildMenu'];
 /** Old-city rules: plain walking shows these and nothing else (the epic's table), and E23.11's quiet shortcut dock. */
-const FIVE = new Set(['#obj', '#res', '#minimap', '#prompt', '#toasts', '#dock']);
+const FIVE = new Set(WALKING_HUD);
 const SIZES = [
   [1280, 800],
   [1920, 1080],
@@ -98,7 +100,7 @@ try {
         await page.screenshot({ path: `${dir}/hud-${name}.png` });
         // The panels open on screen: the build menu, the backpack, the menu and every Settings tab.
         for (const [label, open, sel] of [
-          ['build menu', (g) => g.doAction('buildMenu'), '#buildMenu.open, #buildTray.open'],
+          ['build menu', (g) => g.doAction('buildMenu'), '#buildMenu.open'],
           ['backpack', (g) => g.doAction('backpack'), '#bpScreen.open, #backpack.open'],
           ['menu', (g) => g.doAction('menu'), '#menu.open'],
           ['settings', (g) => (g.doAction('menu'), g.menuChoose('settings')), '#settings.open'],
@@ -108,7 +110,7 @@ try {
           const r = await page.evaluate((sel) => {
             const el = document.querySelector(sel);
             if (!el) return null;
-            const card = el.querySelector('.screen-card, .menu-card, .bm-card') ?? el;
+            const card = el.querySelector('.screen-card, .menu-card, .bm-sheet') ?? el;
             const b = card.getBoundingClientRect();
             return { l: b.left, t: b.top, r: b.right, b: b.bottom };
           }, sel);
