@@ -1,4 +1,3 @@
-import { WATER_NET } from '../data/water';
 import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
@@ -245,8 +244,7 @@ export class DroneRoles {
           s.restoration.grow(g, undefined, 'auto', true);
           tileIds.push(g.id);
         }
-        // E23.4.1: the watering comes out of the water nearby
-        s.water.drawNear(t, WATER_NET.draw.gardenerPerTile * tileIds.length);
+        // E23.6.3: what it pours is the water its hub drew for this job (DroneFuel.take, as it set out): nothing more
         done = true;
       }
     } else if (role === 'scout') {

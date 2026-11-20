@@ -235,8 +235,8 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(offered).toContain('compostSpeed');
     // E23.2.1's charge and E23.3's batteries are: their upgrades are offered
     for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'chargeCells', 'chargeEfficiency', 'sprint', 'batteryStore']) expect(offered, id).toContain(id);
-    // "Lighter drones" waits for E23.6.3's reader (#502), so it is not in the data yet
-    expect(RESEARCH_UPGRADES.map((u) => u.id)).not.toContain('droneThrift');
+    // "Lighter drones" is read by E23.6.3's drone supply (#502), so it is offered with the drones
+    expect(offered).toContain('droneThrift');
   });
 
   it('crops and creatures found open projects', () => {

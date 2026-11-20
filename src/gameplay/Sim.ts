@@ -43,6 +43,7 @@ import { PulseLoad } from './PulseLoad';
 import { RestSystem } from './Rest';
 import { WildlifeSystem } from './Wildlife';
 import { BuriedSystem } from './Buried';
+import { DroneFuel } from './DroneFuel';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
@@ -118,6 +119,8 @@ export class Sim {
   readonly wildlife: WildlifeSystem;
   /** E23.2.2.3: seeds and salvage buried in open ground (the ripple reveals them). */
   readonly buried: BuriedSystem;
+  /** E23.6.3: what drones run on (power, water, biomass by role). */
+  readonly droneFuel: DroneFuel;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
@@ -187,6 +190,7 @@ export class Sim {
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
+    this.droneFuel = new DroneFuel(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);

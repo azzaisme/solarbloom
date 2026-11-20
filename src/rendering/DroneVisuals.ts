@@ -1,7 +1,8 @@
 import * as pc from 'playcanvas';
-import type { DroneData, DroneRole } from '../core/types';
+import type { DroneData, DroneRole, MachineData } from '../core/types';
 import { itemDef } from '../data/items';
 import { TUNING } from '../data/tuning';
+import type { Shortage } from '../gameplay/DroneFuel';
 import type { Sim } from '../gameplay/Sim';
 import { color, glow as glowGain, mat, type MatOpts, PALETTE, uniqueMat } from './Materials';
 import { group, shape } from './Shapes';
@@ -141,6 +142,25 @@ interface DroneView {
   /** E23.6.4: a courier's basket, slung under it while it carries a route's things (made when first needed) */
   basket?: { root: pc.Entity; goods: pc.Entity[]; item?: string };
   antenna: Spring;
+  /** E23.6.3: docked for want of something: a small dim glyph of what's missing over it (made when first needed) */
+  glyph?: { root: pc.Entity; parts: Record<Shortage, pc.Entity>; kind?: Shortage; t: number };
+}
+
+/** E23.6.3: what a docked drone waits for, as a small dim glyph: a drop of water, a leaf of Biomass, a bolt of power. */
+function fuelGlyph(parent: pc.Entity): { root: pc.Entity; parts: Record<Shortage, pc.Entity> } {
+  const root = group(parent, 'fuelGlyph', [0, 0.95, 0]); // clear of the hub's ring when it rests on top
+  const dim = (hex: string) => mat(hex, { opacity: 0.85, emissive: hex, emissiveIntensity: 0.35, gloss: 0.4 });
+  const water = group(root, 'water');
+  shape(water, 'sphere', dim(PALETTE.water), { scale: 0.12 });
+  shape(water, 'cone', dim(PALETTE.water), { pos: [0, 0.085, 0], scale: [0.1, 0.11, 0.1] });
+  const biomass = group(root, 'biomass');
+  shape(biomass, 'sphere', dim(PALETTE.leafFin), { rot: [0, 0, 28], scale: [0.2, 0.045, 0.11] });
+  shape(biomass, 'box', dim(PALETTE.leafFin), { pos: [-0.1, -0.05, 0], rot: [0, 0, 28], scale: [0.015, 0.08, 0.015] });
+  const power = group(root, 'power');
+  shape(power, 'box', dim(PALETTE.gold), { pos: [0.025, 0.06, 0], rot: [0, 0, -25], scale: [0.05, 0.13, 0.03] });
+  shape(power, 'box', dim(PALETTE.gold), { pos: [0, 0, 0], scale: [0.1, 0.03, 0.03] });
+  shape(power, 'box', dim(PALETTE.gold), { pos: [-0.025, -0.06, 0], rot: [0, 0, -25], scale: [0.05, 0.13, 0.03] });
+  return { root, parts: { water, biomass, power } };
 }
 
 
@@ -356,6 +376,28 @@ export class DroneVisuals {
       root.setLocalScale(0.01, 0.01, 0.01);
       this.tweens.add(0.6, (k) => root.setLocalScale(k, k, k), { ease: ease.outBack, delay: 0.3 });
     }
+  }
+
+  /** E23.6.3: shows (or hides) a docked drone's glyph of what it waits for; what's missing is read twice a second. */
+  private updateGlyph(d: DroneData, v: DroneView, hub: MachineData, docked: boolean, status: string | undefined, dt: number, t: number) {
+    if (!docked) {
+      if (v.glyph) v.glyph.root.enabled = false;
+      return;
+    }
+    if (!v.glyph) v.glyph = { ...fuelGlyph(v.root), t: 0 };
+    const g = v.glyph;
+    g.root.enabled = true;
+    g.t -= dt;
+    if (g.t <= 0 || !g.kind) {
+      g.t = 0.5;
+      g.kind = status === 'waitingEnergy' ? 'power' : (this.sim.droneFuel.short(hub, this.roleOf(d)) ?? 'power');
+      for (const k of Object.keys(g.parts) as Shortage[]) g.parts[k].enabled = k === g.kind;
+    }
+    // it turns slowly and breathes, so it reads from any side (still, with reduced motion)
+    const m = this.reducedMotion ? 0 : 1;
+    g.root.setLocalEulerAngles(0, t * 40 * m, 0);
+    const s = 1.35 + 0.1 * Math.sin(t * 2.2 + v.phase) * m;
+    g.root.setLocalScale(s, s, s);
   }
 
   /** E23.6.4: shows a courier's basket while it carries, heaped in the colour of what it carries. */
@@ -679,16 +721,20 @@ export class DroneVisuals {
       if (v.lastMode === 'working' && d.mode === 'cooldown') v.bounce = BOUNCE_S; // a job done: a joyful hop
       v.lastMode = d.mode;
       const idle = d.mode === 'idle' || d.mode === 'returning';
-      const napping = d.mode === 'idle' && this.sim.drones.statusOf(d) === 'napping';
+      const status = this.sim.drones.statusOf(d);
+      const napping = d.mode === 'idle' && status === 'napping';
+      // E23.6.3: docked for want of power, water or Biomass: it settles on its hub, still, under a dim glyph of what's missing
+      const docked = d.mode === 'idle' && !d.old && (status === 'docked' || status === 'waitingEnergy');
+      this.updateGlyph(d, v, hub, docked, status, dt, t);
       this.updateBasket(d, v);
-      const c = d.id === buddy && idle ? this.companion : undefined;
+      const c = d.id === buddy && idle && !docked ? this.companion : undefined; // a docked drone stays on its hub
       if (c) {
         // At bloombot's right shoulder and a little behind, so it never stands between the camera and bloombot.
         const f = c.facing;
         tx = c.x + Math.cos(f) * 0.62 - Math.sin(f) * 0.25;
         tz = c.z - Math.sin(f) * 0.62 - Math.cos(f) * 0.25;
         if (motion) tx += Math.sin(t * 0.9 + v.phase) * 0.06;
-      } else if (idle && motion) {
+      } else if (idle && motion && !docked) {
         // Lazy figure-eight while napping
         tx += Math.sin(t * 0.6 + v.phase) * 0.35;
         tz += Math.sin(t * 1.2 + v.phase) * 0.18;
@@ -698,10 +744,10 @@ export class DroneVisuals {
       const dz = tz - v.z;
       v.x += dx * k;
       v.z += dz * k;
-      const baseY = c ? c.y + 1.15 : w[1] + (d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
+      const baseY = c ? c.y + 1.15 : w[1] + (docked ? 1.05 : d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
       v.y += (baseY - v.y) * (1 - Math.exp(-dt * 5));
       // Hover bob: softer and slower asleep, livelier in a Frenzy; a short hop on a finished restore.
-      const bobAmp = BOB.amp * (napping ? 0.45 : 1) * motion;
+      const bobAmp = BOB.amp * (docked ? 0 : napping ? 0.45 : 1) * motion;
       const bobRate = ((2 * Math.PI) / BOB.period) * (napping ? 0.7 : 1);
       const hop = v.bounce > 0 ? Math.sin(Math.PI * (1 - v.bounce / BOUNCE_S)) * 0.09 * motion : 0;
       const bob = Math.sin(this.bobT * bobRate + v.phase) * bobAmp + hop;
