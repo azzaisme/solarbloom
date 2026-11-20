@@ -1,7 +1,7 @@
 /**
  * E23.10.2 (#406): every model and clip E23 (#354) needs, as data. `docs/art/e23-models.md` explains each one;
  * `tests/e23-models.test.ts` checks reuse sources exist, the batch totals, and that each new file is within its
- * budget once it lands in `assets/raw/models/final/`.
+ * budget once it lands in `assets/raw/models/pending/` (made, not drawn yet) or `final/` (drawn: fetched at startup).
  */
 
 /** How an object gets its art. */

@@ -229,7 +229,11 @@ plays (#468). That takes three things, in order:
    a `.lod1.glb`. `tests/e23-models.test.ts` then checks its budget.
 2. **The system that places the object has landed** (E23.3 power, E23.4 water, E23.5 farm, E23.6 crafting, E23.2
    bloombot and companions). Its machine type gets an entry in `MACHINE_MODELS` (`src/rendering/MachineVisuals.ts`),
-   reused models included.
+   reused models included. In the same change its files move from `assets/raw/models/pending/` to
+   `assets/raw/models/final/`: everything in `final` is downloaded before the loading screen ends, so a model waits in
+   `pending` (committed, never fetched) until something draws it. On 20 Nov the 38 not yet drawn moved there (A's
+   charger and watering can, all of B1 and B3, B2 but the bio-digester, the fences and the trellis), taking the
+   startup models from 63.4 MB to 36.0 MB. The Keepers stay in `final` but are fetched only by `KeeperVisuals`.
 3. **It is played in the browser** and checked from all round at near zoom, both on and off.
 
 ## What has been made
@@ -261,7 +265,7 @@ Batch A and the crops (B6), approved by the owner on 18 Nov 2026: 303 credits. M
 | bird-box | 702 / 800 | 171 | Image route; on a post, gable roof, round hole |
 | bat-box | 794 / 800 | 194 | Image route; tall slatted box on a post, landing ramp |
 | **Fences and trellis** (#466, hand-built, no credits) | | | |
-| fence-<style>-run, -post, -gate | ≤ 800 | ≤ 200 | Built by `assets/tools/prop_models_fences.py` (`build_props.py`): five styles of salvaged materials (picket, willow hurdle, pipe rail, dry-stone wall, clipped hedge). A run spans one tile edge (x −0.5…0.5), a post sits on a tile corner, a gate's part `gate` swings about Z on its hinge (its origin). The hedge's part `leaves` is the one the wind sways. Decoration only. |
+| fence-<style>-run, -post, -gate | ≤ 800 | ≤ 200 | In `pending/` until the farm draws them. Built by `assets/tools/prop_models_fences.py` (`build_props.py`, out to `assets/raw/models/pending`): five styles of salvaged materials (picket, willow hurdle, pipe rail, dry-stone wall, clipped hedge). A run spans one tile edge (x −0.5…0.5), a post sits on a tile corner, a gate's part `gate` swings about Z on its hinge (its origin). The hedge's part `leaves` is the one the wind sways. Decoration only. |
 | trellis | ≤ 800 | ≤ 200 | Two posts and a diamond lattice, 0.8 × 1.5 m, on a planter or farmland tile |
 | farmland ground (#466) | 2 triangles a tile (+ fade band) | | Painted at startup, no file: `src/rendering/FarmlandArt.ts`. Tilled soil `#5f4733` with moss dots, furrows 4 a metre in world space (seamless across tiles). **dry** paler with dusty crests and hairline cracks; **watered** darker, water in the furrow bottoms, a glossier sheen; **fertilised** rich and dark with compost flecks and straw. A side with no farmland beyond fades into the ground over a ragged 0.28 m band, so a field reads as one patch. `game.farmland.set(tiles)` draws them; #517 will call it with its tilled tiles. Checked by `tests/farmland-art.test.ts` and by day and night in `docs/review/e23-farmland-*.png`. |
 | **B4** (19 Nov), in `assets/raw/models/visitors/<id>.glb` | | | Image route (concept on the November reference, then meshy-t2.5 smart topology). Real size, pivot at the feet, facing +z; the butterfly is laid flat. Rigged with `idle`, `follow`, `sit` and `climb` (see below). |

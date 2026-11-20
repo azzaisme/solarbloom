@@ -154,7 +154,8 @@ function jitter(x: number, z: number) {
  * and the texture runs straight on. Vertex alpha carries the fade.
  */
 export function farmlandGeo(tiles: FarmlandTile[]): Record<FarmlandState, FarmlandGeo> {
-  const out = Object.fromEntries(FARMLAND_STATES.map((s) => [s, { pos: [], uv: [], col: [], idx: [] }])) as unknown as Record<FarmlandState, FarmlandGeo>;
+  const empty = (): FarmlandGeo => ({ pos: [], uv: [], col: [], idx: [] });
+  const out: Record<FarmlandState, FarmlandGeo> = { dry: empty(), watered: empty(), fertilised: empty() };
   const at = new Set(tiles.map((t) => `${t.x},${t.z}`));
   const has = (x: number, z: number) => at.has(`${x},${z}`);
   const b = FARMLAND_FADE;

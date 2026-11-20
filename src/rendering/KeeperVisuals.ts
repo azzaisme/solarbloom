@@ -10,7 +10,7 @@ import { SLAB_TOP } from './SceneBuilder';
 import { color } from './Materials';
 
 /** The Keepers' own rigged models (assets/raw/models/final/keeper-<id>.glb: clips idle, wave, sleep, and B5's
- * sit-down, sit and stand-up). */
+ * sit-down, sit and stand-up). Fetched here only, when a Keeper is first shown (ModelLibrary leaves them out). */
 const KEEPER_URLS = import.meta.glob('../../assets/raw/models/final/keeper-*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
 /** STAND-IN until a Keeper's model lands: bloombot's rig, tinted, with the Keeper's prop. Not the finished art. */
 const STAND_IN_URL = new URL('../../assets/raw/bloombot/bloombot.glb', import.meta.url).href;

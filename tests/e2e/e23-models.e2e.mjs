@@ -3,7 +3,7 @@
 // game's ModelLibrary, sets them out beside bloombot in the park (machines, then each crop ripe and growing),
 // plays each new bloombot clip, and saves screenshots to docs/review/e23-models-*.png. Look at them: this proves
 // the files load and draw in the engine. Placing them for real is each system's job (E23.3, E23.5, E23.2.3).
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
 
@@ -41,8 +41,31 @@ try {
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
   await page.waitForFunction(() => window.solarbloom.models?.ready);
 
-  const loaded = await page.evaluate((names) => names.map((n) => [n, window.solarbloom.models.has(n)]), [...MACHINES, ...B1, ...B2, ...B3, ...FENCES, ...CROPS]);
+  // models made but not drawn yet wait in assets/raw/models/pending (never fetched at startup): fed in by hand, as
+  // the animals are, so they can still be set out and looked at here
+  const pendingFiles = Object.fromEntries(
+    readdirSync('assets/raw/models/pending')
+      .filter((f) => f.endsWith('.glb') && !f.includes('.lod1'))
+      .map((f) => [f.slice(0, -4), readFileSync(`assets/raw/models/pending/${f}`).toString('base64')]),
+  );
+  await page.evaluate(async (files) => {
+    const g = window.solarbloom;
+    g.__pending = {};
+    await Promise.all(Object.entries(files).map(([n, b64]) => new Promise((done) => {
+      const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bin], { type: 'model/gltf-binary' }));
+      g.app.assets.loadFromUrlAndFilename(url, `${n}.glb`, 'container', (err, asset) => {
+        if (!err && asset) g.__pending[n] = asset;
+        done();
+      });
+    })));
+    // one way to make any of them, wherever it lives
+    g.__make = (n) => (g.models.has(n) ? g.models.instantiate(n) : g.__pending[n]?.resource.instantiateRenderEntity());
+  }, pendingFiles);
+  const loaded = await page.evaluate((names) => names.map((n) => [n, window.solarbloom.models.has(n) || !!window.solarbloom.__pending[n]]), [...MACHINES, ...B1, ...B2, ...B3, ...FENCES, ...CROPS]);
   for (const [n, ok] of loaded) check(ok, `model ${n} loaded in the game`);
+  const early = await page.evaluate((names) => names.filter((n) => window.solarbloom.models.has(n)), Object.keys(pendingFiles));
+  check(early.length === 0, `no pending model is fetched at startup${early.length ? `: ${early.join(', ')}` : ''}`);
 
   // Bloombot by the fountain, the park restored round it, the camera close (near zoom, the default angle).
   await page.evaluate(() => {
@@ -77,7 +100,7 @@ try {
       holder.setEulerAngles(0, 0, 0);
       rows.forEach((row, ri) => {
         row.items.forEach((it, i) => {
-          const e = it.animal ? g.__animals[it.name]?.resource.instantiateRenderEntity() : g.models.instantiate(it.name);
+          const e = it.animal ? g.__animals[it.name]?.resource.instantiateRenderEntity() : g.__make(it.name);
           if (!e) return;
           const across = (i - (row.items.length - 1) / 2) * row.gap;
           const away = row.away;
@@ -165,7 +188,7 @@ try {
     await page.screenshot({ path: `${dir}/e23-models-fences-${when}.png` });
   }
   await page.evaluate(() => (window.solarbloom.sim.clock.real = false));
-  const gateParts = await page.evaluate((st) => st.map((s) => !!window.solarbloom.models.instantiate(`fence-${s}-gate`)?.findByName('gate')), STYLES);
+  const gateParts = await page.evaluate((st) => st.map((s) => !!window.solarbloom.__make(`fence-${s}-gate`)?.findByName('gate')), STYLES);
   check(gateParts.every(Boolean), `every fence gate has its swinging part (${gateParts.join(', ')})`);
 
   // 1g. farmland ground (#466): an irregular field in front of bloombot, a band of each state (dry, watered,

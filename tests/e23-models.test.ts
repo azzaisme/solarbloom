@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { batchCredits, E23_MODELS, type Batch } from '../src/data/e23models';
 import { dir, Skeleton } from './helpers/gltfPose';
+import { ModelLibrary } from '../src/rendering/Models';
 
 /**
  * E23.10.2 (#406, #464–#468): the E23 model list. Reused models must exist; names are unique; every new model has a
@@ -11,7 +12,10 @@ import { dir, Skeleton } from './helpers/gltfPose';
 const DIR = 'assets/raw/models/final';
 /** The animals (B4) live where the wildlife visitors load them (#544): assets/raw/models/visitors/<id>.glb. */
 const VISITORS = 'assets/raw/models/visitors';
-const fileOf = (name: string) => (name.startsWith('animal-') ? `${VISITORS}/${name.slice(7)}.glb` : `${DIR}/${name}.glb`);
+/** Made but not drawn yet: committed here, never fetched at startup (src/rendering/Models.ts loads only `final`). */
+const PENDING = 'assets/raw/models/pending';
+const fileOf = (name: string) =>
+  name.startsWith('animal-') ? `${VISITORS}/${name.slice(7)}.glb` : existsSync(`${DIR}/${name}.glb`) ? `${DIR}/${name}.glb` : `${PENDING}/${name}.glb`;
 const have = new Set(readdirSync(DIR).filter((f) => f.endsWith('.glb') && !f.includes('.lod1')).map((f) => f.slice(0, -4)));
 
 /** Triangles drawn by a GLB: every mesh node's triangle primitives, counted per node instance. */
@@ -98,10 +102,10 @@ describe('E23.10.2: the E23 model list', () => {
       return (gltf.nodes ?? []).map((n) => n.name);
     };
     for (const m of built) {
-      expect(existsSync(`${DIR}/${m.name}.glb`), m.name).toBe(true);
-      expect(glbTriangles(`${DIR}/${m.name}.glb`), m.name).toBeLessThanOrEqual(m.tris!);
-      expect(glbTriangles(`${DIR}/${m.name}.lod1.glb`), `${m.name}.lod1`).toBeLessThanOrEqual(200);
-      const parts = nodeNames(`${DIR}/${m.name}.glb`);
+      expect(existsSync(fileOf(m.name)), m.name).toBe(true);
+      expect(glbTriangles(fileOf(m.name)), m.name).toBeLessThanOrEqual(m.tris!);
+      expect(glbTriangles(fileOf(m.name).replace(/\.glb$/, '.lod1.glb')), `${m.name}.lod1`).toBeLessThanOrEqual(200);
+      const parts = nodeNames(fileOf(m.name));
       if (m.name.endsWith('-gate')) expect(parts, `${m.name} swings its gate`).toContain('gate');
       if (m.name.startsWith('fence-hedge')) expect(parts, `${m.name} sways its leaves`).toContain('leaves');
     }
@@ -110,9 +114,9 @@ describe('E23.10.2: the E23 model list', () => {
   it('batch B3 (#467) has landed with its moving parts split out: drum, weathervane, the assembler’s arms and glass', () => {
     const b3 = E23_MODELS.filter((m) => m.batch === 'B3');
     expect(b3.map((m) => m.name).sort()).toEqual(['assembler', 'auto-feeder', 'forecast-board', 'hopper-composter', 'mulcher', 'research-station', 'seed-drill']);
-    for (const m of b3) expect(existsSync(`${DIR}/${m.name}.glb`), m.name).toBe(true);
+    for (const m of b3) expect(existsSync(fileOf(m.name)), m.name).toBe(true);
     const gltf = (name: string) => {
-      const buf = readFileSync(`${DIR}/${name}.glb`);
+      const buf = readFileSync(fileOf(name));
       return JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8')) as { nodes: { name?: string }[]; materials: { name?: string; alphaMode?: string }[] };
     };
     const parts: Record<string, string[]> = { mulcher: ['drum'], 'forecast-board': ['vane'], assembler: ['arm-left', 'arm-right', 'glass', 'inside', 'plate'] };
@@ -120,7 +124,7 @@ describe('E23.10.2: the E23 model list', () => {
       const names = gltf(n).nodes.map((x) => x.name);
       for (const p of want) expect(names, `${n} has its part ${p}`).toContain(p);
       // the far version keeps them too, so they turn at every distance
-      const far = readFileSync(`${DIR}/${n}.lod1.glb`);
+      const far = readFileSync(fileOf(n).replace(/\.glb$/, '.lod1.glb'));
       const farNames = (JSON.parse(far.subarray(20, 20 + far.readUInt32LE(12)).toString('utf8')) as { nodes: { name?: string }[] }).nodes.map((x) => x.name);
       for (const p of want) expect(farNames, `${n}.lod1 has its part ${p}`).toContain(p);
     }
@@ -154,6 +158,19 @@ describe('E23.10.2: the E23 model list', () => {
         expect(dir(up, 'LeftUpLeg', 'LeftLeg')[1], `${f}: stands at the end of stand-up`).toBeLessThan(-0.85);
       }
     }
+  });
+
+  it('the startup download holds only what the game draws: nothing pending, and no Keeper (KeeperVisuals loads those)', () => {
+    const startup = new Set(ModelLibrary.names());
+    const pending = readdirSync(PENDING).filter((f) => f.endsWith('.glb') && !f.includes('.lod1')).map((f) => f.slice(0, -4));
+    expect(pending.length).toBe(38);
+    for (const n of pending) {
+      expect(startup.has(n), `${n} is not fetched at startup`).toBe(false);
+      expect(existsSync(`${DIR}/${n}.glb`), `${n} is in one place only`).toBe(false);
+    }
+    for (const n of startup) expect(n.startsWith('keeper-'), `${n} at startup`).toBe(false);
+    // what is drawn now stays: the compost bin and bio-digester (MACHINE_MODELS), the crops (CropVisuals)
+    for (const n of ['compost-bin', 'bio-digester', 'crop-tomato', 'bench']) expect(startup.has(n), n).toBe(true);
   });
 
   it('every B4 animal is rigged with its four clips (#468): idle, follow, sit and climb', () => {
