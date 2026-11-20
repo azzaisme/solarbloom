@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import type { DroneData, DroneRole, MachineData } from '../core/types';
+import { itemDef } from '../data/items';
 import { TUNING } from '../data/tuning';
 import type { Shortage } from '../gameplay/DroneFuel';
 import type { Sim } from '../gameplay/Sim';
@@ -138,6 +139,8 @@ interface DroneView {
   leafL: Spring;
   leafR: Spring;
   leafFlick: Spring;
+  /** E23.6.4: a courier's basket, slung under it while it carries a route's things (made when first needed) */
+  basket?: { root: pc.Entity; goods: pc.Entity[]; item?: string };
   antenna: Spring;
   /** E23.6.3: docked for want of something: a small dim glyph of what's missing over it (made when first needed) */
   glyph?: { root: pc.Entity; parts: Record<Shortage, pc.Entity>; kind?: Shortage; t: number };
@@ -158,6 +161,30 @@ function fuelGlyph(parent: pc.Entity): { root: pc.Entity; parts: Record<Shortage
   shape(power, 'box', dim(PALETTE.gold), { pos: [0, 0, 0], scale: [0.1, 0.03, 0.03] });
   shape(power, 'box', dim(PALETTE.gold), { pos: [-0.025, -0.06, 0], rot: [0, 0, -25], scale: [0.05, 0.13, 0.03] });
   return { root, parts: { water, biomass, power } };
+}
+
+
+/**
+ * E23.6.4: a courier's basket: woven wood on two straps under the drone, heaped with what it carries in that
+ * item's colour, so a route reads from across the park.
+ */
+function cargoBasket(parent: pc.Entity): { root: pc.Entity; goods: pc.Entity[] } {
+  const root = group(parent, 'cargoBasket', [0, -0.34, 0]);
+  const wicker = mat(PALETTE.woodPlank, { gloss: 0.15 });
+  const band = mat(PALETTE.gold, { gloss: 0.5, metal: 0.4 });
+  shape(root, 'box', wicker, { pos: [0, -0.07, 0], scale: [0.34, 0.03, 0.26] });
+  for (const [x, z, sx, sz] of [[0, 0.12, 0.34, 0.025], [0, -0.12, 0.34, 0.025], [0.16, 0, 0.025, 0.26], [-0.16, 0, 0.025, 0.26]] as const)
+    shape(root, 'box', wicker, { pos: [x, 0, z], scale: [sx, 0.14, sz] });
+  shape(root, 'box', band, { pos: [0, 0.07, 0.12], scale: [0.35, 0.02, 0.03] });
+  shape(root, 'box', band, { pos: [0, 0.07, -0.12], scale: [0.35, 0.02, 0.03] });
+  for (const z of [0.1, -0.1]) shape(root, 'box', band, { pos: [0, 0.2, z], scale: [0.015, 0.26, 0.015] });
+  const goods = [
+    [-0.07, 0.06, -0.04, 0.12],
+    [0.06, 0.07, 0.03, 0.13],
+    [0.0, 0.11, -0.01, 0.1],
+    [-0.05, 0.08, 0.07, 0.09],
+  ].map(([x, y, z, s]) => shape(root, 'sphere', wicker, { pos: [x, y, z], scale: s }));
+  return { root, goods };
 }
 
 /** Cute hovering drones. Interpolates the sim's grid position and adds bobbing — presentation only. */
@@ -371,6 +398,22 @@ export class DroneVisuals {
     g.root.setLocalEulerAngles(0, t * 40 * m, 0);
     const s = 1.35 + 0.1 * Math.sin(t * 2.2 + v.phase) * m;
     g.root.setLocalScale(s, s, s);
+  }
+
+  /** E23.6.4: shows a courier's basket while it carries, heaped in the colour of what it carries. */
+  private updateBasket(d: DroneData, v: DroneView) {
+    const item = d.cargo?.find((b) => b.n > 0)?.item;
+    if (!item) {
+      if (v.basket) v.basket.root.enabled = false;
+      return;
+    }
+    if (!v.basket) v.basket = cargoBasket(v.root);
+    v.basket.root.enabled = true;
+    if (v.basket.item !== item) {
+      v.basket.item = item;
+      const m = mat(itemDef(item).colour, { gloss: 0.35 });
+      for (const g of v.basket.goods) if (g.render) g.render.meshInstances.forEach((mi) => (mi.material = m));
+    }
   }
 
   /** Drone Dash trim level of this drone's hub (Phase 5 E12: per hub). */
@@ -683,6 +726,7 @@ export class DroneVisuals {
       // E23.6.3: docked for want of power, water or Biomass: it settles on its hub, still, under a dim glyph of what's missing
       const docked = d.mode === 'idle' && !d.old && (status === 'docked' || status === 'waitingEnergy');
       this.updateGlyph(d, v, hub, docked, status, dt, t);
+      this.updateBasket(d, v);
       const c = d.id === buddy && idle && !docked ? this.companion : undefined; // a docked drone stays on its hub
       if (c) {
         // At bloombot's right shoulder and a little behind, so it never stands between the camera and bloombot.

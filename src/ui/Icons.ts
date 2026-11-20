@@ -255,6 +255,8 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   charger: 'charger', // E23.3.3
   reservoir: 'reservoir', // E23.4.2
   pump: 'pump', // E23.4.2
+  crate: 'basket', // E23.6.4
+  assembler: 'settings', // E23.6.5
   desalination: 'desalination', // E23.4.3
   core: 'sparkle',
 };
@@ -296,6 +298,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '➰': 'link', '🪵': 'build', '🔲': 'glasshouse', '🚰': 'water', '🌀': 'settings',
   // E23.5.1 farm items (food is the carrot, compost the garden bed above).
   '🧪': 'sparkle',
+  // E23.6.5 the Assembler.
+  '🛠': 'wrench',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

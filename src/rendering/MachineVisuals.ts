@@ -41,6 +41,8 @@ interface MachineView {
   coreBase?: pc.StandardMaterial;
   rings?: pc.Entity[];
   orbs?: pc.Entity[];
+  /** E23.6.5: the Assembler's moving parts (its press head and gear), kept out of the batch */
+  arm?: { head: pc.Entity; gear: pc.Entity; screen: pc.Entity };
   canopy?: pc.Entity;
   /** Mother Tree: the tree itself (the park's own tree geometry, swaying and see-through like every other tree) */
   tree?: pc.Entity;
@@ -99,6 +101,8 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   chest: ['storage-chest', 1.0],
   // E23.5.2: the planter box (its crop is drawn by CropVisuals)
   planter: ['planter-bed', 0.9],
+  // E23.6.4: the supply crate is the old city's crate (the Assembler is built from parts below until its own model)
+  crate: ['crate', 0.85],
   // E23.8.3.2: the Grid Battery is drawn (gridBattery below) until E23.10.2's grid-battery model lands; its only
   // stand-in was the Storage Chest, which read as a chest. Add ['grid-battery', 2.0] here with the file.
   // E23.5.3: E23.10's hand-built bin (1 m cube, scaled to its tile) and digester; the procedural bodies stand in
@@ -462,7 +466,7 @@ export class MachineVisuals {
     const id = this.batchGroupFor(v.m);
     if (id === undefined) return;
     v.batched = true;
-    const skip = new Set<pc.Entity>([...(v.panel ?? []), ...(v.orbs ?? []), ...(v.light ? [v.light] : [])]);
+    const skip = new Set<pc.Entity>([...(v.panel ?? []), ...(v.orbs ?? []), ...(v.light ? [v.light] : []), ...(v.arm ? [v.arm.head, v.arm.gear, v.arm.screen] : [])]);
     const walk = (e: pc.Entity) => {
       if (skip.has(e) || !e.enabled) return; // Look 3.19: procedural parts hidden under a model stay out
       if (e.render && e.render.batchGroupId !== id) e.render.batchGroupId = id;
@@ -704,6 +708,9 @@ export class MachineVisuals {
         break;
       case 'charger':
         this.charger(v);
+        break;
+      case 'assembler':
+        this.assembler(v);
         break;
     }
     this.applyModel(v);
@@ -1854,6 +1861,50 @@ export class MachineVisuals {
   }
 
   /**
+   * E23.6.5: the Assembler, kit-bashed from the machines' own parts until its model lands (batch B3): a powered press
+   * on a bevelled 2 × 2 pad. A hopper takes in on the left, a tray gives out on the right; between them a cream
+   * chassis with vents, a screen and a status light carries a metal gantry whose press head works up and down, and a
+   * gold gear turns at its side, while it crafts. Its power cable runs to the pad's edge.
+   */
+  private assembler(v: MachineView) {
+    const b = v.body;
+    part(b, rbox(1.7, 0.16, 1.7, 0.06), cream(), { pos: [0, 0.08, 0], shadow: true });
+    part(b, rbox(1.705, 0.014, 1.705, 0.006), creamSeam(), { pos: [0, 0.06, 0] });
+    for (const [x, z] of [[-0.85, -0.85], [0.85, -0.85], [-0.85, 0.85], [0.85, 0.85]]) {
+      part(b, rcyl(0.13, 0, 0.2, 0.04, 0.01, 14), cream(), { pos: [x, 0, z], shadow: true });
+      bolts(b, [[x, 0.202, z]], 0.045, gold());
+    }
+    // the chassis at the back: vents along its front, a screen and the status light on top
+    part(b, rbox(1.1, 0.62, 0.62, 0.06), cream(), { pos: [0, 0.47, -0.42], shadow: true });
+    part(b, rbox(1.105, 0.014, 0.625, 0.006), creamSeam(), { pos: [0, 0.3, -0.42] });
+    for (let i = 0; i < 4; i++) part(b, rbox(0.16, 0.025, 0.02, 0.008), vent(), { pos: [-0.33 + i * 0.22, 0.24, -0.105] });
+    part(b, rbox(0.4, 0.2, 0.03, 0.015), vent(), { pos: [0, 0.6, -0.1] });
+    const screen = part(b, rbox(0.32, 0.12, 0.01, 0.004), mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.2 }), { pos: [0, 0.6, -0.083] });
+    part(b, rbox(1.14, 0.05, 0.66, 0.02), metal(), { pos: [0, 0.8, -0.42], shadow: true });
+    v.light = part(b, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.5 }), { pos: [0.42, 0.87, -0.42], scale: 0.07 });
+    // the gantry over the work bed, and its press head
+    part(b, rbox(0.7, 0.05, 0.5, 0.02), darkMetal(), { pos: [0, 0.19, 0.25] });
+    for (const s of [-1, 1]) part(b, rod(), metal(), { pos: [s * 0.4, 0.55, 0.25], scale: [0.045, 0.74, 0.045] });
+    part(b, rbox(0.9, 0.07, 0.1, 0.02), metal(), { pos: [0, 0.95, 0.25], shadow: true });
+    const head = group(b, 'pressHead', [0, 0.72, 0.25]);
+    part(head, rod(), metal(), { pos: [0, 0.12, 0], scale: [0.04, 0.24, 0.04] });
+    part(head, rbox(0.26, 0.1, 0.22, 0.03), gold(), { shadow: true });
+    part(head, rbox(0.2, 0.03, 0.16, 0.01), darkMetal(), { pos: [0, -0.06, 0] });
+    // in: a hopper on the left; out: a tray on the right, a finished part on it
+    part(b, rcyl(0.18, 0.16, 0.5, 0.03, 0.01, 12), metal(), { pos: [-0.62, 0, 0.3], shadow: true });
+    part(b, rcyl(0.24, 0.5, 0.56, 0.02, 0.01, 12), gold(), { pos: [-0.62, 0, 0.3] });
+    part(b, rcyl(0.17, 0.53, 0.565, 0.005, 0, 12), vent(), { pos: [-0.62, 0, 0.3] });
+    part(b, rbox(0.38, 0.06, 0.4, 0.02), metal(), { pos: [0.62, 0.22, 0.3], shadow: true });
+    part(b, rbox(0.12, 0.08, 0.12, 0.02), mat(PALETTE.railCopper, { metal: 0.6, gloss: 0.6 }), { pos: [0.6, 0.29, 0.3] });
+    // the gear at its side
+    const gear = group(b, 'gear', [0.57, 0.5, -0.42]);
+    part(gear, ring(18, 6), gold(), { rot: [0, 0, 90], scale: [0.36, 0.08, 0.36] });
+    for (let i = 0; i < 6; i++) part(gear, rbox(0.03, 0.06, 0.07, 0.008), gold(), { pos: [0, Math.cos((i * Math.PI) / 3) * 0.19, Math.sin((i * Math.PI) / 3) * 0.19] });
+    part(b, tube('assemblerCable', bezier([-0.5, 0.2, -0.75], [-0.6, 0.06, -0.85], [-0.75, 0.1, -0.84], 6), 0.016, { sides: 6 }), cable(), {});
+    v.arm = { head, gear, screen };
+  }
+
+  /**
    * E23.3.2.3: Bloom Relays are the grid's power poles. A cream crossarm with a gold band crosses the column under the
    * crystal, braced from below, with a glazed insulator at each end where the lines meet (PowerLines POLE_ARM).
    */
@@ -2359,6 +2410,16 @@ export class MachineVisuals {
           const flow = this.sim.power.networkOf(v.m)?.batteryFlow ?? 0;
           const s = 0.05 + (flow > 1e-6 && !rm ? 0.012 * (1 + Math.sin(t * 3)) : 0);
           v.light!.setLocalScale(s, s, s);
+          break;
+        }
+        case 'assembler': {
+          // E23.6.5: while it crafts, the press head works and the gear turns; idle, both rest
+          const a = v.arm;
+          if (!a) break;
+          const on = this.sim.automation.working(v.m) && !rm;
+          a.head.setLocalPosition(0, 0.72 - (on ? 0.14 * Math.max(0, Math.sin(t * 5)) : 0), 0.25);
+          if (on) a.gear.setLocalEulerAngles(t * 90, 0, 0);
+          a.screen.enabled = this.sim.power.level(v.m) > 0.5 || this.sim.automation.working(v.m);
           break;
         }
         case 'charger': {
