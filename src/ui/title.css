@@ -67,13 +67,20 @@ button.t-act:hover { background: var(--glass-hi-2); }
 
 /* ───── Play: your gardens ───── */
 #title .t-gardens { position: absolute; inset: 0; display: grid; grid-template-rows: auto 1fr auto; gap: 20px; padding: 34px 60px; overflow-y: auto; }
-#title .t-veil { position: fixed; inset: 0; background: rgba(var(--glass-rgb), .38); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+#title .t-veil { position: fixed; inset: 0; background: rgba(var(--glass-rgb), .38); }
+/* One live blur at a time (stacked backdrop blurs over the drifting painting cost every frame: on a Deck or a weak
+   GPU, and under software GL they stalled the frame for minutes). Behind the gardens the painting itself is blurred
+   and holds still (the veil's frost, drawn once), so the slot cards need no blur of their own; a dialog or Settings
+   on top is the one sheet that blurs live, and the painting and the strip under it hold still. */
+#title[data-view=play] .t-art { filter: blur(10px); animation: none; transform: scale(1.06); }
+#title:has(> .t-confirm, > .cf-veil, > #settings.open) .t-art { animation-play-state: paused; }
+#title:has(> .t-confirm, > .cf-veil, > #settings.open) .t-side { backdrop-filter: none; -webkit-backdrop-filter: none; }
 .t-gardens > :not(.t-veil) { position: relative; }
 .t-head { display: flex; align-items: center; gap: 14px; }
 .t-head h2 { margin: 0; font: 900 26px/1.2 var(--font-ui); letter-spacing: -.01em; color: var(--ink); }
 .t-soft { margin: 0; font: 700 16px/1.4 var(--font-ui); color: var(--ink-2); }
 .t-slot-list { display: flex; justify-content: center; align-items: stretch; align-self: center; gap: 28px; }
-.t-slot { position: relative; flex: 0 1 330px; min-width: 0; min-height: 470px; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--r); background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); backdrop-filter: blur(10px) saturate(1.15); -webkit-backdrop-filter: blur(10px) saturate(1.15); }
+.t-slot { position: relative; flex: 0 1 330px; min-width: 0; min-height: 470px; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--r); background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); }
 .t-slot:focus-within { border-color: var(--leaf); box-shadow: var(--shadow), 0 0 0 3px var(--leaf-hi); }
 .t-slot h3 { margin: 0; font: 900 20px/1.25 var(--font-ui); color: var(--ink); overflow-wrap: anywhere; }
 /* the garden's picture: the painted park, washed out while the fountain is dry and greener with each step */

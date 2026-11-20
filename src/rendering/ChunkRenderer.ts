@@ -1858,13 +1858,13 @@ export class ChunkRenderer {
       const model = oldCityModel('jetty');
       if (model === 'jetty') {
         // the model (8 m long along +X, 5.2 m wide, 4.2 m from its posts' feet to the deck) at half size, turned along
-        // the jetty, deck at the beach
+        // the jetty (its end rail out to sea), deck at the beach
         const sc = J.d / 8;
         // water under the planks: the shallow surf where the jetty starts, open sea further out
         const under = surfCell(t.x, t.z) || !seaCell(t.x, t.z + 1) ? PALETTE.ground.shallows : PALETTE.ground.sea;
         this.slab(b, under[t.variant % under.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
         // its deck is 1.7 m up the model (the rope posts rise above it), so that height goes at the beach, not the top
-        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - JETTY_DECK * sc, J.z + J.d / 2, Math.PI / 2, sc, sc, sc);
+        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - JETTY_DECK * sc, J.z + J.d / 2, LANDING.jettyYaw, sc, sc, sc);
         return;
       }
       const sea = PALETTE.ground.sea;
@@ -2032,7 +2032,8 @@ export class ChunkRenderer {
       const xFirst = i % 2 === 0; // the ring runs from the x side round to the z side at this corner, or back
       const nx = at(sx, 0);
       const nz = at(0, sz);
-      if (this.isSoft(nx) && this.isSoft(nz)) {
+      // (rounded only where both sides are at this height: over a drop the corner stays square, like the wall under it)
+      if (this.isSoft(nx) && this.isSoft(nz) && level(nx) && level(nz)) {
         for (let j = 0; j < PATH_CURVE.arc; j++) {
           const a = ((xFirst ? j : PATH_CURVE.arc - j) / PATH_CURVE.arc) * (Math.PI / 2);
           ring.push([cx + sx * R * Math.cos(a), cz + sz * R * Math.sin(a)]);
@@ -2092,8 +2093,11 @@ export class ChunkRenderer {
     for (const [sx, sz] of CORNERS) {
       const nx = g.peek(t.roofId, t.x + sx, t.z);
       const nz = g.peek(t.roofId, t.x, t.z + sz);
-      // both sides of the corner must be the other kind of ground
+      // both sides of the corner must be the other kind of ground, at this tile's height: where either side drops (a
+      // terrace's wall, a step) the corner stays square, as the wall under it is (a curve on top would leave the
+      // wall's square corner poking out under it)
       if (paved ? !this.isSoft(nx) || !this.isSoft(nz) : !this.isPath(nx) || !this.isPath(nz)) continue;
+      if (nx!.level !== t.level || nz!.level !== t.level) continue;
       const from = nx!; // the tile whose ground spreads into this corner
       const alive = t.ground === 'restored' && from.ground === 'restored' && nz!.ground === 'restored';
       const cx = t.x + 0.5 + sx * 0.5;

@@ -28,13 +28,13 @@ const QUICK = [
   // E23.9: the story
   'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally', 'keepers-crops',
   // E23.4: the water network
-  'water-levels', 'shoreline', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'water-reflect', 'pipe-visuals', 'pipe-visuals-west',
+  'water-levels', 'shoreline', 'fullscreen', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'water-reflect', 'pipe-visuals', 'pipe-visuals-west',
   // E23.5: the farm
   'farm-items', 'farm-planters', 'farm-compost', 'farm-extras',
   // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
   'lucky-cat-rewards', 'cat-decor', 'cat-secrecy', 'picker-internals', 'cat-sight-cpu', 'cat-sight-schedule',
   // E23.10: the proof
-  'e23-gentle-failure',
+  'e23-gentle-failure', 'jetty-ropes',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
