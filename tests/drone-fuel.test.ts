@@ -3,9 +3,11 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { DroneData, DroneRole, MachineData } from '../src/core/types';
 import { DRONE_HUB, DRONE_SUPPLY } from '../src/data/drones';
+import { TUNING } from '../src/data/tuning';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
+import { fill, makeSim, PAD, rich } from './helpers';
 
 /**
  * E23.6.3 (#392): what drones run on. A hub with each role, on the real store (Biomass through a Storage chest beside
@@ -392,5 +394,119 @@ describe('E23.6.3 x E23.4.2: water through a pipe', () => {
     expect(sim.water.amountOf(pond.id)).toBeCloseTo(1, 6); // nothing lost
     expect(sim.water.pipes.carries(11, 11)).toBe(true);
     expect(reserved).toBe(0); // and no power booked for a job that didn't go
+  });
+});
+
+describe('E23.6.3 review: nothing draws or starts unpaid', () => {
+  /** A Gardener hub by its pond with young lawn round it to grow (as above). */
+  function gardenSim() {
+    const g = hubSim();
+    const { sim, hub } = g;
+    hub.role = 'gardener';
+    (hub.roles ??= []).push('gardener');
+    sim.areas.clear(sim.areas.areaOf(hub)!, true);
+    for (let x = 17; x < 26; x++)
+      for (let z = 16; z < 21 + DRONE_HUB.waterReach; z++) {
+        const t = sim.grid.get(GROUND, x, z);
+        if (t && !t.occupantId && t.feature !== 'water' && !t.blocked) Object.assign(t, { ground: 'restored', bloom: 0.5, pollution: 0 });
+      }
+    sim.state.drones = [];
+    return g;
+  }
+  /** A Cultivator dock on the test pad with dead ground beside it (as tests/cultivator); its supply stood in. */
+  function cultSim() {
+    const sim = makeSim(1);
+    rich(sim);
+    fill(sim, 0, 0, 7, 5, 'polluted');
+    fill(sim, 0, 6, 7, 7, 'restored');
+    const m = sim.build.place('cultivator', PAD, 1, 6)!;
+    m.upg = {};
+    m.project = undefined; // built (its build site is not what is under test)
+    sim.state.drones.length = 0;
+    Object.assign(sim.power, { isPowered: () => true });
+    const supply = { short: undefined as 'water' | 'power' | undefined, pays: true };
+    Object.assign(sim.droneFuel, { short: () => supply.short, take: () => !supply.short && supply.pays });
+    return { sim, m, supply };
+  }
+
+  it('a tiller parked for a shortage counts as drawing from the moment it is paid, not when it reaches its tiles', () => {
+    const { sim, m, supply } = cultSim();
+    supply.short = 'water';
+    sim.advance(3);
+    const units = m.cult!.units;
+    expect(units.length).toBeGreaterThan(0);
+    expect(units.every((u) => u.parked && !u.work.length)).toBe(true);
+    expect(sim.droneFuel.draw(m)).toBe(0);
+    // supply is back: on the tick a tiller is paid and claims its tiles, it is at work (still on its way)
+    supply.short = undefined;
+    let checked = 0;
+    for (let i = 0; i < 200 && !checked; i++) {
+      const before = units.map((u) => u.work.length);
+      sim.tick(TUNING.simStep); // one game step at a time
+
+      units.forEach((u, k) => {
+        if (before[k] || !u.work.length) return;
+        expect(u.parked).toBeFalsy();
+        checked++;
+      });
+    }
+    expect(checked).toBeGreaterThan(0);
+    const working = units.filter((u) => u.work.length).length;
+    expect(sim.droneFuel.draw(m)).toBeCloseTo(working * DRONE_SUPPLY.cultivator.power, 6);
+  });
+
+  it('a tiller whose hub cannot pay after all does not start its job', () => {
+    const { sim, m, supply } = cultSim();
+    supply.pays = false; // short() says yes, take() comes up short (a pipe giving less than it seemed)
+    sim.advance(5);
+    expect(m.cult!.units.every((u) => !u.work.length)).toBe(true);
+    expect(m.cult!.done ?? 0).toBe(0);
+    expect(sim.droneFuel.draw(m)).toBe(0);
+  });
+
+  it('a drone whose hub cannot pay after all does not start its job: nothing claimed, nothing flown', () => {
+    const { sim, hub } = gardenSim();
+    Object.assign(sim.droneFuel, { short: () => undefined, take: () => false });
+    for (let t = 0; t < 20; t += 0.25) sim.advance(0.25);
+    const mine = sim.state.drones.filter((d) => d.hubId === hub.id);
+    expect(mine.length).toBeGreaterThan(0);
+    for (const d of mine) {
+      expect(d.mode === 'idle' || d.mode === 'returning', d.mode).toBe(true);
+      expect(d.targetTileId).toBeUndefined();
+      expect(d.role).toBeUndefined();
+      expect(d.jobs ?? 0).toBe(0);
+      expect(sim.drones.statusOf(d)).toBe('docked');
+    }
+    expect(sim.droneFuel.draw(hub)).toBe(0);
+  });
+
+  it('a drone sent home short of power adds no load on the way back, and draws again once it sets out', () => {
+    for (const how of ['unpowered', 'no room'] as const) {
+      const { sim, hub } = gardenSim();
+      const p = { on: true, room: Infinity };
+      Object.assign(sim.power, { isPowered: () => p.on, headroom: () => (p.on ? p.room : 0) });
+      // a drone idle away from its hub (it finished a job out there)
+      sim.advance(0.25);
+      const d = sim.state.drones.find((x) => x.hubId === hub.id)!;
+      Object.assign(d, { mode: 'idle', px: hub.x + 8, pz: hub.z + 8, timer: 0, targetTileId: undefined, role: undefined });
+      for (const x of sim.state.drones) if (x !== d) Object.assign(x, { mode: 'idle', px: hub.x + 1, pz: hub.z + 1, timer: 99 });
+      if (how === 'unpowered') p.on = false;
+      else p.room = 0;
+      sim.advance(0.1);
+      expect(d.mode, how).toBe('returning');
+      expect(sim.droneFuel.draw(hub), how).toBe(0); // no load on the way home
+      // home, docked and waiting; then the power is back and it sets out: it draws again
+      for (let t = 0; t < 30 && d.mode === 'returning'; t += 0.25) sim.advance(0.25);
+      expect(d.mode, how).toBe('idle');
+      p.on = true;
+      p.room = Infinity;
+      for (let t = 0; t < 30 && d.mode !== 'flying'; t += 0.1) sim.advance(0.1);
+      expect(d.mode, how).toBe('flying');
+      expect(d.homing).toBeUndefined();
+      expect(sim.droneFuel.draw(hub), how).toBeGreaterThanOrEqual(DRONE_SUPPLY.gardener.power);
+      // and a drone coming home from a job still draws on the way (it is at work)
+      Object.assign(d, { mode: 'returning' });
+      expect(sim.droneFuel.draw(hub), how).toBeGreaterThanOrEqual(DRONE_SUPPLY.gardener.power);
+    }
   });
 });

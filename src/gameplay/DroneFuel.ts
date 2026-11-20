@@ -143,7 +143,8 @@ export class DroneFuel {
   }
 
   /** Is a drone out working (flying to a job, at it, or on its way home), so drawing its hub's power? */
-  private working(d: { mode: string }): boolean {
+  private working(d: { mode: string; homing?: boolean }): boolean {
+    if (d.mode === 'returning' && d.homing) return false; // sent home short: no load on the way back
     return d.mode !== 'idle' && d.mode !== 'cooldown';
   }
 

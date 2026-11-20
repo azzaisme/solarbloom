@@ -148,8 +148,15 @@ export class CultivatorSystem {
             this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
             continue;
           }
-          s.droneFuel.take(m, 'cultivator'); // the job's water
+          // the job's water and power; should that come up short after all, it doesn't start
+          if (!s.droneFuel.take(m, 'cultivator')) {
+            u.retryAt = s.time + 1;
+            u.parked = true;
+            this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
+            continue;
+          }
           this.claim(u, job);
+          u.parked = false; // paid and on its way: it draws (and its booked power is counted) from now
         }
         const lead = s.grid.byTileId(u.work[0])!;
         if (!this.drive(u, lead.x + 0.5, lead.z + 0.5, sp, dt)) continue;

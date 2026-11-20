@@ -86,7 +86,6 @@ export class PowerGrid {
   private dirty = true;
   /** Served fraction per consumer id from the last solve (1 = fully on). */
   private servedFrac = new Map<string, number>();
-  /** E23.6.3: power left on its network when each consumer's turn came in the last solve (W). */
   /** E23.6.3: per network, the power left after every consumer at the last solve, and what is booked since */
   private freeOf = new Map<PowerNetwork, number>();
   private booked = new Map<PowerNetwork, number>();
