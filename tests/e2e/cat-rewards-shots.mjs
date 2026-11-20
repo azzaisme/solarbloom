@@ -158,7 +158,7 @@ const tray = await page.evaluate(() =>
 );
 check(tray.length === 6, `decorate mode shows all six (${tray.join(' ')})`);
 await shot('decorate-tray.png');
-await page.evaluate(() => window.solarbloom.hud.toggleTray(false));
+await page.keyboard.press('q');
 
 // Ripe all around: three planters growing beside bloombot, then a cat.
 const grow = await page.evaluate(() => {

@@ -516,6 +516,11 @@ export interface GameState {
   };
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };
+  /**
+   * E23.2.4: times bloombot has sat down (seeds who visits), and the visitor log: each kind that came, the sim time
+   * it first did, the areas it was seen in and how often. Optional.
+   */
+  wildlife?: { sits: number; log: Record<string, { first: number; where: string[]; count: number }> };
   /** E23.2.2.3: buried finds revealed (a mound shows) and dug up, by id (`bur:x:z`). Optional. */
   buried?: { known: string[]; dug: string[] };
   /** E23.2.2: what the pulse is loaded with (absent = nothing). Optional, so no save version change. */

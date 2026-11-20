@@ -12,7 +12,7 @@ const QUICK = [
   'smoke', 'advisor', 'grid', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics',
   'relay-city', 'no-growing-prices', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
-  'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest',
+  'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest', 'wildlife', 'seatbox',
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world
@@ -32,7 +32,7 @@ const QUICK = [
   // E23.5: the farm
   'farm-items', 'farm-planters', 'farm-compost',
   // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
-  'lucky-cat-rewards', 'cat-decor',
+  'lucky-cat-rewards', 'cat-decor', 'cat-secrecy', 'picker-internals', 'cat-sight-cpu', 'cat-sight-schedule',
   // E23.10: the proof
   'e23-gentle-failure',
 ].map((name) => `tests/${name}.test.ts`);

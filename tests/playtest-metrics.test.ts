@@ -17,6 +17,7 @@ describe('local playtest instrumentation (City 09.7)', () => {
     }
     sim.state.stats.maxCombo = 87;
     sim.state.stats.catsFound = 4;
+    sim.state.cat.found = 4; // E23.12.3: the timings name cats only once one is found
     const times = sim.state.stats.areaTimes!;
     expect(times).toHaveLength(25);
     expect(times[1] - times[0]).toBe(30);

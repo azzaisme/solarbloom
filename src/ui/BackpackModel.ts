@@ -190,6 +190,29 @@ export interface CollectionGroup {
 }
 
 /** The collection: cats, keepsakes, wildlife, landmarks, plots and decorations. No reward names, no multipliers. */
+/**
+ * E23.2.4.3 (#416): the visitor log, every kind of animal that has come to sit with bloombot: how often and where.
+ * Kinds not met yet keep their names to themselves; the rare ones say they are rare.
+ */
+function visitors(sim: Sim): CollectionGroup {
+  const rows = sim.wildlife.logRows();
+  const met = rows.filter((r) => r.seen);
+  const areaName = (id: string) => {
+    const info = sim.areas.info(id);
+    return info.region ? regionName(info.region) : id === PARK ? 'the park' : info.landmarkName;
+  };
+  return {
+    title: 'Visitors',
+    count: `${met.length} of ${rows.length}`,
+    rows: rows.map(({ def, seen }) =>
+      seen
+        ? { name: `${def.icon} ${def.name}`, detail: `${seen.count === 1 ? 'Sat with you once' : `Sat with you ${seen.count} times`}, in ${list([...new Set(seen.where.map(areaName))])}${def.rare ? ' · rare' : ''}`, found: true }
+        : { name: 'Not met yet', detail: def.rare ? 'A rare visitor' : 'Still out there', found: false },
+    ),
+    empty: '',
+  };
+}
+
 export function collection(sim: Sim): CollectionGroup[] {
   const st = sim.state;
   const cz = st.cozy;
@@ -207,7 +230,7 @@ export function collection(sim: Sim): CollectionGroup[] {
     title: 'Lucky Cats',
     count: `${st.cat.found} found`,
     rows: [...where].map(([name, n]) => ({ name: `In ${name}`, detail: n === 1 ? 'One cat found' : `${n} cats found`, found: true })),
-    empty: 'Wander the city. Paw prints mean a cat is close.',
+    empty: '',
   };
   // keepsakes: the ones Lucky Cats leave, and one per region
   const unlocked = new Set([...(cz?.decorUnlocked ?? []), ...(st.salvage?.items ?? []), ...(st.salvage?.caches ?? [])]);
@@ -236,10 +259,12 @@ export function collection(sim: Sim): CollectionGroup[] {
     empty: 'The other robots are asleep. Pulse one to wake it.',
   };
   return [
-    cats,
+    // E23.12.3 (epic rule 8): the Lucky Cats group appears with the first find (before that it would give them away)
+    ...(sim.cat.known ? [cats] : []),
     friends,
     { title: 'Keepsakes', count: `${keeps.filter((k) => k.found).length} of ${keeps.length}`, rows: keeps, empty: '' },
     { title: 'Wildlife', count: `${fauna.length} kinds`, rows: fauna.map((f) => ({ name: cap(f), detail: 'Lives in your gardens', found: true })), empty: 'Wildlife arrives as gardens grow.' },
+    visitors(sim),
     { title: 'Landmarks', count: `${woken.length} awake`, rows: woken.map((a) => ({ name: a.region ? (REGIONS.find((r) => r.id === a.region)?.landmark.name ?? a.landmarkName) : a.landmarkName, detail: a.region ? `In ${regionName(a.region)}` : 'Awake', found: true })), empty: 'Bring a place back to life to wake its landmark.' },
     { title: 'Plots', count: `${plots.length} of ${PLOT_OPTIONS.length}`, rows: plots.map((o) => ({ name: o.name, detail: o.blurb, found: true })), empty: '' },
     { title: 'Decorations', count: `${decor.length} of ${DECOR_OPTIONS.length}`, rows: decor.map((o) => ({ name: o.name, detail: o.blurb, found: true })), empty: '' },

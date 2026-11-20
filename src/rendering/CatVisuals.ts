@@ -52,6 +52,11 @@ export class CatVisuals {
     return [...this.views.keys()];
   }
 
+  /** The entity a cat is drawn as (its meshes are what the player sees of it). */
+  rootOf(catId: string): pc.Entity | undefined {
+    return this.views.get(catId)?.root;
+  }
+
   /** Click target centre (a little above the feet) of one cat (default: any). */
   targetWorld(catId?: string): pc.Vec3 | undefined {
     const v = catId ? this.views.get(catId) : this.views.values().next().value;
