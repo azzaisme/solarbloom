@@ -260,6 +260,9 @@ const aqua = {
   /** E23.4.1: a drained bed (damp silt), and its darker wet rim at the waterline */
   bed: '#5e4b39',
   bedWet: '#3f3328',
+  /** E23.4.5: the Water view: a dry pipe tile, and the ring round a dry planter */
+  viewDry: '#8f9aa0',
+  viewThirsty: '#e2674f',
   foam: '#a8ecff',
   teal: '#6fe3e0',
 };
@@ -328,6 +331,9 @@ const props = {
   gazeboFinial: ['#8f8160', '#e8c04f'],
   bunting: ['#ff6f91', '#ffd25e', '#6fd3ff', '#8be06b', '#c38bff'],
   lampToppled: '#8d8a78',
+  /** E23.8.3.2: the industrial ruins: deep-rusted girders and the rust run-off staining the ground round them */
+  girderRust: '#6b4330',
+  rustStain: '#5e3a28',
   stallDead: '#9a8a70',
   stallAlive: '#c9a77a',
   awning: ['#b5655a', '#5a7fb5'],
@@ -463,6 +469,14 @@ const signal = {
     focus: '#fff6d8',
     /** the Power view's light: the world goes cool and grey under it, so the yellow grid pops */
     viewLight: '#8c98ab',
+  },
+  /** E23.4.5: the Water view */
+  water: {
+    /**
+     * water machines and pipes that hold or carry water become holograms in this blue: fully saturated, as the
+     * Power view's yellow is (pure #0000ff reads near black at 35% opacity, so a sky-leaning blue, RGB (0, 136, 255))
+     */
+    machineHolo: '#0088ff',
   },
 };
 

@@ -303,7 +303,7 @@ export class Fauna {
 
   private assign(kind: Kind, slots: { key: string; home: { x: number; z: number }; y: number; rot?: number }[], opts: FaunaOptions) {
     const cap = TUNING.ecosystem.caps[opts.quality][kind];
-    // E21.24: every animal stands on its terrace (the offset is 0 on flat classic ground)
+    // E21.24: every animal stands on its terrace (the offset is 0 on flat ground)
     const g = this.sim.grid;
     const want = slots.slice(0, cap).map((s) => ({ ...s, y: s.y + g.groundOffset(GROUND, Math.floor(s.home.x), Math.floor(s.home.z)) }));
     const pool = want.length ? this.pool(kind, want.length) : this.pools[kind];
@@ -379,7 +379,7 @@ export class Fauna {
     // Songbirds: hopping on blooming lawns near the middle of the view.
     const birds: { key: string; home: { x: number; z: number }; y: number }[] = [];
     if (eco.has('birds')) {
-      const lawn = tilesIn(s, rect, (t) => t.ground === 'restored' && t.bloom >= 2 && !t.occupantId && !t.blocked && (t.feature ?? 'lawn') === 'lawn', 120).sort(near);
+      const lawn = tilesIn(s, rect, (t) => t.ground === 'restored' && s.water.bloomShown(t) >= 2 && !t.occupantId && !t.blocked && (t.feature ?? 'lawn') === 'lawn', 120).sort(near);
       for (let i = 0; i < lawn.length; i += 5) birds.push({ key: `b:${lawn[i].x}:${lawn[i].z}`, home: { x: lawn[i].x + 0.5, z: lawn[i].z + 0.5 }, y });
     }
     this.assign('groundBirds', [...vis('groundBirds'), ...birds], opts);
@@ -397,7 +397,7 @@ export class Fauna {
     // the lighting epic's bloom picks them up; scene light and grading are left to that epic.
     const flies: { key: string; home: { x: number; z: number }; y: number }[] = [];
     if (opts.fireflies && !opts.reducedMotion) {
-      const lush = tilesIn(s, rect, (t) => t.ground === 'restored' && t.bloom >= 3 && t.feature !== 'water', 160).sort(near);
+      const lush = tilesIn(s, rect, (t) => t.ground === 'restored' && s.water.bloomShown(t) >= 3 && t.feature !== 'water', 160).sort(near); // E23.4.4: faded by low water
       for (let i = 0; i < lush.length; i += 4) flies.push({ key: `f:${lush[i].x}:${lush[i].z}`, home: { x: lush[i].x + 0.5, z: lush[i].z + 0.5 }, y: y + 0.35 });
     }
     this.assign('fireflies', flies, opts);

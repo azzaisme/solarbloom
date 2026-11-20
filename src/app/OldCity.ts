@@ -9,6 +9,7 @@ import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
 import { crossName, CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
+import { compostHtml, digesterHtml } from '../ui/CompostPanel';
 import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
@@ -76,6 +77,7 @@ export class OldCityController {
       this.panel.refresh();
     });
     host.sim.bus.on('biomass.gathered', (e) => {
+      if (e.by !== 'bot') return; // a Harvester drone's clippings go quietly to the store
       const sc = host.screenOf(e.x, e.z);
       flyUp(host.hud.root, `+${e.got} ${MATERIALS.biomass.icon} ${MATERIALS.biomass.name}`, sc.x, sc.y);
       host.sound('salvage', 'biomass');
@@ -172,7 +174,6 @@ export class OldCityController {
    * nothing else).
    */
   interact(front: { x: number; z: number }, occupant?: MachineData): boolean {
-    if (!this.sim.oldCity) return false;
     const onGround = this.host.bot.pose.roofId === GROUND;
     const pile = onGround ? this.sim.salvage.pileAt(front.x, front.z) : undefined;
     if (pile) {
@@ -182,6 +183,8 @@ export class OldCityController {
     // E21.8: a Keeper: wake it, hand over what it asks for, or hear it
     const keeper = onGround ? this.sim.keepers.at(front.x, front.z) : undefined;
     // E21.9: once the Market Hall is awake, Tally trades any 3 of one material for 1 of another
+    // E23.9.2: Tally's panel offers both, trading and (when bloombot carries something it loves) a gift: one press
+    // never gives anything away by surprise
     if (keeper && keeper.id === 'tally' && this.sim.landmarks.canTrade()) {
       this.openTrade();
       return true;
@@ -258,10 +261,14 @@ export class OldCityController {
    * does nothing else).
    */
   pulse(front: { x: number; z: number }): boolean {
-    if (!this.sim.oldCity || this.host.bot.pose.roofId !== GROUND) return false;
+    if (this.host.bot.pose.roofId !== GROUND) return false;
     const keeper = this.sim.keepers.at(front.x, front.z);
     if (!keeper || !this.sim.keepers.visible(keeper.id)) return false;
-    if (!this.sim.keepers.pulse(keeper.id)) this.sim.keepers.interact(keeper.id);
+    // E23.9.2: a settled Keeper only chats when pulsed: nothing is handed over without Interact
+    if (!this.sim.keepers.pulse(keeper.id)) {
+      if (this.sim.keepers.step(keeper.id) === 'settled') this.sim.keepers.chat(keeper.id);
+      else this.sim.keepers.interact(keeper.id);
+    }
     this.host.bot.visuals.play('pulse');
     return true;
   }
@@ -303,6 +310,30 @@ export class OldCityController {
     );
   }
 
+  /** E23.5.3: a compost bin's panel. */
+  compostBin(m: MachineData) {
+    const c = this.sim.compost;
+    this.host.sound('click');
+    this.panel.open(
+      () => compostHtml(this.sim, m),
+      (act, arg) => {
+        const n = act === 'fill' ? c.fill(m, arg as 'biomass' | 'food') : act === 'take' ? c.take(m, arg as 'compost' | 'fertiliser') : act === 'return' ? c.returnCompost(m) : 0;
+        if (n > 0) this.host.sound(act === 'take' ? 'salvage' : 'deliver', act === 'take' ? 'seeds' : undefined);
+      },
+    );
+  }
+
+  /** E23.5.3: a Bio Digester's panel. */
+  digester(m: MachineData) {
+    this.host.sound('click');
+    this.panel.open(
+      () => digesterHtml(this.sim, m),
+      (act) => {
+        if (act === 'feed' && this.sim.compost.feed(m) > 0) this.host.sound('deliver');
+      },
+    );
+  }
+
   /** E23.5.1: clip restored ground for biomass: hold Interact 0.6 s, like salvaging. */
   gatherHold(t: TileData) {
     const why = this.sim.gather.problem(t);
@@ -315,10 +346,10 @@ export class OldCityController {
   }
 
   /**
-   * A click on a tile under old-city rules: a pile walks bloombot there and salvages it. True when handled.
+   * A click on a tile: a pile walks bloombot there and salvages it. True when handled.
    */
   click(tile: { roofId: string; x: number; z: number }): boolean {
-    if (!this.sim.oldCity || tile.roofId !== GROUND) return false;
+    if (tile.roofId !== GROUND) return false;
     const pile = this.sim.salvage.pileAt(tile.x, tile.z);
     if (!pile) return false;
     const b = this.host.bot;
@@ -343,6 +374,10 @@ export class OldCityController {
     this.panel.open(
       () => tradeHtml(this.sim, give),
       (act, arg) => {
+        if (act === 'gift') {
+          if (this.sim.keepers.interact('tally') === 'gave') this.host.sound('deliver');
+          return;
+        }
         if (act === 'give') give = arg as MaterialId;
         else if (act === 'get' && give && this.sim.landmarks.trade(give, arg as MaterialId)) this.host.sound('deliver');
       },

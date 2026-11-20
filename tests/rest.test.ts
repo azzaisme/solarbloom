@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FRIENDSHIP } from '../src/data/keepers';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
@@ -9,7 +10,7 @@ import { BOT_CLIPS, REST, seatLift } from '../src/data/rest';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
-const oldSim = () => new Sim(createInitialState(7, 'oldcity'));
+const oldSim = () => new Sim(createInitialState(7));
 /** The park's old benches (generated props). */
 const parkBenches = (sim: Sim) => [[3, 6], [10, 6], [5, 9], [9, 10]].map(([x, z]) => sim.rest.benchAt(x, z)!);
 
@@ -75,8 +76,11 @@ describe('E23.2.3: benches', () => {
     for (const k of KEEPERS.slice(0, 2)) delete sim.state.areas[k.region];
     expect(sim.rest.friends(KEEPERS[1].x, KEEPERS[1].z)).toEqual([]);
     for (const k of KEEPERS.slice(0, 2)) sim.state.areas[k.region] = { fog: 'cleared', revealedAt: 0 };
+    // E23.9.2: settled is not yet a friend; three gifts it loves make one
+    expect(sim.rest.friends(KEEPERS[1].x, KEEPERS[1].z)).toEqual([]);
+    for (const k of KEEPERS.slice(0, 2)) sim.state.salvage!.keepers[k.id] = { step: 'settled', hearts: FRIENDSHIP.giftsToFriend };
     expect(sim.rest.friends(KEEPERS[1].x, KEEPERS[1].z)).toEqual([KEEPERS[1].id, KEEPERS[0].id]);
-    // E23.9.2's friendship decides once it is on the sim (three gifts after settling): only true friends
+    // only true friends (isFriend decides)
     (sim.keepers as unknown as { isFriend(id: string): boolean }).isFriend = (id) => id === KEEPERS[0].id;
     expect(sim.rest.friends(KEEPERS[1].x, KEEPERS[1].z)).toEqual([KEEPERS[0].id]);
   });
@@ -86,10 +90,8 @@ describe('E23.2.3: benches', () => {
     const b = parkBenches(sim)[1];
     sim.inventory.add('scrap', REST.mendCost.scrap!);
     sim.rest.mend(b); // a bench mended earlier in the day
+    // nothing to eat: biomass and food are backpack items (E23.1.4), and the pack is empty
     for (const k of Object.keys(sim.state.salvage!.pack)) delete (sim.state.salvage!.pack as Record<string, number>)[k];
-    sim.econ.spend({ biomass: sim.econ.get('biomass') });
-    sim.econ.add('energy', 1e6);
-    sim.econ.add('water', 1e6);
     sim.state.charge = { value: 0 };
     sim.bot = { roofId: GROUND, x: b.x + 0.5, z: b.z + 1.5 }; // in front of the bench
     expect(sim.clock.gameIsDay()).toBe(true); // daytime: no sleeping to fall back on

@@ -15,13 +15,9 @@ export class JournalSystem {
     });
   }
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   /** The page on its post on a ground cell, if any (read or not: a read page can be read again). */
   pageAt(x: number, z: number): string | undefined {
-    if (!this.on) return undefined;
     const sp = setPieceAt(x, z);
     if (sp?.kind !== 'page' || !PAGES[sp.id]) return undefined;
     if (sp.region && this.sim.areas.fog(sp.region) === 'hidden') return undefined;

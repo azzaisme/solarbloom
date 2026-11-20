@@ -1,4 +1,4 @@
-import type { AreaMode, MachineData } from '../core/types';
+import type { AreaMode, ComponentId, MachineData } from '../core/types';
 import { MACHINES, TIER2, TIER3 } from '../data/machines';
 import { ICONS, iconize } from './Icons';
 import { $, esc, HudPart } from './HudPart';
@@ -27,10 +27,22 @@ export class Panels extends HudPart {
       if (t.closest('[data-close]')) this.cb.closeInspect();
       const w = t.closest<HTMLButtonElement>('[data-wake]');
       if (w && !w.disabled) this.cb.wake(w.dataset.wake!);
-      const db = t.closest<HTMLButtonElement>('[data-district]');
-      if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
       const rl = t.closest<HTMLButtonElement>('[data-role]');
       if (rl && !rl.disabled) this.cb.chooseRole(rl.dataset.role!);
+      // E23.6.5: what an Assembler makes
+      const as = t.closest<HTMLButtonElement>('[data-asm]');
+      if (as) {
+        const [id, recipe] = as.dataset.asm!.split('|');
+        const m = this.sim.machine(id);
+        if (m) this.sim.automation.setRecipe(m, (recipe || undefined) as ComponentId | undefined);
+      }
+      // E23.6.5: which crate beside it an Assembler takes from or puts in (steps through the crates beside it)
+      const io = t.closest<HTMLButtonElement>('[data-asm-io]');
+      if (io) {
+        const [id, which] = io.dataset.asmIo!.split('|');
+        const m = this.sim.machine(id);
+        if (m) this.sim.automation.nextCrate(m, which as 'input' | 'output');
+      }
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
       if (am) {
         const [id, mode] = am.dataset.areaMode!.split('|');
@@ -153,7 +165,12 @@ export class Panels extends HudPart {
     }
     el.classList.add('open');
     this.root.classList.add('inspecting');
+    // the panel redraws as the world runs (a drone's status, a craft's progress): the button in focus keeps it, so
+    // the arrow keys and the d-pad don't lose their place (E23.6.4: a hub's roles, an Assembler's recipe)
+    const a = document.activeElement as HTMLElement | null;
+    const key = a && a !== el && el.contains(a) ? focusKey(a) : undefined;
     this.set('inspect', el, 'html', html);
+    if (key && !el.contains(document.activeElement)) el.querySelector<HTMLElement>(key)?.focus({ focusVisible: true } as FocusOptions);
   }
 
   machineHtml(m: MachineData, extra: string): string {
@@ -173,7 +190,7 @@ export class Panels extends HudPart {
     this.set('catCount', $(this.root, '#catCount'), 'text', String(cats));
     if (cats > 0) $(this.root, '#catBtn').hidden = false;
     // Look 5.9: the house shows a badge while a landmark (or the fountain) is ready to wake; a tap then flies there.
-    const wakeReady = s.state.progression.coreActivated ? s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id)) : s.progression.coreReady();
+    const wakeReady = s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id));
     const homeB = $(this.root, '#homeBtn');
     this.set('homeReady', homeB, 'cls', wakeReady ? '1' : '0', 'ready');
     this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: look at it from above' : 'Home (Home key)');
@@ -182,4 +199,11 @@ export class Panels extends HudPart {
       this.failTimer -= dt;
       if (this.failTimer <= 0) $(this.root, '#fail').style.display = 'none';
     }  }
+}
+
+/** A selector that finds the same control after a redraw: its id, or its first data-* attribute. */
+function focusKey(e: HTMLElement): string | undefined {
+  if (e.id) return `#${CSS.escape(e.id)}`;
+  const d = [...e.attributes].find((x) => x.name.startsWith('data-'));
+  return d ? `[${d.name}="${CSS.escape(d.value)}"]` : undefined;
 }

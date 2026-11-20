@@ -15,19 +15,25 @@ export interface MaterialDef {
   home: string[];
   /** a tint for its fly-ups and panel row */
   colour: string;
+  /** E23.8.3.2: found only on the mainland (and never traded for on the island) */
+  mainlandOnly?: boolean;
   /** E23.5.1: where it comes from, for items that never lie in piles (the backpack says this instead of regions) */
   from?: string;
+  /** E23.8.3.2: where it lies when that is not an Old City region, in world words ("Found in …", "Needs Steel — …") */
+  place?: string;
 }
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
-  scrap: { id: 'scrap', name: 'Scrap', icon: '🧱', models: ['rubble-pile', 'crate', 'stone-block'], home: ['park', 'backstreet', 'mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory'], colour: '#9a8f84' },
-  seeds: { id: 'seeds', name: 'Seeds', icon: '🌱', models: ['broken-pot', 'stump'], home: ['park', 'elderGrove'], colour: '#8fbf5a' },
-  copper: { id: 'copper', name: 'Copper', icon: '🔧', models: ['salvage-copper'], home: ['mastRow'], colour: '#c87a4a' },
+  scrap: { id: 'scrap', name: 'Scrap', icon: '🧱', models: ['rubble-pile', 'crate', 'stone-block'], home: ['park', 'backstreet', 'mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory', 'spireHeights'], colour: '#9a8f84' },
+  seeds: { id: 'seeds', name: 'Seeds', icon: '🌱', models: ['broken-pot', 'stump'], home: ['park', 'elderGrove', 'glasshouse'], colour: '#8fbf5a' },
+  copper: { id: 'copper', name: 'Copper', icon: '🔧', models: ['salvage-copper'], home: ['mastRow', 'observatory'], colour: '#c87a4a' },
   timber: { id: 'timber', name: 'Timber', icon: '🛢️', models: ['salvage-driftwood'], home: ['saltwind'], colour: '#a8764a' },
-  glass: { id: 'glass', name: 'Glass', icon: '🪟', models: ['salvage-glass'], home: ['oldMarket'], colour: '#8fd0d8' },
-  clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern'], colour: '#b97a5a' },
-  gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza'], colour: '#b8a26a' },
-  sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces'], colour: '#f2c84a' },
+  glass: { id: 'glass', name: 'Glass', icon: '🪟', models: ['salvage-glass'], home: ['oldMarket', 'glasshouse'], colour: '#8fd0d8' },
+  clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern', 'elderGrove'], colour: '#b97a5a' },
+  gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza', 'spireHeights'], colour: '#b8a26a' },
+  sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces', 'observatory', 'saltwind'], colour: '#f2c84a' },
+  // E23.8.3.2: steel, from the mainland's industrial ruins only
+  steel: { id: 'steel', name: 'Steel', icon: '🔩', models: ['salvage-steel'], home: [], colour: '#8d9aa5', mainlandOnly: true, place: 'the industrial ruins past the causeway' },
   // E23.5.1: farm items (data/farm). Never lying in piles: gathered from restored ground, grown or composted.
   biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
   food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
@@ -131,7 +137,7 @@ export const TIERS: TierDef[] = [
   { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Stacks of 60'], look: 'flowing' },
   { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Stacks of 80'], look: 'lit' },
   { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Cultivator', 'Stacks of 120'], look: 'lit' },
-  { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom'], look: 'bloom' },
+  { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom', 'Grid Battery'], look: 'bloom' },
 ];
 
 export const ABILITIES: Record<AbilityId, { name: string; blurb: string }> = {
@@ -151,7 +157,7 @@ export const WORKBENCH = {
   groups: { pulse: 'copper', machines: 'gears', drones: 'glass', storage: 'timber', networks: 'sunstone', fog: 'clay' } as Record<string, MaterialId>,
 };
 
-/** Lucky Cat rewards under old-city rules: units of the local material by variant. */
+/** Lucky Cat rewards: units of the local material by variant. */
 export const CAT_REWARD = { standard: 10, golden: 25, rainbow: 60 };
 
 /** §3: Tally's trade once the Market Hall is awake. */

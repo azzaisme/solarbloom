@@ -1,35 +1,18 @@
-import { formatCost } from '../core/Economy';
 import { distToFootprint } from '../core/Grid';
-import { ROOF_TEMPLATES } from '../data/templates';
 import { GROUND } from '../core/GameState';
-import type { Cost, PlantKind, RestoreSource, TileData } from '../core/types';
+import type { PlantKind, RestoreSource, TileData } from '../core/types';
 import { PLANT_LOAD, PULSE_LOAD, type PulseLoadDef } from '../data/pulse';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
+/** Can a pulse go here? A pulse costs only charge (E23.2.1; E23.1.4: no energy or water). */
 export interface PulseCheck {
   ok: boolean;
   reason?: string;
-  cost: Cost;
 }
 
 export class RestorationSystem {
   constructor(private sim: Sim) {}
-
-  pulseCost(t: TileData): Cost {
-    const layer = this.sim.grid.layer(t.roofId);
-    // City rooftops cost like their template's ground, scaled by their area's distance difficulty.
-    const roofMult =
-      t.roofId === GROUND
-        ? this.sim.areas.info(this.sim.areas.areaOf(t)!).difficulty
-        : ((layer?.template ? ROOF_TEMPLATES[layer.template]?.pulseCostMult : undefined) ?? 1) * (layer?.cluster ? this.sim.areas.info(layer.cluster).difficulty : 1);
-    if (t.ground === 'restored') {
-      const n = TUNING.restore.nurture[Math.min(TUNING.restore.maxBloom, t.bloom + 1)];
-      return { energy: Math.round(n.energy * this.sim.upgrades.pulseEnergyMult * 100) / 100, water: n.water };
-    }
-    const base = t.ground === 'prepared' ? TUNING.pulse.prepared : TUNING.pulse.polluted;
-    return { energy: Math.round(base.energy * this.sim.upgrades.pulseEnergyMult * roofMult * 100) / 100, water: Math.ceil(base.water * roofMult) };
-  }
 
   /** E21.9: may a helper (drone, Cultivator, Mother Tree) work this tile? (Old City: bloombot's share first.) */
   helperMay(t: TileData): boolean {
@@ -49,35 +32,23 @@ export class RestorationSystem {
   }
 
   checkPulse(t: TileData): PulseCheck {
-    const cost = this.pulseCost(t);
     const roof = this.sim.grid.roof(t.roofId);
-    if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'This rooftop is not reachable yet', cost };
+    if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'This rooftop is not reachable yet' };
     const fog = this.sim.areas.fogReason(t);
-    if (fog) return { ok: false, reason: fog, cost };
-    if (t.blocked && t.feature === 'water') return { ok: false, reason: 'The open sea — nothing grows out there', cost };
+    if (fog) return { ok: false, reason: fog };
+    if (t.blocked && t.feature === 'water') return { ok: false, reason: 'The open sea — nothing grows out there' };
     const piece = t.blocked ? this.sim.salvage?.describe(t) : undefined; // E21: a pile, a gate, a Keeper
-    if (piece) return { ok: false, reason: piece.detail, cost };
-    if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here', cost };
-    if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
-    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
+    if (piece) return { ok: false, reason: piece.detail };
+    if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here' };
+    if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready' };
+    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom' };
     // E23.2.1: out of charge, no pulse (bloombot walks on; eat, sit or find a charger)
-    if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of charge. Eat something, rest or find a charger', cost };
-    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through — ${Math.max(1, Math.ceil(t.growthRemainingSec))}s`, cost };
+    if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of charge. Eat something, rest or find a charger' };
+    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through — ${Math.max(1, Math.ceil(t.growthRemainingSec))}s` };
     const tilling = this.sim.cultivators?.remaining(t);
-    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab — ${Math.max(1, Math.ceil(tilling))}s`, cost };
-    if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here', cost };
-    const short = this.sim.econ.shortfall(cost);
-    if (short === 'energy')
-      return { ok: false, reason: `Need ${formatCost({ energy: cost.energy })} — solar is recharging, or Harvest Sunlight`, cost };
-    if (short === 'water') {
-      const hasCondenser = this.sim.state.machines.some((m) => m.type === 'condenser');
-      return {
-        ok: false,
-        reason: hasCondenser ? 'Water is condensing — one moment' : 'Need 💧 — the rain barrel is refilling. A Water Condenser helps!',
-        cost,
-      };
-    }
-    return { ok: true, cost };
+    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab — ${Math.max(1, Math.ceil(tilling))}s` };
+    if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here' };
+    return { ok: true };
   }
 
   /** Player Restoration Pulse. */
@@ -93,7 +64,6 @@ export class RestorationSystem {
       this.sim.bus.emit('action.failed', { reason: chk.reason!, tileId });
       return false;
     }
-    this.sim.econ.spend(chk.cost);
     this.sim.charge.use('pulse');
     // E23.2.2: the pulse uses one unit of its load (or fires empty) and sends out its reveal ripple
     const load = this.sim.pulseLoad.take();
@@ -225,7 +195,7 @@ export class RestorationSystem {
     return true;
   }
 
-  /** `quiet`: offline drone work (Phase 4 E01) grows the tile and pays its yield but sets off no chain. */
+  /** `quiet`: grows the tile but sets off no chain. */
   grow(t: TileData, chainId?: number, starter: 'player' | 'auto' = 'auto', quiet = false) {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
     this.chainPlantOn(t, chainId);
@@ -233,13 +203,10 @@ export class RestorationSystem {
     t.bloom = Math.min(TUNING.restore.maxBloom, Math.max(t.bloom + 1, this.plantDef(t).bloom));
     this.sim.transitions.bloom(t, t.bloom, starter === 'auto' || quiet);
     this.sim.grid.touch(t);
-    const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
-    if (b.gt(0)) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
     this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom, auto: starter === 'auto' });
     if (quiet) return;
     const id = this.sim.chains.onGrown(t, chainId, starter);
     if (this.carrying && id >= 0) this.rememberChainPlant(id, this.carrying); // the chain carries the pulse's load
-    this.sim.chains.addReward(id, b);
   }
 
   /** the plant of the loaded pulse being fired right now (its chain is told to carry it) */
@@ -352,8 +319,6 @@ export class RestorationSystem {
     if (source === 'overflow') this.sim.transitions.lush(t, this.sim.time + TUNING.neighbourhood.reservoir.lushSeconds);
     this.sim.grid.touch(t);
     this.sim.state.stats.tilesRestored++;
-    const biomass = this.sim.econ.add('biomass', TUNING.restore.instantBiomass * this.sim.upgrades.soilMult * this.plantDef(t).biomass);
-    if (biomass.gt(0)) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: biomass, tileId: t.id });
     // Life seeps outward: neighbours soften from concrete into moss.
     for (const nb of this.sim.grid.neighbors(t)) {
       if (nb.ground !== 'polluted' || nb.blocked) continue;
@@ -373,13 +338,12 @@ export class RestorationSystem {
     if (source === 'pulse' || source === 'broad' || source === 'mega') this.sim.areas.countBot(t);
     this.sim.areas.onRestored(t);
     if (quiet) {
-      this.sim.bus.emit('tile.restored', { tile: t, source, chainId: -1, biomass });
+      this.sim.bus.emit('tile.restored', { tile: t, source, chainId: -1 });
       return -1;
     }
     const id = this.sim.chains.onRestored(t, source, chainId);
     if (t.plant && id >= 0 && (source === 'pulse' || source === 'broad')) this.rememberChainPlant(id, t.plant);
-    this.sim.chains.addReward(id, biomass);
-    this.sim.bus.emit('tile.restored', { tile: t, source, chainId: id, biomass });
+    this.sim.bus.emit('tile.restored', { tile: t, source, chainId: id });
     if (source === 'cultivator') this.sim.cultivators.onRestored(t);
     return id;
   }

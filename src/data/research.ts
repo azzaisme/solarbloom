@@ -114,7 +114,7 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   // Drones (E23.6.3 and E18's roles read these)
   { id: 'droneRange', branch: 'drones', name: 'Further wings', each: 'Drones work further from their hub', per: 2, needs: 'drones', levels: [{ cost: { glassPane: 2, wire: 2 } }, { cost: { glassPane: 4, motor: 1 } }, { cost: { sunCell: 1, motor: 2 } }] },
   { id: 'droneSpeed', branch: 'drones', name: 'Quicker wings', each: 'Drones fly a little faster', per: 0.15, needs: 'drones', levels: [{ cost: { motor: 1 } }, { cost: { motor: 2, gears: 4 } }, { cost: { motor: 3, sunstone: 4 } }] },
-  { id: 'droneCarry', branch: 'drones', name: 'Bigger baskets', each: 'Couriers carry more at a time', per: 1, needs: 'couriers', levels: [{ cost: { planks: 6 } }, { cost: { planks: 10, wire: 4 } }, { cost: { planks: 14, motor: 1 } }] },
+  { id: 'droneCarry', branch: 'drones', name: 'Bigger baskets', each: 'Couriers carry 5 more on each trip', per: 5, needs: 'couriers', levels: [{ cost: { planks: 6 } }, { cost: { planks: 10, wire: 4 } }, { cost: { planks: 14, motor: 1 } }] },
 ];
 
 /** Every project, by branch. A branch's first project opens from a find; the rest follow on. */

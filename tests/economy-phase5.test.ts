@@ -1,30 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { big, toNum } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { PARK } from '../src/core/Areas';
-import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
+import { regionById } from '../src/core/OldCityLayout';
 import { fill, makeSim, PAD, rich } from './helpers';
 
+/** full daylight, so a panel's output is its whole rating */
+const DAY = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
 
 describe('Phase 5 E12: uncapped biomass', () => {
-  it('biomass passes 100 and keeps growing; a full energy store still caps', () => {
+  // E23.5.1 / E23.1.1 / E23.1.4: biomass is gathered into the backpack in stacks, so no store ever caps it
+  it('biomass is never capped by a store', () => {
     const sim = new Sim(createInitialState(4));
-    sim.state.resources.biomass = big(99);
-    sim.econ.add('biomass', 1e6);
-    expect(toNum(sim.state.resources.biomass)).toBeCloseTo(1e6 + 99, 6);
-    sim.econ.add('energy', 1e6);
-    expect(sim.econ.isFull('energy')).toBe(true);
-    expect(sim.econ.isFull('biomass')).toBe(false);
-  });
-
-  it('Seed Vault still grows energy and water, never biomass', () => {
-    const sim = new Sim(createInitialState(4));
-    sim.state.resources.biomass = big(1e6);
-    expect(sim.upgrades.grant('seedVault')).toBeGreaterThan(0);
-    expect(toNum(sim.state.caps.energy)).toBe(TUNING.storageTiers.energy[1]);
-    expect(toNum(sim.state.caps.water)).toBe(TUNING.storageTiers.water[1]);
-    expect(sim.econ.cap('biomass')).toBeUndefined();
+    // a backpack stack has a limit, the store at the shed has none: past 100 and still growing
+    expect(sim.inventory.add('biomass', sim.inventory.stackLimit())).toBe(0);
+    sim.inventory.addToStore('biomass', 1e6);
+    expect(sim.inventory.stored('biomass')).toBe(1e6);
   });
 });
 
@@ -35,12 +26,13 @@ describe('Phase 5 E12: per-machine upgrades', () => {
     fill(sim, 0, 0, 7, 7, 'restored');
     const a = sim.build.place('solar', PAD, 5, 5)!;
     const b = sim.build.place('solar', PAD, 6, 6)!;
-    const e0 = sim.production.solarOutput(b, true);
+    const e0 = sim.power.output(b, DAY);
+    expect(e0).toBeGreaterThan(0);
     expect(sim.upgrades.grant('solarArray', a.id)).toBeGreaterThan(0);
     expect(sim.upgrades.levelOf(a, 'solarArray')).toBe(1);
     expect(sim.upgrades.levelOf(b, 'solarArray')).toBe(0);
-    expect(sim.production.solarOutput(b, true)).toBe(e0);
-    expect(sim.production.solarOutput(a, true)).toBeCloseTo(e0 * 1.5, 9);
+    expect(sim.power.output(b, DAY)).toBe(e0);
+    expect(sim.power.output(a, DAY)).toBeCloseTo(e0 * 1.5, 9);
   });
 
   it('a grant for a machine that is gone, or of the wrong type, changes nothing (E23.1.5)', () => {
@@ -52,28 +44,7 @@ describe('Phase 5 E12: per-machine upgrades', () => {
   });
 });
 
-describe('Phase 5 E12: smaller goals and no specialty stall', () => {
-  it('city areas pay rewarded steps at 25 / 50 / 75% of what their landmark needs, once each', () => {
-    const sim = new Sim(createInitialState(7));
-    sim.areas.clear(PARK, true);
-    const id = sim.areas.revealed().find((a) => a !== PARK)!;
-    const steps: number[] = [];
-    sim.bus.on('area.step', ({ step }) => steps.push(step));
-    const need = sim.areas.need(id);
-    let done = 0;
-    for (let pass = 0; pass < 200 && done < need; pass++)
-      for (const t of sim.areas.entryTiles(id)) {
-        if (done >= need) break;
-        if (!sim.restoration.isEligible(t)) continue;
-        sim.restoration.complete(t, 'pulse');
-        done++;
-      }
-    expect(steps).toEqual([1, 2, 3]);
-    sim.areas.checkSteps(id);
-    expect(steps).toEqual([1, 2, 3]); // never twice
-    expect(sim.state.areas[id].steps).toBe(3);
-  });
-
+describe('Phase 5 E12: no specialty stall', () => {
   it('an area restored all the way is ready to wake', () => {
     const sim = new Sim(createInitialState(7));
     sim.areas.clear(PARK, true);
@@ -85,6 +56,9 @@ describe('Phase 5 E12: smaller goals and no specialty stall', () => {
     }
     const c = sim.areas.counts(id);
     expect(c.restored).toBe(c.restorable);
+    // E21.9: and once its Keeper asks for the landmark (no material or specialty stall on top)
+    expect(sim.areas.ready(id)).toBe(false);
+    sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
     expect(sim.areas.ready(id)).toBe(true);
     void GROUND;
   });

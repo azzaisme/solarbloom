@@ -15,7 +15,7 @@ import { Sim } from '../src/gameplay/Sim';
  * (so no timer can run on real time), and each E23 timer is written in game time (data/time) and takes exactly
  * that much play, the same in both clock modes, whatever the real clock does.
  */
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 const at = (h: number) => () => new Date(2026, 10, 18, h, 0, 0);
 
 function files(dir: string): string[] {

@@ -334,7 +334,7 @@ export class Grid {
     return [r.origin[0] + t.x + 0.5, r.origin[1] + r.height + (t.level !== undefined ? levelY(t.level) : 0), r.origin[2] + t.z + 0.5];
   }
 
-  /** E21.24: world y offset of the ground at a cell (0 on flat classic ground and every raised layer). */
+  /** E21.24: world y offset of the ground at a cell (0 on flat ground and every raised layer). */
   groundOffset(layerId: string, x: number, z: number): number {
     const t = this.get(layerId, x, z);
     return t?.level !== undefined ? levelY(t.level) : 0;

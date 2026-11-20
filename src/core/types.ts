@@ -1,20 +1,22 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-/** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+/** `chest`: the Old City's caches (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+/** E23.6.4: `crate` (a supply crate, its own contents) and `assembler` (E23.6.5) are automation's machines. */
 export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
   // E23.5.2: the farm
-  | 'planter';
+  | 'planter'
+  // E23.5.3: the end of the farm chain
+  | 'compostBin'
+  | 'bioDigester'
+  // E23.4.2: the water network
+  | 'reservoir'
+  | 'pump'
+  | 'desalination'
+  // E23.8.3.2: the mainland's big machines
+  | 'gridBattery'
+  // E23.6.4 / E23.6.5: automation
+  | 'crate'
+  | 'assembler';
 export type BuildableType = Exclude<MachineType, 'core'>;
-export type ResourceKind = 'energy' | 'water' | 'biomass';
-/** Plain per-resource numbers (tuning tables, small per-second coefficients). */
-export type Resources = Record<ResourceKind, number>;
-/** Phase 5 E12: resource quantities are big numbers (see core/Big). */
-export type Amounts = Record<ResourceKind, import('./Big').Big>;
-/** Only energy and water have storage; biomass is uncapped. */
-export type CappedKind = Exclude<ResourceKind, 'biomass'>;
-export type Caps = Record<CappedKind, import('./Big').Big>;
-/** Income per second, per resource (totals are big numbers too). */
-export type Rates = Amounts;
-export type Cost = Partial<Record<ResourceKind, import('./Big').BigLike>>;
 export type RestoreSource =
   | 'pulse'
   | 'broad'
@@ -108,7 +110,7 @@ export interface LayerData {
   origin: [number, number, number];
   unlocked: boolean;
   preview: boolean; // visible but not yet playable
-  /** Ground generation version: 2 adds buildings, 3 rooftop clusters. Saves keep the version they began with. */
+  /** Ground generation version: 4 the city generator's ground, 5 the Old City (every game since E23.1.1). */
   gen?: number;
   /** City 12.1: a generated rooftop uses this template's layout and look ('seed', 'reservoir' or 'canopy'). */
   template?: string;
@@ -128,6 +130,8 @@ export interface MachineData {
   size: number;
   starter?: boolean;
   boostUntil: number; // solar bloom boost
+  /** E23.12 (#528): a Lucky Cat's Golden Relay: this relay carries power further, for good. */
+  golden?: boolean;
   timer: number; // per-machine automation timer
   charge: number; // condenser / Mother Tree / Reservoir Garden / Elder Tree charge meter
   /** Overcharge Pulse: a manual restoration right next to it boosts its next trigger until this time. */
@@ -138,9 +142,9 @@ export interface MachineData {
   tier?: number;
   /**
    * Phase 5 E14: a superstructure under construction. `stage` = stages paid (1 foundation, 2 assembly,
-   * 3 activation = built); `costs` = the three stage prices locked at placement (Decimal strings).
+   * 3 activation = built). E23.1.4: its counter prices went with the counters.
    */
-  project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
+  project?: { stage: number };
   /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
   ability?: { charge: number; used: number; auto?: boolean };
   /** E23.3: a power pole tripped by lightning (it carries nothing until bloombot resets it with one press). */
@@ -202,15 +206,22 @@ export interface DroneData {
   role?: DroneRole;
   /** E18.4: a Courier's machine target (instead of a tile). */
   targetMachineId?: string;
+  /** E23.6.4: a Courier on a route: the route, and what it carries to the route's target crate (none: going to fetch) */
+  route?: string;
+  cargo?: { item: import('./types').ItemId; n: number }[];
+  /** E23.6.4: units of room it booked in the route's target before fetching (no two baskets count on the same room) */
+  reserve?: number;
 }
 
-export type BuffType = 'solarFrenzy' | 'megaflower';
+export type BuffType = 'solarFrenzy' | 'megaflower' | 'droneParty';
 export interface Buff {
   type: BuffType;
   until: number;
+  /** E23.12 (#528): where it was set off (a Solar Surge lights the panels near the cat; a Drone Party speeds the drones near it) */
+  at?: { roofId: string; x: number; z: number };
 }
 
-export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker';
+export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker' | 'ripeAround';
 
 /** Phase 5 E15: how rare a cat is (rolled when it appears, saved with it). */
 export type CatVariant = 'standard' | 'golden' | 'rainbow';
@@ -251,8 +262,6 @@ export interface Progression {
   introSeen: boolean;
   /** manual pulses since the last Overcharge */
   pulseCharge: number;
-  /** Phase 4 E04.3: park milestones already paid (restored-tile thresholds). Missing in older saves. */
-  parkMilestones?: number[];
   /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */
   megaCharge?: number;
   /** Old saves only (the rooftop campaign's Cores). */
@@ -299,14 +308,12 @@ export interface AreaState {
   clearedAt?: number;
   /** what drones do here: keep it blooming, push from it into the fog, or leave it alone */
   mode?: AreaMode;
-  /** Phase 5 E12: rewarded progress steps already paid here (count of TUNING.areaSteps.at reached). */
-  steps?: number;
   /**
    * Revealed but still sealed in thick fog until its gate opens (E21.5; E23.1.5: never bought). While sealed
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
    */
   sealed?: boolean;
-  /** E21.9: tiles in this area bloombot restored itself (old-city rules: helpers wait until it has done its share) */
+  /** E21.9: tiles in this area bloombot restored itself (helpers wait until it has done its share) */
   byBot?: number;
   /** sim time the player unlocked it */
   unlockedAt?: number;
@@ -320,17 +327,11 @@ export interface LinkState {
   crossings: number;
 }
 
-/**
- * E21 (#312): which rules a game plays by. 'oldcity' is the Old City (docs/E21_OLD_CITY.md): a fixed map of nine
- * regions, materials salvaged by hand, fountain tiers. 'classic' is the endless idle city every game before E21
- * played. A save without the field is classic (the field is never written for classic, so those saves stay
- * byte-identical).
- */
-export type Rules = 'oldcity' | 'classic';
-
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
-export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser'
+  // E23.8.3.2: from the mainland's industrial ruins only
+  | 'steel';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
 export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
 /** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
@@ -346,10 +347,18 @@ export interface KeeperState {
   pulsed?: boolean;
   /** what has been handed over toward the current delivery (request 1 or the landmark) */
   given?: Partial<Record<MaterialId, number>>;
+  /** E23.9.2: settled only: gifts it liked so far (FRIENDSHIP.giftsToFriend makes a friend) */
+  hearts?: number;
+  /** E23.9.2: sim time of the last gift it took (one a game day) */
+  giftedAt?: number;
+  /** E23.9.2: how many times a friend has chatted (which line comes next) */
+  chats?: number;
+  /** E23.9.2: the tile it is off to tend; `at` is when it finishes, set once it gets there */
+  tending?: { x: number; z: number; at?: number };
 }
 
 /**
- * E21: everything the Old City adds to a save. Present only under old-city rules; each part belongs to its own
+ * E21: everything the Old City adds to a save. Each part belongs to its own
  * ticket (E21.1 pack and store, E21.2 piles, E21.5 opened gates, E21.6 tier, E21.8 keepers, …).
  */
 export interface SalvageState {
@@ -393,6 +402,17 @@ export interface SalvageState {
   decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
+  /** E23.6.4: what each supply crate holds, by machine id */
+  crates?: Record<string, Partial<Record<ItemId, number>>>;
+  /** E23.6.4: courier routes the player set (from one crate to another, an item or everything) */
+  routes?: { id: string; from: string; to: string; item: import('../data/automation').RouteItem }[];
+  /** E23.6.4: how many times each job has been done by hand (it opens its automation) */
+  hand?: Partial<Record<import('../data/automation').HandJob, number>>;
+  /**
+   * E23.6.5: each Assembler's recipe (an item id), seconds left on the craft in hand and what that craft took (given
+   * back if it is stopped), and the crates the player chose as its input and output
+   */
+  assemblers?: Record<string, { recipe?: string; left?: number; taken?: Partial<Record<ItemId, number>>; input?: string; output?: string }>;
   /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
   research?: ResearchState;
   /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */
@@ -401,8 +421,25 @@ export interface SalvageState {
   crops?: string[];
   /** E23.6.2: crossbreeds found (data/crops crossKey, e.g. 'radish+lettuce'), in the order found */
   crosses?: string[];
+  /** E23.9.2: crops kept for the Keepers, by crop id (one from each harvest, up to FRIENDSHIP.basketMax) */
+  basket?: Record<string, number>;
   /** E23.5.2.3: gathers counted toward each region's next seed packet, by region id */
   seedFinds?: Record<string, number>;
+  /** E23.5.3: each compost bin's contents, by machine id */
+  bins?: Record<string, BinState>;
+  /** E23.5.3: biomass in each Bio Digester's hopper, by machine id */
+  digesters?: Record<string, number>;
+}
+
+/** E23.5.3: what is in a compost bin (feed in feed units; progress in game days). */
+export interface BinState {
+  feed?: number;
+  /** days toward the next compost */
+  work?: number;
+  compost?: number;
+  /** days the oldest compost has matured */
+  ripen?: number;
+  fertiliser?: number;
 }
 
 /** E23.6.2: what the research station keeps. */
@@ -434,16 +471,12 @@ export interface PlanterState {
 
 export interface GameState {
   version: number;
-  /** E21: the rule set (absent = classic). Read it through `rulesOf`. */
-  rules?: Rules;
-  /** E21: Old City state (old-city rules only). */
-  salvage?: SalvageState;
+  /** E21: the Old City's own state (E23.1.1: every game has it: one rule set). */
+  salvage: SalvageState;
   seed: number;
   rngState: number;
   time: number;
   nextId: number;
-  resources: Amounts;
-  caps: Caps;
   layers: LayerData[];
   /** Only present in a save being loaded: packed tile deltas per chunk (consumed by Sim). */
   tiles?: Record<string, string>;
@@ -453,20 +486,15 @@ export interface GameState {
   drones: DroneData[];
   upgrades: Record<string, number>;
   buffs: Buff[];
-  harvestReadyAt: number;
   /** City areas that have been revealed (frontier or further). Static area data comes from the seed. */
   areas: Record<string, AreaState>;
   /** Bridges and relays by link id (see data/rooftops LINKS). */
   links: Record<string, LinkState>;
-  /** Golden Relay (Lucky Cat): extra remote blooms on the next cross-roof chain. */
-  relayBonus: number;
   cat: CatState;
   progression: Progression;
   stats: Stats;
   /** Phase 4 E01: wall-clock time (ms since 1970) this state was last saved. */
   savedAt?: number;
-  /** City 10.7: district blooms claimed, by district id (sim time). Optional: older saves have none. */
-  districts?: Record<string, number>;
   /** Phase 5 E16: fauna that has arrived, by kind (sim time). Cosmetic; optional, so no save version change. */
   fauna?: Partial<Record<'butterflies' | 'birds' | 'koi' | 'robots', number>>;
   /**
@@ -481,7 +509,11 @@ export interface GameState {
    */
   cozy?: CozyState;
   /** E23.4.1: water levels (share of capacity) of bodies that have changed, by body id `x,z`. Optional. */
-  water?: { levels: Record<string, number> };
+  water?: {
+    levels: Record<string, number>;
+    /** E23.4.2.2: pipe tiles on the ground, `x,z`, sorted */
+    pipes?: string[];
+  };
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };
   /**
@@ -499,7 +531,7 @@ export interface GameState {
     /** E23.3.5: set once lights placed before night lighting have been carried over (see Lights.carryOver) */
     lights?: number;
   };
-  /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
+  /** E23.2.1: bloombot's charge (absent = full). Optional, so no save version change. */
   charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;

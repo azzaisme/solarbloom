@@ -1,10 +1,10 @@
 import { OLD_CITY, PARK_SET, REGIONS, type RampDef } from '../data/oldcity';
-import { causewayBroken, causewayRamps, isMainlandCell, mainlandShore, onCauseway } from './Mainland';
+import { causewayBroken, causewayRamps, isMainlandCell, mainlandShore, mainlandWater, onCauseway } from './Mainland';
 import { inOldCity, inRect, isSeaChunk, onJetty, regionOfChunk, regionWater, seaCell } from './OldCityLayout';
 
 /**
  * E21.24 (§7 "Height"): the Old City's terraces. Every ground tile has a level 0–4 (one level is 1.2 tiles high),
- * a pure function of the cell (never saved), and only under old-city rules: classic ground stays flat.
+ * a pure function of the cell (never saved).
  *
  * Tiles stay flat: a ramp (one level over 3 tiles) or a stair (one level over 2) is the only way between levels
  * on foot (ladders and perches come with E21.7). A step between two tiles is allowed when the heights of their
@@ -58,7 +58,7 @@ export function levelAt(x: number, z: number): number {
   const cz = Math.floor(z / CHUNK);
   // E23.8.3.1: the Long Causeway and the mainland stand at the island's base level; the causeway's broken middle is a
   // low deck at sea level (flooded until the Great Bloom), with ramps down to it
-  if (causewayBroken(x, z)) return OLD_CITY.seaLevel;
+  if (causewayBroken(x, z) || mainlandWater(x, z)) return OLD_CITY.seaLevel; // and the mainland's canals and ponds
   if (onCauseway(x, z) || (isMainlandCell(x) && !mainlandShore(x, z))) return OLD_CITY.baseLevel;
   // the sea all round (E21.26), the bay, the coast, the jetty and canals are all at sea level
   if (!inOldCity(cx, cz) || isSeaChunk(cx, cz) || seaCell(x, z) || onJetty(x, z) || regionWater(x, z)) return OLD_CITY.seaLevel;
@@ -123,7 +123,7 @@ export function heightAt(px: number, pz: number): number {
   return rampHeight(h, k);
 }
 
-/** World y offset of a height in levels (level 1 is drawn at the classic ground height). */
+/** World y offset of a height in levels (level 1 is drawn at the old flat ground height). */
 export function levelY(level: number): number {
   return (level - OLD_CITY.baseLevel) * OLD_CITY.levelHeight;
 }

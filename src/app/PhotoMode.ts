@@ -259,7 +259,7 @@ export class PhotoMode {
       case 'buildMenu':
         this.freeze = !this.freeze;
         break;
-      case 'harvest': // F for focus
+      case 'eat': // F for focus
         this.dof = !this.dof;
         this.host.setDof(this.dof);
         break;

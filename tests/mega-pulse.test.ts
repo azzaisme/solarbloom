@@ -1,16 +1,14 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
+import { wakeNextArea } from './helpers';
 
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   return sim;
@@ -50,9 +48,14 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
     const sim = city();
     const first = sim.restoration.megaBudget();
     expect(first).toBe(TUNING.mega.baseTiles);
-    for (let i = 0; i < 10; i++) sim.areas.clear(sim.areas.nextGoal()!, true);
+    // E23.1.1: the Old City is one fixed island, then the mainland past the causeway: the next area to wake is an
+    // open one, else the region behind the nearest gate (opened here as a player would), else the mainland
+    const wakeNext = () => wakeNextArea(sim);
+    for (let i = 0; i < 10; i++) expect(wakeNext()).toBe(true);
     expect(sim.restoration.megaBudget()).toBe(TUNING.mega.baseTiles + 10 * TUNING.mega.tilesPerArea);
-    for (let i = 0; i < 200; i++) sim.areas.clear(sim.areas.nextGoal()!, true);
+    const toCap = Math.ceil((TUNING.mega.maxTiles - TUNING.mega.baseTiles) / TUNING.mega.tilesPerArea);
+    while (sim.areas.clearedCount() < toCap + 5 && wakeNext());
+    expect(sim.areas.clearedCount()).toBeGreaterThan(toCap);
     expect(sim.restoration.megaBudget()).toBe(TUNING.mega.maxTiles);
   });
 

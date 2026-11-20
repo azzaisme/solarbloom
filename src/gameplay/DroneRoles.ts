@@ -1,10 +1,8 @@
-import { big } from '../core/Big';
 import { WATER_NET } from '../data/water';
 import { PARK } from '../core/Areas';
-import { Economy } from '../core/Economy';
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
-import type { Cost, DroneData, DroneRole, MachineData, TileData } from '../core/types';
+import type { DroneData, DroneRole, MachineData, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import { tierOf } from '../data/machines';
 import { HOME } from './ProgressionSystem';
@@ -36,11 +34,6 @@ export const ROLE_INFO: Record<DroneRole, { name: string; icon: string; job: str
 const COURIER_TYPES = new Set<MachineData['type']>(['motherTree', 'solar', 'relay', 'condenser', 'reservoirGarden']);
 
 export class DroneRoles {
-  /** Seconds this session with income lost to a full store (the Harvester unlock; not saved). */
-  lostSeconds = 0;
-  /** Harvester totals this session: lost income collected and biomass paid out (tests check paid ≤ collected). */
-  readonly harvest = { collected: 0, paid: 0 };
-  private lastOverflow = 0;
   /** E18.4: when each machine last took a Courier delivery (sim time). */
   private delivered = new Map<string, number>();
   /** E18.6: when each hub last sparked a chain (sim time). */
@@ -88,19 +81,20 @@ export class DroneRoles {
       case 'restorer':
         return undefined;
       case 'gardener':
-        if (!has('condenser')) return 'Build a Water Condenser first (Gardeners run on water)';
+        if (!has('condenser')) return 'Build a Water Condenser first';
         if (!s.state.progression.coreActivated && s.progression.fullBloomCount(HOME) < R.gardener.unlockFullBloom) return `Grow ${R.gardener.unlockFullBloom} tiles to full bloom first`;
         return undefined;
       case 'scout':
-        // First when an area next to the park is in fog; after that, while any revealed area still has fog
-        // (once its neighbours clear, the frontier moves out: the role must not lock again).
-        return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'Wake the fountain to reveal the fog first';
+        // While any open area still has fog (Saltwind, from the start); once a hub owns it, it never locks again.
+        return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'No fog to scout: open a gate to the next region first';
       case 'courier':
+        // E23.6.4: couriers open once things have been carried to and from the store by hand
+        if (s.automation?.handDone('carry')) return undefined;
         return has('motherTree') || has('relay') ? undefined : 'Build a Mother Tree or a Bloom Relay first';
       case 'spark':
         return has('pollinator', R.spark.unlockGardens) ? undefined : `Build ${R.spark.unlockGardens} Pollinator Gardens first`;
       case 'harvester':
-        return this.lostSeconds >= R.harvester.unlockLostSeconds || this.anyOwns('harvester') ? undefined : 'Unlocks once full stores have lost income for a minute';
+        return s.state.stats.firsts.gathered !== undefined || this.anyOwns('harvester') ? undefined : 'Gather biomass by hand first';
     }
   }
 
@@ -112,31 +106,22 @@ export class DroneRoles {
     return role === 'restorer' || !!hub.roles?.includes(role);
   }
 
-  /** One-time refit price for this hub (free when owned). The same for every hub (E23.1.5: no price grows). */
-  refitPrice(hub: MachineData, role: DroneRole): Cost {
-    if (this.owns(hub, role)) return {};
-    const base = TUNING.drone.roles.refit[role];
-    const out: Cost = { biomass: big(base.biomass) };
-    for (const k of ['energy', 'water'] as const) {
-      const v = base[k];
-      if (!v) continue;
-      const cap = this.sim.econ.cap(k);
-      out[k] = cap ? Math.min(v, Math.max(1, Math.floor(cap.toNumber() * TUNING.machineCostMaxShare))) : v;
-    }
-    return out;
+  /** One-time refit price for this hub in biomass (0 when owned). The same for every hub (E23.1.5: no price grows). */
+  refitPrice(hub: MachineData, role: DroneRole): number {
+    return this.owns(hub, role) ? 0 : TUNING.drone.roles.refit[role] ?? 0;
   }
 
   /** Can the hub take this role now? `reason` names what's missing. */
-  check(hubId: string, role: DroneRole, slot = 1): { ok: boolean; reason?: string; price: Cost } {
+  check(hubId: string, role: DroneRole, slot = 1): { ok: boolean; reason?: string; price: number } {
     const hub = this.sim.machine(hubId);
-    if (!hub || hub.type !== 'droneHub') return { ok: false, reason: 'That hub is gone', price: {} };
-    if (!ROLES.includes(role)) return { ok: false, reason: 'Unknown role', price: {} };
-    if (slot === 2 && tierOf(hub) < 2) return { ok: false, reason: 'Only a Fleet Hub has a second role', price: {} };
+    if (!hub || hub.type !== 'droneHub') return { ok: false, reason: 'That hub is gone', price: 0 };
+    if (!ROLES.includes(role)) return { ok: false, reason: 'Unknown role', price: 0 };
+    if (slot === 2 && tierOf(hub) < 2) return { ok: false, reason: 'Only a Fleet Hub has a second role', price: 0 };
     const price = this.refitPrice(hub, role);
     const locked = this.owns(hub, role) ? undefined : this.lockedReason(role);
     if (locked) return { ok: false, reason: locked, price };
-    const short = this.sim.econ.shortfall(price);
-    if (short) return { ok: false, reason: `Need ${Economy.part(price, short).ceil().toString()} ${short === 'energy' ? '⚡' : short === 'water' ? '💧' : '🌿'}`, price };
+    // E23.1.4: biomass from the backpack and the store within reach (a gathered item, not a counter)
+    if (price > 0 && this.sim.inventory.available('biomass') < price) return { ok: false, reason: `Needs ${price} Biomass`, price };
     return { ok: true, price };
   }
 
@@ -154,7 +139,7 @@ export class DroneRoles {
     const current = slot === 2 ? hub.role2 ?? hub.role ?? 'restorer' : this.roleOf(hub);
     if (current === role && (slot === 1 || hub.role2)) return true;
     const refit = !this.owns(hub, role);
-    if (refit && !this.sim.econ.spend(st.price)) return false;
+    if (refit && st.price > 0 && !this.sim.inventory.pay({ biomass: st.price })) return false;
     if (refit) (hub.roles ??= []).push(role);
     if (slot === 2) hub.role2 = role;
     else if (role === 'restorer') delete hub.role;
@@ -185,7 +170,7 @@ export class DroneRoles {
     if (role && !this.owns(hub, role)) {
       // A role new to this hub: pay its refit once (all or nothing), without changing the hub's own role.
       const st = this.check(hubId, role);
-      if (!st.ok || !this.sim.econ.spend(st.price)) {
+      if (!st.ok || (st.price > 0 && !this.sim.inventory.pay({ biomass: st.price }))) {
         this.sim.bus.emit('action.failed', { reason: st.reason ?? 'Unavailable' });
         return false;
       }
@@ -202,28 +187,29 @@ export class DroneRoles {
   // ───────────── jobs ─────────────
 
   /**
-   * Starts a job for a non-Restorer drone: finds a target, pays for it (reserve and "save up" apply through
-   * payJob) and claims it. 'none' = nothing to do (nap), 'broke' = something to do but not affordable now.
+   * Starts a job for a non-Restorer drone: finds a target and claims it. 'none' = nothing to do (nap). E23.1.4: a
+   * job costs no energy or water (the hub runs on the grid; E23.6.3 adds each role's inputs).
    */
-  start(d: DroneData, hub: MachineData, role: DroneRole): 'none' | 'broke' | 'started' {
+  start(d: DroneData, hub: MachineData, role: DroneRole): 'none' | 'started' {
     switch (role) {
       case 'gardener':
         // E23.4.1: a Gardener only waters where there is real water nearby and draws it (see complete); no counter
-        return this.startTile(d, this.gardenTarget(d, hub), () => ({}), role);
+        return this.startTile(d, this.gardenTarget(d, hub), role);
       case 'scout':
-        return this.startTile(d, this.scoutTarget(d, hub), (t) => this.scoutCost(hub, t), role);
+        return this.startTile(d, this.scoutTarget(d, hub), role);
+      case 'harvester':
+        return this.startTile(d, this.harvestTarget(d, hub), role);
       case 'courier':
         return this.startCourier(d, hub);
       case 'spark':
         return this.startSpark(d, hub);
       default:
-        return 'none'; // the Harvester never flies to a target (see tick)
+        return 'none';
     }
   }
 
-  private startTile(d: DroneData, t: TileData | undefined, price: (t: TileData) => Cost, role: DroneRole): 'none' | 'broke' | 'started' {
+  private startTile(d: DroneData, t: TileData | undefined, role: DroneRole): 'none' | 'started' {
     if (!t) return 'none';
-    if (!this.sim.drones.payJob(price(t))) return 'broke';
     d.role = role;
     this.sim.drones.claimTile(d, t.id);
     return 'started';
@@ -281,6 +267,13 @@ export class DroneRoles {
             tileIds.push(n.id);
           }
         }
+        done = true;
+      }
+    } else if (role === 'harvester') {
+      // E23.1.4: clip the flowered tile and carry the biomass to the store (as bloombot gathers by hand)
+      const t = job.tileId ? s.grid.byTileId(job.tileId) : undefined;
+      if (t && s.gather.canGather(t) && s.gather.clip(t, 'store') > 0) {
+        tileIds.push(t.id);
         done = true;
       }
     } else if (role === 'courier') {
@@ -394,14 +387,6 @@ export class DroneRoles {
     return search(own, true) ?? (net && search(net, true)) ?? search(own, false) ?? (net && search(net, false));
   }
 
-  /** Restore pulse cost plus 1 ⚡ for every 4 tiles flown past the hub's base radius. */
-  scoutCost(hub: MachineData, t: TileData): Cost {
-    const c = this.sim.restoration.pulseCost(t);
-    const dist = distToFootprint(t.x, t.z, hub.x, hub.z, hub.size);
-    const extra = Math.floor(Math.max(0, dist - TUNING.drone.hubRadius) / TUNING.drone.roles.scout.tilesPerEnergy);
-    return extra > 0 ? { ...c, energy: Economy.part(c, 'energy').add(extra) } : c;
-  }
-
   // ───────────── Courier ─────────────
 
   private machineReserved(id: string, except?: DroneData) {
@@ -473,21 +458,18 @@ export class DroneRoles {
     return out.sort((a, b) => a.score - b.score || (a.m.id < b.m.id ? -1 : 1)).map((x) => x.m);
   }
 
-  courierCost(m: MachineData): Cost {
-    return { ...TUNING.drone.roles.courier.cost[m.type] };
-  }
-
-  private startCourier(d: DroneData, hub: MachineData): 'none' | 'broke' | 'started' {
-    const cands = this.courierCandidates(d, hub);
-    if (!cands.length) return 'none';
-    // If one store is low, serve the machines it can still pay for.
-    for (const m of cands.slice(0, 6)) {
-      if (!this.sim.drones.payJob(this.courierCost(m))) continue;
-      d.role = 'courier';
-      d.targetMachineId = m.id;
+  private startCourier(d: DroneData, hub: MachineData): 'none' | 'started' {
+    // E23.6.4: routes the player set come first (they run on the hub's grid power)
+    const route = this.sim.automation?.routeFor(hub, d);
+    if (route) {
+      this.sim.automation.startRoute(d, route);
       return 'started';
     }
-    return 'broke';
+    const m = this.courierCandidates(d, hub)[0];
+    if (!m) return 'none';
+    d.role = 'courier';
+    d.targetMachineId = m.id;
+    return 'started';
   }
 
   /** One delivery (bounded: at most once per machine per 8 s). True if it did anything. */
@@ -518,7 +500,6 @@ export class DroneRoles {
         }
         break;
     }
-    s.production.markDirty();
     return true;
   }
 
@@ -552,13 +533,12 @@ export class DroneRoles {
     return near.find((t) => this.growable(t)) ?? near.find((t) => s.restoration.isEligible(t));
   }
 
-  private startSpark(d: DroneData, hub: MachineData): 'none' | 'broke' | 'started' {
+  private startSpark(d: DroneData, hub: MachineData): 'none' | 'started' {
     const S = TUNING.drone.roles.spark;
     if ((this.sparked.get(hub.id) ?? -Infinity) + S.everySeconds > this.sim.time + 1e-9) return 'none';
     const m = this.sparkTarget(d, hub);
     if (!m) return 'none';
-    if (!this.sim.drones.payJob({ energy: S.energy })) return 'broke';
-    this.sparked.set(hub.id, this.sim.time); // the per-hub limit counts from the paid trip
+    this.sparked.set(hub.id, this.sim.time); // the per-hub limit counts from the trip
     d.role = 'spark';
     d.targetMachineId = m.id;
     return 'started';
@@ -574,34 +554,26 @@ export class DroneRoles {
     return true;
   }
 
-  // ───────────── Harvester, unlock tracking ─────────────
+  // ───────────── Harvester ─────────────
 
-  /** Once per sim tick (after production): lost-income seconds, and Harvesters turning lost income into biomass. */
-  tick(dt: number) {
+  /** E23.1.4: the nearest flowered, unclipped tile in the hub's reach (its network's after), not already claimed. */
+  harvestTarget(_d: DroneData, hub: MachineData): TileData | undefined {
     const s = this.sim;
-    const lost = s.log.overflow.energy + s.log.overflow.water;
-    const delta = Math.max(0, lost - this.lastOverflow);
-    this.lastOverflow = lost;
-    if (delta > 0) this.lostSeconds += dt;
-    if (delta <= 0) return;
-    let drones = 0;
-    for (const d of s.state.drones) if (!d.old && this.roleFor(d, s.machine(d.hubId)) === 'harvester') drones++;
-    if (!drones) return;
-    const H = TUNING.drone.roles.harvester;
-    // Only income nobody else used (it was already lost); the Frenzy overflow rule is untouched.
-    const collected = Math.min(delta, drones * H.perDronePerSec * dt);
-    const paid = collected * (1 - H.keep) * H.rate;
-    this.harvest.collected += collected;
-    if (paid > 0) {
-      const got = s.econ.add('biomass', paid);
-      this.harvest.paid += got.toNumber();
-    }
-  }
-
-  /** Is a Harvester at work right now (a store full and losing income)? */
-  harvesting(): boolean {
-    const s = this.sim;
-    return s.econ.isFull('energy') || s.econ.isFull('water');
+    const hx = hub.x + hub.size / 2;
+    const hz = hub.z + hub.size / 2;
+    return this.inReach(hub, (tiles) => {
+      let best: TileData | undefined;
+      let bd = Infinity;
+      for (const t of tiles) {
+        if (s.drones.isReserved(t.id) || !s.gather.canGather(t)) continue;
+        const dd = (t.x + 0.5 - hx) ** 2 + (t.z + 0.5 - hz) ** 2;
+        if (dd < bd) {
+          bd = dd;
+          best = t;
+        }
+      }
+      return best;
+    });
   }
 
   // ───────────── shared ─────────────
@@ -612,24 +584,4 @@ export class DroneRoles {
     return pick(s.drones.ownTiles(hub)) ?? (s.drones.network(hub).length > 1 ? pick(s.drones.networkTiles(hub)) : undefined);
   }
 
-  /** E18 offline: Gardener and Scout work through the drone-job path; Courier, Spark and Harvester don't work offline. */
-  offlineJob(d: DroneData, hub: MachineData, role: DroneRole): 'none' | 'broke' | { restored: number; grown: number } {
-    const s = this.sim;
-    if (role === 'gardener') {
-      const t = this.gardenTarget(d, hub);
-      if (!t) return 'none';
-      const all = [t, ...this.gardenNeighbours(t, hub)];
-      for (const g of all) s.restoration.grow(g, undefined, 'auto', true);
-      s.water.drawNear(t, WATER_NET.draw.gardenerPerTile * all.length); // E23.4.1
-      return { restored: 0, grown: all.length };
-    }
-    if (role === 'scout') {
-      const t = this.scoutTarget(d, hub);
-      if (!t) return 'none';
-      if (!s.drones.payJob(this.scoutCost(hub, t))) return 'broke';
-      s.restoration.complete(t, 'drone', undefined, true);
-      return { restored: 1, grown: 0 };
-    }
-    return 'none';
-  }
 }

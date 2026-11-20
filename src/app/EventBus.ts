@@ -1,6 +1,5 @@
-import type { Big } from '../core/Big';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
-import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
+import type { BuffType, CatRewardType, CatVariant, MachineData, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
   /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
@@ -54,11 +53,13 @@ export interface GameEvents {
   'research.done': { id: string };
   'research.upgraded': { id: string; level: number };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
-  'biomass.gathered': { tileId: string; x: number; z: number; got: number };
+  'biomass.gathered': { tileId: string; x: number; z: number; got: number; by: 'bot' | 'drone' };
   /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
   'planter.changed': { machineId: string };
   'planter.ripe': { machineId: string; crop: string };
   'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
+  /** E23.5.3: a compost bin or Bio Digester changed (filled, made something, emptied). */
+  'farm.machine': { machineId: string };
   /**
    * E21.10 caches: one was opened (emitted by whoever opens caches; E23.5.2.3 listens for the seeds inside).
    * Nothing opens caches yet: the E21.10 data lists them but no system emits this so far.
@@ -68,6 +69,13 @@ export interface GameEvents {
   'seeds.found': { crop: string; region: string };
   /** E23.6.2: a crossbreed found at a harvest (data/crops crossKey and its two parents) */
   'cross.found': { key: string; a: string; b: string };
+  /** E23.6.4: automation: things carried to or from the store by hand; a crate's contents changed; a route set,
+   *  changed or removed, or a basket delivered; an Assembler's recipe changed */
+  'store.moved': { material: import('../core/types').ItemId; n: number };
+  'crate.changed': { id: string };
+  'route.changed': { id: string };
+  'route.delivered': { id: string; items: number };
+  'assembler.changed': { id: string };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
@@ -78,14 +86,22 @@ export interface GameEvents {
   'fountain.delivered': { material: import('../core/types').MaterialId; n: number };
   'fountain.tier': { tier: number };
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
-  /** E23.9.1: a page of the maker's journal was kept */
-  'journal.page': { id: string };
   'keeper.said': { keeperId: string; lines: string[] };
   'keeper.step': { keeperId: string; step: import('../core/types').KeeperStep };
+  /** E23.9.2: a Keeper took a gift it loves, or bloombot grew its garden */
+  'keeper.gift': { keeperId: string; /** a material, or 'garden' for a grown Keeper garden (E23.5.4.6) */ item: string; hearts: number };
+  /** E23.9.2: a settled Keeper sets off to tend a tile of its region */
+  'keeper.tending': { keeperId: string; x: number; z: number };
+  /** E23.9.2: a settled Keeper tended a tile of its region (one bloom step) */
+  'keeper.tended': { keeperId: string; x: number; z: number };
+  /** E23.9.2: a Keeper calls bloombot a friend */
+  'keeper.friend': { keeperId: string };
+  /** E23.9.1: a page of the maker's journal was kept */
+  'journal.page': { id: string };
   /** E21.9: a region's landmark woke (by bloombot's own delivery). */
   'landmark.woken': { region: string };
   'tile.restoring': { tile: TileData; source: RestoreSource };
-  'tile.restored': { tile: TileData; source: RestoreSource; chainId: number; biomass: Big };
+  'tile.restored': { tile: TileData; source: RestoreSource; chainId: number };
   'tile.prepared': { tile: TileData };
   'tile.softened': { tile: TileData };
   'tile.nurtured': { tile: TileData; level: number; auto?: boolean };
@@ -95,13 +111,11 @@ export interface GameEvents {
   'tile.knocked': { tile: TileData };
   /** Look 6: a tile's transition changed without a state change (a delayed wave, a Cultivator phase). */
   'tile.transition': { tile: TileData };
-  'resource.gain': { kind: ResourceKind; amount: Big; tileId?: string; reason?: string };
-  'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };
-  'chain.ended': { chainId: number; combo: number; bonus: Big; total: Big; milestonePct: number; energy: Big; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
+  'chain.ended': { chainId: number; combo: number; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
   'mega.released': { tileId: string; budget: number };
   'mega.ready': Record<string, never>;
   'area.modeChanged': { areaId: string; mode: 'bloom' | 'frontier' | 'off' | undefined };
@@ -117,7 +131,6 @@ export interface GameEvents {
   /** City 12.1: a rooftop cluster's roof was added to the world, or became reachable. */
   'layer.added': { layerId: string };
   'layer.unlocked': { layerId: string };
-  'canal.flow': { from: string; to: string; path: string[]; kind: 'fill' | 'overflow'; chainId?: number };
   'canopy.burst': { machineId: string; radius: number; gardens: string[] };
   'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };
@@ -136,16 +149,9 @@ export interface GameEvents {
   'cat.spawned': { anchorId: string; catId?: string; variant?: CatVariant; invasion?: boolean };
   'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number; catId?: string; variant?: CatVariant; rewards?: CatRewardType[] };
   'cat.moved': { from: string; anchorId: string; catId?: string };
-  'cat.goldenRelay': Record<string, never>;
+  'cat.goldenRelay': { machineId: string };
   'buff.started': { type: BuffType; seconds: number };
-  'harvest': { amount: Big };
-  'rooftop.coreReady': Record<string, never>;
-  'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
-  /** Phase 4 E04.3: a park milestone was reached and paid (once). */
-  /** Phase 5 E12: a rewarded step on the way to an area's landmark (25 / 50 / 75% of the tiles it needs). */
-  'area.step': { areaId: string; step: number; share: number; credited: Partial<Record<ResourceKind, Big>> };
-  'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, Big>>; next?: number };
   'area.revealed': { areaId: string };
   /** region unlocks: the player paid to lift a sealed area's fog */
   'area.unlocked': { areaId: string };
@@ -154,10 +160,8 @@ export interface GameEvents {
   'area.cleared': { areaId: string };
   /** City 09.1: progress on an area's specialty action. */
   'area.specialty': { areaId: string; have: number; need: number; met: boolean };
-  'district.ready': { districtId: string };
   /** Phase 5 E16: a fauna kind arrived (once per save; cosmetic). */
   'fauna.unlocked': { id: 'butterflies' | 'birds' | 'koi' | 'robots' };
-  'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, Big>>; replay: boolean };
 }
 
 type Handler<T> = (payload: T) => void;

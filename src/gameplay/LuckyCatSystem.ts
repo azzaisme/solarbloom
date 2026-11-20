@@ -1,6 +1,5 @@
-import { fmt } from '../core/Big';
 import { HOME } from './ProgressionSystem';
-import type { CatRewardType, CatSpot, CatVariant, MachineData, TileData } from '../core/types';
+import type { CatRewardType, CatSpot, CatVariant, MachineData, MaterialId, TileData } from '../core/types';
 import { hashString, tileRandom } from '../core/Hash';
 
 const CAT_SALT = hashString('lucky-cat');
@@ -8,8 +7,19 @@ import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { CAT_ANCHORS, type CatAnchor } from '../data/templates';
+import { CAT_DECOR, CAT_DECOR_OF_VARIANT, DECOR_OPTION } from '../data/cozy';
 import { TUNING } from '../data/tuning';
+import { MATERIALS } from '../data/salvage';
+import { regionOfCell } from '../core/OldCityLayout';
+import { strengthOf } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
+
+/** Where a cat was found (rewards that act nearby start from here). */
+export interface CatAt {
+  roofId: string;
+  x: number;
+  z: number;
+}
 
 export interface CatReward {
   type: CatRewardType;
@@ -25,6 +35,7 @@ export const CAT_REWARD_NAMES: Record<CatRewardType, string> = {
   goldenRelay: 'Golden Relay',
   catsGarden: "Cat's Garden",
   fogWhisker: 'Fog Whisker',
+  ripeAround: 'Ripe All Around',
 };
 
 /** How an anchor looks from the current camera: on screen, off screen (reachable by panning) or under the HUD. */
@@ -311,11 +322,6 @@ export class LuckyCatSystem {
     return Math.max(0, Math.min(scaled, s.areas.need(id) - s.areas.counts(id).restored - 1));
   }
 
-  /** Golden Relay's extra corridor blooms: grows with the city, capped. */
-  goldenCorridorTiles(): number {
-    return Math.min(TUNING.cat.goldenCorridorMax, TUNING.cat.goldenCorridorTiles + Math.floor(this.sim.areas.clearedCount() / 10));
-  }
-
   /** Summary for the discovery panel. */
   discoveries() {
     const log = this.sim.state.cat.log ?? [];
@@ -367,42 +373,100 @@ export class LuckyCatSystem {
   }
 
   /**
-   * Golden Relay needs a way to send it (a built bridge, or in the city a green corridor of street gardens)
-   * and no unspent one; Cat's Garden needs somewhere new to bloom. Never useless.
+   * E23.12 (#528) Golden Relay: the relay nearest the cat that isn't gold yet (relays are power poles, E23.3.2).
+   * Undefined when there is none: it is never rolled then.
    */
-  goldenRelayAvailable() {
-    const s = this.sim;
-    if (s.state.relayBonus > 0) return false;
-    return s.state.machines.some((m) => s.chains.isCorridor(m) && s.chains.corridorNext(m).length > 0);
+  goldenRelayTarget(at?: CatAt): MachineData | undefined {
+    const relays = this.sim.machinesOfType('relay').filter((m) => !m.golden);
+    if (!relays.length) return undefined;
+    if (!at) return relays[0];
+    const d = (m: MachineData) => (m.roofId === at.roofId ? Math.hypot(m.x + m.size / 2 - at.x, m.z + m.size / 2 - at.z) : 1e9);
+    return relays.reduce((a, b) => (d(b) < d(a) ? b : a));
+  }
+
+  goldenRelayAvailable(at?: CatAt) {
+    return !!this.goldenRelayTarget(at);
   }
 
   catsGardenAvailable() {
     return this.catsGardenTiles().length > 0;
   }
 
-  /** The drone hub a Drone Party launches from: in the city, the hub nearest the fog the player is pushing into. */
-  partyHub(): MachineData | undefined {
+  /**
+   * E23.12 (#528) Drone Party is only offered when drones are working near the cat: a hub with its own drones within
+   * `TUNING.cat.partyRadius` tiles (anywhere when the cat's spot is unknown).
+   */
+  partyAvailable(at?: CatAt): boolean {
     const s = this.sim;
-    const hubs = s.state.machines.filter((m) => m.type === 'droneHub');
-    if (hubs.length <= 1 || !this.city()) return hubs[0];
-    const goal = s.areas.nextGoal();
-    const entry = goal ? s.areas.entryTiles(goal)[0] : undefined;
-    if (!entry) return hubs[0];
-    return hubs.reduce((a, b) => (Math.hypot(b.x - entry.x, b.z - entry.z) < Math.hypot(a.x - entry.x, a.z - entry.z) ? b : a));
+    const busy = new Set(s.state.drones.filter((d) => !d.expiresAt).map((d) => d.hubId));
+    return s.state.machines.some(
+      (m) => busy.has(m.id) && (!at || (m.roofId === at.roofId && Math.hypot(m.x + m.size / 2 - at.x, m.z + m.size / 2 - at.z) <= TUNING.cat.partyRadius)),
+    );
   }
 
-  rollReward(): CatRewardType {
-    const hasHub = this.sim.state.machines.some((m) => m.type === 'droneHub');
+  /** Where a cat sits (its anchor), for the rewards that act nearby. */
+  spotAt(spot: CatSpot): CatAt | undefined {
+    const a = this.anchor(spot.anchorId);
+    return a && { roofId: a.roofId, x: a.pos[0], z: a.pos[2] };
+  }
+
+  /**
+   * E23.12 (#528) Lucky Harvest's gift: food, biomass and what the cat's region is known for (its material: copper on
+   * Mast Row, clay in the Cistern Basin…; seeds in the park and backstreets). Fertile soil gives more biomass.
+   */
+  giftAt(at: CatAt | undefined, mult: number): Partial<Record<MaterialId, number>> {
+    const G = TUNING.cat.gift;
+    const r = at && at.roofId === GROUND ? regionOfCell(at.x, at.z) : undefined;
+    const local: MaterialId = r ? (Object.values(MATERIALS).find((m) => m.id !== 'scrap' && m.home.includes(r.id))?.id ?? 'scrap') : 'seeds';
+    const soil = r ? strengthOf(r.id, 'soil') : 1;
+    const out: Partial<Record<MaterialId, number>> = {};
+    const put = (m: MaterialId, n: number) => (out[m] = (out[m] ?? 0) + Math.max(1, Math.round(n)));
+    put('food', G.food * mult);
+    put('biomass', G.biomass * mult * soil);
+    put(local, G.local * mult);
+    return out;
+  }
+
+  /**
+   * E23.12.2 (#529) Ripe all around: the planters within `TUNING.cat.ripeRadius` tiles of bloombot (of the cat when
+   * there is no bloombot, as in the bots) with a crop still growing. Empty: the reward is never rolled.
+   */
+  ripeTargets(at?: CatAt): MachineData[] {
+    const s = this.sim;
+    const b = s.bot ?? s.state.bot; // live where the game sets it, else the last saved spot
+    const from = b ? { roofId: b.roofId, x: b.x, z: b.z } : at;
+    return s.farm.planters().filter((m) => {
+      if (!s.farm.bed(m).crop || s.farm.look(m).ripe) return false;
+      return !from || (m.roofId === from.roofId && Math.hypot(m.x + m.size / 2 - from.x, m.z + m.size / 2 - from.z) <= TUNING.cat.ripeRadius);
+    });
+  }
+
+  /**
+   * E23.12.2 (#529): the cat-only decoration this cat leaves: a Golden or Rainbow Cat its own piece while bloombot
+   * doesn't have it, otherwise the next missing one in order (the rarer cats' pieces last). Undefined once bloombot
+   * has them all: from then on a cat gives only its reward.
+   */
+  nextDecor(variant: CatVariant = 'standard'): string | undefined {
+    const left = CAT_DECOR.filter((id) => !this.sim.crafting.decorMade(id));
+    if (!left.length) return undefined;
+    const own = CAT_DECOR_OF_VARIANT[variant];
+    if (own && left.includes(own)) return own;
+    const rare = new Set(Object.values(CAT_DECOR_OF_VARIANT));
+    return left.find((id) => !rare.has(id)) ?? left[0];
+  }
+
+  rollReward(at?: CatAt): CatRewardType {
     const w = TUNING.cat.weights;
     const table: [CatRewardType, number][] = [
       ['luckyHarvest', w.luckyHarvest],
       ['solarFrenzy', w.solarFrenzy],
       ['megaBloom', w.megaBloom],
-      ['droneParty', hasHub ? w.droneParty : 0],
+      ['droneParty', this.partyAvailable(at) ? w.droneParty : 0],
       ['jackpot', w.jackpot],
-      ['goldenRelay', this.goldenRelayAvailable() ? w.goldenRelay : 0],
+      ['goldenRelay', this.goldenRelayAvailable(at) ? w.goldenRelay : 0],
       ['catsGarden', this.catsGardenAvailable() ? w.catsGarden : 0],
       ['fogWhisker', this.fogWhiskerTiles().length ? w.fogWhisker : 0],
+      ['ripeAround', this.ripeTargets(at).length ? w.ripeAround : 0],
     ];
     const total = table.reduce((a, [, x]) => a + x, 0);
     let r = this.sim.rng.next() * total;
@@ -436,12 +500,16 @@ export class LuckyCatSystem {
     const hidden = Math.min(1, (s.time - spot.spawnedAt) / TUNING.cat.hiddenBonusCapSec);
     const mult = Math.min(TUNING.cat.maxRewardMult, (1 + TUNING.cat.hiddenBonusMax * hidden) * vmult);
     // A Rainbow Cat always gives two different rewards (a jackpot); the first cat a Lucky Harvest.
-    const type: CatRewardType = first ? 'luckyHarvest' : variant === 'rainbow' ? 'jackpot' : this.rollReward();
-    const parts = [this.apply(type, mult, hidden, vmult)];
+    const at = this.spotAt(spot);
+    const type: CatRewardType = first ? 'luckyHarvest' : variant === 'rainbow' ? 'jackpot' : this.rollReward(at);
+    const parts = [this.apply(type, mult, at)];
     // Saved-up rewards from saves made before E20.1 (#284), when a missed cat stashed extras: paid once, then gone.
     const extras = regular ? (c.stash ?? 0) : 0;
-    for (let i = 0; i < extras; i++) parts.push(this.apply('luckyHarvest', 1, 0));
+    for (let i = 0; i < extras; i++) parts.push(this.apply('luckyHarvest', 1, at));
     if (regular) c.stash = 0;
+    // E23.12.2 (#529): every cat also leaves a cat-only decoration until bloombot has them all
+    const decor = this.nextDecor(variant);
+    if (decor && s.crafting.giveDecor(decor)) parts.push(`${DECOR_OPTION[decor].icon} ${DECOR_OPTION[decor].name} to place in your gardens`);
     const summary = parts.join(' · ');
     c.lastReward = type;
     c.log = [...(c.log ?? []), { anchorId: spot.anchorId, reward: type, at: s.time, variant }];
@@ -450,75 +518,103 @@ export class LuckyCatSystem {
     return { type, summary };
   }
 
-  /** `mult`: everything scales by it (capped); `vmult`: the rarity's share, which also lengthens a harvest. */
-  private apply(type: CatRewardType, mult: number, hidden: number, vmult = 1): string {
+  /**
+   * Pays one reward. `mult` scales it (rarity and hidden time, capped); `at` is where the cat sat. E23.12 (#528):
+   * every reward pays out in the world (the backpack, charge, the grid, drones, restored ground), never in a
+   * counter, and its words are the world's own: no numbers.
+   */
+  private apply(type: CatRewardType, mult: number, at: CatAt | undefined): string {
     const s = this.sim;
     const parts: string[] = [];
     const harvest = () => {
-      // Sustained rate: a cat found mid-Frenzy doesn't pay ×10 (Phase 4 E08.4).
-      const rate = s.production.rates(true).biomass;
-      const secs = (TUNING.cat.harvestSecondsMin + (TUNING.cat.harvestSecondsMax - TUNING.cat.harvestSecondsMin) * hidden) * vmult;
-      // Phase 5 E12: biomass is uncapped, so the whole harvest always lands.
-      const got = s.econ.add('biomass', rate.mul(secs).max(TUNING.cat.harvestMin));
-      const w = s.econ.add('water', 10 * mult);
-      const e = s.econ.add('energy', 15 * mult);
-      if (got.gt(0)) s.bus.emit('resource.gain', { kind: 'biomass', amount: got, reason: 'cat' });
-      if (w.gt(0)) s.bus.emit('resource.gain', { kind: 'water', amount: w, reason: 'cat' });
-      if (e.gt(0)) s.bus.emit('resource.gain', { kind: 'energy', amount: e, reason: 'cat' });
-      parts.push(`+${fmt(got)}🌿 +${fmt(w)}💧 +${fmt(e)}⚡`);
+      const gift = this.giftAt(at, mult);
+      for (const [m, n] of Object.entries(gift) as [MaterialId, number][]) {
+        const left = s.inventory.add(m, n);
+        if (left > 0) s.inventory.addToStore(m, left); // a full backpack: the rest waits in the store
+      }
+      const names = Object.keys(gift).map((m) => MATERIALS[m as MaterialId].name.toLowerCase());
+      parts.push(`A gift in your backpack: ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
     };
-    const frenzy = () => {
-      const secs = TUNING.cat.frenzySeconds * mult;
+    const surge = () => {
+      s.charge.recharge(s.charge.max, 'cat');
+      const secs = TUNING.cat.surgeSeconds * mult;
       // Phase 5 E15: stacked surges never run past surgeMaxSeconds from now.
       const cap = s.time + TUNING.cat.surgeMaxSeconds;
-      const existing = s.state.buffs.find((b) => b.type === 'solarFrenzy');
-      if (existing) existing.until = Math.min(cap, Math.max(existing.until, s.time) + secs);
-      else s.state.buffs.push({ type: 'solarFrenzy', until: Math.min(cap, s.time + secs) });
+      const here = at && { roofId: at.roofId, x: at.x, z: at.z };
+      const same = (b: { at?: { roofId: string; x: number; z: number } }) => b.at?.roofId === here?.roofId && b.at?.x === here?.x && b.at?.z === here?.z;
+      const existing = s.state.buffs.find((b) => b.type === 'solarFrenzy' && b.until > s.time && same(b));
+      if (existing) existing.until = Math.min(cap, existing.until + secs);
+      else s.state.buffs.push({ type: 'solarFrenzy', until: Math.min(cap, s.time + secs), at: here });
       s.bus.emit('buff.started', { type: 'solarFrenzy', seconds: secs });
-      parts.push(`Solar ×${TUNING.cat.frenzyMult} for ${Math.round(secs)} s`);
+      parts.push('Charge full, and the solar panels nearby shine brighter for a while');
     };
-    const mega = () => {
+    // Each reward returns true when it acted as itself. Unable to act, it gives a gift instead (never nothing), or,
+    // inside a jackpot (`fallback` false), does nothing so the jackpot can pick another.
+    const mega = (fallback = true): boolean => {
       const ok = s.chains.startMega(Math.min(TUNING.cat.megaBloomMax, Math.round(TUNING.cat.megaBloomTiles * mult)));
-      parts.push(ok ? 'A free Mega Bloom!' : 'Everything is already blooming!');
-      if (!ok) harvest();
+      if (ok) parts.push('A Mega Bloom!');
+      else if (fallback) harvest(); // everything nearby already blooms
+      return ok;
     };
-    const party = () => {
-      const hub = this.partyHub();
-      if (!hub) return harvest();
+    const party = (fallback = true): boolean => {
+      if (!this.partyAvailable(at)) {
+        if (fallback) harvest();
+        return false;
+      }
       const secs = Math.min(TUNING.cat.partyMaxSeconds, TUNING.cat.dronePartySeconds * mult);
-      s.drones.spawn(hub, secs);
-      s.drones.spawn(hub, secs);
-      parts.push(`2 party drones for ${Math.round(secs)} s`);
+      s.state.buffs.push({ type: 'droneParty', until: s.time + secs, at: at && { roofId: at.roofId, x: at.x, z: at.z } });
+      s.bus.emit('buff.started', { type: 'droneParty', seconds: secs });
+      parts.push('The drones nearby work faster for a while');
+      return true;
     };
-    const golden = () => {
-      if (!this.goldenRelayAvailable()) return harvest(); // degrade gracefully, never useless
-      s.state.relayBonus = this.city() ? this.goldenCorridorTiles() : TUNING.cat.goldenRelayExtra;
-      s.bus.emit('cat.goldenRelay', {});
-      parts.push(
-        this.city()
-          ? `Your next green corridor hop blooms +${s.state.relayBonus} extra tiles`
-          : `Your next cross-roof chain sends +${TUNING.cat.goldenRelayExtra} extra remote bloom`,
-      );
+    const golden = (fallback = true): boolean => {
+      const relay = this.goldenRelayTarget(at);
+      if (!relay) {
+        if (fallback) harvest();
+        return false;
+      }
+      relay.golden = true;
+      s.power.invalidate();
+      s.bus.emit('cat.goldenRelay', { machineId: relay.id });
+      parts.push('A relay turns gold: it carries power further');
+      return true;
     };
-    const garden = () => {
+    const garden = (fallback = true): boolean => {
       const tiles = this.catsGardenTiles();
-      if (!tiles.length || !s.chains.startCatGarden(tiles)) return harvest();
+      if (!tiles.length || !s.chains.startCatGarden(tiles)) {
+        if (fallback) harvest();
+        return false;
+      }
       const area = s.areas.areaOf(tiles[0]);
       const where = area ? `the ${AREA_TYPES[s.areas.info(area).type].name.toLowerCase()}` : s.grid.roof(tiles[0].roofId)!.name;
-      parts.push(`A little garden blooms in ${where} (${tiles.length} tiles)`);
+      parts.push(`A little garden blooms in ${where}`);
+      return true;
     };
-    const whisker = () => {
+    const whisker = (fallback = true): boolean => {
       const tiles = this.fogWhiskerTiles();
-      if (!tiles.length || !s.chains.startCatGarden(tiles)) return harvest();
+      if (!tiles.length || !s.chains.startCatGarden(tiles)) {
+        if (fallback) harvest();
+        return false;
+      }
       const a = s.areas.info(s.areas.areaOf(tiles[0])!);
-      parts.push(`The fog thins over the ${AREA_TYPES[a.type].name.toLowerCase()} (${tiles.length} tiles)`);
+      parts.push(`The fog thins over the ${AREA_TYPES[a.type].name.toLowerCase()}`);
+      return true;
+    };
+    const ripe = (fallback = true): boolean => {
+      const n = this.ripeTargets(at).filter((m) => s.farm.ripenNow(m)).length;
+      if (!n) {
+        if (fallback) harvest(); // nothing growing nearby any more
+        return false;
+      }
+      parts.push(n === 1 ? 'The planter nearby ripens at once' : 'The planters nearby ripen all at once');
+      return true;
     };
     switch (type) {
       case 'luckyHarvest':
         harvest();
         break;
       case 'solarFrenzy':
-        frenzy();
+        surge();
         break;
       case 'megaBloom':
         mega();
@@ -535,18 +631,20 @@ export class LuckyCatSystem {
       case 'fogWhisker':
         whisker();
         break;
+      case 'ripeAround':
+        ripe();
+        break;
       case 'jackpot': {
-        // Two different compatible rewards together.
-        const pool: (() => void)[] = [harvest, frenzy, mega];
-        if (s.state.machines.some((m) => m.type === 'droneHub')) pool.push(party);
-        if (this.goldenRelayAvailable()) pool.push(golden);
-        if (this.catsGardenAvailable()) pool.push(garden);
-        const i = Math.floor(s.rng.next() * pool.length);
-        let j = Math.floor(s.rng.next() * (pool.length - 1));
-        if (j >= i) j++;
+        // Two different rewards from the pool, in a random order; one that can't act here is skipped, never doubled
+        // into a second gift (the gift and the surge always act, so there are always two).
+        const pool: ((fallback?: boolean) => boolean)[] = [() => (harvest(), true), () => (surge(), true), mega, party, golden, garden, whisker, ripe];
+        for (let i = pool.length - 1; i > 0; i--) {
+          const j = Math.floor(s.rng.next() * (i + 1));
+          [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
         parts.push('JACKPOT!');
-        pool[i]();
-        pool[j]();
+        let given = 0;
+        for (const r of pool) if (given < 2 && r(false)) given++;
         break;
       }
     }

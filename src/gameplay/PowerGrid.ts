@@ -7,7 +7,7 @@ import type { MachineData } from '../core/types';
  */
 export type PowerNode = Pick<MachineData, 'id' | 'roofId' | 'x' | 'z' | 'size' | 'tripped' | 'upg'> & { type: string; charge: number };
 import { POWER, SHED_ORDER, type ShedClass } from '../data/power';
-import { groundLevel, readSky, regionBoost, type PowerSky } from './PowerEnv';
+import { groundLevel, readSky, regionBoost, solarBoost, type PowerSky } from './PowerEnv';
 import type { Sim } from './Sim';
 
 /**
@@ -67,8 +67,7 @@ const byId = (a: PowerNode, b: PowerNode) => idNum(a) - idNum(b) || (a.id < b.id
 const KEEP_ORDER = [...SHED_ORDER].reverse(); // served first = shed last
 
 /**
- * E23.3.1: the power grid (`sim.power`). Machines join networks through poles in range (flood fill, like
- * `CanalNetwork`), or by touching. Each tick a network sums its supply, serves its consumers from the most
+ * E23.3.1: the power grid (`sim.power`). Machines join networks through poles in range (flood fill), or by touching. Each tick a network sums its supply, serves its consumers from the most
  * important (chargers) to the least (lamps), covers any deficit from its batteries and stores any surplus.
  * When short, consumers go dark one at a time in shed order and come back by themselves. Deterministic and
  * headless; networks are cached until a machine is built or removed (or `invalidate()` is called).
@@ -97,14 +96,13 @@ export class PowerGrid {
   constructor(private sim: Sim) {
     // E23.6.2: Longer lines and Clearer panels (research) stretch pole range and solar output
     this.register('relay', { pole: { range: (m, s) => s.relays.range(m as MachineData) * (1 + (s.research?.effect('poleReach') ?? 0)) } });
-    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) * (1 + (s.research?.effect('solarYield') ?? 0)) });
-    this.register('battery', { battery: { capacity: POWER.battery.capacity, rate: POWER.battery.rate } });
+    // E23.1.4 / #528: Solar Wings, blooms beside a panel and a Lucky Cat's Solar Surge make it feed the grid more
+    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) * solarBoost(s, m) * s.upgrades.solarMult(m as MachineData) * (1 + (s.research?.effect('solarYield') ?? 0)) });
+    this.register('battery', { battery: { capacity: () => POWER.battery.capacity * (sim.landmarks?.batteryMult() ?? 1), rate: POWER.battery.rate } });
     this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
-    // E23.3.3: helpers run on the grid (old-city rules only; the classic game keeps its energy economy).
-    if (sim.oldCity) {
-      this.register('droneHub', { consumer: { shed: 'helper', draw: POWER.helper.droneHub } });
-      this.register('cultivator', { consumer: { shed: 'helper', draw: POWER.helper.cultivator } });
-    }
+    // E23.3.3: helpers run on the grid.
+    this.register('droneHub', { consumer: { shed: 'helper', draw: POWER.helper.droneHub } });
+    this.register('cultivator', { consumer: { shed: 'helper', draw: POWER.helper.cultivator } });
   }
 
   private providers: (() => readonly PowerNode[])[] = [];
