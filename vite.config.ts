@@ -35,6 +35,8 @@ const QUICK = [
   'lucky-cat-rewards', 'cat-decor', 'cat-secrecy', 'picker-internals', 'cat-sight-cpu', 'cat-sight-schedule',
   // E23.10: the proof
   'e23-gentle-failure', 'jetty-ropes',
+  // E23 polish (#596): shaders warm behind the loading screen
+  'shader-warmup',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

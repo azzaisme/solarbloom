@@ -53,6 +53,7 @@ import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer'
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
 import { CropVisuals } from '../rendering/CropVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
+import { ShaderWarmup } from '../rendering/ShaderWarmup';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
@@ -418,6 +419,8 @@ export class Game {
     this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.rings = new ProgressRings(this.sim, this.scene.world);
+    this.rings.prepare(); // #596: its shader warms with the rest
+    this.warmup = new ShaderWarmup(this.app, this.camera.entity.camera!);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
     const models = createModels(this.app);
@@ -929,6 +932,8 @@ export class Game {
   /** the device the title screen was driven with (it picks the first glyph set) */
   private startDevice: 'keys' | 'pad' = 'keys';
   private readyFrames = 0;
+  /** #596: draws everything once behind the loading screen, so no shader compiles mid-play */
+  private warmup!: ShaderWarmup;
   /** #561: when the ground round bloombot was first complete; the rest of the view gets at most VIEW_WAIT ms more */
   private nearDoneAt = 0;
   static VIEW_WAIT = 8000;
@@ -967,7 +972,7 @@ export class Game {
     const viewDone = nearDone && (all === 0 || performance.now() - this.nearDoneAt > Game.VIEW_WAIT);
     // the bar: the ground round bloombot fills the first 60%, the rest of the view the last 40% (never steps back)
     const view = !loaded ? 0 : nearDone ? 0.6 + 0.4 * ((loaded - all) / loaded) : 0.6 * ((loaded - near) / loaded);
-    return { models: modelsDone ? 1 : Math.min(0.99, (m?.loaded.size ?? 0) / total), world: 1, view: viewDone ? 1 : Math.min(0.99, view * (modelsDone ? 1 : 0.5)), shaders: Math.min(1, this.readyFrames / 4) };
+    return { models: modelsDone ? 1 : Math.min(0.99, (m?.loaded.size ?? 0) / total), world: 1, view: viewDone ? 1 : Math.min(0.99, view * (modelsDone ? 1 : 0.5)), shaders: Math.min(this.warmup.state === 'done' ? 1 : 0.9, this.readyFrames / 4) };
   }
 
   /** Freezes or unfreezes the game without the menu (tools, screenshots). */
@@ -4781,9 +4786,13 @@ export class Game {
     this.nightFindVisuals.update(wdt);
     this.tileFx.update(wdt);
     this.frameNo++;
-    if (this.readyFrames < 4) {
+    if (this.readyFrames < 4 || this.warmup.state !== 'done') {
       const s = this.loadSteps();
-      this.readyFrames = s.models === 1 && s.view === 1 ? this.readyFrames + 1 : 0;
+      const ready = s.models === 1 && s.view === 1;
+      // #596: once the view is complete, every shader it could need is compiled behind the loading screen
+      if (ready && this.warmup.state === 'idle') this.warmup.start(this.app.root, this.chunks.warmupSamples(), [pc.LAYERID_WORLD]);
+      this.warmup.update();
+      this.readyFrames = ready ? this.readyFrames + 1 : 0;
     }
     this.updateChainPresentation(wdt);
     if (!this.cinematic) this.checkCozyUnlocks();

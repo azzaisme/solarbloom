@@ -31,6 +31,7 @@ import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER, poolMaterial, updatePool } from './Water';
 import { TrMeshBuilder } from './transitions/TrMeshBuilder';
+import { transitionMaterial } from './transitions/TransitionMaterial';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 
 /** Small seeded RNG for decoration placement (looks only). */
@@ -1118,6 +1119,24 @@ export class ChunkRenderer {
       b.add('box', PALETTE.metal.dark, [kx, y + H - 0.25, kz], [0.03, 0.4, 0.03]);
       b.add('box', PALETTE.metal.iron, [kx, y + H - 0.5, kz], [0.16, 0.14, 0.12]);
     }
+  }
+
+  /**
+   * #596: a small mesh for each chunk material made only when the world needs it (an area's towers once its fog
+   * thins, a pool once it holds water, the growth transitions on a first pulse), in the same vertex layout, so the
+   * loading screen can compile their shaders before play.
+   */
+  warmupSamples(): [pc.Mesh, pc.Material][] {
+    const b = new MeshBuilder();
+    b.add('box', '#ffffff', [0, 0, 0], 0.05);
+    const tb = new TrMeshBuilder();
+    tb.add('box', '#ffffff', [0, 0, 0], 0.05);
+    const plain = b.build(this.device)!;
+    return [
+      [plain, towerMaterial()],
+      [plain, poolMaterial(this.device)],
+      [tb.build(this.device)!, transitionMaterial()],
+    ];
   }
 
   private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
