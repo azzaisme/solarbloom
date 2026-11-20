@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build menu, gamepad</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="sb.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="screen" style="width: 1280px; height: 800px">
+  <div class="veil"></div>
+  <section class="card sheet" role="dialog" aria-label="Build">
+    <header class="sheet-head">
+      <div class="badge"><span class="ic i-hammer"></span></div>
+      <h2 class="h1" style="margin: 0">Build</h2>
+      <span class="grow"></span>
+      <span class="act soft"><span class="g pad pb">B</span>Back</span>
+    </header>
+    <div class="sheet-tabs tabs" role="tablist">
+      <span class="g bumper">LB</span>
+      <span class="tab">Machines</span>
+      <span class="tab on"><span class="ic i-bolt"></span>Power</span>
+      <span class="tab">Water</span>
+      <span class="tab">Farm</span>
+      <span class="tab">Storage</span>
+      <span class="tab">Decorations</span>
+      <span class="g bumper">RB</span>
+    </div>
+    <div class="sheet-body">
+      <div class="cells grow" style="grid-template-columns: repeat(4, minmax(0, 1fr))">
+        <button class="cell focus" style="border: 0; font: inherit"><span class="ic xl i-solar" style="color: #875800"></span>Solar Panel<span class="small soft">Slot 1</span></button>
+        <button class="cell" style="border: 0; font: inherit"><span class="ic xl i-cell" style="color: #875800"></span>Battery<span class="small soft">Slot 2</span></button>
+        <button class="cell" style="border: 0; font: inherit"><span class="ic xl i-bolt" style="color: #875800"></span>Power Pole<span class="small soft">Slot 3</span></button>
+        <button class="cell" style="border: 0; font: inherit"><span class="ic xl i-sun" style="color: #875800"></span>Lamp</button>
+        <button class="cell" style="border: 0; font: inherit"><span class="ic xl i-gear" style="color: #875800"></span>Wind Turbine<span class="dot" style="right: 10px; top: 10px"></span></button>
+        <button class="cell" style="border: 0; font: inherit; color: #7b8574" aria-disabled="true"><span class="ic xl i-lock"></span>Charger<span class="small" style="color: #a23d1c">Wake Sluice</span></button>
+        <button class="cell" style="border: 0; font: inherit; color: #7b8574" aria-disabled="true"><span class="ic xl i-lock"></span>Bio Digester<span class="small" style="color: #a23d1c">Wake Bramble</span></button>
+      </div>
+      <aside class="detail">
+        <div class="row"><div class="badge sun" style="width: 64px; height: 64px"><span class="ic xl i-solar"></span></div><div><div class="h2">Solar Panel</div><div class="small soft">Power by day, rests at night</div></div></div>
+        <p class="body" style="margin: 0">Feeds the grid it stands on. Link it to a battery to keep the lights on after dark.</p>
+        <div class="label">You need</div>
+        <div class="row" style="flex-wrap: wrap; gap: 8px"><span class="chip ok"><span class="mat m-timber" style="width: 16px; height: 16px"></span>2 of 2 Timber</span><span class="chip ok"><span class="mat m-glass" style="width: 16px; height: 16px"></span>1 of 1 Glass</span><span class="chip need"><span class="mat m-copper" style="width: 16px; height: 16px; border-width: 4px"></span>1 of 2 Copper</span></div>
+        <p class="small" style="margin: 0; color: #a23d1c">One more Copper. Scrap piles in Pipeworks have it.</p>
+        <span class="grow"></span>
+        <div class="tile" style="padding: 12px; display: flex; align-items: center; gap: 10px"><span class="g">1</span><span class="body">On your hotbar, slot 1</span></div>
+      </aside>
+    </div>
+    <footer class="sheet-foot acts">
+      <span class="act dim"><span class="g pad pa" style="opacity: .5">A</span>Build</span>
+      <span class="act"><span class="g pad py">Y</span>Pin to a slot</span>
+      <span class="act"><span class="g pad pb">B</span>Back</span>
+    </footer>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

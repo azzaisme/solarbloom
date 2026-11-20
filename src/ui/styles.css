@@ -1,92 +1,152 @@
-/* ───────── Look 5.1: HUD design tokens and typography ─────────
-   Every colour in this file comes from a token below. Panels are dark translucent glass with a thin gold
-   edge and a soft inner glow; titles and numbers use Fredoka (rounded display), body text Nunito.
-   Both fonts are self-hosted (SIL OFL 1.1, licences in src/ui/fonts/). */
+/* ───────── E23.11: Sunlit Glass, the HUD's design tokens ─────────
+   Light frosted paper over the painted world, dark green ink, and four colours that each mean one thing:
+   leaf = act / focus / growing, sun = charge and power, sky = water, clay = "not yet" and careful choices.
+   Every colour in the HUD's CSS comes from a token here (the design board: docs/art/ui-sunlit-glass.md).
+   The older token names further down are kept as aliases so every part reads the same palette.
+   Nunito for everything; Fredoka only for the Solarbloom wordmark. Both are self-hosted (SIL OFL 1.1,
+   licences in src/ui/fonts/). Contrast is checked by tests/hud-contrast.test.ts. */
 @font-face { font-family: 'Fredoka'; font-style: normal; font-weight: 500 700; font-display: swap; src: url('./fonts/fredoka-latin.woff2') format('woff2'); }
 @font-face { font-family: 'Nunito'; font-style: normal; font-weight: 500 900; font-display: swap; src: url('./fonts/nunito-latin.woff2') format('woff2'); }
 
 :root {
   /* Type */
-  --font-display: 'Fredoka', ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, sans-serif;
   --font-ui: 'Nunito', ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  /* Glass */
-  --glass-rgb: 12, 30, 32;
-  --glass: rgba(var(--glass-rgb), .84);
-  --glass-strong: rgba(var(--glass-rgb), .9);
-  --glass-solid: rgb(20, 42, 44);
-  --glass-hi: rgba(255, 244, 214, .06);       /* raised tiles inside a panel */
-  --glass-hi-2: rgba(255, 244, 214, .1);      /* hover */
-  --glass-sunk: rgba(0, 0, 0, .28);           /* tracks, wells */
-  --scrim: rgba(6, 18, 20, .5);
-  --blur: blur(12px) saturate(1.25);
-  /* Edges and glows */
-  --edge: rgba(240, 200, 120, .55);
-  --edge-soft: rgba(240, 200, 120, .28);
-  --edge-strong: #f0c878;
-  --inner-glow: inset 0 1px 0 rgba(255, 238, 200, .16), inset 0 0 14px rgba(255, 214, 140, .07);
-  --glow-active: 0 0 0 2px var(--gold), 0 0 18px rgba(255, 206, 110, .55);
-  --glow-green: 0 0 0 2px var(--leaf-hi), 0 0 22px rgba(140, 236, 110, .6);
-  --radius: 14px;
-  --radius-lg: 20px;
-  --radius-sm: 10px;
-  --shadow: 0 8px 26px rgba(0, 12, 14, .38);
-  --shadow-sm: 0 2px 8px rgba(0, 12, 14, .3);
-  /* Text on glass (AA on --glass over a white scene: see tests/hud-contrast.test.ts) */
-  --text: #fff6e4;          /* cream */
-  --text-strong: #ffffff;
-  --text-soft: #dcd3bd;     /* secondary */
-  --text-dim: #c9c0aa;      /* disabled labels (still AA large) */
-  --gold: #f6cc6e;
-  --gold-hi: #ffe7a3;
-  --gold-deep: #b98a2c;
-  --ink-dark: #2a1d00;      /* text on gold buttons */
-  --ink-green: #0f3313;     /* text on green buttons */
-  /* Resources */
-  --energy: #ffd148;
-  --water: #7ad8f8;
-  --biomass: #94e46e;
-  --energy-bar: linear-gradient(90deg, #f7b52a, #ffe27a);
-  --water-bar: linear-gradient(90deg, #2ea7e0, #8fe3ff);
-  --biomass-bar: linear-gradient(90deg, #47b23c, #b4f08a);
-  /* States */
-  --good: #a6ec82;
-  --bad: #ffb8aa;
-  --bad-bg: rgba(120, 24, 16, .86);
-  --leaf: #5cc04a;
-  --leaf-hi: #a8f07e;
-  --pink: #ff8fbf;
-  --cyan-hi: #8fe9ff;
-  --btn-gold: linear-gradient(180deg, #ffe58a, #f2b93b);
-  --btn-gold-edge: #a8740f;
-  --btn-green: linear-gradient(180deg, #a8f07e, #4fb543);
-  --btn-green-edge: #2f7a2a;
-  --btn-off: rgba(255, 244, 214, .1);
-  --badge: #ff5c8a;
-  --focus: #8fe9ff;
-  /* Glows and accents */
-  --gold-glow: rgba(255, 206, 110, .55);
-  --gold-glow-soft: rgba(255, 206, 110, .35);
-  --gold-ring: rgba(255, 200, 60, .7);
-  --gold-ring-0: rgba(255, 200, 60, 0);
-  --tier2: #c4870f;
-  --tier2-glow: rgba(255, 190, 60, .7);
-  --tier3: #b0398a;
-  --tier3-glow: rgba(255, 110, 200, .7);
+  --font-display: var(--font-ui);
+  --font-body: var(--font-ui);
+  --font-logo: 'Fredoka', 'Nunito', ui-rounded, system-ui, sans-serif;
+  /* Paper (surfaces) */
+  --paper: #fffcf3;
+  --paper-2: #f6f0e1;
+  --paper-3: #ece3cd;
+  --paper-a: rgba(255, 252, 243, .93);
+  --line: rgba(92, 72, 30, .14);
+  --line-2: rgba(92, 72, 30, .3);
+  /* Ink */
+  --ink: #1f2a1c;
+  --ink-2: #4c5947;
+  --ink-3: #6f7a68;
+  --on: #ffffff;
+  /* The four meanings */
+  --leaf: #3d9a3a;
+  --leaf-ink: #29722a;
+  --leaf-soft: #e2f2d4;
+  --leaf-hi: #8fdc5f;
+  --leaf-btn: #2c8237;
+  --leaf-btn-2: #236b2c;
+  --sun: #f3b22a;
+  --sun-ink: #875800;
+  --sun-soft: #fdf0cb;
+  --sun-edge: #c98a10;
+  --sky: #2d8cc8;
+  --sky-ink: #1a5e8b;
+  --sky-soft: #dceefa;
+  --clay: #c4552f;
+  --clay-ink: #a23d1c;
+  --clay-soft: #fbe2d7;
+  --bloom: #ff5f95;
+  --low: #e9772a;
+  --low-2: #f7a542;
+  /* Shape */
+  --r: 20px;
+  --r-tile: 14px;
+  --r-key: 7px;
+  --radius: 18px;
+  --radius-lg: 22px;
+  --radius-sm: 12px;
+  --shadow: 0 10px 28px rgba(70, 50, 10, .2);
+  --shadow-sm: 0 3px 10px rgba(70, 50, 10, .16);
+  --shadow-key: 0 3px 0 rgba(92, 72, 30, .3);
+  --blur: blur(16px) saturate(1.2);
+  --focus-ring: 0 0 0 3px var(--paper), 0 0 0 6px var(--leaf-ink), 0 0 18px 6px rgba(143, 220, 95, .55);
+  /* Keycaps */
+  --key-bg: #ffffff;
+  --key-ink: #1f2a1c;
+  --key-edge: rgba(92, 72, 30, .3);
+  /* Pad faces (Xbox colours; the art inside is drawn in Glyphs.ts) */
+  --pad-a: #2f8a3c; --pad-b: #c23a33; --pad-x: #2a6fc0; --pad-y: #b98a12;
+  --ps-cross: #8fb4f0; --ps-circle: #f08a92; --ps-square: #e59ad2; --ps-triangle: #62d0b3;
+  --deck-btn: #2c3136; --glyph-ink-dark: #10181a; --bot-joint: #4a4640;
+  /* The minimap's paint (ground, paths, water, plants and the arrow) */
+  --mm-rim: #ffffff;
+  --mm-grass: #a3d36c;
+  --mm-grass-hi: #b8de80;
+  --mm-dead: #c27a50;
+  --mm-dead-2: #9e5e3c;
+  --mm-path: #f3dfb8;
+  --mm-path-edge: #e3c896;
+  --mm-water: #5ab9b8;
+  --mm-water-hi: #8fdcd2;
+  --mm-bush: #5d9d42;
+  --mm-bush-hi: #7cc25a;
+  --mm-roof: #f28cb8;
+  --mm-wall: #f4dcb6;
+  --mm-fog: #ece6da;
+  --mm-arrow: #ffd24a;
+  --mm-arrow-2: #f2961c;
+  --mm-arrow-ink: #8a4a00;
+  /* Night and sleep */
+  --sleep: #0b1226;
+
+  /* ── Aliases: the names the older parts use, now reading the Sunlit Glass palette ── */
+  --glass-rgb: 255, 252, 243;
+  --glass: rgba(var(--glass-rgb), .93);
+  --glass-strong: rgba(var(--glass-rgb), .97);
+  --glass-solid: rgb(255, 252, 243);
+  --glass-hi: rgba(92, 72, 30, .05);       /* raised tiles inside a panel */
+  --glass-hi-2: rgba(92, 72, 30, .09);     /* hover */
+  --glass-sunk: rgba(92, 72, 30, .12);     /* tracks, wells */
+  --scrim: rgba(31, 42, 28, .45);
+  --edge: rgba(92, 72, 30, .22);
+  --edge-soft: rgba(92, 72, 30, .14);
+  --edge-strong: #3d9a3a;
+  --inner-glow: inset 0 1px 0 rgba(255, 255, 255, .85);
+  --glow-active: var(--focus-ring);
+  --glow-green: 0 0 0 3px var(--leaf-hi), 0 0 22px rgba(143, 220, 95, .6);
+  --text: #1f2a1c;
+  --text-strong: #1f2a1c;
+  --text-soft: #4c5947;
+  --text-dim: #6f7a68;      /* disabled labels (3:1) */
+  --gold: #875800;
+  --gold-hi: #7a4f00;
+  --gold-deep: #c98a10;
+  --ink-dark: #3a2600;      /* text on sun buttons */
+  --ink-green: #ffffff;     /* text on leaf buttons */
+  --energy: #875800;
+  --water: #1a5e8b;
+  --biomass: #29722a;
+  --energy-bar: linear-gradient(90deg, #f3b22a, #ffd65c);
+  --water-bar: linear-gradient(90deg, #2d8cc8, #7cc6ef);
+  --biomass-bar: linear-gradient(90deg, #3d9a3a, #8fdc5f);
+  --good: #29722a;
+  --bad: #a23d1c;
+  --bad-bg: #fbe2d7;
+  --pink: #ff5f95;
+  --cyan-hi: #1a5e8b;
+  --btn-gold: linear-gradient(180deg, #ffd65c, #f3b22a);
+  --btn-gold-edge: #c98a10;
+  --btn-green: linear-gradient(180deg, #2c8237, #236b2c);
+  --btn-green-edge: #1c5623;
+  --btn-off: #f6f0e1;
+  --badge: #ff5f95;
+  --focus: #29722a;
+  --gold-glow: rgba(243, 178, 42, .55);
+  --gold-glow-soft: rgba(243, 178, 42, .3);
+  --gold-ring: rgba(243, 178, 42, .7);
+  --gold-ring-0: rgba(243, 178, 42, 0);
   --pulse-hi: #c6f7a4;
   --pulse-hover: #d8ffbd;
-  --leaf-glow: rgba(60, 160, 60, .35);
+  --leaf-glow: rgba(61, 154, 58, .35);
   --white-ring: rgba(255, 255, 255, .7);
-  --shade: rgba(0, 0, 0, .35);
-  --text-shade: rgba(0, 0, 0, .6);
+  --shade: rgba(31, 42, 28, .3);
+  --text-shade: rgba(0, 0, 0, .5);
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --mask-hourglass: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 10'%3E%3Cpath d='M0 0h8v1.2C8 3.4 5.6 4.2 5.6 5S8 6.6 8 8.8V10H0V8.8C0 6.6 2.4 5.8 2.4 5S0 3.4 0 1.2z'/%3E%3C/svg%3E");
-  /* Page (behind the canvas while it boots) */
   --logo-edge: rgba(120, 80, 10, .55);
   --mask-sparkle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 0l1.2 3.8L10 5 6.2 6.2 5 10 3.8 6.2 0 5l3.8-1.2z'/%3E%3C/svg%3E");
-  --above-bar: 140px;            /* panels that open above the hotbar and its dome */
+  --above-bar: 140px;
   --page-bg: linear-gradient(180deg, #7fc3e8 0%, #b9e0ee 32%, #dcefee 55%, #f8e6c6 82%, #f6d3a6 100%);
   --boot-ink: #2d6a3e;
   --mono-bg: rgba(0, 0, 0, .6);
@@ -480,7 +540,7 @@ img.icon { object-fit: contain; -webkit-user-drag: none; }
 .mark.painted { transform: scale(1.12); filter: none !important; }
 
 /* Phase 4 E11.5: high contrast: opaque panels, brighter secondary text, stronger outlines. */
-body.contrast { --text-soft: #f4ecd8; --text-dim: #e0d6c0; --edge: #ffd77a; --edge-soft: #ffd77a; --glass: var(--glass-solid); --glass-strong: rgb(8, 22, 24); }
+body.contrast { --text-soft: #1f2a1c; --text-dim: #4c5947; --edge: #1f2a1c; --edge-soft: #4c5947; --line: #4c5947; --glass: var(--glass-solid); --glass-strong: rgb(255, 255, 255); --paper-a: rgb(255, 252, 243); }
 body.contrast .panel, body.contrast .chip { background: var(--glass-strong); border: 2px solid var(--edge-strong); backdrop-filter: none; -webkit-backdrop-filter: none; }
 body.contrast .slot { background: var(--glass-solid); outline: 2px solid var(--edge-strong); }
 body.contrast .slot.active, body.contrast .slot[data-tool="pulse"].active { outline: 4px solid var(--leaf-hi); }
@@ -701,11 +761,6 @@ body.oldcity #res { width: 220px; }
 #minimap .mm-rim[hidden] { display: none; }
 
 /* ───────── E22.3: button glyphs (src/ui/Glyphs.ts) ───────── */
-:root {
-  --pad-a: #2f8a3c; --pad-b: #c23a33; --pad-x: #2a6fc0; --pad-y: #b98a12;
-  --ps-cross: #8fb4f0; --ps-circle: #f08a92; --ps-square: #e59ad2; --ps-triangle: #62d0b3;
-  --deck-btn: #2c3136; --glyph-ink-dark: #10181a; --bot-joint: #4a4640;
-}
 svg.glyph { display: block; overflow: visible; flex: none; }
 svg.glyph text { font-family: var(--font-ui); font-weight: 800; dominant-baseline: auto; }
 svg.glyph .g-cap { fill: var(--glass-hi-2); stroke: var(--edge-strong); stroke-width: 1.6; }
@@ -747,5 +802,5 @@ body.contrast svg.glyph .g-cap { fill: var(--glass-solid); stroke: var(--text-st
 .ctl-resets { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 
 /* E23.7.1.3: sleeping in the house: the screen dims to a deep night blue and back */
-#sleepVeil { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: #0b1226; opacity: 0; transition: opacity 900ms ease; }
+#sleepVeil { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: var(--sleep); opacity: 0; transition: opacity 900ms ease; }
 #sleepVeil.on { opacity: 1; }

@@ -1,4 +1,4 @@
-// Look 5.11: text contrast on the HUD's glass meets WCAG AA. The tokens are read from styles.css, the glass is
+// Look 5.11 / E23.11: text contrast on the HUD's glass meets WCAG AA. The tokens are read from styles.css, the glass is
 // composited over the brightest and darkest scenes it can sit on (white and black), and each text colour is
 // checked against both: 4.5:1 for body text, 3:1 for large display text (WCAG 1.4.3).
 import { describe, expect, it } from 'vitest';
@@ -83,15 +83,19 @@ describe('HUD text contrast on glass (Look 5.11)', () => {
     expect(audit(TC, ['glass', 'glass-strong'])).toEqual([]);
   });
   it('button labels are AA on their fills', () => {
-    const gold = [parse('#ffe58a', T), parse('#f2b93b', T)];
-    const green = [parse('#a8f07e', T), parse('#4fb543', T)];
-    for (const c of gold) expect(ratio(parse(T['ink-dark'], T), c)).toBeGreaterThanOrEqual(4.5);
-    for (const c of green) expect(ratio(parse(T['ink-green'], T), c)).toBeGreaterThanOrEqual(4.5);
-    // The key badges: dark letters on cream.
-    expect(ratio(parse(T['ink-dark'], T), parse(T.text, T))).toBeGreaterThanOrEqual(4.5);
+    // E23.11 Sunlit Glass: dark ink on sun buttons, white on the deep leaf of the main button.
+    const sun = [parse('#ffd65c', T), parse('#f3b22a', T)];
+    const leaf = [parse('#2c8237', T), parse('#236b2c', T)];
+    for (const c of sun) expect(ratio(parse(T['ink-dark'], T), c)).toBeGreaterThanOrEqual(4.5);
+    for (const c of leaf) expect(ratio(parse(T['ink-green'], T), c)).toBeGreaterThanOrEqual(4.5);
+    // The keycaps: dark letters on white; the careful (clay) choice in clay ink on its soft fill.
+    expect(ratio(parse(T['key-ink'], T), parse(T['key-bg'], T))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(parse(T['clay-ink'], T), parse(T['clay-soft'], T))).toBeGreaterThanOrEqual(4.5);
+    // Each colour's ink on its own soft fill (chips and badges).
+    for (const k of ['leaf', 'sun', 'sky']) expect(ratio(parse(T[k + '-ink'], T), parse(T[k + '-soft'], T))).toBeGreaterThanOrEqual(4.5);
   });
   it('the gradients the buttons use are the ones checked above', () => {
-    expect(T['btn-gold']).toBe('linear-gradient(180deg, #ffe58a, #f2b93b)');
-    expect(T['btn-green']).toBe('linear-gradient(180deg, #a8f07e, #4fb543)');
+    expect(T['btn-gold']).toBe('linear-gradient(180deg, #ffd65c, #f3b22a)');
+    expect(T['btn-green']).toBe('linear-gradient(180deg, #2c8237, #236b2c)');
   });
 });

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Start over: are you sure</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="sb.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap">
+<style>
+body{margin:0}
+.ghostslot{position:absolute;top:140px;width:330px;height:470px;border-radius:20px;background:rgba(255,252,243,.75)}
+.dlg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;border-radius:24px;padding:28px 30px 0;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;overflow:hidden}
+.dlg .what{width:100%;display:flex;gap:14px;align-items:center;padding:12px 14px;border-radius:14px;background:#f6f0e1;text-align:left}
+.dlg .what .pic{width:84px;height:56px;border-radius:10px;background:url(/_blob/a9d707ad7e970f6865db7fa2b896f422) center/cover;flex:none}
+.dlg .choices{width:100%;display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.btn.danger{background:#fbe2d7;border-color:#c4552f;color:#a23d1c}
+.hold{display:flex;align-items:center;gap:10px}
+.hold .ring{width:30px;height:30px;--p:40%;background:conic-gradient(#c4552f 0 var(--p),#ece3cd 0)}
+.hold .ring::before{inset:4px;background:#fbe2d7}
+.dlg .foot{width:calc(100% + 60px);margin-top:10px;display:flex;justify-content:flex-end;gap:22px;padding:12px 22px;border-top:1px solid rgba(92,72,30,.14);background:rgba(246,240,225,.7)}
+</style>
+</helmet>
+<div class="screen" style="width: 1280px; height: 800px">
+  <div style="position: absolute; inset: 0; background: rgba(255, 252, 243, .38); backdrop-filter: blur(10px)"></div>
+  <div class="ghostslot" style="left: 117px"></div>
+  <div class="ghostslot" style="left: 475px"></div>
+  <div class="ghostslot" style="left: 833px"></div>
+  <div style="position: absolute; inset: 0; background: rgba(31, 42, 28, .45)"></div>
+
+  <section class="card dlg" role="alertdialog" aria-labelledby="dt" aria-describedby="dd">
+    <div class="badge clay" style="width: 64px; height: 64px"><span class="ic l i-remove"></span></div>
+    <div id="dt" class="h1">Start Hillside garden over?</div>
+    <div class="what">
+      <div class="pic"></div>
+      <div class="facts small" style="line-height: 1.45"><b class="body" style="font-weight: 900">Hillside garden</b><br>Day 14 · 6 h 20 min played · Fountain step 3 of 5</div>
+    </div>
+    <div id="dd" class="body soft">Everything in this garden goes away for good: your builds, your backpack and your friends' progress. You can't get it back.</div>
+    <div class="choices">
+      <button class="btn primary focus" style="min-height: 56px; font-size: 18px"><span class="ic i-heart"></span>Keep my garden</button>
+      <button class="btn danger" style="min-height: 52px"><span class="hold"><span class="ring"><span class="g pad pa" style="height: 20px; width: 20px; font-size: 11px">A</span></span>Hold to start over</span></button>
+    </div>
+    <div class="foot acts">
+      <span class="act"><span class="g pad pa">A</span>Choose</span>
+      <span class="act"><span class="g pad pb">B</span>Keep my garden</span>
+    </div>
+  </section>
+
+  <aside class="card" style="position: absolute; right: 24px; top: 24px; width: 300px; padding: 14px 16px">
+    <div class="label" style="margin-bottom: 6px">How it works</div>
+    <div class="small" style="line-height: 1.45">The safe choice is picked first, so a quick tap of A or Enter never deletes. Starting over needs a one-second hold (pad, Enter or mouse); letting go early does nothing. B or Esc always backs out. The same dialog guards Delete and "Quit without saving".</div>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
