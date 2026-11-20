@@ -1,7 +1,9 @@
 import type { ItemId, MaterialId } from '../core/types';
+import { giftLabel } from '../gameplay/KeeperSystem';
 import { COMPONENT_IDS, COMPONENTS } from '../data/crafting';
 import { PARK } from '../core/Areas';
-import { BLUEPRINTS, ITEMS, KEEPSAKES, PAGES, REGIONS } from '../data/oldcity';
+import { KEEPER_STORIES } from '../data/keepers';
+import { BLUEPRINTS, ITEMS, KEEPERS, KEEPSAKES, PAGES, REGIONS } from '../data/oldcity';
 import { DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { MACHINES } from '../data/machines';
 import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
@@ -77,7 +79,7 @@ export function itemCells(sim: Sim): ItemCell[] {
       limit,
       stored,
       label: seen ? `${name}, ${count} of ${limit} in backpack, ${stored} in store` : 'A material not found yet',
-      from: !seen ? 'Somewhere in the city' : MATERIALS[id].from ?? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}`,
+      from: !seen ? 'Somewhere in the city' : MATERIALS[id].from ?? (MATERIALS[id].place ? `Found in ${MATERIALS[id].place}` : undefined) ?? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}`,
       next: seen ? neededNext(sim, id) : '',
     };
   }).concat(componentCells(sim, limit));
@@ -105,9 +107,13 @@ function componentCells(sim: Sim, limit: number): ItemCell[] {
   });
 }
 
-/** One-off items carried (the Heart Seed, the Star Lens). */
+/** One-off items carried (the Heart Seed, the Star Lens), and the crops kept for the Keepers (E23.9.2). */
 export function oneOffItems(sim: Sim): { id: string; name: string; from: string }[] {
-  return (sim.state.salvage?.items ?? []).map((id) => ({ id, name: ITEMS[id]?.name ?? id, from: `From ${regionName(ITEMS[id]?.from ?? '')}` }));
+  const items = (sim.state.salvage?.items ?? []).map((id) => ({ id, name: ITEMS[id]?.name ?? id, from: `From ${regionName(ITEMS[id]?.from ?? '')}` }));
+  const basket = Object.entries(sim.state.salvage?.basket ?? {})
+    .filter(([, n]) => n > 0)
+    .map(([crop, n]) => ({ id: `basket:${crop}`, name: `${giftLabel(crop).name}${n > 1 ? ` ×${n}` : ''}`, from: 'Kept for a friend' }));
+  return [...items, ...basket];
 }
 
 export interface RequestRow {
@@ -210,16 +216,29 @@ export function collection(sim: Sim): CollectionGroup[] {
     const found = unlocked.has(o.id) || sim.crafting.decorMade(o.id);
     return { name: found ? o.name : 'Not found yet', detail: found ? o.blurb : 'Still out there somewhere', found };
   });
-  const regionKeeps = KEEPSAKES.map((k) => ({ name: unlocked.has(k.id) ? k.name : 'Not found yet', detail: unlocked.has(k.id) ? `From ${regionName(k.region)}` : 'Hidden in a cache somewhere', found: unlocked.has(k.id) }));
+  const regionKeeps = KEEPSAKES.map((k) => ({ name: unlocked.has(k.id) ? k.name : 'Not found yet', detail: unlocked.has(k.id) ? `From ${regionName(k.region)}` : 'One day, a friend will give you this', found: unlocked.has(k.id) }));
   const keeps = [...catKeeps, ...regionKeeps];
   const fauna = Object.keys(st.fauna ?? {});
   const woken = sim.areas.revealed().filter((id) => sim.areas.fog(id) === 'cleared').map((id) => sim.areas.info(id));
   const plots = PLOT_OPTIONS.filter((o) => 'start' in o.unlock || cz?.unlocked?.includes(o.id));
   const decor = DECOR_OPTIONS.filter((o) => 'start' in o.unlock || cz?.decorUnlocked?.includes(o.id));
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  // E23.9.2: the Keepers bloombot has woken, with what each is like and how close a friend it is
+  const awake = KEEPERS.filter((k) => sim.keepers.step(k.id) !== 'asleep');
+  const friends: CollectionGroup = {
+    title: 'Friends',
+    count: `${awake.filter((k) => sim.keepers.isFriend(k.id)).length} of ${KEEPERS.length}`,
+    rows: awake.map((k) => ({
+      name: sim.keepers.isFriend(k.id) ? `${k.name}, a friend` : k.name,
+      detail: KEEPER_STORIES[k.id]?.personality ?? regionName(k.region),
+      found: true,
+    })),
+    empty: 'The other robots are asleep. Pulse one to wake it.',
+  };
   return [
     // E23.12.3 (epic rule 8): the Lucky Cats group appears with the first find (before that it would give them away)
     ...(sim.cat.known ? [cats] : []),
+    friends,
     { title: 'Keepsakes', count: `${keeps.filter((k) => k.found).length} of ${keeps.length}`, rows: keeps, empty: '' },
     { title: 'Wildlife', count: `${fauna.length} kinds`, rows: fauna.map((f) => ({ name: cap(f), detail: 'Lives in your gardens', found: true })), empty: 'Wildlife arrives as gardens grow.' },
     { title: 'Landmarks', count: `${woken.length} awake`, rows: woken.map((a) => ({ name: a.region ? (REGIONS.find((r) => r.id === a.region)?.landmark.name ?? a.landmarkName) : a.landmarkName, detail: a.region ? `In ${regionName(a.region)}` : 'Awake', found: true })), empty: 'Bring a place back to life to wake its landmark.' },

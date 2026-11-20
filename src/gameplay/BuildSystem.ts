@@ -4,6 +4,7 @@ import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
 import { MATERIALS, STORE, type MaterialCost } from '../data/salvage';
 import { regionById } from '../core/OldCityLayout';
+import { isMainlandCell } from '../core/Mainland';
 import type { MaterialId } from '../core/types';
 import { isMaterial, itemDef } from '../data/items';
 import type { Sim } from './Sim';
@@ -128,8 +129,9 @@ export class BuildSystem {
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 
-  /** " — Mast Row" once a region holding the material has been seen (revealed), else nothing. */
+  /** " — Mast Row" once a region holding the material has been seen (revealed), else nothing; a place outside the regions always (steel's industrial ruins). */
   whereFrom(m: MaterialId): string {
+    if (MATERIALS[m].place) return ` — ${MATERIALS[m].place}`;
     for (const home of MATERIALS[m].home) {
       if (home === 'park' || home === 'backstreet') continue;
       const r = regionById(home);
@@ -151,12 +153,14 @@ export class BuildSystem {
     }
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
+    // E23.8.3.2: the mainland's big machines stand only past the causeway
+    if (def.mainlandOnly && (roofId !== GROUND || !isMainlandCell(x) || !isMainlandCell(x + def.size - 1))) return fail(`${def.name}: only on the mainland`);
     if (type === 'chest' && s.machinesOfType('chest').length >= STORE.maxChests) return fail(`At most ${STORE.maxChests} Storage Chests`);
     if (roofId === GROUND && def.areaTypes) {
       const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];
       if (!def.areaTypes.includes(t.type)) return fail(`Only grows in a ${def.areaTypes.map((a) => AREA_TYPES[a as AreaType].name.toLowerCase()).join(' or ')} area`);
     }
-    const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround);
+    const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround) ?? s.water.placeProblem(type, roofId, x, z); // E23.4.2: a pump on a bank
     if (why) return fail(why);
     if (!s.inventory.canPay(recipe)) return fail(this.missingLabel(type) ?? 'Missing materials', true);
     return { ok: true, spotOk: true };
@@ -173,7 +177,10 @@ export class BuildSystem {
     const recipe = this.recipe(m.type as BuildableType);
     for (const t of s.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t && t.occupantId === m.id) t.occupantId = undefined;
     s.grid.unindexMachine(m);
-    if (m.type === 'droneHub') s.drones.removeHub(m.id);
+    if (m.type === 'droneHub') {
+      s.automation.hubRemoved(m.id); // E23.6.4: couriers' baskets come back before the drones go
+      s.drones.removeHub(m.id);
+    }
     s.state.machines = s.state.machines.filter((q) => q.id !== m.id);
     machinesRemoved();
     if (recipe) s.inventory.refund(recipe);

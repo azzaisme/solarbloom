@@ -38,6 +38,7 @@ import { WaterSystem } from './WaterSystem';
 import { Crafting } from './Crafting';
 import { Research } from './Research';
 import { ChargeSystem } from './Charge';
+import { Automation } from './Automation';
 import { PulseLoad } from './PulseLoad';
 import { RestSystem } from './Rest';
 import { BuriedSystem } from './Buried';
@@ -45,6 +46,7 @@ import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
 import { FarmSystem } from './FarmSystem';
+import { CompostSystem } from './CompostSystem';
 import { Weather } from './Weather';
 
 /**
@@ -105,6 +107,8 @@ export class Sim {
   readonly research: Research;
   /** E23.2.1: bloombot's charge, the only meter. */
   readonly charge: ChargeSystem;
+  /** E23.6.4 / E23.6.5: supply crates, courier routes and jobs done by hand, the Assembler. */
+  readonly automation: Automation;
   /** E23.2.2: what the pulse is loaded with, and its reveal ripple. */
   readonly pulseLoad: PulseLoad;
   /** E23.2.3: benches and meditating at chargers. */
@@ -121,6 +125,8 @@ export class Sim {
   readonly gather: GatherSystem;
   /** E23.5.2: planters and crops. */
   readonly farm: FarmSystem;
+  /** E23.5.3: compost bins and Bio Digesters (old-city rules). */
+  readonly compost: CompostSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -181,6 +187,7 @@ export class Sim {
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
     this.farm = new FarmSystem(this);
+    this.compost = new CompostSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -188,6 +195,7 @@ export class Sim {
     this.water = new WaterSystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
+    this.automation = new Automation(this); // E23.6.4: after the grid (the Assembler is a consumer)
     this.chargers = new ChargerSystem(this);
     this.lights = new Lights(this);
     this.chains = new BloomChainSystem(this);
@@ -204,6 +212,7 @@ export class Sim {
     this.log = new DebugLog(this);
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
+    this.mainland.wire(); // E23.8.3.2: after every system (the grid and water network) is built
   }
 
   get time() {
@@ -295,11 +304,14 @@ export class Sim {
     this.water.tick(dt);
     this.rest.tick(dt);
     this.crafting.tick(dt);
+    this.automation.tick(dt);
     this.research.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
     this.farm.tick(dt);
+    this.compost.tick(dt);
+    this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();

@@ -27,6 +27,7 @@ export type Action =
   | 'rotate'
   | 'rotateBack'
   | 'removeMode'
+  | 'waterOverlay'
   | 'powerOverlay'
   | 'slot1'
   | 'slot2'
@@ -96,6 +97,7 @@ export const ACTIONS: readonly ActionDef[] = [
   A('rotate', 'Turn the piece', 'build', 'build'),
   A('rotateBack', 'Turn the piece back', 'build', 'build'),
   A('removeMode', 'Remove mode', 'build', 'build'),
+  A('waterOverlay', 'Water view (in build mode)', 'build', 'build'),
   A('powerOverlay', 'Power view (in build mode)', 'build', 'build'),
   A('slot1', 'Hotbar slot 1', 'build', 'world'),
   A('slot2', 'Hotbar slot 2', 'build', 'world'),
@@ -146,6 +148,7 @@ export function defaultKeys(): Record<Action, string[]> {
     rotate: ['KeyR', 'Wheel'],
     rotateBack: [],
     removeMode: ['KeyX'],
+    waterOverlay: ['KeyV'],
     powerOverlay: ['KeyO'],
     slot1: ['Digit1'],
     slot2: ['Digit2'],
@@ -190,6 +193,7 @@ export function defaultPad(): Partial<Record<Action, number>> {
     rotate: 5,
     rotateBack: 4,
     removeMode: 7,
+    waterOverlay: 14, // d-pad left (Harvest / Eat while walking)
     powerOverlay: 15, // d-pad right (Pin next request while walking)
     backpack: 12,
     map: 8,

@@ -37,6 +37,27 @@ export const MAINLAND_TYPES: { type: AreaType; weight: number }[] = [
 ];
 
 /**
+ * Fresh water on the mainland, so pumps, planters and reservoirs work there as on the island. Cells are district-local
+ * (a district is 32 × 32). Every chunk's avenues (chunk cells 7–8) cross the water on bridges, so a canal never cuts
+ * the mainland in two. Sunk to sea level between walls, like the island's canals.
+ */
+export const MAINLAND_WATER = {
+  /** a canal runs east–west through every district whose row (district z) is a multiple of this: every 2 × 2 of
+   *  districts has one, and no district is more than one district from a canal */
+  canalEvery: 2,
+  /** the canal's rows inside its district (clear of the avenues at 7–8 and 23–24) */
+  canalRows: [14, 15],
+  /** a pond in the quiet band at the district's south end (rows 25–31, columns 9–22), by district type */
+  ponds: {
+    // a reservoir district is an open basin: a long rectangular pool
+    reservoir: { chance: 1, rect: [10, 25, 21, 30] as [number, number, number, number] },
+    plaza: { chance: 1, centre: [16, 28] as [number, number], radius: 2.6 },
+    park: { chance: 0.6, centre: [16, 28] as [number, number], radius: 2.2 },
+    grove: { chance: 0.3, centre: [15, 28] as [number, number], radius: 1.8 },
+  } as Partial<Record<AreaType, { chance: number; rect?: [number, number, number, number]; centre?: [number, number]; radius?: number }>>,
+};
+
+/**
  * Salvage fields: the mainland's best salvage. In a district of a type below, each chunk holds a field (a cluster of
  * piles) with this chance. Fields are bigger and richer than the island's piles, and respawn quickly (E23.7.4 owns
  * respawning; `respawnDays` is the mainland's value for it).
@@ -53,7 +74,8 @@ export const SALVAGE_FIELDS = {
   /** what each district type's fields hold, by weight */
   materials: {
     street: { scrap: 3, copper: 2, glass: 1 },
-    downtown: { scrap: 3, gears: 2, copper: 2 },
+    // the industrial ruins: the only place steel is found
+    downtown: { steel: 4, scrap: 2, gears: 1, copper: 1 },
     grove: { seeds: 3, timber: 2 },
     park: { seeds: 2, timber: 2, clay: 1 },
     market: { glass: 2, scrap: 2, timber: 1 },
@@ -61,6 +83,21 @@ export const SALVAGE_FIELDS = {
     reservoir: { clay: 3, scrap: 1 },
   } as Partial<Record<AreaType, Partial<Record<MaterialId, number>>>>,
   sizes: { small: 1, medium: 2, large: 2 } as Record<PileSize, number>,
+  /** E23.8.3.2: the industrial ruins round a steel field (core/Mainland chunkRuins): cells from its centre, and how many */
+  ruins: { reach: 5, frames: 3, gantrySpan: 3, stains: 7 },
   /** a pile's model when its material has none */
   models: { small: 'rubble-pile', medium: 'crate', large: 'stone-block' } as Record<PileSize, string>,
+};
+
+/**
+ * E23.8.3.2: the mainland-only machines, built from steel (recipes on the crafting table, data/crafting MACHINE_RECIPES). Starting values.
+ * The grid battery joins the power grid (E23.3, `sim.power`) as storage.
+ */
+export const MAINLAND_MACHINES = {
+  gridBattery: {
+    /** stored energy (power units × seconds): about ten island batteries */
+    capacity: 4000,
+    /** charge / discharge per second */
+    rate: 60,
+  },
 };

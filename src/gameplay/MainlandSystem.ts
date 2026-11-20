@@ -1,6 +1,6 @@
 import { GROUND } from '../core/GameState';
 import { brokenCells, isMainlandCell, landingArea, onCauseway } from '../core/Mainland';
-import { MAINLAND } from '../data/mainland';
+import { MAINLAND, MAINLAND_MACHINES } from '../data/mainland';
 import type { Sim } from './Sim';
 
 /**
@@ -14,6 +14,15 @@ export class MainlandSystem {
     sim.bus.on('fountain.tier', ({ tier }) => {
       if (tier >= MAINLAND.opensAtTier) this.open();
     });
+  }
+
+  /**
+   * E23.8.3.2: joins the mainland's machines to the grid (E23.3, `sim.power`), once the Sim has built it (called at
+   * the end of the Sim's constructor). The Grid Battery is storage.
+   */
+  wire(): void {
+    const B = MAINLAND_MACHINES.gridBattery;
+    this.sim.power.register('gridBattery', { battery: { capacity: B.capacity, rate: B.rate } });
   }
 
   /** Has the Great Bloom raised the causeway? */

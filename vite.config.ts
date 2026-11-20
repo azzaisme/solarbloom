@@ -16,8 +16,7 @@ const QUICK = [
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world
-  'crafting', 'research',
-  'crafting',
+  'crafting', 'research', 'automation',
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
@@ -25,13 +24,13 @@ const QUICK = [
   // E23.8: regions and the mainland
   'region-strengths', 'region-unlocks-e23',
   // E23.8.3: the mainland
-  'mainland',
+  'mainland', 'mainland-steel',
   // E23.9: the story
-  'journal',
+  'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally', 'keepers-crops',
   // E23.4: the water network
-  'water-levels',
+  'water-levels', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'pipe-visuals', 'pipe-visuals-west',
   // E23.5: the farm
-  'farm-items', 'farm-planters',
+  'farm-items', 'farm-planters', 'farm-compost',
   // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
   'lucky-cat-rewards', 'cat-decor', 'cat-secrecy', 'picker-internals', 'cat-sight-cpu',
   // E23.10: the proof

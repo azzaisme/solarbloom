@@ -58,6 +58,12 @@ export interface CellRect {
   d: number;
 }
 
+/**
+ * Deep water in a region: a rectangle, all water unless `mask` draws its outline (one string a row from `z`, one
+ * character a cell from `x`; `#` water). `pond`: a natural pond, drawn as a pool (banks, rocks, reeds), not a canal.
+ */
+export type WaterRect = CellRect & { pond?: boolean; mask?: string[] };
+
 export type RampDir = 'n' | 's' | 'e' | 'w';
 
 /** E21.24: a ramp (one level over 3 tiles) or a stair (one level over 2), walked along `dir` from `from` to `to`. */
@@ -118,8 +124,11 @@ export interface RegionDef {
   piles: PileDef[];
   /** the region's main street: a road from its gate (cells, two wide, for generation) */
   roads: CellRect[];
-  /** deep water inside the region (a canal: never walked, until Hover; level 0) */
-  water?: CellRect[];
+  /**
+   * deep water inside the region (a canal: never walked, until Hover; level 0). `pond`: a natural pond rather than
+   * a canal, drawn as a pool (rounded painted banks, rocks and reeds, the pool's surface) instead of open water.
+   */
+  water?: WaterRect[];
 }
 
 const P = (id: string, x: number, z: number, material: MaterialId, size: PileSize, model: string): PileDef => ({ id, x, z, material, size, model });
@@ -395,7 +404,32 @@ export const REGIONS: RegionDef[] = [
     ],
     roads: [],
     // E23.4.1: the spring-fed pond east of the island (dry until the Old Cistern wakes and its springs run)
-    water: [{ x: 64, z: 41, w: 8, d: 12 }],
+    // its outline is irregular (a natural pond, not a tank): `#` is water, `.` the basin floor round it
+    water: [
+      {
+        x: 63,
+        z: 40,
+        w: 11,
+        d: 14,
+        pond: true,
+        mask: [
+          '...####....',
+          '..#######..',
+          '.#########.',
+          '.##########',
+          '###########',
+          '##########.',
+          '.#########.',
+          '.########..',
+          '..#######..',
+          '..########.',
+          '.#########.',
+          '.########..',
+          '..######...',
+          '....###....',
+        ],
+      },
+    ],
   },
   {
     id: 'clockPlaza',
@@ -823,12 +857,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { seeds: 8 }, landmark: { copper: 20, scrap: 10 }, reward: 'beacons', rewardText: 'Every landmark beacon shows on the minimap',
     say: {
       asleep: ['A robot slumped against a lamp post. Its visor is dark.'],
-      stirred: ['…bzzt. Power? Is someone there?', 'Five of anything would get my circuits going.'],
-      woke: ['Pylon, signal keeper of Mast Row. You woke me!', 'The mast up the street has been dark for years.'],
-      request1: ['Nothing grows here any more.', 'Bring me 8 Seeds from the park and I will plant the verges.'],
-      request2: ['The old tram stop is where everyone used to meet.', 'Bring it back to life, every tile of it.'],
-      landmark: ['The Signal Mast is ready to sing again.', 'Bring 20 Copper and 10 Scrap to the mast and wake it.'],
-      settled: ['The mast is calling! Every beacon in the city answers now.', 'Look for the lights on your map.'],
+      stirred: ['…bzzt. Signal? Is someone there?', 'Five of anything would get my circuits going.'],
+      woke: ['Pylon, signal keeper of Mast Row! You woke me!'],
+      request1: ["Could you bring me 8 Seeds from the park? Please? I'd like to plant the verges."],
+      request2: ['The old tram stop was the busiest spot on the street.', 'Could you bring it back to life, every tile?'],
+      landmark: ['The Signal Mast is ready to sing.', 'Bring 20 Copper and 10 Scrap to the mast and wake it.'],
+      settled: ['Every landmark beacon answers now. Look for the lights on your map.'],
     },
   },
   {
@@ -836,12 +870,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { timber: 10 }, landmark: { glass: 20, timber: 10 }, reward: 'trade', rewardText: 'Tally trades any 3 of one material for 1 of another',
     say: {
       asleep: ['A robot behind a broken stall, counting nothing.'],
-      stirred: ['Customer? Five of anything and we can talk.'],
-      woke: ['Tally, keeper of the Old Market. Every stall had a lamp once.'],
-      request1: ['The stalls need mending. 10 Timber from the beach, please.'],
-      request2: ['Restore the market square, so people have somewhere to stand.'],
+      stirred: ['A customer? Five of anything and we can talk.'],
+      woke: ['Tally, keeper of the Old Market. Everything here had a price.'],
+      request1: ["The stalls need mending. 10 Timber from the beach, please. I'll put it on your account."],
+      request2: ['Restore the market square, so the stalls have somewhere green to stand.'],
       landmark: ['The Market Hall can open its doors.', 'Bring 20 Glass and 10 Timber to the hall.'],
-      settled: ['Open for business! Bring me 3 of anything and I will give you 1 of what you need.'],
+      settled: ["Bring me 3 of anything, and I'll give you 1 of what you need."],
     },
   },
   {
@@ -850,11 +884,11 @@ export const KEEPERS: KeeperDef[] = [
     say: {
       asleep: ['A robot half buried in the sand, facing the sea.'],
       stirred: ['…the tide? Five of anything, and I will get up.'],
-      woke: ['Tide, keeper of Saltwind Beach. I watch the Sea Lock.'],
-      request1: ['The lock\'s hinges are gone. 10 Copper from Mast Row, please.'],
-      request2: ['Restore the boardwalk so the beach can be walked again.'],
+      woke: ['Tide, keeper of Saltwind Beach. I kept the Sea Lock.'],
+      request1: ["The lock's hinges are gone. 10 Copper from Mast Row, please."],
+      request2: ['Restore the boardwalk, so the beach can be walked again.'],
       landmark: ['The Sea Lock is ready. Bring 20 Timber and 10 Copper.'],
-      settled: ['The lock is open! The canals fill and the bridge to Clock Plaza rises.'],
+      settled: ['The canals fill, and the bridge to Clock Plaza rises.'],
     },
   },
   {
@@ -863,11 +897,11 @@ export const KEEPERS: KeeperDef[] = [
     say: {
       asleep: ['A robot curled up among dead leaves.'],
       stirred: ['Mm. Five of anything, and I will wake properly.'],
-      woke: ['Moss, keeper of Elder Grove. The old tree is still alive, just.'],
-      request1: ['I need cloches for the seedlings. 10 Glass from the market.'],
+      woke: ['Moss, keeper of Elder Grove. Mm. Good morning.'],
+      request1: ['The seedlings need cloches. 10 Glass from the market, if you would.'],
       request2: ['Restore the ring of stumps where the grove began.'],
       landmark: ['Wake the Elder Tree with 20 Seeds and 40 Biomass.'],
-      settled: ['The Elder Tree is awake! Seeds come twice as easily now.'],
+      settled: ['The Elder Tree is awake. Seeds come twice as easily now.'],
     },
   },
   {
@@ -876,11 +910,11 @@ export const KEEPERS: KeeperDef[] = [
     say: {
       asleep: ['A robot on the rim of a dry basin.'],
       stirred: ['Water? No… five of anything, then.'],
-      woke: ['Sluice, keeper of Cistern Basin.'],
-      request1: ['The valves are seized. 12 Gears from Clock Plaza.'],
-      request2: ['Restore the spillway so the water has somewhere to go.'],
+      woke: ['Sluice, keeper of Cistern Basin. Is it raining? It never rains.'],
+      request1: ['The valves are seized. 12 Gears from Clock Plaza, please. Sorry. Please.'],
+      request2: ['Restore the spillway, so the water has somewhere to go.'],
       landmark: ['Wake the Old Cistern with 30 Clay and 15 Copper.'],
-      settled: ['The cistern holds water again! Your tanks hold twice as much.'],
+      settled: ['The cistern holds water again. Your tanks hold twice as much.'],
     },
   },
   {
@@ -888,12 +922,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { glass: 12 }, landmark: { gears: 30, glass: 15 }, reward: 'helpersFast', rewardText: 'Helpers work 25% faster',
     say: {
       asleep: ['A robot frozen mid-step at the foot of the stair.'],
-      stirred: ['Tick… tick… five of anything, please.'],
-      woke: ['Tock, keeper of Clock Plaza. The clock stopped at twenty past four.'],
+      stirred: ['Tick… tick… five of anything, please. Promptly.'],
+      woke: ["Tock, keeper of Clock Plaza. You're late. The clock stopped at twenty past four."],
       request1: ['The clock face is shattered. 12 Glass, please.'],
       request2: ['Restore the plaza around the tower.'],
       landmark: ['Wake the Clock Tower with 30 Gears and 15 Glass.'],
-      settled: ['The clock runs! Every helper keeps better time now.'],
+      settled: ['Every helper keeps better time now.'],
     },
   },
   {
@@ -901,8 +935,8 @@ export const KEEPERS: KeeperDef[] = [
     request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Batteries hold twice as much',
     say: {
       asleep: ['A robot asleep against a chimney.'],
-      stirred: ['Up here? Five of anything and I will wake.'],
-      woke: ['Gable, keeper of The Terraces.'],
+      stirred: ["Up here? Five of anything and I'll wake."],
+      woke: ['Gable, keeper of The Terraces! Mind the edge.'],
       request1: ['The roof beds need clay. 15 Clay from the basin.'],
       request2: ['Restore the roof garden.'],
       landmark: ['Wake the Rooftop Core with 30 Sunstone and 15 Gears.'],
@@ -914,12 +948,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { sunstone: 15 }, landmark: { glass: 40, seeds: 40, clay: 20 }, reward: 'heartSeed', rewardText: 'The Heart Seed',
     say: {
       asleep: ['A robot among cracked glass panes.'],
-      stirred: ['Five of anything, and I will see you properly.'],
-      woke: ['Fern, keeper of the Glasshouse Gardens.'],
+      stirred: ["Oh. Five of anything, and I'll see you properly."],
+      woke: ['Fern, keeper of the Glasshouse Gardens. Hello. Sorry. Hello.'],
       request1: ['The heaters need light. 15 Sunstone, from the beach or the roofs.'],
       request2: ['Restore the nursery beds.'],
       landmark: ['Wake the Great Greenhouse with 40 Glass, 40 Seeds and 20 Clay.'],
-      settled: ['The greenhouse breathes! Take the Heart Seed to the fountain.'],
+      settled: ['Take the Heart Seed to the fountain.'],
     },
   },
   {
@@ -927,12 +961,12 @@ export const KEEPERS: KeeperDef[] = [
     request1: { glass: 20 }, landmark: { sunstone: 40, copper: 30, gears: 20 }, reward: 'starLens', rewardText: 'The Star Lens; caches show on the map',
     say: {
       asleep: ['A robot staring at the sky, unmoving.'],
-      stirred: ['Five of anything, and I will look down for once.'],
+      stirred: ['Five of anything, and I will look down. For once.'],
       woke: ['Vega, keeper of Observatory Hill.'],
       request1: ['The telescope needs lenses. 20 Glass, please.'],
       request2: ['Restore the hilltop.'],
       landmark: ['Wake the Sky Observatory with 40 Sunstone, 30 Copper and 20 Gears.'],
-      settled: ['I can see everything! Take the Star Lens, and look for the caches on your map.'],
+      settled: ['Take the Star Lens. The caches show on your map now.'],
     },
   },
   {
@@ -945,7 +979,7 @@ export const KEEPERS: KeeperDef[] = [
       request1: ['The planters on the terraces are bare. 20 Clay from the basin.'],
       request2: ['Restore Spire Square, at the foot of the towers.'],
       landmark: ['Wake the Solar Spire with 40 Glass, 30 Gears and 20 Sunstone.'],
-      settled: ['The Spire is lit! Every lift runs again, right to the top.'],
+      settled: ['Every lift runs again, right to the top.'],
     },
   },
 ];
@@ -1055,6 +1089,9 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'sea-cliff': { standIn: 'skyline-cliff', what: 'Close-range sea cliffs in the north' },
   // machines
   'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
+  // E23.8.3.2: the mainland's steel and its big machines (E23.10.2 makes the real models)
+  'salvage-steel': { standIn: 'procedural', what: 'A heap of steel girders from the industrial ruins' },
+  'grid-battery': { standIn: 'storage-chest', what: 'The Grid Battery: a grid-scale battery bank (2 × 2)' },
   // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
   'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },
   'salvage-driftwood': { standIn: 'barrel', what: 'A Timber (driftwood) pile' },

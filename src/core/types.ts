@@ -1,8 +1,21 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 /** `chest`: the Old City's caches (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+/** E23.6.4: `crate` (a supply crate, its own contents) and `assembler` (E23.6.5) are automation's machines. */
 export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
   // E23.5.2: the farm
-  | 'planter';
+  | 'planter'
+  // E23.5.3: the end of the farm chain
+  | 'compostBin'
+  | 'bioDigester'
+  // E23.4.2: the water network
+  | 'reservoir'
+  | 'pump'
+  | 'desalination'
+  // E23.8.3.2: the mainland's big machines
+  | 'gridBattery'
+  // E23.6.4 / E23.6.5: automation
+  | 'crate'
+  | 'assembler';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type RestoreSource =
   | 'pulse'
@@ -193,6 +206,11 @@ export interface DroneData {
   role?: DroneRole;
   /** E18.4: a Courier's machine target (instead of a tile). */
   targetMachineId?: string;
+  /** E23.6.4: a Courier on a route: the route, and what it carries to the route's target crate (none: going to fetch) */
+  route?: string;
+  cargo?: { item: import('./types').ItemId; n: number }[];
+  /** E23.6.4: units of room it booked in the route's target before fetching (no two baskets count on the same room) */
+  reserve?: number;
 }
 
 export type BuffType = 'solarFrenzy' | 'megaflower' | 'droneParty';
@@ -311,7 +329,9 @@ export interface LinkState {
 
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
-export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser'
+  // E23.8.3.2: from the mainland's industrial ruins only
+  | 'steel';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
 export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
 /** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
@@ -327,6 +347,14 @@ export interface KeeperState {
   pulsed?: boolean;
   /** what has been handed over toward the current delivery (request 1 or the landmark) */
   given?: Partial<Record<MaterialId, number>>;
+  /** E23.9.2: settled only: gifts it liked so far (FRIENDSHIP.giftsToFriend makes a friend) */
+  hearts?: number;
+  /** E23.9.2: sim time of the last gift it took (one a game day) */
+  giftedAt?: number;
+  /** E23.9.2: how many times a friend has chatted (which line comes next) */
+  chats?: number;
+  /** E23.9.2: the tile it is off to tend; `at` is when it finishes, set once it gets there */
+  tending?: { x: number; z: number; at?: number };
 }
 
 /**
@@ -374,6 +402,17 @@ export interface SalvageState {
   decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
+  /** E23.6.4: what each supply crate holds, by machine id */
+  crates?: Record<string, Partial<Record<ItemId, number>>>;
+  /** E23.6.4: courier routes the player set (from one crate to another, an item or everything) */
+  routes?: { id: string; from: string; to: string; item: import('../data/automation').RouteItem }[];
+  /** E23.6.4: how many times each job has been done by hand (it opens its automation) */
+  hand?: Partial<Record<import('../data/automation').HandJob, number>>;
+  /**
+   * E23.6.5: each Assembler's recipe (an item id), seconds left on the craft in hand and what that craft took (given
+   * back if it is stopped), and the crates the player chose as its input and output
+   */
+  assemblers?: Record<string, { recipe?: string; left?: number; taken?: Partial<Record<ItemId, number>>; input?: string; output?: string }>;
   /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
   research?: ResearchState;
   /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */
@@ -382,8 +421,25 @@ export interface SalvageState {
   crops?: string[];
   /** E23.6.2: crossbreeds found (data/crops crossKey, e.g. 'radish+lettuce'), in the order found */
   crosses?: string[];
+  /** E23.9.2: crops kept for the Keepers, by crop id (one from each harvest, up to FRIENDSHIP.basketMax) */
+  basket?: Record<string, number>;
   /** E23.5.2.3: gathers counted toward each region's next seed packet, by region id */
   seedFinds?: Record<string, number>;
+  /** E23.5.3: each compost bin's contents, by machine id */
+  bins?: Record<string, BinState>;
+  /** E23.5.3: biomass in each Bio Digester's hopper, by machine id */
+  digesters?: Record<string, number>;
+}
+
+/** E23.5.3: what is in a compost bin (feed in feed units; progress in game days). */
+export interface BinState {
+  feed?: number;
+  /** days toward the next compost */
+  work?: number;
+  compost?: number;
+  /** days the oldest compost has matured */
+  ripen?: number;
+  fertiliser?: number;
 }
 
 /** E23.6.2: what the research station keeps. */
@@ -453,7 +509,11 @@ export interface GameState {
    */
   cozy?: CozyState;
   /** E23.4.1: water levels (share of capacity) of bodies that have changed, by body id `x,z`. Optional. */
-  water?: { levels: Record<string, number> };
+  water?: {
+    levels: Record<string, number>;
+    /** E23.4.2.2: pipe tiles on the ground, `x,z`, sorted */
+    pipes?: string[];
+  };
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };
   /** E23.2.2.3: buried finds revealed (a mound shows) and dug up, by id (`bur:x:z`). Optional. */

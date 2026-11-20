@@ -42,6 +42,8 @@ import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { WaterLevels } from '../rendering/WaterLevels';
+import { PipeVisuals } from '../rendering/PipeVisuals';
+import { WaterOverlay } from '../rendering/WaterOverlay';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
 import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
@@ -116,6 +118,10 @@ import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
 import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
 import { ControlsTable } from '../ui/ControlsTable';
+import { crateName } from '../ui/CratePanel';
+import { materialIcon } from '../ui/MaterialIcons';
+import { AUTOMATION } from '../data/automation';
+import { itemDef } from '../data/items';
 import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
 
@@ -203,6 +209,10 @@ export class Game {
   readonly chunks: ChunkRenderer;
   /** E23.4.1: water levels drawn on the water (the drained bed) */
   readonly waterLevels: WaterLevels;
+  /** E23.4.2: pipe runs */
+  readonly pipes: PipeVisuals;
+  /** E23.4.5: the Water view (build mode) */
+  readonly waterOverlay: WaterOverlay;
   /** Look 6.12: living transitions (every tile change plays as a process). */
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
@@ -352,6 +362,8 @@ export class Game {
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
       for (const t of tiles) this.chunks.markTile(t);
     });
+    this.pipes = new PipeVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.waterOverlay = new WaterOverlay(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
@@ -738,7 +750,7 @@ export class Game {
       for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
         const t = this.sim.grid.get(GROUND, tx, tz);
         if (!t || t.feature === 'water') continue;
-        const stage = treeStage(t);
+        const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: a faded tree sheds like its stage
         if (!stage || stage < 2) continue;
         const area = this.sim.areas.areaOf(t);
         const spot = area ? treeSpot(t, this.sim.areas.info(area).type) : undefined;
@@ -990,6 +1002,7 @@ export class Game {
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
     this.hud.craft.close();
+    this.hud.crate.close();
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
   }
@@ -997,7 +1010,7 @@ export class Game {
   /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
    *  key press already reaches the game, however slow the frame). */
   private syncPanelPause() {
-    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.hud.crate.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
   }
 
   private openMenu() {
@@ -1281,9 +1294,17 @@ export class Game {
         const dpad: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
         // (on a tab, left and right change tab; up and down still leave the tab row)
         const onTab = !!(e.target as HTMLElement)?.closest?.('[role=tablist]') && (e.code === 'ArrowLeft' || e.code === 'ArrowRight');
-        if (this.panelOpen() && dpad[e.code] !== undefined && this.padFocus && !onTab) {
+        // E23.6.4: a machine's panel (a hub's roles, an Assembler's recipe) takes the arrows once its focus is in it
+        const inInspect = !!this.selected && !!(document.activeElement as HTMLElement | null)?.closest?.('#inspect.open');
+        if ((this.panelOpen() || inInspect) && dpad[e.code] !== undefined && this.padFocus && !onTab) {
           e.preventDefault();
           this.padFocus.button(dpad[e.code]);
+          return;
+        }
+        // and Enter presses its focused button, as A does (the panel redraws as the world runs)
+        if (inInspect && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.padFocus) {
+          e.preventDefault();
+          this.padFocus.button(0);
           return;
         }
         const a = this.resolveKey(e.code);
@@ -1345,6 +1366,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'waterOverlay':
+        return this.toggleWaterView();
       case 'powerOverlay':
         return this.togglePowerView();
       case 'map':
@@ -1382,7 +1405,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.crate.isOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1633,11 +1656,29 @@ export class Game {
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
     else if (this.hud.craft.isOpen) this.hud.craft.close();
+    else if (this.hud.crate.isOpen) this.hud.crate.close();
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
     else if (!fromCancel) this.openMenu();
     this.syncPanelPause();
+  }
+
+  /** E23.4.5: the Water view is on (shown while building; it stays on for the next time you build). */
+  waterView = false;
+  private waterViewSeen = false;
+  /** E23.4.5: V / d-pad left in build mode. A new concept: one short introduction, the first time only. */
+  toggleWaterView() {
+    if (!this.building()) return;
+    this.waterView = !this.waterView;
+    if (this.waterView && this.powerView) this.togglePowerView(); // one view at a time
+    this.hud.buildBar.waterOn = this.waterView;
+    this.hud.buildBar.render(this.hud.currentTool);
+    // a new concept: one short introduction, once a save (the classic park has no salvage save: once a session)
+    if (this.waterView && (this.sim.state.salvage ? this.sim.salvage.see('tip:waterView') : !this.waterViewSeen)) {
+      this.waterViewSeen = true;
+      this.hud.toast('Water view: pumps, tanks and pipes holding water glow blue, with arrows the way it flows. Each pond and tank shows how full it is.', 'gold', 4.5);
+    }
   }
 
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
@@ -1649,6 +1690,7 @@ export class Game {
   private togglePowerView() {
     if (!this.building()) return;
     this.powerView = !this.powerView;
+    if (this.powerView) this.waterView = this.hud.buildBar.waterOn = false; // one view at a time
     this.hud.buildBar.powerOn = this.powerView;
     this.hud.buildBar.render(this.hud.currentTool);
     // A new concept gets one short introduction, the first time only.
@@ -1767,6 +1809,23 @@ export class Game {
     else if (r === 'select' || r === 'wake') v.play('interact');
   }
 
+  /**
+   * E23.6.4: a machine's panel opened from the keyboard takes the focus, so the arrows and Enter reach its choices (a
+   * hub's roles, an Assembler's recipe) as the d-pad and A do; Esc closes it and the arrows walk again.
+   */
+  private focusPanelForKeys() {
+    if (this.bot?.lastInput === 'pad') return;
+    // the panel draws with the HUD's next update: try for a few frames until its first control takes the focus
+    let tries = 10;
+    const go = () => {
+      const el = document.querySelector('#inspect.open');
+      if (el?.contains(document.activeElement)) return;
+      if (el?.querySelector('button:not([disabled])')) this.padFocus?.button(13);
+      else if (--tries > 0) requestAnimationFrame(go);
+    };
+    requestAnimationFrame(go);
+  }
+
   /** Bloombot (G.4): E / A: the current tool on the tile in front (Inspect pulses; build tools build). */
   private botAct() {
     if (!this.bot || this.cinematic || this.paused || this.hud.modalOpen || this.bot.visuals.busy === 'assemble') return;
@@ -1778,7 +1837,9 @@ export class Game {
     this.bot.following = true;
     const tool = this.hud.currentTool === 'inspect' ? 'pulse' : this.hud.currentTool;
     const sc = aim ?? this.botTileScreen(p.tile);
-    this.botAnim(this.actAt(p, sc.x, sc.y, tool, false));
+    const r = this.actAt(p, sc.x, sc.y, tool, false);
+    this.botAnim(r);
+    if (r === 'select') this.focusPanelForKeys();
     this.botPreviewKey = '';
     this.buildKey = '';
   }
@@ -1915,7 +1976,9 @@ export class Game {
         frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
         run: () => {
           if (this.sim.power.reset(occ)) return b.visuals.play('interact');
-          this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false));
+          const r = this.actAt(p, sc().x, sc().y, 'inspect', false);
+          this.botAnim(r);
+          if (r === 'select') this.focusPanelForKeys();
         },
       });
     } else {
@@ -1970,7 +2033,7 @@ export class Game {
     const pile = s.salvage.pileAt(f.x, f.z);
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
-    if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
+    if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : s.keepers.giftFor(keeper.id) ? 'Give a gift to' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
     const page = s.journal.pageAt(f.x, f.z);
     if (page) out.push({ kind: 'cache', id: `page:${page}`, verb: 'Read', name: s.journal.found(page) ? 'the page again' : 'the page', distance: fd, at: front, run });
     const sp = setPieceAt(f.x, f.z);
@@ -1989,9 +2052,22 @@ export class Game {
       const lk = s.farm.look(occ);
       out.push({ kind: 'machine', id: `planter:${occ.id}`, verb: lk.ripe ? 'Harvest' : lk.crop ? 'Tend' : 'Plant in', name: lk.ripe ? CROPS[lk.crop!].name : 'the planter', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.planter(occ) });
     }
+    // E23.5.3: the compost bin and the Bio Digester open their panels
+    if (occ?.type === 'compostBin') out.push({ kind: 'machine', id: `bin:${occ.id}`, verb: 'Open', name: 'the compost bin', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.compostBin(occ) });
+    if (occ?.type === 'bioDigester') out.push({ kind: 'machine', id: `dig:${occ.id}`, verb: s.compost.fuel(occ) > 0 ? 'Look at' : 'Feed', name: 'the Bio Digester', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.digester(occ) });
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
+    // E23.6.4: a supply crate opens its own panel (its things, and the courier routes from it)
+    if (occ?.type === 'crate')
+      out.push({
+        kind: 'storage', id: `crate:${occ.id}`, verb: 'Open', name: 'the crate', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.crate.open(occ);
+          this.syncPanelPause();
+        },
+      });
     return out;
   }
 
@@ -2011,7 +2087,7 @@ export class Game {
     if (this.building()) {
       const tool = this.hud.currentTool;
       const dk = decorType(tool);
-      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
+      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : tool === 'pipe' ? 'Lay a pipe' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
       return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
     }
     const f = b.front();
@@ -2851,6 +2927,7 @@ export class Game {
     const dk = decorType(tool);
     if (dk) return this.previewDecor(p, x, y, dk);
     if (tool === 'remove') return this.previewRemove(p, x, y);
+    if (tool === 'pipe') return this.previewPipe(p, x, y);
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -3022,10 +3099,43 @@ export class Game {
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
   }
 
+  /** E23.4.2.2: the pipe tool's ghost and tip: one tile at a time; the tool stays in hand to lay the next. */
+  private previewPipe(p: Pick, x: number, y: number) {
+    const t = p.tile!;
+    const pipes = this.sim.water.pipes;
+    this.overlays.hideRadius();
+    const why = pipes.layProblem(p.roofId, t.x, t.z) ?? (this.inReach(p.roofId, t.x, t.z, 1) ? undefined : TOO_FAR);
+    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.12);
+    const have = this.sim.inventory.available('pipe');
+    const left = `${have} Pipe${have === 1 ? '' : 's'} at hand (the crafting table makes them)`;
+    this.hud.showTip(x, y, `<b>Pipe</b>Carries water from a pump or a reservoir to whatever stands beside it.<br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to lay · ${left}</span>`}`);
+  }
+
+  /** E23.4.2.2: lays one pipe tile (the tool stays in hand, tile by tile). */
+  private layPipeAt(p: Pick, x: number, y: number): ActResult {
+    const t = p.tile!;
+    if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+      this.hud.showFail(TOO_FAR, x, y);
+      return 'none';
+    }
+    const why = this.sim.water.pipes.layProblem(p.roofId, t.x, t.z);
+    if (why) {
+      this.hud.showFail(why, x, y);
+      return 'none';
+    }
+    return this.sim.water.pipes.lay(p.roofId, t.x, t.z) ? 'build' : 'none';
+  }
+
   private previewRemove(p: Pick, x: number, y: number) {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
     this.overlays.hideRadius();
+    if (!d && p.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z)) {
+      // E23.4.2.2: a pipe tile lifts back into the pack (its Pipe)
+      this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.12);
+      this.hud.showTip(x, y, `<b>🧹 Lift the pipe</b>${this.press('E')} to lift it (its Pipe goes back into your pack)`);
+      return;
+    }
     if (!d) {
       this.overlays.hideGhost();
       this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'hover');
@@ -3085,6 +3195,14 @@ export class Game {
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
+    // E23.4.2.2: the remove tool lifts a pipe tile (its Pipe back into the pack)
+    if (!d && !pickUp && p.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z)) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      return this.sim.water.pipes.lift(t.x, t.z) ? 'build' : 'none';
+    }
     // E21.3: the remove tool also takes down a machine, giving its whole recipe back
     const occ = !d && !pickUp ? this.sim.occupant(t) : undefined;
     // E23.3.5: a pole with lights on its lines: the lights come down first (the pole stays)
@@ -3391,6 +3509,7 @@ export class Game {
     const dk = decorType(tool);
     if (dk) return this.placeDecorAt(p, x, y, dk);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
+    if (tool === 'pipe') return this.layPipeAt(p, x, y);
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -3611,6 +3730,30 @@ export class Game {
         extra = `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom.${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
         break;
       }
+      // E23.6.4: a supply crate, and (E23.6.5) the Assembler and what it makes
+      case 'crate': {
+        const a = s.automation;
+        const routes = a.routes().filter((r) => r.from === m.id || r.to === m.id).length;
+        extra = `<p class="stat">🧺 ${crateName(s, m.id)} · ${a.load(m.id)} of ${AUTOMATION.crate.capacity} inside${routes ? ` · ${routes} courier route${routes === 1 ? '' : 's'}` : ''}</p>`;
+        break;
+      }
+      case 'assembler': {
+        const a = s.automation;
+        const { input, output } = a.io(m);
+        const recipe = a.recipeOf(m);
+        const why = a.assemblerProblem(m);
+        // the player chooses which crate beside it is its input and which its output (each button steps to the next)
+        const many = a.cratesBeside(m).length > 1;
+        const ioBtn = (which: 'input' | 'output', label: string, c: MachineData) =>
+          `<button class="role-btn" data-asm-io="${m.id}|${which}"${many ? '' : ' disabled'}><span class="rn">${label}</span><span class="rp">${esc(crateName(s, c.id))}</span></button>`;
+        const io = input ? `<p class="rh">Crates</p><div class="role-row">${ioBtn('input', 'Takes from', input)}${ioBtn('output', 'Puts in', output!)}</div>` : '';
+        const picks = s.crafting
+          .itemRecipes()
+          .map((r) => `<button class="role-btn${r.id === recipe ? ' on' : ''}" data-asm="${m.id}|${r.id}" aria-pressed="${r.id === recipe}"><span class="ri">${materialIcon(r.id, 22)}</span><span class="rn">${esc(itemDef(r.id).name)}</span></button>`)
+          .join('');
+        extra = `<p class="stat">${why ? esc(why) : `Making ${esc(itemDef(recipe!).name)}`}</p>${io}<p class="rh">What it makes</p><div class="role-row">${picks}${recipe ? `<button class="role-btn" data-asm="${m.id}|"><span class="rn">Stop</span></button>` : ''}</div>`;
+        break;
+      }
       case 'core': {
         // Every Core is an area landmark now (on the ground, or on a city rooftop).
         this.hud.renderInspect(this.landmarkHtml(m));
@@ -3637,6 +3780,10 @@ export class Game {
     b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
     b.on('machine.built', ({ machine }) => {
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
+    });
+    // E23.6.5: an Assembler's choice shows at once in its panel
+    b.on('assembler.changed', ({ id }) => {
+      if (this.selected === id) this.renderInspect();
     });
     b.on('area.revealed', ({ areaId }) => {
       this.chunks.markArea(areaId);
@@ -3944,6 +4091,13 @@ export class Game {
       if (!r || r.gate.opensRegion === false || this.settings.noVistas || this.settings.reducedMotion) return;
       if (!s.salvage.see(`vista:${region}`)) return;
       setTimeout(() => this.vista(r.landmark.x + 1, r.landmark.z + 1, 2, () => {}), 300);
+    });
+    // E23.9.2: a Keeper finished tending a tile: a little burst of green where it worked
+    b.on('keeper.tended', ({ x, z }) => {
+      const t = this.sim.grid.get(GROUND, x, z);
+      if (!t) return;
+      const [wx, wy, wz] = this.sim.grid.tileWorld(t);
+      this.vfx.burst(new pc.Vec3(wx, wy + 0.3, wz), 10, { up: 1.6, speed: 0.9, size: 0.05, life: 1.1 });
     });
     b.on('fountain.tier', ({ tier }) => {
       this.applyFountainLook(false);
@@ -4511,8 +4665,12 @@ export class Game {
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
     // E23.3.4: in the Power view, powered electrical machines become yellow holograms and the rest of the world darkens
     this.machines.powerHolo(powerOn ? this.poweredMachines() : undefined, wdt);
+    // E23.4.5: in the Water view, pumps, tanks and pipes holding water become blue holograms, in the same dimmed world
+    const waterOn = this.waterView && this.building();
+    this.machines.waterHolo(waterOn ? WaterOverlay.holoMachines(this.sim) : undefined, wdt);
+    this.pipes.holo(waterOn ? this.machines.holoMat('water') : undefined);
     const D = POWER.view.darken;
-    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
+    const dimTo = powerOn || waterOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
     const k = Math.min(1, wdt / POWER.view.fade);
     this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
     this.powerOverlay.setBoost(this.dayNight.boost);
@@ -4573,6 +4731,10 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.waterLevels.update();
+    this.pipes.update(dt);
+    this.waterOverlay.visible = this.waterView && this.building();
+    if (this.bot) this.waterOverlay.update(dt, this.bot.pose);
+    for (const r of this.sim.water.takeFadeChanges()) this.chunks.markRect(...r); // E23.4.4: land around low water
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
       this.updateExploreCamera(wdt);

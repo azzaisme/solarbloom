@@ -1,5 +1,6 @@
 import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
 import { BUILDABLE, MACHINES } from '../data/machines';
+import { WATER_NET } from '../data/water';
 import { TUNING } from '../data/tuning';
 import { type Action, type Bindings, keyLabel } from '../app/Bindings';
 import { actionGlyph, type GlyphStyle, type PadStyle, padName } from './Glyphs';
@@ -27,6 +28,8 @@ export class Hotbar extends HudPart {
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
+      // E23.4.2.2: the pipe, laid tile by tile
+      `<button class="slot" data-tool="pipe" aria-label="Lay pipe"><span class="key"></span><span class="si">${ICONS.pipe}</span><span class="sl">Pipe</span><span class="sc"></span></button>`,
       // E19.2: decorations, free once earned, and the remove tool
       `<span class="tray-break" aria-hidden="true"></span>`,
       ...DECOR_OPTIONS.map(
@@ -114,6 +117,15 @@ export class Hotbar extends HudPart {
       btn.hidden = !!roofOnly && !s.build.isUnlocked(t);
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
     }
+    // E23.4.2.2: the pipe's slot: what's left of the last Pipe, or its price; it unlocks with the pump
+    const pipeBtn = this.root.querySelector<HTMLElement>('#hotbar [data-tool="pipe"]');
+    if (pipeBtn) {
+      const p = s.water.pipes;
+      const locked = !s.water.unlocked('pipe');
+      this.set('hc-pipe', $(pipeBtn, '.sc'), 'text', locked ? s.water.lockLabel() : p.costText());
+      this.set('hk-pipe', pipeBtn, 'cls', s.inventory.canPay(WATER_NET.pipe.cost) ? '0' : '1', 'cant');
+      this.set('hl-pipe', pipeBtn, 'cls', locked ? '1' : '0', 'locked');
+    }
     // E19.2: a decoration's slot appears once it's earned
     for (const o of DECOR_OPTIONS) {
       const on = decorOpen(s, o);
@@ -163,6 +175,9 @@ export class BuildBar extends HudPart {
   /** E23.3.4: the Power view's glyph, and whether it is on (the game sets it). */
   private powerGlyph = '';
   powerOn = false;
+  /** E23.4.5: the Water view's glyph, and whether it is on (the game sets it). */
+  private waterGlyph = '';
+  waterOn = false;
 
   static template(): string {
     return `<div id="buildbar" class="panel" role="toolbar" aria-label="Build hotbar" hidden></div>`;
@@ -177,6 +192,7 @@ export class BuildBar extends HudPart {
     if (!b) return;
     this.keys = (['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'] as Action[]).map((a) => (b.keys[a][0] ? keyLabel(b.keys[a][0]) : ''));
     this.powerGlyph = actionGlyph(b, 'powerOverlay', style ?? 'keys');
+    this.waterGlyph = actionGlyph(b, 'waterOverlay', style ?? 'keys');
     this.last.delete('buildbar');
   }
 
@@ -198,6 +214,10 @@ export class BuildBar extends HudPart {
     const power = this.sim.power.networks().length
       ? `<div class="bslot power${this.powerOn ? ' on' : ''}" aria-label="Power view ${this.powerOn ? 'on' : 'off'}"><span class="key glyph">${this.powerGlyph}</span><span class="sl">Power</span></div>`
       : '';
-    this.set('buildbar', el, 'html', html + power);
+    // E23.4.5: the Water view toggle beside it (once the water network is handed over, Cistern Basin's Keeper)
+    const water = this.sim.water.unlocked('pipe')
+      ? `<div class="bslot power water${this.waterOn ? ' on' : ''}" aria-label="Water view ${this.waterOn ? 'on' : 'off'}"><span class="key glyph">${this.waterGlyph}</span><span class="sl">Water</span></div>`
+      : '';
+    this.set('buildbar', el, 'html', html + power + water);
   }
 }

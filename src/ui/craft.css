@@ -36,3 +36,12 @@
 .cr-decor li button { margin-left: auto; min-height: 36px; padding: 2px 12px; border-radius: 10px; font: 600 16px var(--font-display); background: var(--glass-hi-2); border: 1px solid var(--edge); color: var(--text-strong); }
 .cr-decor li button[aria-disabled=true] { color: var(--text-dim); border-color: var(--edge-soft); background: var(--btn-off); }
 .cr-decor li.cr-made b, .cr-note { color: var(--good); }
+/* E23.6.4: a supply crate's panel (the backpack's grid and moves, its courier routes below) */
+#crateScreen { z-index: 11; }
+#crateScreen .panel.bp-card { width: min(980px, calc(96vw / var(--ui-zoom, 1))); height: min(680px, calc(92vh / var(--ui-zoom, 1))); max-height: none; }
+#crateScreen .set-h { margin: 16px 0 8px; font: 600 18px var(--font-display); color: var(--gold); }
+.ct-routes li button { min-height: 36px; padding: 2px 12px; border-radius: 10px; font: 600 16px var(--font-display); background: var(--glass-hi-2); border: 1px solid var(--edge); color: var(--text-strong); }
+.ct-routes li button:last-of-type { margin-left: auto; }
+.ct-routes .ct-warn { flex-basis: 100%; font: 700 16px var(--font-ui); color: var(--text-soft); }
+.ct-send { flex-wrap: wrap; margin-top: 8px; }
+.ct-send small { font: 700 14px var(--font-ui); color: var(--text-soft); margin-left: 4px; }

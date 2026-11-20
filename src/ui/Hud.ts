@@ -12,13 +12,14 @@ import { Panels } from './Panels';
 import { Backpack } from './Backpack';
 import { CraftTable } from './CraftTable';
 import { ChargeMeter } from './ChargeMeter';
+import { CratePanel } from './CratePanel';
 import { LoadWheel } from './LoadWheel';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
 /** E19.2: `decor:<id>` holds a decoration to place; `remove` aims at decorations to remove or pick up. */
 export type DecorTool = `decor:${string}`;
-export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | 'remove';
+export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | 'remove' | 'pipe';
 /** E19.2: the decoration a tool holds, if it holds one. */
 export const decorType = (t: Tool) => (t.startsWith('decor:') ? t.slice(6) : undefined);
 /** A machine build tool (a machine type), not pulse, inspect, a core, a decoration or remove. */
@@ -159,6 +160,8 @@ export class Hud {
   readonly craft: CraftTable;
   /** E23.2.1: bloombot's charge, the only meter */
   readonly charge: ChargeMeter;
+  /** E23.6.4: a supply crate's panel */
+  readonly crate: CratePanel;
   /** E23.2.2: the pulse load wheel */
   readonly loadWheel: LoadWheel;
 
@@ -192,6 +195,7 @@ export class Hud {
     this.prompt = new Prompt(this.root);
     this.backpack = new Backpack(this.root, { sim: this.sim });
     this.craft = new CraftTable(this.root, { sim: this.sim });
+    this.crate = new CratePanel(this.root, { sim: this.sim });
   }
 
   private template() {

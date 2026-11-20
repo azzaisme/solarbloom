@@ -5,6 +5,7 @@ import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { TIERS } from '../src/data/salvage';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { KEEPERS } from '../src/data/oldcity';
+import { HAND_JOBS } from '../src/data/automation';
 import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
@@ -14,9 +15,10 @@ const oldSim = (tier = 4) => {
   sim.bot = NEAR;
   return sim;
 };
-/** E23.6.1: wakes every Keeper (crafting-table machines unlock from them). */
+/** E23.6.1: wakes every Keeper (crafting-table machines unlock from them); E23.6.4: and does each automation job by hand. */
 const wakeKeepers = (sim: Sim) => {
   for (const k of KEEPERS) sim.state.salvage!.keepers[k.id] = { step: 'settled' };
+  sim.state.salvage!.hand = Object.fromEntries(Object.entries(HAND_JOBS).map(([j, d]) => [j, d.times]));
 };
 /** Restores a 2×2 of park ground for building. */
 function ground(sim: Sim, x: number, z: number, g: GroundState = 'restored') {
@@ -42,6 +44,9 @@ describe('E21.3: recipes', () => {
       const z = 12;
       ground(sim, x, z);
       if (MACHINES[type].areaTypes) continue; // needs its area type (the Reservoir Garden)
+      if (MACHINES[type].mainlandOnly) continue; // only past the causeway: paid exactly in tests/mainland-steel
+      if (type === 'pump' || type === 'desalination') continue; // on a bank / the shore only: paid exactly in tests/water-*.test.ts
+      if (sim.water.unlockFor(type)) sim.state.salvage!.keepers.sluice = { step: 'request1' }; // E23.4: Cistern Basin's unlocks
       stock(sim, type);
       stock(sim, type);
       const first = sim.build.place(type, GROUND, x, z);
@@ -54,7 +59,10 @@ describe('E21.3: recipes', () => {
 
   it('machines are locked until their fountain tier', () => {
     const sim = oldSim(0);
-    for (const t of BUILDABLE) expect(sim.build.isUnlocked(t), t).toBe(false);
+    // E23.5.3: the compost bin is a home recipe, open from the start
+    const home = (t: BuildableType) => MACHINE_RECIPES.some((r) => r.builds === t && 'home' in r.unlock);
+    expect(sim.build.isUnlocked('compostBin')).toBe(true);
+    for (const t of BUILDABLE) if (!home(t)) expect(sim.build.isUnlocked(t), t).toBe(false);
     sim.state.salvage!.tier = 1;
     // E23.6.1: the Solar panel and the Storage chest come from Keepers now (crafting-table recipes)
     expect(sim.build.isUnlocked('solar')).toBe(false);
