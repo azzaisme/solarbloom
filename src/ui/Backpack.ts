@@ -2,7 +2,7 @@ import type { ItemId } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { blueprintRows, collection, itemCells, journalPages, oneOffItems, pinRequest, requestRows, TABS, type TabId } from './BackpackModel';
 import { materialIcon } from './MaterialIcons';
-import { bloombotRows, pips, stateWords, type BloombotRow } from './BloombotPage';
+import { BLOOMBOT_GROUPS, bloombotRows, howHeading, pips, stateWords, type BloombotRow } from './BloombotPage';
 import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell';
 import { reveal } from './PadFocus';
 import './backpack.css';
@@ -272,18 +272,13 @@ export class Backpack {
       `<b class="bb-name">${esc(r.name)}</b>` +
       (r.kind === 'upgrade' ? `<span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>` : '') +
       `<span class="bb-state">${esc(stateWords(r))}</span></button>`;
-    const group = (title: string, id: string, list: BloombotRow[], note: string) =>
-      `<h3 class="pn-label" id="${id}">${title} <span class="bb-count">${esc(note)}</span></h3><div class="bb-rows" role="listbox" aria-labelledby="${id}">${list.map(row).join('')}</div>`;
-    const moves = rows.filter((r) => r.kind === 'move');
-    const ups = rows.filter((r) => r.kind === 'upgrade');
-    const levels = ups.reduce((a, r) => a + (r.level ?? 0), 0);
-    const most = ups.reduce((a, r) => a + (r.max ?? 0), 0);
-    return (
-      `<div class="pn-split bb-split"><div class="pn-main bb-main">` +
-      group('Moves', 'bbMovesH', moves, `${moves.filter((r) => r.state === 'have').length} of ${moves.length} learned`) +
-      group('Upgrades', 'bbUpsH', ups, `${levels} of ${most} levels`) +
-      `</div><aside class="pn-detail bp-detail bb-detail" id="bpDetail">${this.botDetail()}</aside></div>`
-    );
+    const groups = BLOOMBOT_GROUPS.map((g) => {
+      const list = rows.filter((r) => r.kind === g.kind);
+      if (!list.length) return '';
+      const id = `bbH-${g.kind}`;
+      return `<h3 class="pn-label" id="${id}">${esc(g.title)} <span class="bb-count">${esc(g.note(list))}</span></h3><div class="bb-rows" role="listbox" aria-labelledby="${id}">${list.map(row).join('')}</div>`;
+    }).join('');
+    return `<div class="pn-split bb-split"><div class="pn-main bb-main">${groups}</div><aside class="pn-detail bp-detail bb-detail" id="bpDetail">${this.botDetail()}</aside></div>`;
   }
 
   private botDetail(): string {
@@ -292,10 +287,10 @@ export class Backpack {
     const level = r.kind === 'upgrade' ? `<p class="bb-level"><span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>${esc(stateWords(r))}</p>` : `<p class="bb-level">${esc(stateWords(r))}</p>`;
     const where = r.where ? `<button class="pn-btn primary bb-where" id="bb-where" data-bbwhere="${r.id}">${icon('pin', 's')}Show me where</button>` : '';
     return (
-      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : 'spark')}</span>${esc(r.name)}</h3>` +
+      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : r.kind === 'park' ? 'star' : 'spark')}</span>${esc(r.name)}</h3>` +
       level +
       `<p class="bb-does">${esc(r.does)}</p>` +
-      `<h4>${r.state === 'have' ? (r.kind === 'move' ? 'Learned' : 'At its top level') : r.kind === 'move' ? 'How to learn it' : r.level ? 'The next level' : 'How to get it'}</h4><p>${esc(r.how)}</p>` +
+      `<h4>${esc(howHeading(r))}</h4><p>${esc(r.how)}</p>` +
       where
     );
   }

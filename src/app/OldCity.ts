@@ -298,7 +298,7 @@ export class OldCityController {
       this.host.hud.showFail(why, sc.x, sc.y);
       return;
     }
-    this.startHold('salvage', SALVAGE.holdSeconds, () => this.sim.salvage.salvage(id), viaClick);
+    this.startHold('salvage', this.sim.parkGrowth.salvageHold, () => this.sim.salvage.salvage(id), viaClick);
   }
 
   /** E23.5.2: a planter: harvest a ripe bed straight away, otherwise open its panel (plant, feed, extras). */

@@ -6,7 +6,7 @@
 //   - Bloombot itself early and late, from behind and from the front: a leaf by the sprout per move, a glowing cell
 //     per level of Bigger charge, a pocket per level of Roomier backpack;
 //   - the moment when it grows: the first one points to the page, later ones don't.
-// Shots go to docs/review/e24-620/ (SHOTS_DIR overrides).
+// Shots go to docs/review/e25/ (SHOTS_DIR overrides; #620's first set is in docs/review/e24-620/).
 //   npm run build && node tests/e2e/bloombot-page.e2e.mjs      (GPU=1: the real GPU, d3d11; otherwise SwiftShader)
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -14,7 +14,7 @@ import { preview } from 'vite';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
-const out = process.env.SHOTS_DIR ?? 'docs/review/e24-620';
+const out = process.env.SHOTS_DIR ?? 'docs/review/e25';
 mkdirSync(out, { recursive: true });
 const port = Number(process.env.PORT ?? 4266);
 const server = await preview({ build: { outDir: process.env.DIST ?? 'dist' }, preview: { port, strictPort: true }, logLevel: 'silent' });
@@ -36,7 +36,7 @@ function pageNow() {
   };
 }
 
-/** Grows Bloombot: every move, and levels of the two upgrades it wears (the rest of the page shows them too). */
+/** Grows Bloombot: every move, all three park milestones (#622), and levels of the upgrades it wears. */
 function growLate() {
   const s = window.solarbloom.sim;
   const sv = s.state.salvage;
@@ -44,6 +44,7 @@ function growLate() {
   sv.research ??= { analysed: [], done: [], running: [], levels: {} };
   sv.research.done.push('rb-cells', 'rb-backpack', 'rb-pulse', 'rb-efficiency');
   Object.assign(sv.research.levels, { chargeCells: 3, backpack: 2, pulseRadius: 1 });
+  s.state.progression.parkGrowth = 3;
 }
 
 /**
@@ -120,8 +121,9 @@ try {
     await page.waitForTimeout(400);
     let p = await page.evaluate(pageNow);
     check(/Bloombot/.test(p.tab), `${L}: E moves from Items to the Bloombot tab ("${p.tab}")`);
-    check(p.rows.length === 9 && p.rows[0] === 'Pry · Next' && p.rows.slice(1, 4).every((r) => / · Later$/.test(r)), `${L}: four moves, Pry next (${p.rows.slice(0, 4).join(' | ')})`);
-    check(p.rows.slice(4).every((r) => / · Level 0 of 3$/.test(r)), `${L}: five upgrades, none started (${p.rows.slice(4).join(' | ')})`);
+    check(p.rows.length === 12 && p.rows[0] === 'Pry · Next' && p.rows.slice(1, 4).every((r) => / · Later$/.test(r)), `${L}: four moves, Pry next (${p.rows.slice(0, 4).join(' | ')})`);
+    check(/^Spreading pulse · \d+ of 20$/.test(p.rows[4]) && p.rows[5] === 'Steady charge · Later' && p.rows[6] === 'Nimble hands · Later', `${L}: #622: three park milestones, the first counting the park (${p.rows.slice(4, 7).join(' | ')})`);
+    check(p.rows.slice(7).every((r) => / · Level 0 of 3$/.test(r)), `${L}: five upgrades, none started (${p.rows.slice(7).join(' | ')})`);
     check(/Bring the fountain what it asks for and it teaches this/.test(p.detail) && /Show me where/.test(p.detail), `${L}: Pry says how to learn it, with Show me where ("${p.detail}")`);
     await shot('3-page-early');
     // the detail's end is above the footer, or the detail scrolls to it (the wheel, and Show me where at its foot)
@@ -143,6 +145,7 @@ try {
     await page.waitForTimeout(500);
     const late = await page.evaluate(() => window.solarbloom.bot.visuals.growthPieces.map((p) => p.name));
     check(late.filter((n) => n.startsWith('grow-leaf')).length === 4 && late.filter((n) => n.startsWith('grow-cell')).length === 3 && late.filter((n) => n.startsWith('grow-pocket')).length === 2, `${L}: grown, it wears four leaves, three cells and two pockets (${late.join(', ')})`);
+    check(late.includes('grow-bud') && late.includes('grow-collar') && late.filter((n) => n.startsWith('grow-cuff')).length === 2, `${L}: #622: and what the park grew: a bud, a collar and two cuffs (${late.join(', ')})`);
     await closeUp(page, 'back');
     await botShots(page, `${out}/4-bloombot-late-back-${label}`);
     await closeUp(page, 'front');
@@ -157,7 +160,8 @@ try {
     await page.waitForTimeout(300);
     p = await page.evaluate(pageNow);
     check(p.rows.slice(0, 4).every((r) => / · Learned$/.test(r)), `${L}: every move learned (${p.rows.slice(0, 4).join(' | ')})`);
-    check(p.rows.includes('Bigger charge · Top level') && p.rows.includes('Roomier backpack · Level 2 of 3') && p.rows.includes('Wider pulse · Level 1 of 3'), `${L}: upgrade levels show (${p.rows.slice(4).join(' | ')})`);
+    check(p.rows.slice(4, 7).every((r) => / · Grown$/.test(r)), `${L}: #622: every park milestone grown (${p.rows.slice(4, 7).join(' | ')})`);
+    check(p.rows.includes('Bigger charge · Top level') && p.rows.includes('Roomier backpack · Level 2 of 3') && p.rows.includes('Wider pulse · Level 1 of 3'), `${L}: upgrade levels show (${p.rows.slice(7).join(' | ')})`);
     // the arrows move through the rows; the one in focus fills the detail
     await page.focus('#bb-backpack');
     await page.waitForTimeout(200);
@@ -179,9 +183,9 @@ try {
     check(!went.open && !!went.mark, `${L}: Show me where closes the backpack and marks the house (${JSON.stringify(went)})`);
 
     // ── 3. the moment it grows: the first one points to the page ──
-    const say = async (fire) => {
+    const say = async (fire, want = 'level|can ') => {
       await page.evaluate(fire);
-      await page.waitForFunction(() => [...document.querySelectorAll('#toasts .toast')].some((t) => /level|can /.test(t.textContent)), null, { timeout: 8000 }).catch(() => {});
+      await page.waitForFunction((want) => [...document.querySelectorAll('#toasts .toast')].some((t) => new RegExp(want).test(t.textContent)), want, { timeout: 8000 }).catch(() => {});
       return page.evaluate(() => [...document.querySelectorAll('#toasts .toast')].map((t) => t.textContent.trim()).pop() ?? '');
     };
     await page.evaluate(() => {
@@ -195,6 +199,12 @@ try {
     await page.waitForTimeout(6500);
     const second = await say(() => window.solarbloom.sim.bus.emit('research.upgraded', { id: 'backpack', level: 3 }));
     check(second === 'Bloombot got better: Roomier backpack, level 3 of 3', `${L}: later moments just say what grew ("${second}")`);
+    await page.waitForTimeout(4000);
+    // #622: the park's milestone, with what it does
+    const park = await say(() => window.solarbloom.sim.bus.emit('bloombot.parkGrew', { step: 1, id: 'spill' }), 'park helped');
+    check(park === 'The park helped Bloombot grow: Spreading pulseA pulse on dry ground wakes the patch beside it too.', `${L}: #622: the park's moment names what grew and what it does ("${park}")`);
+    await page.waitForTimeout(800); // past its fade in
+    await shot('8-park-grew');
 
     check(!errors.length, `${L}: no page errors ${errors.join(' | ')}`);
     await page.close();

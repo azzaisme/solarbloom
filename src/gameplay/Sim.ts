@@ -39,6 +39,7 @@ import { LandmarkSystem } from './LandmarkSystem';
 import { WaterSystem } from './WaterSystem';
 import { Crafting } from './Crafting';
 import { Research } from './Research';
+import { ParkGrowth } from './ParkGrowth';
 import { ChargeSystem } from './Charge';
 import { Automation } from './Automation';
 import { PulseLoad } from './PulseLoad';
@@ -110,6 +111,8 @@ export class Sim {
   readonly crafting: Crafting;
   /** E23.6.2: the research station (projects, and the upgrades they open). */
   readonly research: Research;
+  /** #622: what greening the park has grown Bloombot into */
+  readonly parkGrowth: ParkGrowth;
   /** E23.2.1: bloombot's charge, the only meter. */
   readonly charge: ChargeSystem;
   /** E23.6.4 / E23.6.5: supply crates, courier routes and jobs done by hand, the Assembler. */
@@ -196,6 +199,7 @@ export class Sim {
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
+    this.parkGrowth = new ParkGrowth(this);
     this.droneFuel = new DroneFuel(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
@@ -322,6 +326,7 @@ export class Sim {
     this.crafting.tick(dt);
     this.automation.tick(dt);
     this.research.tick(dt);
+    this.parkGrowth.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
