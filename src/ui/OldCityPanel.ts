@@ -162,7 +162,7 @@ export function storageHtml(sim: Sim, title = 'Storage'): string {
     .join('');
   return (
     cardHead({ icon: icon('pack', 'l'), title, mood: 'Move things between your backpack and the store.', dock: 'sheet', choose: 'Move' }) +
-    `<div class="oc-content"><table class="oc-store"><thead><tr><th scope="col">Material</th><th scope="col">With you</th><th scope="col">Put in the store</th><th scope="col">Take out</th><th scope="col">In the store</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="oc-empty">Nothing found yet. Salvage piles to fill your backpack.</td></tr>'}</tbody></table>
+    `<div class="oc-content"><table class="oc-store"><thead><tr><th scope="col">Material</th><th scope="col">With you</th><th scope="col">Put in the store</th><th scope="col">Take out</th><th scope="col">In the store</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="oc-empty">Nothing found yet. Dig in the glinting piles to fill your backpack.</td></tr>'}</tbody></table>
     <div class="oc-row"><button class="pn-btn primary" data-act="depositAll" ${MATERIAL_IDS.some((m) => inv.count(m)) ? '' : 'disabled'}>Deposit everything</button></div></div>`
   );
 }
@@ -256,6 +256,16 @@ export class SpeechBubble {
     this.el.style.left = `${Math.max(half + 16, Math.min(room - half - 16, at.x))}px`;
     this.el.style.top = `${Math.max(this.el.offsetHeight + 16, at.y)}px`;
   }
+
+  /**
+   * #662: is a Keeper talking? While it is, Bloombot's moments and the guide's lines wait, so nothing lands under the
+   * bubble. A second bubble still to come counts for a few seconds (it waits for its speaker to be on screen; if
+   * Bloombot has walked off, the rest can go ahead).
+   */
+  speaking(now = performance.now()): boolean {
+    return !this.el.hidden || (!!this.next && now < this.until + SpeechBubble.NEXT_GRACE_MS);
+  }
+  static readonly NEXT_GRACE_MS = 4000;
 }
 
 // ───────────── Tally's trade (E21.9) ─────────────

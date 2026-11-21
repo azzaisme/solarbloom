@@ -1,0 +1,1014 @@
+[
+ {
+  "where": "fresh start",
+  "kind": "prompt",
+  "text": "EHold Salvage Scrap"
+ },
+ {
+  "where": "fresh start",
+  "kind": "goal",
+  "text": "Wake the fountain Bloombot learns to pry open rubble Scrap 0 of 20Seeds 0 of 6Park 0 of 60 Dig Scrap out of a glinting pile: hold E beside one.HShow me where"
+ },
+ {
+  "where": "fresh start",
+  "kind": "goal",
+  "text": "Wake the fountain Bloombot learns to pry open rubble Scrap 0 of 20Seeds 0 of 6Park 1 of 60 Dig Scrap out of a glinting pile: hold E beside one.HShow me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "PryNext || PryNextPries open the rubble that blocks a way.How to learn itBring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "HoverLater || HoverLaterFloats over water too deep to wade.How to learn itThe fountain teaches this once you've brought it what it asks for twice more.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "ClimbLater || ClimbLaterClimbs up onto the roofs.How to learn itThe fountain teaches this once you've brought it what it asks for three more times.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "GlideLater || GlideLaterGlides down from the edge of a roof.How to learn itThe fountain teaches this once you've brought it what it asks for four more times.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Pry IILater || Pry IILaterForces open the heavy iron doors of old vaults.How to learn itBloombot has to learn Hover at the fountain first. Then the crafting table in the house can work out “Pry II”.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Hover IILater || Hover IILaterHovers much further over the sea.How to learn itBloombot has to learn Climb at the fountain first. Then the crafting table in the house can work out “Hover II”.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Climb IILater || Climb IILaterClimbs straight up a low wall, with no ladder.How to learn itBloombot has to learn Glide at the fountain first. Then the crafting table in the house can work out “Climb II”.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Glide IILater || Glide IILaterGlides a lot further from a high edge.How to learn itBloombot has to learn Glide at the fountain first, and the crafting table in the house has to work out “Climb II”. Then it can work out “Glide II”.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Spreading pulse1 of 20 || Spreading pulse1 of 20A pulse on dry ground wakes the patch beside it too.How it growsKeep bringing the park back to life around the fountain. This grows at 20 on the goal card's Park count, and it's at 1 now.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Steady chargeLater || Steady chargeLaterPulses, moves and running use a tenth less charge.How it growsKeep bringing the park back to life. This grows at 40 on the goal card's Park count.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Nimble handsLater || Nimble handsLaterDigging things out of a glinting pile takes a quarter less time.Right now digging out a pile takes 0.6 seconds, and prying rubble open 2 seconds.How it growsKeep bringing the park back to life. This grows at 60 on the goal card's Park count.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Quick chargeLater || Quick chargeLaterSitting at a charger fills Bloombot a fifth faster.How to learn itPylon, a robot asleep in Mast Row, teaches this when it wakes. Find the way into Mast Row first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Eye for valueLater || Eye for valueLaterEvery fourth dig at a glinting pile turns up one extra piece.How to learn itTally, a robot asleep in Old Market, teaches this when it wakes. Find the way into Old Market first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "BeachcomberNext || BeachcomberNextGlinting piles you have dug fill back up a fifth sooner.How to learn itTide is a robot asleep in Saltwind Beach. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Green thumbLater || Green thumbLaterBloombot gathers a quarter more Greens from each patch.How to learn itMoss, a robot asleep in Elder Grove, teaches this when it wakes. Find the way into Elder Grove first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Float alongLater || Float alongLaterRunning uses a quarter less charge.How to learn itSluice, a robot asleep in Cistern Basin, teaches this when it wakes. Find the way into Cistern Basin first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Good timingLater || Good timingLaterThe Mega Pulse is ready a quarter sooner.How to learn itTock, a robot asleep in Clock Plaza, teaches this when it wakes. Find the way into Clock Plaza first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Easy restLater || Easy restLaterResting by the fountain or on a bench brings charge back twice as fast.How to learn itGable, a robot asleep in The Terraces, teaches this when it wakes. Find the way into The Terraces first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Warm handsLater || Warm handsLaterCrops in planters grow a fifth faster.How to learn itFern, a robot asleep in Glasshouse Gardens, teaches this when it wakes. Find the way into Glasshouse Gardens first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "StarlightLater || StarlightLaterAt night, pulses and running use a fifth less charge.How to learn itVega, a robot asleep in Observatory Hill, teaches this when it wakes. Find the way into Observatory Hill first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Strong backLater || Strong backLaterBloombot carries 10 more of each thing.How to learn itAtlas, a robot asleep in Spire Heights, teaches this when it wakes. Find the way into Spire Heights first."
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Bigger charge○○○○○Level 0 of 5 || Bigger charge○○○○○Level 0 of 5Bloombot holds more charge, so it can keep going longer before it rests.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Gentler on charge○○○○○Level 0 of 5 || Gentler on charge○○○○○Level 0 of 5Pulses and moves use less charge, so a full charge lasts longer.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Longer stride○○○○○Level 0 of 5 || Longer stride○○○○○Level 0 of 5Running uses less charge and goes a little faster.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Wider pulse○○○○○Level 0 of 5 || Wider pulse○○○○○Level 0 of 5Each pulse brings back more ground at once.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Roomier backpack○○○○○Level 0 of 5 || Roomier backpack○○○○○Level 0 of 5Bloombot can carry 20 more of each thing.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Quick hands○○○Level 0 of 3 || Quick hands○○○Level 0 of 3Digging things out of piles and prying rubble open go quicker.Right now digging out a pile takes 0.6 seconds, and prying rubble open 2 seconds.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Keen eye○○○Level 0 of 3 || Keen eye○○○Level 0 of 3Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Sun soak○○○Level 0 of 3 || Sun soak○○○Level 0 of 3Standing still in the sun slowly charges Bloombot, so it can top up anywhere by day.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Lantern○○Level 0 of 2 || Lantern○○Level 0 of 2Bloombot carries its own light at night, so dark streets are easier to see.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "page, fresh",
+  "kind": "page",
+  "text": "Lucky pulse○○○Level 0 of 3 || Lucky pulse○○○Level 0 of 3Now and then a pulse on bare red ground turns up a few Seeds or Scrap.How to get itThe crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.Show me where"
+ },
+ {
+  "where": "park 20",
+  "kind": "prompt",
+  "text": "EHold Salvage Scrap"
+ },
+ {
+  "where": "park 20",
+  "kind": "toast",
+  "text": "🧹 A quarter of the way there<small>Keep pulsing the ground around the fountain to wake it.</small>"
+ },
+ {
+  "where": "park 20",
+  "kind": "goal",
+  "text": "Wake the fountain Bloombot learns to pry open rubble Scrap 0 of 20Seeds 0 of 6Park 20 of 60 Dig Scrap out of a glinting pile: hold E beside one.HShow me where"
+ },
+ {
+  "where": "park 20",
+  "kind": "toast",
+  "text": "The park helped Bloombot grow: Spreading pulse<small>A pulse on dry ground wakes the patch beside it too.</small><small>See what's next on its page in the backpack (Tab or I).</small>"
+ },
+ {
+  "where": "park 40",
+  "kind": "toast",
+  "text": "🪑 Halfway there<small>Keep pulsing the ground around the fountain. The birds will want to sit here again.</small>"
+ },
+ {
+  "where": "park 40",
+  "kind": "goal",
+  "text": "Wake the fountain Bloombot learns to pry open rubble Scrap 0 of 20Seeds 0 of 6Park 40 of 60 Dig Scrap out of a glinting pile: hold E beside one.HShow me where"
+ },
+ {
+  "where": "park 40",
+  "kind": "toast",
+  "text": "The park helped Bloombot grow: Steady charge<small>Pulses, moves and running use a tenth less charge.</small>"
+ },
+ {
+  "where": "park 40",
+  "kind": "toast",
+  "text": "🌹 New plot option: Rose arbour<small>An arch of climbing roses over a seat. Grow it in an empty plot on green ground.</small>"
+ },
+ {
+  "where": "park 40",
+  "kind": "goal",
+  "text": "Wake the fountain Bloombot learns to pry open rubble Scrap 0 of 20Seeds 0 of 6Park 41 of 60 Dig Scrap out of a glinting pile: hold E beside one.HShow me where"
+ },
+ {
+  "where": "park 60",
+  "kind": "toast",
+  "text": "💡 Three quarters of the way there<small>The lamps are lit again. A little more green around the fountain and it wakes.</small>"
+ },
+ {
+  "where": "park 60",
+  "kind": "toast",
+  "text": "☕ New plot option: Café terrace<small>Tables, parasols and a planter of herbs. Grow it in an empty plot on green ground.</small>"
+ },
+ {
+  "where": "park 60",
+  "kind": "goal",
+  "text": "Wake the fountain Bloombot learns to pry open rubble Scrap 0 of 20Seeds 0 of 6✓Park 60 of 60 Dig Scrap out of a glinting pile: hold E beside one.HShow me where"
+ },
+ {
+  "where": "park 60",
+  "kind": "toast",
+  "text": "The park helped Bloombot grow: Nimble hands<small>Digging things out of a glinting pile takes a quarter less time.</small>"
+ },
+ {
+  "where": "fresh, after the park",
+  "kind": "prompt",
+  "text": "Nurture"
+ },
+ {
+  "where": "fresh, after the park",
+  "kind": "prompt",
+  "text": "EHold Salvage Sunstone"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 Mast Row is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 Old Market is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 Elder Grove is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 Cistern Basin is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 Clock Plaza is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 The Terraces is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 Glasshouse Gardens is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 Observatory Hill is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🔓 Spire Heights is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "prompt",
+  "text": "EHold Salvage Scrap"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "goal",
+  "text": "Pry open the rubble Another robot like Bloombot is asleep on the other side Scrap 0 of 20Seeds 0 of 6Park 0 of 60 Hold E beside the rubble to pry it open.HShow me where"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "☕ New plot option: Café terrace<small>Tables, parasols and a planter of herbs. Grow it in an empty plot on green ground.</small>"
+ },
+ {
+  "where": "deck150 late setup",
+  "kind": "toast",
+  "text": "🌹 New plot option: Rose arbour<small>An arch of climbing roses over a seat. Grow it in an empty plot on green ground.</small>"
+ },
+ {
+  "where": "deck150 crafting table",
+  "kind": "table",
+  "text": "Crafting table Paused Esc Back Q Craft Upgrade Research E Bigger charge One more battery cell in Bloombot Done Gentler on charge Pulses and moves use a little less charge 2 Motor 4 of 6 Sunstone Level 3 Longer stride Running uses less charge and goes a little faster 1 Motor 6 Gears Level 2 Wider pulse Each pulse brings back a little more ground 18 of 24 Seeds 1 of 2 Sun cell Level 3 Roomier backpack Bloombot carries 20 more of each thing 2 Motor 4 of 8 Sunstone Level 4 Quick hands Digging out a pile and prying rubble take less time Done Keen eye Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too Done Sun soak Bloombot slowly charges standing still in the sun Done Lantern Bloombot's own light reaches further at night Done Lucky pulse Now and then a pulse on bare red ground turns up a few Seeds or Scrap Done Lucky pulse: level 3 Enter Upgrade Q E Change tab Esc Back to the world"
+ },
+ {
+  "where": "deck150 upgrades made",
+  "kind": "prompt",
+  "text": "EHold Salvage Scrap"
+ },
+ {
+  "where": "deck150 upgrades made",
+  "kind": "toast",
+  "text": "Bloombot got better: Bigger charge, level 4 of 5<small>See what's next on its page in the backpack (Tab or I).</small>"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Bigger charge, level 5 of 5"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "prompt",
+  "text": "EHold Salvage Sunstone"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Quick hands, level 1 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Quick hands, level 2 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Quick hands, level 3 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Keen eye, level 1 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Keen eye, level 2 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "prompt",
+  "text": "Pulse"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Keen eye, level 3 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Sun soak, level 1 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Sun soak, level 2 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Sun soak, level 3 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Lantern, level 1 of 2"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Lantern, level 2 of 2"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "prompt",
+  "text": "Pulse"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Lucky pulse, level 1 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Out of charge<small>Bloombot walks slower and can't pulse. Press F to eat Greens or Food, or rest.</small>"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Lucky pulse, level 2 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "goal",
+  "text": "Pry open the rubble Another robot like Bloombot is asleep on the other side Scrap 0 of 20Seeds 0 of 6Park 0 of 60 Bloombot is running low. Stand still by the fountain for a while to charge up.HShow me where"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Bloombot got better: Lucky pulse, level 3 of 3"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "prompt",
+  "text": "Pulse"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Lucky! The pulse dug up 3 Scrap"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Lucky! The pulse dug up 3 Scrap"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Lucky! The pulse dug up 2 Scrap"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Lucky! The pulse dug up 2 Scrap"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Lucky! The pulse dug up 2 Seeds"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Lucky! The pulse dug up 3 Seeds"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Lucky! The pulse dug up 3 Scrap"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "Lucky! The pulse dug up 3 Scrap"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "goal",
+  "text": "Pry open the rubble Another robot like Bloombot is asleep on the other side Scrap 0 of 20Seeds 0 of 6Park 0 of 60 Hold E beside the rubble to pry it open.HShow me where"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "prompt",
+  "text": "Nurture"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "The park helped Bloombot grow: Spreading pulse<small>A pulse on dry ground wakes the patch beside it too.</small>"
+ },
+ {
+  "where": "new upgrades in use",
+  "kind": "toast",
+  "text": "🐟 Koi have arrived!<small>They glide through the clean water.</small>"
+ },
+ {
+  "where": "by sleeping Tide",
+  "kind": "prompt",
+  "text": "ETalk to Tide"
+ },
+ {
+  "where": "waking Tide",
+  "kind": "prompt",
+  "text": "Pulse"
+ },
+ {
+  "where": "waking Tide",
+  "kind": "prompt",
+  "text": "ETalk to Tide"
+ },
+ {
+  "where": "waking Tide",
+  "kind": "bubble",
+  "keeper": "tide",
+  "text": "…the tide? Is it in? / Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again."
+ },
+ {
+  "where": "waking Tide",
+  "kind": "bubble",
+  "keeper": "tide",
+  "text": "Tide, keeper of Saltwind Beach. I kept the Sea Lock. / We held the sea out and pumped the sweet water inland. The beach grew wide, and quiet. / The sea always brings things back. The piles you dig will fill up again sooner than you think. / The lock's hinges are gone. 10 Copper, please. Try the street with the tall mast."
+ },
+ {
+  "where": "waking Tide",
+  "kind": "toast",
+  "text": "Tide taught Bloombot a knack: Beachcomber<small>Glinting piles you have dug fill back up a fifth sooner.</small>"
+ },
+ {
+  "where": "waking Tide",
+  "kind": "toast",
+  "text": "The park helped Bloombot grow: Steady charge<small>Pulses, moves and running use a tenth less charge.</small>"
+ },
+ {
+  "where": "jetty end, no Hover II",
+  "kind": "prompt",
+  "text": "EHover over to the sandbarToo far to hover yet. The crafting table in the house can work out Hover II."
+ },
+ {
+  "where": "b11-hover-sandbar",
+  "kind": "prompt",
+  "text": "EHover over to the sandbar"
+ },
+ {
+  "where": "b12-glide-pier",
+  "kind": "prompt",
+  "text": "EGlide over to the old pier"
+ },
+ {
+  "where": "b13-climb-roof",
+  "kind": "prompt",
+  "text": "EClimb up onto the old roofPulse"
+ },
+ {
+  "where": "vault, no Pry II",
+  "kind": "prompt",
+  "text": "EHold Pry open the vault doorThis door is too heavy to pry open yet. The crafting table in the house can work out Pry II."
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "EHover over to the sandbarToo far to hover yet. The crafting table in the house can work out Hover II."
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "EHover over to the sandbar"
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "Pulse"
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "EGlide over to the old pierToo far to glide yet. The crafting table in the house can work out Glide II."
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "EGlide over to the old pier"
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "Pulse"
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "EClimb up onto the old roofPulse"
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "Pulse"
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "EHold Pry open the vault doorThis door is too heavy to pry open yet. The crafting table in the house can work out Pry II."
+ },
+ {
+  "where": "stronger moves",
+  "kind": "prompt",
+  "text": "EHold Pry open the vault door"
+ },
+ {
+  "where": "stronger moves",
+  "kind": "toast",
+  "text": "🌾 Sweetcorn seeds<small>Plant them in a planter.</small>"
+ },
+ {
+  "where": "stronger moves",
+  "kind": "toast",
+  "text": "The vault door gives<small>Inside: 24 Copper, 6 Wire and 1 Battery cell</small>"
+ },
+ {
+  "where": "by Greens",
+  "kind": "prompt",
+  "text": "EHold Gather clippings"
+ },
+ {
+  "where": "holds",
+  "kind": "prompt",
+  "text": "EHold Gather clippings"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "PryLearned || PryLearnedPries open the rubble that blocks a way.LearnedThe fountain taught Bloombot this."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "HoverLearned || HoverLearnedFloats over water too deep to wade.LearnedThe fountain taught Bloombot this."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "ClimbLearned || ClimbLearnedClimbs up onto the roofs.LearnedThe fountain taught Bloombot this."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "GlideLearned || GlideLearnedGlides down from the edge of a roof.LearnedThe fountain taught Bloombot this."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Pry IILearned || Pry IILearnedForces open the heavy iron doors of old vaults.Where to use itThere are old vaults to open in Mast Row, the Old Market and Saltwind.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Hover IILearned || Hover IILearnedHovers much further over the sea.Where to use itFrom the end of the jetty, Bloombot can hover out to the sandbar.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Climb IILearned || Climb IILearnedClimbs straight up a low wall, with no ladder.Where to use itThere are old roofs to climb in the Old Market and in Saltwind.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Glide IILearned || Glide IILearnedGlides a lot further from a high edge.Where to use itFrom the cliff east of the beach, Bloombot can glide out to the old pier.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Spreading pulseGrown || Spreading pulseGrownA pulse on dry ground wakes the patch beside it too.GrownIt grew as the park came back to life."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Steady chargeGrown || Steady chargeGrownPulses, moves and running use a tenth less charge.GrownIt grew as the park came back to life."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Nimble hands43 of 60 || Nimble hands43 of 60Digging things out of a glinting pile takes a quarter less time.Right now digging out a pile takes 0.42 seconds, and prying rubble open 1.4 seconds.How it growsKeep bringing the park back to life around the fountain. This grows at 60 on the goal card's Park count, and it's at 43 now.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Quick chargeLearned || Quick chargeLearnedSitting at a charger fills Bloombot a fifth faster.LearnedPylon taught Bloombot this when it woke in Mast Row."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Eye for valueNext || Eye for valueNextEvery fourth dig at a glinting pile turns up one extra piece.How to learn itTally is a robot asleep in Old Market. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "BeachcomberLearned || BeachcomberLearnedGlinting piles you have dug fill back up a fifth sooner.LearnedTide taught Bloombot this when it woke in Saltwind Beach."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Green thumbLearned || Green thumbLearnedBloombot gathers a quarter more Greens from each patch.LearnedMoss taught Bloombot this when it woke in Elder Grove."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Float alongNext || Float alongNextRunning uses a quarter less charge.How to learn itSluice is a robot asleep in Cistern Basin. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Good timingNext || Good timingNextThe Mega Pulse is ready a quarter sooner.How to learn itTock is a robot asleep in Clock Plaza. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Easy restNext || Easy restNextResting by the fountain or on a bench brings charge back twice as fast.How to learn itGable is a robot asleep in The Terraces. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Warm handsNext || Warm handsNextCrops in planters grow a fifth faster.How to learn itFern is a robot asleep in Glasshouse Gardens. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "StarlightNext || StarlightNextAt night, pulses and running use a fifth less charge.How to learn itVega is a robot asleep in Observatory Hill. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Strong backNext || Strong backNextBloombot carries 10 more of each thing.How to learn itAtlas is a robot asleep in Spire Heights. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Bigger charge●●●●●Top level || Bigger charge●●●●●Top levelBloombot holds more charge, so it can keep going longer before it rests.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Gentler on charge●●○○○Level 2 of 5 || Gentler on charge●●○○○Level 2 of 5Pulses and moves use less charge, so a full charge lasts longer.The next levelGo to the crafting table in the house and make level 3 in its Upgrade tab. It takes 2 Motor and 6 Sunstone.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Longer stride●○○○○Level 1 of 5 || Longer stride●○○○○Level 1 of 5Running uses less charge and goes a little faster.The next levelGo to the crafting table in the house and make level 2 in its Upgrade tab. It takes 1 Motor and 6 Gears.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Wider pulse●●○○○Level 2 of 5 || Wider pulse●●○○○Level 2 of 5Each pulse brings back more ground at once.The next levelGo to the crafting table in the house and make level 3 in its Upgrade tab. It takes 24 Seeds and 2 Sun cell.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Roomier backpack●●●○○Level 3 of 5 || Roomier backpack●●●○○Level 3 of 5Bloombot can carry 20 more of each thing.The next levelGo to the crafting table in the house and make level 4 in its Upgrade tab. It takes 2 Motor and 8 Sunstone.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Quick hands●●●Top level || Quick hands●●●Top levelDigging things out of piles and prying rubble open go quicker.Right now digging out a pile takes 0.42 seconds, and prying rubble open 1.4 seconds.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Keen eye●●●Top level || Keen eye●●●Top levelEach pulse lights up piles and hidden things from further away. At level 3 they show on the map too.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Sun soak●○○Level 1 of 3 || Sun soak●○○Level 1 of 3Standing still in the sun slowly charges Bloombot, so it can top up anywhere by day.The next levelGo to the crafting table in the house and make level 2 in its Upgrade tab. It takes 6 Sunstone and 4 Wire.Show me where"
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Lantern●●Top level || Lantern●●Top levelBloombot carries its own light at night, so dark streets are easier to see.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late deck150",
+  "kind": "page",
+  "text": "Lucky pulse●●●Top level || Lucky pulse●●●Top levelNow and then a pulse on bare red ground turns up a few Seeds or Scrap.At its top levelAs far as it goes."
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 Mast Row is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 Old Market is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 Elder Grove is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 Cistern Basin is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 Clock Plaza is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 The Terraces is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 Glasshouse Gardens is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 Observatory Hill is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🔓 Spire Heights is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "☕ New plot option: Café terrace<small>Tables, parasols and a planter of herbs. Grow it in an empty plot on green ground.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "toast",
+  "text": "🌹 New plot option: Rose arbour<small>An arch of climbing roses over a seat. Grow it in an empty plot on green ground.</small>"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "prompt",
+  "text": "EHold Salvage Scrap"
+ },
+ {
+  "where": "1280x800 late setup",
+  "kind": "goal",
+  "text": "Pry open the rubble Another robot like Bloombot is asleep on the other side Scrap 0 of 20Seeds 0 of 6Park 0 of 60 Hold E beside the rubble to pry it open.HShow me where"
+ },
+ {
+  "where": "1280x800 crafting table",
+  "kind": "table",
+  "text": "Crafting table Paused Esc Back Q Craft Upgrade Research E Bigger charge One more battery cell in Bloombot Done Gentler on charge Pulses and moves use a little less charge 2 Motor 4 of 6 Sunstone Level 3 Longer stride Running uses less charge and goes a little faster 1 Motor 6 Gears Level 2 Wider pulse Each pulse brings back a little more ground 18 of 24 Seeds 1 of 2 Sun cell Level 3 Roomier backpack Bloombot carries 20 more of each thing 2 Motor 4 of 8 Sunstone Level 4 Quick hands Digging out a pile and prying rubble take less time Done Keen eye Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too Done Sun soak Bloombot slowly charges standing still in the sun Done Lantern Bloombot's own light reaches further at night Done Lucky pulse Now and then a pulse on bare red ground turns up a few Seeds or Scrap Done Lucky pulse: level 3 Enter Upgrade Q E Change tab Esc Back to the world"
+ },
+ {
+  "where": "1280x800 upgrades made",
+  "kind": "toast",
+  "text": "Bloombot got better: Bigger charge, level 4 of 5<small>See what's next on its page in the backpack (Tab or I).</small>"
+ },
+ {
+  "where": "1280x800 upgrades made",
+  "kind": "prompt",
+  "text": "EHold Salvage Scrap"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "PryLearned || PryLearnedPries open the rubble that blocks a way.LearnedThe fountain taught Bloombot this."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "HoverLearned || HoverLearnedFloats over water too deep to wade.LearnedThe fountain taught Bloombot this."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "ClimbLearned || ClimbLearnedClimbs up onto the roofs.LearnedThe fountain taught Bloombot this."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "GlideLearned || GlideLearnedGlides down from the edge of a roof.LearnedThe fountain taught Bloombot this."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Pry IINext || Pry IINextForces open the heavy iron doors of old vaults.How to learn itGo to the crafting table in the house and start “Pry II” in its Research tab. Then Bloombot learns it.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Hover IINext || Hover IINextHovers much further over the sea.How to learn itGo to the crafting table in the house and start “Hover II” in its Research tab. Then Bloombot learns it.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Climb IINext || Climb IINextClimbs straight up a low wall, with no ladder.How to learn itGo to the crafting table in the house and start “Climb II” in its Research tab. Then Bloombot learns it.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Glide IILater || Glide IILaterGlides a lot further from a high edge.How to learn itThe crafting table in the house has to work out “Climb II” first, then “Glide II”.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Spreading pulse1 of 20 || Spreading pulse1 of 20A pulse on dry ground wakes the patch beside it too.How it growsKeep bringing the park back to life around the fountain. This grows at 20 on the goal card's Park count, and it's at 1 now.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Steady chargeLater || Steady chargeLaterPulses, moves and running use a tenth less charge.How it growsKeep bringing the park back to life. This grows at 40 on the goal card's Park count.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Nimble handsLater || Nimble handsLaterDigging things out of a glinting pile takes a quarter less time.Right now digging out a pile takes 0.42 seconds, and prying rubble open 1.4 seconds.How it growsKeep bringing the park back to life. This grows at 60 on the goal card's Park count.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Quick chargeLearned || Quick chargeLearnedSitting at a charger fills Bloombot a fifth faster.LearnedPylon taught Bloombot this when it woke in Mast Row."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Eye for valueNext || Eye for valueNextEvery fourth dig at a glinting pile turns up one extra piece.How to learn itTally is a robot asleep in Old Market. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "BeachcomberNext || BeachcomberNextGlinting piles you have dug fill back up a fifth sooner.How to learn itTide is a robot asleep in Saltwind Beach. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Green thumbLearned || Green thumbLearnedBloombot gathers a quarter more Greens from each patch.LearnedMoss taught Bloombot this when it woke in Elder Grove."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Float alongNext || Float alongNextRunning uses a quarter less charge.How to learn itSluice is a robot asleep in Cistern Basin. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Good timingNext || Good timingNextThe Mega Pulse is ready a quarter sooner.How to learn itTock is a robot asleep in Clock Plaza. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Easy restNext || Easy restNextResting by the fountain or on a bench brings charge back twice as fast.How to learn itGable is a robot asleep in The Terraces. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Warm handsNext || Warm handsNextCrops in planters grow a fifth faster.How to learn itFern is a robot asleep in Glasshouse Gardens. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "StarlightNext || StarlightNextAt night, pulses and running use a fifth less charge.How to learn itVega is a robot asleep in Observatory Hill. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Strong backNext || Strong backNextBloombot carries 10 more of each thing.How to learn itAtlas is a robot asleep in Spire Heights. Pulse it to stir it, then bring it 5 of anything to wake it. It teaches this as it wakes.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Bigger charge●●●●●Top level || Bigger charge●●●●●Top levelBloombot holds more charge, so it can keep going longer before it rests.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Gentler on charge●●○○○Level 2 of 5 || Gentler on charge●●○○○Level 2 of 5Pulses and moves use less charge, so a full charge lasts longer.The next levelGo to the crafting table in the house and make level 3 in its Upgrade tab. It takes 2 Motor and 6 Sunstone.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Longer stride●○○○○Level 1 of 5 || Longer stride●○○○○Level 1 of 5Running uses less charge and goes a little faster.The next levelGo to the crafting table in the house and make level 2 in its Upgrade tab. It takes 1 Motor and 6 Gears.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Wider pulse●●○○○Level 2 of 5 || Wider pulse●●○○○Level 2 of 5Each pulse brings back more ground at once.The next levelGo to the crafting table in the house and make level 3 in its Upgrade tab. It takes 24 Seeds and 2 Sun cell.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Roomier backpack●●●○○Level 3 of 5 || Roomier backpack●●●○○Level 3 of 5Bloombot can carry 20 more of each thing.The next levelGo to the crafting table in the house and make level 4 in its Upgrade tab. It takes 2 Motor and 8 Sunstone.Show me where"
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Quick hands●●●Top level || Quick hands●●●Top levelDigging things out of piles and prying rubble open go quicker.Right now digging out a pile takes 0.42 seconds, and prying rubble open 1.4 seconds.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Keen eye●●●Top level || Keen eye●●●Top levelEach pulse lights up piles and hidden things from further away. At level 3 they show on the map too.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Sun soak●●●Top level || Sun soak●●●Top levelStanding still in the sun slowly charges Bloombot, so it can top up anywhere by day.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Lantern●●Top level || Lantern●●Top levelBloombot carries its own light at night, so dark streets are easier to see.At its top levelAs far as it goes."
+ },
+ {
+  "where": "page late 1280x800",
+  "kind": "page",
+  "text": "Lucky pulse●●●Top level || Lucky pulse●●●Top levelNow and then a pulse on bare red ground turns up a few Seeds or Scrap.At its top levelAs far as it goes."
+ }
+]

@@ -262,8 +262,13 @@ try {
     });
     await page.waitForTimeout(600);
     const woke = await page.evaluate(() => window.solarbloom.sim.keepers.interact('tide'));
+    // #662: while Tide talks, its moment waits, so nothing lands under the bubble
+    await page.waitForTimeout(1500);
+    const under = await page.evaluate(() => [...document.querySelectorAll('#toasts .toast')].some((t) => /taught Bloombot/.test(t.textContent)));
+    check(!under, `${L}: #662: the knack's moment waits while Tide is talking`);
+    await page.waitForFunction(() => !document.querySelector('.oc-bubble:not([hidden])'), null, { timeout: 40_000 }).catch(() => {});
     const knack = await say(() => {}, 'taught Bloombot');
-    check(woke === 'woke' && knack === 'Tide taught Bloombot a knack: BeachcomberJunk piles you have dug fill back up a fifth sooner.', `${L}: #625: waking Tide teaches its knack, with a moment ("${woke}", "${knack}")`);
+    check(woke === 'woke' && knack === 'Tide taught Bloombot a knack: BeachcomberGlinting piles you have dug fill back up a fifth sooner.', `${L}: #625: waking Tide teaches its knack, with a moment ("${woke}", "${knack}")`);
     const beads = await page.evaluate(() => window.solarbloom.bot.visuals.growthPieces.filter((x) => x.name.startsWith('grow-knacks-')).length);
     check(beads === 5, `${L}: #625: and Bloombot wears a fifth bead (${beads})`);
     await page.waitForTimeout(800);

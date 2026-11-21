@@ -1649,6 +1649,9 @@ export class Game {
     if (was && this.hud.guide.text && (!was.comes(this.sim) || was.known(this.sim))) this.hud.guide.hide();
     if (!this.bot || this.cinematic || this.photo.active || this.paused || this.hud.modalOpen || this.panelOpen()) return;
     if (document.body.classList.contains('loading-on')) return;
+    // #662: while a Keeper talks, its bubble has the floor: Bloombot's moment (a knack it just taught) and the next
+    // guide line wait until it's done
+    if (this.oc?.bubble.speaking()) return;
     startIdeas(this.sim); // before anything adds to the list (a save from before E24 is sorted out first)
     this.showGrowth();
     if (this.settings.hints === false || this.settings.potter) return;

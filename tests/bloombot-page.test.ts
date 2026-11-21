@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/core/GameState';
 import { RESEARCH_UPGRADES } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
-import { bloombotRows, moveRows, bloombotUpgradeRows, pips, stateWords } from '../src/ui/BloombotPage';
+import { bloombotRows, howHeading, moveRows, bloombotUpgradeRows, pips, stateWords } from '../src/ui/BloombotPage';
 import { TABS } from '../src/ui/BackpackModel';
 import { bannedIn, WORDS } from '../src/ui/words';
 
@@ -41,7 +41,7 @@ describe('#620: Bloombot\'s page', () => {
     sim.state.salvage!.abilities.push('pry');
     const moves = moveRows(sim);
     expect(moves.map((m) => m.state)).toEqual(['have', 'next', 'later', 'later']);
-    expect(moves[0]).toMatchObject({ how: 'Learned.', where: undefined });
+    expect(moves[0]).toMatchObject({ how: 'The fountain taught Bloombot this.', where: undefined });
     sim.state.salvage!.tier = 1;
     expect(moveRows(sim)[1].how).toBe('Bring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.');
   });
@@ -112,5 +112,24 @@ describe('#620: Bloombot\'s page', () => {
   it('each row names the part of Bloombot it changes (E25\'s turntable lights it)', () => {
     const parts = Object.fromEntries(bloombotRows(fresh()).map((r) => [r.id, r.part]));
     expect(parts).toMatchObject({ pry: 'marks', glide: 'marks', chargeCells: 'cells', backpack: 'pockets', pulseRadius: 'leaves', lantern: 'lamp' });
+  });
+});
+
+describe('#663: the page and the crafting table use the same plain words', () => {
+  it('a learned row never just repeats its heading', () => {
+    const sim = fresh();
+    sim.state.salvage!.abilities.push('pry');
+    for (const r of bloombotRows(sim).filter((x) => x.state === 'have')) expect(r.how.replace(/\.$/, ''), r.name).not.toBe(howHeading(r));
+  });
+
+  it('the table speaks of moves, running and ground, not abilities, sprinting, tiles or stacks', () => {
+    for (const u of RESEARCH_UPGRADES.filter((x) => x.branch === 'bloombot')) expect(u.each, u.id).not.toMatch(/\b(abilit\w*|sprint\w*|tiles?|stacks?)\b/i);
+  });
+
+  it('one name for the piles Bloombot digs: glinting piles, never junk piles', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const f of ['src/data/bloombot.ts', 'src/ui/BloombotPage.ts', 'src/data/research.ts', 'src/gameplay/Advisor.ts', 'src/ui/GuideLines.ts', 'src/gameplay/KeeperSystem.ts', 'src/ui/OldCityPanel.ts']) {
+      expect(readFileSync(f, 'utf8'), f).not.toMatch(/junk piles?/i);
+    }
   });
 });
