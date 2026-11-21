@@ -169,6 +169,7 @@ export class BloombotVisuals {
     holder.addChild(e);
     this.root.addChild(holder);
     this.addFace(holder, e);
+    this.greenGlow(e);
     e.addComponent('anim', { activate: true });
     const anim = e.anim!;
     for (const a of res.animations) {
@@ -183,6 +184,27 @@ export class BloombotVisuals {
     this.standIn = undefined;
     this.loaded = true;
     anim.baseLayer?.transition('idle', 0);
+  }
+
+  /**
+   * #631: Bloombot's glowing trim (material `bloombot_glow`, the chest light, the ear lights, the seams) in its own
+   * green rather than the model's cyan. One shared material for every part that glows.
+   */
+  private greenGlow(rig: pc.Entity) {
+    let green: pc.StandardMaterial | undefined;
+    for (const r of rig.findComponents('render') as pc.RenderComponent[])
+      for (const mi of r.meshInstances) {
+        const old = mi.material as pc.StandardMaterial;
+        if (old?.name !== 'bloombot_glow') continue;
+        if (!green) {
+          green = old.clone();
+          green.name = 'bloombot_glow_green';
+          green.diffuse = color(PALETTE.botGlow);
+          green.emissive = color(PALETTE.botGlow);
+          green.update();
+        }
+        mi.material = green;
+      }
   }
 
   /**
