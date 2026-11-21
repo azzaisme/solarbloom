@@ -93,6 +93,37 @@ describe('E22.10: plain words', () => {
     for (const s of ['Spend biomass', 'Energy 3/s', 'Full bloom']) expect(bannedIn(plainWords(s))).toEqual([]);
   });
 
+  it('#610: a lock waiting on the fountain names the fountain step, never a tier', async () => {
+    const { bannedIn } = await import('../src/ui/words');
+    const { fountainLock } = await import('../src/gameplay/Crafting');
+    const { unlockText } = await import('../src/ui/BuildCatalog');
+    expect(fountainLock(1)).toBe('🔒 Wake the fountain first');
+    expect(fountainLock(2)).toBe('🔒 Reach fountain step 2: The pump turns');
+    expect(unlockText({ tier: 1 })).toBe('Wake the fountain');
+    expect(unlockText({ tier: 3 })).toBe('Reach fountain step 3');
+    const sim = new Sim(createInitialState(7));
+    for (let t = 1; t <= 5; t++)
+      for (const s of [fountainLock(t), unlockText({ tier: t }), sim.crafting.unlockLabel({ tier: t })]) {
+        expect(s, s).not.toMatch(/\btier\b/i);
+        expect(bannedIn(s), s).toEqual([]);
+      }
+  });
+
+  it('#610: refusals and statuses bloombot shows use none of the banned words', async () => {
+    const { bannedIn } = await import('../src/ui/words');
+    const bad: string[] = [];
+    const files = ['src/gameplay/BuildSystem.ts', 'src/gameplay/Crafting.ts', 'src/gameplay/RestorationSystem.ts', 'src/gameplay/SalvageSystem.ts', 'src/gameplay/DroneRoles.ts', 'src/gameplay/LandmarkSystem.ts', 'src/gameplay/KeeperSystem.ts', 'src/gameplay/WaterPipes.ts', 'src/gameplay/Cozy.ts', 'src/gameplay/GatherSystem.ts', 'src/gameplay/NightFinds.ts', 'src/ui/BuildCatalog.ts', 'src/ui/AreaPanel.ts', 'src/ui/Hotbar.ts'];
+    for (const f of files)
+      for (const lit of literals(stripComments(readFileSync(f, 'utf8')))) {
+        // the words, not the code between ${ and } (a `t.tier` there is never on screen)
+        let s = lit;
+        for (let i = 0; i < 4; i++) s = s.replace(/\$\{[^{}]*\}/g, '');
+        if (!/[A-Z ]/.test(s) || /^[#.[]/.test(s)) continue;
+        if (bannedIn(s).length) bad.push(`${f}: ${s.slice(0, 80)} (${bannedIn(s).join(', ')})`);
+      }
+    expect(bad).toEqual([]);
+  });
+
   it('bannedIn catches every banned word and the rate slash', async () => {
     const { bannedIn, BANNED } = await import('../src/ui/words');
     expect(bannedIn('Restore tiles 14/130 · reward at 20')).toEqual(['reward at']);

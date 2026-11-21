@@ -45,7 +45,7 @@ describe('E23.5.1: farm items', () => {
     expect(price).toBeGreaterThan(0);
     // nothing gathered yet: the refit can't be paid
     expect(sim.roles.check(hub.id, 'gardener').ok).toBe(false);
-    expect(sim.roles.check(hub.id, 'gardener').reason).toBe(`Needs ${price} Biomass`);
+    expect(sim.roles.check(hub.id, 'gardener').reason).toBe(`Needs ${price} Greens`);
     expect(sim.roles.choose(hub.id, 'gardener')).toBe(false);
     // gathered biomass pays: part from the backpack, the rest from the store
     sim.inventory.add('biomass', 30);

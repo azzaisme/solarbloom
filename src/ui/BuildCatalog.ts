@@ -153,7 +153,7 @@ export function unlockText(u: Unlock): string {
     const k = KEEPERS.find((x) => x.region === u.keeper);
     return k ? `Wake ${k.name}` : 'Wake its Keeper';
   }
-  if ('tier' in u) return 'Grow the fountain';
+  if ('tier' in u) return u.tier <= 1 ? 'Wake the fountain' : `Reach fountain step ${u.tier}`;
   if ('research' in u) return 'Research it first';
   if ('find' in u) return 'Not found yet';
   return 'Not known yet';

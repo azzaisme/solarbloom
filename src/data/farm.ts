@@ -22,9 +22,9 @@ export function isFarmItem(m: string): m is FarmItem {
  */
 export const FARM_USES: Record<FarmItem, { charge: number; load: boolean; blurb: string }> = {
   biomass: { charge: 0.04, load: false, blurb: 'Clippings, leaves and spent crops. Bloombot can eat it, compost it or feed a digester.' },
-  food: { charge: 0.12, load: false, blurb: 'Grown in planters. Better charge than biomass, and Keepers love a gift of it.' },
+  food: { charge: 0.12, load: false, blurb: 'Grown in planters. More charge than Greens, and Keepers love a gift of it.' },
   compost: { charge: 0, load: false, blurb: 'From the compost bin. Given time it turns into fertiliser.' },
-  fertiliser: { charge: 0, load: true, blurb: 'Pulsed into the ground for full bloom, big trees and rare flowers.' },
+  fertiliser: { charge: 0, load: true, blurb: 'Pulse it into the ground for flowers, big trees and rare blooms.' },
   // E23.5.4.1: a strong snack
   honey: { charge: 0.25, load: false, blurb: 'From beehives. A strong snack: much more charge than food.' },
 };

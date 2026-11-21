@@ -58,7 +58,7 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     expect(t.ground).toBe('polluted');
     expect(t.tr).toMatchObject({ k: 'soften', g: 1 });
     expect(t.pollution).toBeLessThan(100);
-    expect(sim.restoration.checkPulse(t).reason).toMatch(/Cultivator is breaking up this slab — \d+s/);
+    expect(sim.restoration.checkPulse(t).reason).toMatch(/Cultivator is breaking up this slab: \d+s/);
   });
 
   it('shares the drones’ reservations: a drone never takes a tiller’s tile', () => {

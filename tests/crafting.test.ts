@@ -221,7 +221,7 @@ describe('E23.6.1: the crafting table', () => {
     expect(sim.inventory.count('planks')).toBe(1);
     expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['bench']);
     // the crate stack is found in a Saltwind Beach cache
-    expect(sim.crafting.decorProblem('cratestack')).toBe('🔒 Not found yet');
+    expect(sim.crafting.decorProblem('cratestack')).toBe('🔒 Still to be found');
     expect(cozy.decorChoices().find((c) => c.option.id === 'cratestack')!.unlocked).toBe(false);
     sim.state.salvage!.caches.push('c-saltwind-1');
     expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBe('Not made yet: it is made at the crafting table');
@@ -260,7 +260,7 @@ describe('E23.6.1: the crafting table', () => {
     expect(open('solarlamppost')).toBe(true);
     expect(cozy.canDecorate('solarlamppost', GROUND, 12, 12)).toBeUndefined();
     // a researched light waits for its research, whatever else is done
-    expect(sim.crafting.decorProblem('fairylights')).toBe('🔒 Research');
+    expect(sim.crafting.decorProblem('fairylights')).toBe('🔒 Research it at the workshop');
   });
 
   it('every machine is built from a crafting-table recipe', () => {

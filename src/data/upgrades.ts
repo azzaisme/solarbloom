@@ -65,7 +65,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Drone Dash',
     icon: '🛸',
     maxLevel: DRONE_DASH.length - 1,
-    describe: (n) => `This hub's drones work ×${DRONE_DASH[n]} as fast (flight and rest)`,
+    describe: (n) => `This hub's drones fly and recharge ${DRONE_DASH[n]} times as fast`,
   },
   {
     id: 'pollinatorReach',

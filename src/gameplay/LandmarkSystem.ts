@@ -43,7 +43,7 @@ export class LandmarkSystem {
     if (a.fog(r.id) === 'cleared') return `The ${r.landmark.name} is awake`;
     const need = a.need(r.id);
     const done = a.counts(r.id).restored;
-    if (done < need) return `Restore more of ${r.name} first: ${done}/${need} tiles`;
+    if (done < need) return `Restore more of ${r.name} first: ${done} of ${need} tiles`;
     const k = this.sim.keepers.def(r.keeper);
     if (this.sim.keepers.step(r.keeper) !== 'landmark') return `${k.name} has something to ask first`;
     return undefined;
