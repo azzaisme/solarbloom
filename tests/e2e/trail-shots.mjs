@@ -36,7 +36,7 @@ try {
       s.lights.dark = s.power.sky().dark;
     }, { f, weather });
   /** Puts bloombot at a cell facing a way (radians, 0 = south, π = north), lets the camera settle behind it, then asks Show me where: H, or a spot of the shot's own. */
-  const ask = async (x, z, facing, spot) => {
+  const ask = async (x, z, facing, spot, follow = 0) => {
     await page.evaluate(({ x, z, facing }) => {
       const b = window.solarbloom.bot;
       Object.assign(b.pose, { x, z, facing });
@@ -51,6 +51,19 @@ try {
     await page.waitForTimeout(2200);
     const after = await page.evaluate(() => window.solarbloom.camera.yaw);
     if (Math.abs(after - yaw) > 10) fail(`the camera turned (${yaw.toFixed(1)}° → ${after.toFixed(1)}°): it should stay with bloombot`);
+    if (follow) {
+      // as a player would: turn to face along the trail's next stretch (the camera follows bloombot round)
+      await page.evaluate((ahead) => {
+        const g = window.solarbloom;
+        const pts = g.trail.way?.points;
+        if (!pts || pts.length < 2) return;
+        const q = pts[Math.min(pts.length - 1, ahead)];
+        const f = Math.atan2(q.x - g.bot.pose.x, q.z - g.bot.pose.z);
+        g.bot.pose.facing = f;
+        g.camera.turnTo((f * 180) / Math.PI + 180, true);
+      }, follow);
+      await page.waitForTimeout(900);
+    }
   };
   const shot = async (name, { reached = true } = {}) => {
     const t = await page.evaluate(() => {
@@ -80,22 +93,30 @@ try {
   });
   // the load wheel's first-time introduction shows when bloombot first carries seeds: let it pass
   await page.waitForTimeout(9000);
-  await ask(8.5, 24.5, Math.PI);
+  // from the jetty, up the beach and the steps to the fountain
+  await ask(8.5, 45.5, Math.PI, undefined, 14);
   await shot('day-to-fountain');
+  await ask(8.5, 24.5, Math.PI, undefined, 10);
+  await shot('day-to-fountain-steps');
   await sky(0.83);
   await page.waitForTimeout(2500);
-  await ask(8.5, 24.5, Math.PI);
+  await ask(8.5, 45.5, Math.PI, undefined, 14);
   await shot('night-to-fountain');
+  await ask(8.5, 24.5, Math.PI, undefined, 10);
+  await shot('night-to-fountain-steps');
   await sky(0.45, 'fog');
   await page.waitForTimeout(2500);
   await ask(8.5, 24.5, Math.PI);
   await shot('fog-to-fountain');
 
-  // 3. Somewhere behind the Mast Row rubble before Pry: the trail goes as far as the rubble and says why it stops.
+  // 3. Pylon, the Keeper behind the Mast Row rubble, before Pry. The card never points past shut rubble (it points at
+  // the rubble itself), so this shot asks Show me where for Pylon directly and hides the card: what a player sees
+  // when a goal lies past a way in that is still shut. The trail goes as far as it can and says why it stops.
   await sky(0.3);
   await page.waitForTimeout(2500);
-  await ask(8.5, 9.5, Math.PI, { roofId: 'g', x: 8, z: -6.5, cell: { x: 7, z: -7 }, kind: 'keeper', name: 'a Keeper' });
-  await shot('day-behind-rubble', { reached: false });
+  await page.addStyleTag({ content: '#obj { visibility: hidden !important; }' });
+  await ask(11.5, 6.5, Math.PI, { roofId: 'g', x: 10.5, z: -3.5, cell: { x: 10, z: -4 }, kind: 'keeper', name: 'Pylon' });
+  await shot('day-pylon-behind-rubble', { reached: false });
 
   if (errors.length) fail(`page errors:\n${errors.join('\n')}`);
 } finally {

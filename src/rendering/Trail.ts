@@ -31,6 +31,9 @@ export class Trail {
   private mesh?: pc.Mesh;
   private dots: { x: number; z: number; s: number }[] = [];
   private colors = new Uint8Array(0);
+  /** each dot's centre in the world, and the vertex positions (rebuilt as the dots grow with distance) */
+  private centres: number[] = [];
+  private positions = new Float32Array(0);
   private route?: TrailRoute;
   private age = 0;
   /** how far along the way bloombot has got (cells), never going back */
@@ -68,6 +71,7 @@ export class Trail {
   /** Lays a new trail along `route` (replacing any trail already down). */
   show(route: TrailRoute) {
     this.clear();
+    this.centres = [];
     const layer = this.sim.grid.layer(route.roofId);
     const dots = trailDots(route.points);
     if (!layer || !dots.length) return;
@@ -85,6 +89,7 @@ export class Trail {
       const x = layer.origin[0] + d.x;
       const z = layer.origin[2] + d.z;
       const base = pos.length / 3;
+      this.centres.push(x, y, z);
       pos.push(x, y, z);
       for (const r of [T.dot, T.rim, T.halo])
         for (let k = 0; k < SEG; k++) {
@@ -103,7 +108,8 @@ export class Trail {
     }
     const device = pc.AppBase.getApplication()!.graphicsDevice;
     const mesh = new pc.Mesh(device);
-    mesh.setPositions(pos);
+    this.positions = new Float32Array(pos);
+    mesh.setPositions(this.positions);
     mesh.setNormals(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)));
     this.colors = new Uint8Array(dots.length * PER_DOT * 4);
     mesh.setColors32(this.colors);
@@ -128,7 +134,36 @@ export class Trail {
    * Each frame. `show`: false while something else owns the screen (building, photo mode, a cutscene); it hides
    * then, and is gone afterwards if it ran out meanwhile. `bot`: bloombot's position. `night`: 0 by day … 1 at night.
    */
-  update(dt: number, show: boolean, bot: { roofId: string; x: number; z: number } | undefined, night: number) {
+  /**
+   * Seen from the low follow camera a flat dot shrinks to a sliver a few metres off, so each dot grows with its
+   * distance from the camera (up to `farScale`), and the stretch ahead stays readable.
+   */
+  private size(camera: pc.Vec3) {
+    const T = WAYMARK.trail;
+    const c = this.centres;
+    const p = this.positions;
+    let o = 0;
+    for (let i = 0; i < c.length; i += 3) {
+      const x = c[i];
+      const y = c[i + 1];
+      const z = c[i + 2];
+      const d = Math.hypot(x - camera.x, y - camera.y, z - camera.z);
+      const k = Math.min(T.farScale, Math.max(1, 1 + (d - T.nearDistance) * T.growth));
+      p[o++] = x;
+      p[o++] = y;
+      p[o++] = z;
+      for (const r of [T.dot, T.rim, T.halo])
+        for (let j = 0; j < SEG; j++) {
+          const a = (j / SEG) * Math.PI * 2;
+          p[o++] = x + Math.cos(a) * r * k;
+          p[o++] = y;
+          p[o++] = z + Math.sin(a) * r * k;
+        }
+    }
+    this.mesh!.setPositions(p);
+  }
+
+  update(dt: number, show: boolean, bot: { roofId: string; x: number; z: number } | undefined, night: number, camera?: pc.Vec3) {
     const route = this.route;
     if (!route || !this.mesh) return;
     const T = WAYMARK.trail;
@@ -187,7 +222,8 @@ export class Trail {
       put(shade, 0, SEG);
     }
     this.mesh.setColors32(c);
-    this.mesh.update(pc.PRIMITIVE_TRIANGLES, false);
+    if (camera) this.size(camera);
+    this.mesh.update(pc.PRIMITIVE_TRIANGLES, !!camera);
     this.material.emissive.lerp(this.dayColor, this.nightColor, dark);
     this.material.emissiveIntensity = T.glow + (T.nightGlow - T.glow) * dark;
     this.material.update();

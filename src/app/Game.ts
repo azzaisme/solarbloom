@@ -4976,7 +4976,7 @@ export class Game {
       const shown = !this.cinematic && !this.photo.active && !this.building() && (!this.settings.potter || marked);
       this.waymark.update(dt, this.goal, shown, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
       this.trail.reducedMotion = !!this.settings.reducedMotion;
-      this.trail.update(dt, !this.cinematic && !this.photo.active && !this.building(), this.bot.pose, 1 - this.dayNight.light);
+      this.trail.update(dt, !this.cinematic && !this.photo.active && !this.building(), this.bot.pose, 1 - this.dayNight.light, this.camera.entity.getPosition());
       const [cx, cy, cz] = this.bot.world();
       this.drones.companion = { x: cx, y: cy, z: cz, facing: this.bot.pose.facing };
     }

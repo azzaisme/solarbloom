@@ -1,6 +1,7 @@
 import { GROUND } from '../core/GameState';
 import { mainlandClosedAt } from '../core/Mainland';
 import { MAINLAND_CLOSED } from '../data/mainland';
+import { REGIONS, type GateDef } from '../data/oldcity';
 import { WAYMARK } from '../data/waymark';
 import type { GoalSpot } from '../ui/GoalSpot';
 import { WORDS } from '../ui/words';
@@ -34,7 +35,10 @@ export function trailRoute(sim: Sim, walker: Walker, from: BotPose, goal: GoalSp
   const T = WAYMARK.trail;
   const start = { x: from.x, z: from.z };
   if (goal.roofId !== from.roofId) return { roofId: from.roofId, points: [start], reached: false, why: WORDS.trail.level };
-  const near = (x: number, z: number) => Math.hypot(x + 0.5 - goal.x, z + 0.5 - goal.z) <= T.reach;
+  // beside the goal counts as there: within `reach`, or further out when the goal is wide and solid (a landmark, a
+  // hall), as far as its nearest open cell that bloombot can stand on
+  const reach = Math.max(T.reach, besideGoal(sim, walker, from.roofId, goal) + 0.01);
+  const near = (x: number, z: number) => Math.hypot(x + 0.5 - goal.x, z + 0.5 - goal.z) <= reach;
   const r = walker.pathOrNearest(from.roofId, from.x, from.z, near, goal.cell, T.budget);
   const points = [start, ...r.path];
   if (r.reached) return { roofId: from.roofId, points, reached: true };
@@ -43,11 +47,36 @@ export function trailRoute(sim: Sim, walker: Walker, from: BotPose, goal: GoalSp
 }
 
 /**
+ * How far the goal's nearest cell bloombot can stand on lies from it (cells, centre to centre; 0 when there is none).
+ * Only cells in the goal's own area count: a Keeper behind shut rubble is not "beside" the park on this side of it.
+ */
+function besideGoal(sim: Sim, walker: Walker, roofId: string, goal: GoalSpot): number {
+  const area = roofId === GROUND ? sim.areas.map.areaOfCell(goal.cell.x, goal.cell.z) : undefined;
+  const R = WAYMARK.trail.beside;
+  let best = Infinity;
+  for (let dz = -R; dz <= R; dz++)
+    for (let dx = -R; dx <= R; dx++) {
+      const cx = goal.cell.x + dx;
+      const cz = goal.cell.z + dz;
+      if (!walker.walkable(roofId, cx, cz)) continue;
+      if (area !== undefined && sim.areas.map.areaOfCell(cx, cz) !== area) continue;
+      best = Math.min(best, Math.hypot(cx + 0.5 - goal.x, cz + 0.5 - goal.z));
+    }
+  return best === Infinity ? 0 : best;
+}
+
+/**
  * What stands between where the way stops and the goal, in plain words. Looks along the straight line from the stop
  * to the goal: a shut way in anywhere on it says what it needs (its own words, as the rubble's prompt does);
  * otherwise the first thing in the way. Every line tells a first-time player what to do next.
  */
 export function whyStops(sim: Sim, walker: Walker, roofId: string, end: TrailPoint, goal: GoalSpot): string {
+  // the goal lies in a region still shut behind its way in: that is what stops the trail, wherever it ends
+  if (roofId === GROUND) {
+    const area = sim.areas.map.areaOfCell(goal.cell.x, goal.cell.z);
+    const shut = REGIONS.find((r) => r.id === area && r.gate.opensRegion !== false && !sim.gates.isOpen(r.gate.id));
+    if (shut) return gateWhy(sim, shut.gate);
+  }
   const dx = goal.x - end.x;
   const dz = goal.z - end.z;
   const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) * 4));
@@ -61,11 +90,7 @@ export function whyStops(sim: Sim, walker: Walker, roofId: string, end: TrailPoi
     if (roofId === GROUND) {
       // a shut way in: what blocks it, and how it opens (its own words, as at the rubble itself)
       const gate = sim.gates.gateAt(cx, cz);
-      if (gate) {
-        const p = sim.gates.problem(gate);
-        if (!p) return `${gate.blocked} ${WORDS.trail.openNow}`;
-        return p.startsWith(gate.blocked) ? p : `${gate.blocked} ${p}`;
-      }
+      if (gate) return gateWhy(sim, gate);
     }
     if (first || walker.walkable(roofId, cx, cz)) continue;
     if (roofId === GROUND && mainlandClosedAt(cx, cz)) first = MAINLAND_CLOSED.title;
@@ -74,6 +99,13 @@ export function whyStops(sim: Sim, walker: Walker, roofId: string, end: TrailPoi
     else first = WORDS.trail.blocked;
   }
   return first ?? WORDS.trail.blocked;
+}
+
+/** A shut way in: what blocks it and how it opens, or that bloombot can open it now (its own words, as at the rubble). */
+function gateWhy(sim: Sim, gate: GateDef): string {
+  const p = sim.gates.problem(gate);
+  if (!p) return `${gate.blocked} ${WORDS.trail.openNow}`;
+  return p.startsWith(gate.blocked) ? p : `${gate.blocked} ${p}`;
 }
 
 /**

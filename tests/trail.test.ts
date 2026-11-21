@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import { REGIONS } from '../src/data/oldcity';
+import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { allPiles } from '../src/core/OldCityLayout';
 import { WAYMARK } from '../src/data/waymark';
 import { Sim } from '../src/gameplay/Sim';
 import { trailDots, trailRoute, type TrailRoute } from '../src/gameplay/TrailRoute';
@@ -94,8 +95,69 @@ describe('#632: the trail follows a walkable way', () => {
   });
 });
 
+describe('#632: a solid goal counts as reached from beside it, whatever it is', () => {
+  it('the fountain (solid) from the jetty: gets there, ends beside it, no note', () => {
+    const sim = fresh();
+    const walker = new Walker(sim);
+    const [fx, fz] = sim.areas.info(PARK).landmark;
+    expect(walker.walkable(GROUND, fx, fz)).toBe(false);
+    const r = trailRoute(sim, walker, spawnPose(sim, walker), at(fx, fz, 'fountain'));
+    expect(r.reached).toBe(true);
+    expect(r.why).toBeUndefined();
+    expect(Math.hypot(end(r).x - (fx + 0.5), end(r).z - (fz + 0.5))).toBeLessThan(3);
+  });
+
+  it('a salvage pile across the park: gets there, beside the pile', () => {
+    const sim = fresh();
+    const walker = new Walker(sim);
+    const bot = spawnPose(sim, walker);
+    const pile = allPiles()
+      .filter((p) => walker.walkable(GROUND, p.x + 1, p.z) || walker.walkable(GROUND, p.x - 1, p.z) || walker.walkable(GROUND, p.x, p.z + 1))
+      .filter((p) => sim.areas.fog(sim.areas.map.areaOfCell(p.x, p.z)) !== 'hidden')
+      .sort((a, b) => Math.hypot(b.x - bot.x, b.z - bot.z) - Math.hypot(a.x - bot.x, a.z - bot.z))
+      .find((p) => Math.hypot(p.x - bot.x, p.z - bot.z) < 60)!;
+    expect(pile).toBeDefined();
+    const r = trailRoute(sim, walker, bot, at(pile.x, pile.z, 'pile'));
+    expect(r.reached).toBe(true);
+    expect(r.why).toBeUndefined();
+    walkable(walker, r);
+  });
+
+  it('a Keeper beyond rubble that has been pried open: gets there, no note', () => {
+    const sim = fresh();
+    const pylon = KEEPERS.find((k) => k.id === 'pylon')!;
+    const region = REGIONS.find((q) => q.id === pylon.region)!;
+    sim.gates.open(region.gate.id, true);
+    const walker = new Walker(sim);
+    const r = trailRoute(sim, walker, spawnPose(sim, walker), at(pylon.x, pylon.z, 'keeper'));
+    expect(r.reached).toBe(true);
+    expect(r.why).toBeUndefined();
+    walkable(walker, r);
+  });
+
+  it('real rubble: the same Keeper before the rubble is pried open, the trail stops at the rubble and says so', () => {
+    const sim = fresh();
+    const pylon = KEEPERS.find((k) => k.id === 'pylon')!;
+    const region = REGIONS.find((q) => q.id === pylon.region)!;
+    const walker = new Walker(sim);
+    const r = trailRoute(sim, walker, spawnPose(sim, walker), at(pylon.x, pylon.z, 'keeper'));
+    expect(r.reached).toBe(false);
+    expect(r.why).toBe(`${region.gate.blocked} ${region.gate.how}`);
+  });
+
+  it('a wide landmark, deep in its own footprint: reached from its nearest open cell', () => {
+    const sim = fresh();
+    const region = REGIONS.find((q) => q.id === 'mastRow')!;
+    sim.gates.open(region.gate.id, true);
+    const walker = new Walker(sim);
+    const r = trailRoute(sim, walker, spawnPose(sim, walker), at(region.landmark.x, region.landmark.z, 'landmark'));
+    expect(r.reached).toBe(true);
+    expect(r.why).toBeUndefined();
+  });
+});
+
 describe('#632: with no way there yet, it goes as close as it can and says why', () => {
-  it('a Keeper behind rubble before Pry: the trail stops on this side and says the rubble blocks it', () => {
+  it('real rubble: a Keeper behind it before Pry, the trail stops on this side and says the rubble blocks it', () => {
     const sim = fresh();
     const walker = new Walker(sim);
     const region = REGIONS.find((q) => q.id === 'mastRow')!;
