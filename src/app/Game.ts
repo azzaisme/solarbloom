@@ -100,7 +100,7 @@ import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
 import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
 import type { PromptModel } from '../ui/Prompt';
-import { Pause, runSimFrame } from './Pause';
+import { Pause, runSimFrame, volumesFor } from './Pause';
 import { Menu, type MenuHeader, type MenuItem } from '../ui/Menu';
 import { type SettingKey, SettingsScreen } from '../ui/SettingsScreen';
 import { settingsRows } from '../ui/SettingsRows';
@@ -715,6 +715,7 @@ export class Game {
       } else {
         this.pause.clear('hidden');
         if (document.hasFocus()) this.pause.clear('blur');
+        this.sfx.resume(); // #673: a browser may have put the sound to sleep while the page was hidden
       }
     });
     window.addEventListener('blur', () => pauseOnBlur() && this.pause.set('blur'));
@@ -731,8 +732,9 @@ export class Game {
       document.body.classList.toggle('paused', p);
       // model animations (bloombot, the Keepers) run on the engine's own clock: it stops too
       this.app.timeScale = p ? 0 : 1;
-      this.applyVolumes();
     };
+    // #673: the sound only changes when the player is away (page hidden, device asleep), not for a pause or a menu
+    this.pause.onReasons = () => this.applyVolumes();
     window.addEventListener('beforeunload', () => this.saveNow());
 
     this.app.on('update', (dt: number) => this.update(dt));
@@ -1043,11 +1045,10 @@ export class Game {
     this.pause.set('menu', p);
   }
 
-  /** E22.11: volumes, with world sound off and the music down to a quiet bed while paused. */
+  /** E22.11 / #673: the player's volumes, through every pause and menu; quiet only while the page is hidden or the device sleeps. */
   private applyVolumes() {
-    const s = this.settings;
-    const quiet = this.pause.paused;
-    this.sfx.setVolumes(quiet ? 0 : (s.sfxVolume ?? 100) / 100, ((s.musicVolume ?? 100) / 100) * (quiet ? 0.3 : 1));
+    const v = volumesFor(this.settings, this.pause);
+    this.sfx.setVolumes(v.sfx, v.music);
   }
 
   // ───────────────────────── E22.11: the menu and Settings ─────────────────────────
@@ -4957,7 +4958,8 @@ export class Game {
     this.padFocus?.tick(); // #616: a menu that just opened starts with its first control in focus
     const paused = this.pause.paused;
     // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
-    this.hud.craft.update(paused ? this.realDt() : dt, paused);
+    const realDt = paused ? this.realDt() : dt;
+    this.hud.craft.update(realDt, paused);
     if (!paused && !this.photo.frozen) {
       this.runSim(dt);
     }
@@ -5139,7 +5141,7 @@ export class Game {
     const restored = this.sim.progression.restoredCount(HOME);
     this.sfx.layers = Math.min(3, Math.floor(restored / 12));
     this.sfx.life = Math.min(1, restored / 48);
-    this.sfx.update(wdt);
+    this.sfx.update(realDt); // #673: the music plays on through a pause (its fallback pad counts real time)
 
     if (this.selected) {
       this.inspectTimer -= dt;
