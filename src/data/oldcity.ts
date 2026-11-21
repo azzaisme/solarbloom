@@ -41,13 +41,24 @@ export interface GateDef {
   cells: [number, number][];
   /** what opens it: an ability, a region's landmark waking, or a repair delivery */
   needs: { ability?: AbilityId; landmark?: RegionId; repair?: MaterialCost };
-  /** what the prompt says while it is shut */
+  /** what the prompt says while it is shut: what is in the way, in a few words */
   blocked: string;
+  /**
+   * #606: what the player does about it, in plain words (no "tier": the fountain's steps by their place, the way the
+   * fountain's panel counts them). The prompt says `blocked` then `how` (gateText); the clouds over the region say
+   * where it is, then `how` (AreaSystem.sealText).
+   */
+  how: string;
   /**
    * Opening it opens its region (the default). False when the region is open from the start and the gate only
    * shuts off part of it (Saltwind Beach: the boat lands there; the barricade blocks the boardwalk to the Sea Lock).
    */
   opensRegion?: boolean;
+}
+
+/** #606: what a shut gate's prompt says: what is in the way, then what to do about it. */
+export function gateText(g: GateDef): string {
+  return `${g.blocked} ${g.how}`;
 }
 
 /** A rectangle of cells (x, z, width, depth). */
@@ -152,7 +163,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 9, z: -8, w: 2, d: 3 }],
     seam: { name: 'the Pipeworks', x: 23, z: -8 },
-    gate: { id: 'g-mastRow', kind: 'barricade', cells: [[7, -1], [8, -1]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
+    gate: { id: 'g-mastRow', kind: 'barricade', cells: [[7, -1], [8, -1]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
     patch: { name: 'The tram stop', x: 10, z: -20, w: 5, d: 3 },
     caches: [
       { id: 'c-mastRow-1', x: 2, z: -30 },
@@ -206,7 +217,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 21, z: 9, w: 2, d: 3 }],
     seam: { name: 'the Glassworks', x: 40, z: 24 },
-    gate: { id: 'g-oldMarket', kind: 'barricade', cells: [[16, 7], [16, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
+    gate: { id: 'g-oldMarket', kind: 'barricade', cells: [[16, 7], [16, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
     patch: { name: 'The market square', x: 26, z: 18, w: 6, d: 4 },
     caches: [
       { id: 'c-oldMarket-1', x: 45, z: 2 },
@@ -260,7 +271,7 @@ export const REGIONS: RegionDef[] = [
     seam: { name: 'the Driftline', x: -12, z: 28 },
     // The boat lands here, so the beach is open from the start. The Sea Lock stands across the canal that runs down
     // to the bay; the barricade blocks the boardwalk bridge over it.
-    gate: { id: 'g-saltwind', kind: 'barricade', cells: [[-3, 36], [-2, 36], [-3, 37], [-2, 37]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the boardwalk to the Sea Lock — needs Pry (fountain tier 1)', opensRegion: false },
+    gate: { id: 'g-saltwind', kind: 'barricade', cells: [[-3, 36], [-2, 36], [-3, 37], [-2, 37]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the boardwalk to the Sea Lock.', how: 'Wake the fountain and Bloombot will learn to pry it open.', opensRegion: false },
     patch: { name: 'The boardwalk', x: 0, z: 36, w: 10, d: 2 },
     caches: [
       { id: 'c-saltwind-1', x: -15, z: 18 },
@@ -358,7 +369,7 @@ export const REGIONS: RegionDef[] = [
     landmark: { kind: 'elder', name: 'Elder Tree', x: -20, z: -4 },
     keeper: 'moss',
     seam: { name: 'the Seedbank', x: -28, z: 8 },
-    gate: { id: 'g-elderGrove', kind: 'barricade', cells: [[-1, 7], [-1, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
+    gate: { id: 'g-elderGrove', kind: 'barricade', cells: [[-1, 7], [-1, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
     patch: { name: 'The ring of stumps', x: -14, z: 2, w: 4, d: 4 },
     caches: [
       { id: 'c-elderGrove-1', x: -31, z: -15 },
@@ -413,7 +424,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 36, z: 33, w: 2, d: 3 }],
     seam: { name: 'the Claypits', x: 70, z: 58 },
-    gate: { id: 'g-cistern', kind: 'water', cells: [[40, 32], [41, 32], [40, 33], [41, 33], [40, 34], [41, 34]], needs: { ability: 'hover' }, blocked: 'Deep water — needs Hover (fountain tier 2)' },
+    gate: { id: 'g-cistern', kind: 'water', cells: [[40, 32], [41, 32], [40, 33], [41, 33], [40, 34], [41, 34]], needs: { ability: 'hover' }, blocked: 'The water\'s too deep to wade.', how: 'Bloombot learns to hover at the fountain\'s second step.' },
     patch: { name: 'The spillway', x: 44, z: 52, w: 4, d: 6 },
     caches: [
       { id: 'c-cistern-1', x: 78, z: 33 },
@@ -500,7 +511,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 53, z: 4, w: 2, d: 3 }],
     seam: { name: 'the Escapement', x: 72, z: -12 },
-    gate: { id: 'g-clockPlaza', kind: 'lockBridge', cells: [[48, 7], [49, 7], [48, 8], [49, 8]], needs: { landmark: 'saltwind', ability: 'hover' }, blocked: 'The canal is too deep — the lock bridge rises when the Sea Lock wakes (or Hover)' },
+    gate: { id: 'g-clockPlaza', kind: 'lockBridge', cells: [[48, 7], [49, 7], [48, 8], [49, 8]], needs: { landmark: 'saltwind', ability: 'hover' }, blocked: 'The canal\'s too deep to cross.', how: 'Wake the Sea Lock and its bridge will rise, or hover over once Bloombot can.' },
     patch: { name: 'The plaza', x: 60, z: 12, w: 8, d: 4 },
     caches: [
       { id: 'c-clockPlaza-1', x: 78, z: 30 },
@@ -553,7 +564,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 7, z: -40, w: 2, d: 3 }],
     seam: { name: 'the Sunvein', x: -10, z: -60 },
-    gate: { id: 'g-terraces', kind: 'climb', cells: [[8, -33]], needs: { ability: 'climb' }, blocked: 'Only the roofs go on from here — needs Climb (fountain tier 3)' },
+    gate: { id: 'g-terraces', kind: 'climb', cells: [[8, -33]], needs: { ability: 'climb' }, blocked: 'Only the roofs go on from here.', how: 'Bloombot learns to climb at the fountain\'s third step.' },
     patch: { name: 'The roof garden', x: 18, z: -46, w: 4, d: 4 },
     caches: [
       { id: 'c-terraces-1', x: -15, z: -63 },
@@ -606,7 +617,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: -41, z: 2, w: 2, d: 3 }],
     seam: { name: 'the Potting Sheds', x: -60, z: -28 },
-    gate: { id: 'g-glasshouse', kind: 'bridge', cells: [[-36, 0], [-35, 0], [-34, 0], [-33, 0], [-36, 1], [-35, 1], [-34, 1], [-33, 1]], needs: { repair: { timber: 30, copper: 20, gears: 10 } }, blocked: 'The bridge is broken — repair it with 30 Timber, 20 Copper and 10 Gears' },
+    gate: { id: 'g-glasshouse', kind: 'bridge', cells: [[-36, 0], [-35, 0], [-34, 0], [-33, 0], [-36, 1], [-35, 1], [-34, 1], [-33, 1]], needs: { repair: { timber: 30, copper: 20, gears: 10 } }, blocked: 'The bridge is broken.', how: 'Bring 30 Timber, 20 Copper and 10 Gears to mend it.' },
     patch: { name: 'The nursery beds', x: -46, z: 6, w: 4, d: 4 },
     caches: [
       { id: 'c-glasshouse-1', x: -63, z: 14 },
@@ -676,7 +687,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 33, z: -45, w: 2, d: 3 }],
     seam: { name: 'the Lens Grinders', x: 72, z: -40 },
-    gate: { id: 'g-observatory', kind: 'cliff', cells: [[33, -48]], needs: { ability: 'glide' }, blocked: 'A cliff too high to climb — glide here from the edge of The Terraces (fountain tier 4)' },
+    gate: { id: 'g-observatory', kind: 'cliff', cells: [[33, -48]], needs: { ability: 'glide' }, blocked: 'The cliff\'s too high to climb.', how: 'Bloombot learns to glide at the fountain\'s fourth step, then can glide here from the edge of The Terraces.' },
     patch: { name: 'The hilltop', x: 56, z: -74, w: 6, d: 4 },
     caches: [
       { id: 'c-observatory-1', x: 78, z: -79 },
@@ -748,7 +759,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: -27, z: -40, w: 2, d: 3 }],
     seam: { name: 'the Foundry Vaults', x: -70, z: -50 },
-    gate: { id: 'g-spireHeights', kind: 'climb', cells: [[-24, -33], [-23, -33]], needs: { ability: 'climb' }, blocked: 'A collapsed skybridge blocks the avenue — needs Climb (fountain tier 3)' },
+    gate: { id: 'g-spireHeights', kind: 'climb', cells: [[-24, -33], [-23, -33]], needs: { ability: 'climb' }, blocked: 'A fallen skybridge blocks the avenue.', how: 'Bloombot learns to climb at the fountain\'s third step.' },
     patch: { name: 'Spire Square', x: -54, z: -58, w: 8, d: 4 },
     caches: [
       { id: 'c-spireHeights-1', x: -79, z: -90 },
@@ -808,7 +819,7 @@ export const REGION_STRENGTHS: Record<RegionId, { strengths: Partial<Record<Stre
   mastRow: { strengths: { wind: STRENGTH_BONUS }, text: 'Wind' },
   oldMarket: { strengths: { trade: STRENGTH_BONUS }, text: 'Trade: swap materials, buy seeds' },
   saltwind: { strengths: { wind: 1.75, tide: STRENGTH_BONUS }, text: 'Wind and tide: the strongest wind' },
-  elderGrove: { strengths: { soil: STRENGTH_BONUS }, text: 'Fertile soil: faster crops, more biomass' },
+  elderGrove: { strengths: { soil: STRENGTH_BONUS }, text: 'Fertile soil: faster crops, more Greens' },
   cistern: { strengths: { water: STRENGTH_BONUS }, text: 'Water: springs refill for free' },
   clockPlaza: { strengths: { machinery: STRENGTH_BONUS }, text: 'Machinery' },
   terraces: { strengths: { sun: STRENGTH_BONUS }, text: 'Sun: more solar on the roofs' },
@@ -972,7 +983,7 @@ export const KEEPERS: KeeperDef[] = [
       woke: ['Moss, keeper of Elder Grove. Mm. Good morning.'],
       request1: ['The seedlings need cloches. 10 Glass from the market, if you would.'],
       request2: ['Restore the ring of stumps where the grove began.'],
-      landmark: ['Wake the Elder Tree with 20 Seeds and 40 Biomass.'],
+      landmark: ['Wake the Elder Tree with 20 Seeds and 40 Greens.'],
       settled: ['The Elder Tree is awake. Seeds come twice as easily now.'],
     },
   },
@@ -1163,7 +1174,7 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
   // E23.8.3.2: the mainland's steel and its big machines (E23.10.2 makes the real models)
   'salvage-steel': { standIn: 'procedural', what: 'A heap of steel girders from the industrial ruins' },
-  'grid-battery': { standIn: 'storage-chest', what: 'The Grid Battery: a grid-scale battery bank (2 × 2)' },
+  'grid-battery': { standIn: 'storage-chest', what: 'The Grid Battery: a grid-scale battery bank, two tiles square' },
   // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
   'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },
   'salvage-driftwood': { standIn: 'barrel', what: 'A Timber (driftwood) pile' },

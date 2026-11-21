@@ -57,7 +57,36 @@
 #obj .oprog[hidden] { display: none; }
 #obj .oprog .sg-bar { flex: 1; }
 #obj .oprog .ocn { font: 800 16px var(--font-ui); color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#obj .oprog .ocn:empty { display: none; }
 #obj.nudge { animation: nudge 1.6s ease-in-out infinite; }
+/* #605: what the goal brings, its parts (each counted, ticked when done) and the one next step under it */
+#obj .owhy { margin: -4px 0 0; font: 700 15px/1.3 var(--font-ui); color: var(--ink-2); }
+#obj .owhy[hidden], #obj .oparts[hidden], #obj .onext[hidden], #obj .owhere[hidden] { display: none; }
+#obj .oparts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+#obj .oparts li { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 6px; border-radius: 999px; background: var(--paper-2); font: 700 14px/1.2 var(--font-ui); color: var(--ink-2); white-space: nowrap; }
+#obj .oparts li b { font-weight: 900; color: var(--ink); font-variant-numeric: tabular-nums; }
+#obj .oparts li.done { background: var(--leaf-soft); color: var(--leaf-ink); }
+#obj .oparts li.done b { color: var(--leaf-ink); }
+#obj .oparts .oi { width: 18px; text-align: center; font-size: 14px; }
+#obj .onext { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding-top: 8px; border-top: 1.5px solid var(--line-2); }
+#obj .onext p { margin: 0; font: 800 15px/1.3 var(--font-ui); color: var(--ink); }
+#obj .owhere { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 3px 10px 3px 4px; border-radius: 999px; border: 1.5px solid var(--line-2); background: var(--key-bg); color: var(--ink); font: 800 14px var(--font-ui); cursor: pointer; pointer-events: auto; }
+#obj .owhere:hover { border-color: var(--leaf-ink); }
+
+/* #607: the guide's line, once per idea: centred low, just above the prompt (GuideLine sets its bottom), then it fades */
+#guide { position: absolute; left: 50%; bottom: calc(26px + var(--safe-b)); transform: translateX(-50%); z-index: 4; pointer-events: none; display: flex; align-items: center; gap: 10px; width: max-content; max-width: min(560px, calc(100vw / var(--ui-zoom, 1) - 40px)); padding: 8px 18px 8px 8px; border-radius: 26px; animation: sg-toast-in .35s cubic-bezier(.2, 1.6, .4, 1); transition: opacity .5s; }
+#guide[hidden] { display: none; }
+#guide.out { opacity: 0; }
+#guide p { margin: 0; min-width: 0; font: 800 17px/1.3 var(--font-ui); color: var(--ink); }
+#guide p svg.glyph { display: inline-block; width: 32px; height: 24px; margin: -4px 1px; vertical-align: middle; }
+body.photo #guide { display: none; }
+/* #608: the park's count where the player is looking, for a moment after each tile */
+#tally { position: absolute; left: 50%; bottom: calc(26px + var(--safe-b)); transform: translateX(-50%); z-index: 4; pointer-events: none; display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px; border-radius: 999px; font: 800 16px/1.2 var(--font-ui); color: var(--ink); white-space: nowrap; }
+#tally[hidden] { display: none; }
+#tally b { font-weight: 900; font-variant-numeric: tabular-nums; }
+#tally .sg-bar { width: 72px; }
+#tally.done { background: var(--leaf-soft); color: var(--leaf-ink); }
+body.photo #tally { display: none; }
 
 /* ── 2. charge (top right): the only meter. Calm when full, amber ring when low, grey at zero ── */
 #res { position: absolute; top: calc(18px + var(--safe-t)); right: calc(18px + var(--safe-r)); width: 248px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }

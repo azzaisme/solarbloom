@@ -91,12 +91,25 @@ const read = (since) =>
       getComputedStyle(e).visibility !== "hidden" &&
       e.getBoundingClientRect().width > 0;
     const obj = document.querySelector("#obj");
+    const txt = (sel) => {
+      const e = obj?.querySelector(sel);
+      return vis(e) ? (e.textContent ?? "").trim() : "";
+    };
     const card = vis(obj)
-      ? (obj.querySelector("#objTitle")?.textContent ?? "").trim()
+      ? [txt("#objTitle"), txt("#objNext")].filter(Boolean).join(" · ")
       : "";
-    const count = vis(obj?.querySelector("#objProg"))
-      ? (obj.querySelector("#objCount")?.textContent ?? "").trim()
-      : "";
+    // #605: every part of the goal as a chip ("Scrap 4 of 20", "Park 12 of 60")
+    const parts = vis(obj?.querySelector("#objParts"))
+      ? [...obj.querySelectorAll("#objParts li")].map((l) => {
+          // the chip: its icon, its name (the bare text), and "a of b" in bold
+          const label = [...l.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim();
+          const m = /(\d+) of (\d+)/.exec(l.querySelector("b")?.textContent ?? "");
+          return m ? { label, have: +m[1], need: +m[2] } : undefined;
+        }).filter(Boolean)
+      : [];
+    const hand = parts.find((p) => /^(Park|Landmarks awake)$/.test(p.label));
+    const count =
+      hand && hand.have < hand.need ? `${hand.have} of ${hand.need}` : "";
     const pr = document.querySelector("#prompt");
     const prompt = vis(pr)
       ? [...pr.querySelectorAll("*")]
@@ -111,6 +124,7 @@ const read = (since) =>
     const g = window.solarbloom;
     return {
       card,
+      parts,
       count,
       prompt,
       toasts,
@@ -276,15 +290,13 @@ let t0 = Date.now();
 const times = { salvage: undefined, fountain: undefined, pry: undefined };
 const simAt = {};
 const shot = (name) => page.screenshot({ path: `${dir}/${name}.png` });
-const parseWant = (card) => {
-  // "Bring 6 Scrap, 4 Copper and 2 Seeds to the fountain"
-  const m = /^Bring (.+) to the fountain$/.exec(card);
-  if (!m) return undefined;
-  return m[1]
-    .split(/, | and /)
-    .map((p) => /^(\d+) (.+)$/.exec(p.trim()))
-    .filter(Boolean)
-    .map(([, n, name]) => ({ n: +n, name }));
+const parseWant = (r) => {
+  // #605's card: the material chips still short ("Scrap 4 of 20" wants 16 more: handed in and carried both count),
+  // or none short while the next step says to take them "to the fountain" (an empty list: go and hand them in)
+  const mats = (r.parts ?? []).filter((p) => !/^(Park|Landmarks awake)$/.test(p.label));
+  const left = mats.filter((p) => p.have < p.need).map((p) => ({ n: p.need - p.have, name: p.label }));
+  if (left.length) return left;
+  return mats.length && /to the fountain/i.test(r.card) ? [] : undefined;
 };
 
 try {
@@ -354,7 +366,7 @@ try {
     // what to do, from the words alone
     const words = `${r.card} ${heard.slice(-3).join(" ")}`;
     let acted = false;
-    const want = parseWant(r.card);
+    const want = parseWant(r);
     if (m.woke && /\bpry\b|barricade/i.test(words)) {
       const onCard = /\bpry\b|barricade/i.test(r.card);
       hint ??= {
@@ -388,7 +400,7 @@ try {
           .map((w) => ({
             id: w.name.toLowerCase(),
             name: w.name,
-            need: w.n - s.inventory.count(w.name.toLowerCase()),
+            need: w.n, // #605's chips count what is carried too
           }))
           .filter((w) => w.need > 0);
       }, want);

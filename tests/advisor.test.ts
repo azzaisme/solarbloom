@@ -167,11 +167,13 @@ describe('objective advisor (City 14.1)', () => {
     console.log(`advisor alone: fountain tier 1 at ${(sim.time / 60).toFixed(1)} min, ${followed} steps followed`);
   });
 
-  it('speaks through the objective sentence: a shortage in the loop first, the next step once the fountain is done', () => {
+  it('speaks through the objective card: a shortage in the loop first (under the goal, #605), the next step once the fountain is done', () => {
     const sim = new Sim(createInitialState(4));
-    expect(objectiveSentence(sim).text).toMatch(/fountain/); // a new game: the fountain wants Scrap and Seeds
+    expect(objectiveSentence(sim).text).toMatch(/fountain/); // a new game: wake the fountain
+    expect(objectiveSentence(sim).parts?.map((p) => p.label)).toEqual(['Scrap', 'Seeds', 'Park']);
     (sim as unknown as Record<string, unknown>).charge = { low: true, share: 0.1 };
-    expect(objectiveSentence(sim).text).toMatch(/running low/);
+    expect(objectiveSentence(sim).next).toMatch(/running low/);
+    expect(objectiveSentence(sim).text).toMatch(/fountain/); // #605: the goal never disappears
     (sim as unknown as Record<string, unknown>).charge = { low: false, share: 0.9 };
     sim.state.salvage!.tier = 5; // every tier done
     const g = sim.advisor.suggest();

@@ -6,7 +6,7 @@ import { SALVAGE_FIELDS } from '../data/mainland';
 
 /** A mainland salvage-field pile (`ml:<x>:<z>`, E23.8.3). */
 const isMainlandPile = (p: PileDef) => p.id.startsWith('ml:');
-import { PARK_SET, type PileDef, type RegionDef } from '../data/oldcity';
+import { PARK_SET, gateText, type PileDef, type RegionDef } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import type { Sim } from './Sim';
 
@@ -233,7 +233,7 @@ export class SalvageSystem {
       const m = MATERIALS[sp.pile.material];
       return { title: `${m.icon} ${m.name} pile`, detail: `${this.left(sp.pile.id)} ${m.name} left. Hold Interact to salvage it, 3 at a time.` };
     }
-    if (sp.kind === 'gate' && !this.sim.gates.isOpen(sp.gate.id)) return { title: 'In the way', detail: sp.gate.blocked };
+    if (sp.kind === 'gate' && !this.sim.gates.isOpen(sp.gate.id)) return { title: 'In the way', detail: gateText(sp.gate) };
     if (sp.kind === 'keeper') return { title: `🤖 ${sp.keeper.name}`, detail: this.sim.keepers.hint(sp.keeper.id) };
     if (sp.kind === 'page') return { title: 'A page on a post', detail: this.sim.journal.found(sp.id) ? "A page of the maker's journal. You have read this one." : "A page in the maker's handwriting." };
     if (sp.kind === 'shed') return { title: 'A ruined shed', detail: 'Bloombot\'s house, one day.' };

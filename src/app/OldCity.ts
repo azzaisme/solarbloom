@@ -119,7 +119,7 @@ export class OldCityController {
     // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
     host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
     host.sim.bus.on('fountain.tier', () => this.panel.close());
-    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${itemDef(e.material).name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
+    host.sim.bus.on('pack.full', (e) => host.hud.toast(`You can't carry more ${itemDef(e.material).name}<small>Put some away at the fountain or in a chest.</small>`, '', 2.6));
   }
 
   get sim(): Sim {

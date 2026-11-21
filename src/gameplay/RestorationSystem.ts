@@ -32,6 +32,8 @@ export class RestorationSystem {
   }
 
   checkPulse(t: TileData): PulseCheck {
+    // #606: a wait in words ("a second", "12 seconds"), not "12s"
+    const seconds = (n: number) => (Math.max(1, Math.ceil(n)) === 1 ? 'a second' : `${Math.ceil(n)} seconds`);
     const roof = this.sim.grid.roof(t.roofId);
     if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'You can\'t reach this rooftop yet' };
     const fog = this.sim.areas.fogReason(t);
@@ -44,7 +46,7 @@ export class RestorationSystem {
     if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in flower' };
     // E23.2.1: out of charge, no pulse (bloombot walks on; eat, sit or find a charger)
     if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of charge. Eat something, rest or find a charger' };
-    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through: ${Math.max(1, Math.ceil(t.growthRemainingSec))}s` };
+    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through: ${seconds(t.growthRemainingSec)}` };
     const tilling = this.sim.cultivators?.remaining(t);
     if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab: ${Math.max(1, Math.ceil(tilling))}s` };
     if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here' };
@@ -65,6 +67,8 @@ export class RestorationSystem {
       return false;
     }
     this.sim.charge.use('pulse');
+    // #607: the player's own pulses (drones and chains restore too: the guide asks whether the player has pulsed)
+    this.sim.state.stats.pulses = (this.sim.state.stats.pulses ?? 0) + 1;
     // E23.2.2: the pulse uses one unit of its load (or fires empty) and sends out its reveal ripple
     const load = this.sim.pulseLoad.take();
     const ripple = this.sim.pulseLoad.ripple(t);

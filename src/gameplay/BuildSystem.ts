@@ -132,7 +132,7 @@ export class BuildSystem {
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 
-  /** " — Mast Row" once a region holding the material has been seen (revealed), else nothing; a place outside the regions always (steel's industrial ruins). */
+  /** ". Salvage it in Mast Row." once a region holding the material has been seen (revealed), else nothing; a place outside the regions always (steel's industrial ruins). */
   whereFrom(m: MaterialId): string {
     if (MATERIALS[m].place) return ` from ${MATERIALS[m].place}`;
     for (const home of MATERIALS[m].home) {
@@ -140,7 +140,7 @@ export class BuildSystem {
       const r = regionById(home);
       if (r && this.sim.state.areas[r.id]) return ` from ${r.name}`;
     }
-    return MATERIALS[m].home.includes('park') ? ' — the park' : '';
+    return MATERIALS[m].home.includes('park') ? '. Salvage it in the park.' : '';
   }
 
   /** E21.3: placement: the tier lock, the recipe, the chest limit. */

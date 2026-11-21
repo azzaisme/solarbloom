@@ -1,6 +1,9 @@
 import { CHUNK } from '../core/Hash';
 import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
+import { WORDS } from '../ui/words';
+import { CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
+import { goalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { treeSpot, treeStage } from '../rendering/TreePlacement';
@@ -11,7 +14,7 @@ import { CAT_SIGHT, SightSchedule, catSamples, cpuSeenPixels } from '../core/Cat
 import type { Box } from '../core/Solids';
 import { SightPicker } from '../rendering/SightPicker';
 import { distToFootprint } from '../core/Grid';
-import type { DroneRole, LayerData, MachineData, TileData } from '../core/types';
+import type { DroneRole, LayerData, MachineData, MaterialId, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS, tierGives } from '../data/salvage';
 import { MAINLAND_CLOSED } from '../data/mainland';
@@ -20,7 +23,7 @@ import { CROPS } from '../data/crops';
 import { isExtra } from '../gameplay/FarmExtras';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
-import { seaCell, setPieceAt } from '../core/OldCityLayout';
+import { allPiles, seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
 import { REST } from '../data/rest';
@@ -151,6 +154,13 @@ const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
 const MOUSE_AIM_MS = 8000;
 /** the shortest time between two quarter turns from the mouse wheel (a trackpad sends many small wheel events) */
 const WHEEL_TURN_MS = 140;
+/** #605: how long the gold arrow stays on Show me where's spot (unless bloombot gets there first). */
+const WAY_MARK_MS = 12000;
+/** #607: the least time between two guide lines (one idea at a time, each left to sink in). */
+const IDEA_GAP_MS = 14000;
+/** #608: how often the piles the fountain still wants glint, and how near bloombot they must be (tiles). */
+const PILE_GLINT_MS = 1800;
+const PILE_GLINT_REACH = 26;
 /** Bloombot: how far in the camera may come (the cursor view stops at 1.9). */
 const BOT_MAX_ZOOM = 4.3; // E21.22: the close step (EXPLORE.zoomSteps[0])
 const BOT_REACH = 1.6;
@@ -489,6 +499,8 @@ export class Game {
             this.save();
           }
         },
+        glyph: (a) => this.glyph(a),
+        showWhere: () => this.showWhere(),
         focusTile: (x, z) => {
           if (this.cinematic) return;
           this.camera.glide(x + 0.5, 0, z + 0.5, Math.max(this.camera.zoom, 0.9));
@@ -1461,6 +1473,9 @@ export class Game {
         return;
       case 'pinNext':
         return this.pinNext();
+      case 'showWhere':
+        if (!this.hud.objective.showWhere()) this.hud.toast(WORDS.objective.nowhere, '', 2.2);
+        return;
       case 'recentre':
         return this.camera.recentre();
       case 'debug':
@@ -1528,6 +1543,100 @@ export class Game {
       return;
     }
     this.selectTool(this.hud.currentTool === t ? 'pulse' : t);
+  }
+
+  /**
+   * #605 (E24): Show me where. The gold arrow stands on the current goal spot (ui/GoalSpot.ts, the same spot the beam
+   * and the minimap use) until bloombot gets there or for a while, and the camera turns to look that way from behind
+   * bloombot, so the way is in view. Sitting keeps its own calm view: the arrow still shows. False with nowhere to go.
+   */
+  private wayMark?: { roofId: string; x: number; z: number; until: number };
+  private showWhere(): boolean {
+    if (!this.bot || this.cinematic || this.photo.active) return false;
+    const spot = goalSpot(this.sim, this.hud.objective.current);
+    if (!spot) return false;
+    this.wayMark = { roofId: spot.roofId, x: spot.cell.x, z: spot.cell.z, until: performance.now() + WAY_MARK_MS };
+    if (this.resting?.active) return true;
+    const p = this.bot.pose;
+    const dx = spot.x - p.x;
+    const dz = spot.z - p.z;
+    if (Math.hypot(dx, dz) > 1.5) this.camera.turnTo((Math.atan2(dx, dz) * 180) / Math.PI + 180);
+    this.camIdle = 0; // the swing back behind bloombot waits for the player to walk on
+    return true;
+  }
+
+  /**
+   * #607 (E24): the guide's lines, each once, when its idea comes up (GuideLines.ts). Only while bloombot is out
+   * walking: never over the loading screen, a cinematic, photo mode, the menu or a panel; never with hints off or
+   * at the potter-about pace; one at a time, with a gap.
+   */
+  private ideaCheckAt = 0;
+  private ideaAt = -Infinity;
+  /** the idea whose line is showing: it fades early once its moment passes, or the player has done it */
+  private ideaShowing?: Idea;
+  private updateGuideLines() {
+    const now = performance.now();
+    if (now - this.ideaCheckAt < 500) return;
+    this.ideaCheckAt = now;
+    const was = this.ideaShowing;
+    if (was && this.hud.guide.text && (!was.comes(this.sim) || was.known(this.sim))) this.hud.guide.hide();
+    if (!this.bot || this.cinematic || this.photo.active || this.paused || this.hud.modalOpen || this.panelOpen()) return;
+    if (document.body.classList.contains('loading-on') || this.settings.hints === false || this.settings.potter) return;
+    startIdeas(this.sim);
+    if (now - this.ideaAt < IDEA_GAP_MS) return;
+    const idea = dueIdea(this.sim);
+    if (!idea) return;
+    markShown(this.sim, idea.id);
+    this.ideaAt = now;
+    this.ideaShowing = idea;
+    this.hud.guide.show(idea.text((a) => this.guideKey(a), this.sim));
+  }
+
+  /** #607: an action's key or button in a guide line: its glyph (keys or the pad in hand), or "Click" for the left mouse button. */
+  private guideKey(a: Action): string {
+    if (this.glyphs.style === 'keys' && this.bindings.keys[a][0] === 'Mouse0') return CLICK;
+    return this.glyph(a);
+  }
+
+  /**
+   * #608: once the park's part of a fountain step is done and what it still wants isn't in the backpack, the piles
+   * of those things near bloombot glint now and then, so they are easy to spot (the card says where the nearest is).
+   */
+  private glintAt = 0;
+  private updatePileGlints() {
+    const now = performance.now();
+    if (now - this.glintAt < PILE_GLINT_MS || !this.bot || this.cinematic || this.photo.active || this.paused) return;
+    this.glintAt = now;
+    const s = this.sim;
+    const t = s.fountain.next();
+    if (!t || !s.fountain.condition(t).done) return;
+    const short = (Object.keys(t.delivery) as MaterialId[]).filter((k) => (k as string) !== 'biomass' && s.fountain.remaining(k) > s.inventory.available(k));
+    if (!short.length) return;
+    const p = this.bot.pose;
+    for (const pile of allPiles()) {
+      if (!short.includes(pile.material) || s.salvage.left(pile.id) <= 0 || s.salvage.problem(pile.id)) continue;
+      if (Math.hypot(pile.x + 0.5 - p.x, pile.z + 0.5 - p.z) > PILE_GLINT_REACH) continue;
+      const tile = s.grid.get(GROUND, pile.x, pile.z);
+      if (!tile) continue;
+      const v = this.tileVec(tile);
+      v.y += 0.6;
+      this.vfx.burst(v, this.settings.reducedMotion ? 3 : 7, { up: 0.9, speed: 0.35, size: 0.06, life: 1.2, gravity: -0.2, hex: PALETTE.gold, glow: 1.4 });
+    }
+  }
+
+  /** #605 / #607: where the gold arrow stands now: Show me where's spot, else the first step's salvage pile. */
+  private beaconSpot(): { roofId: string; x: number; z: number } | undefined {
+    const w = this.wayMark;
+    if (w) {
+      const p = this.bot?.pose;
+      const there = !!p && p.roofId === w.roofId && Math.hypot(w.x + 0.5 - p.x, w.z + 0.5 - p.z) < 2;
+      if (there || performance.now() > w.until) this.wayMark = undefined;
+      else return w;
+    }
+    if (this.sim.state.progression.tutorialStep !== 0) return undefined;
+    // #607: the guide's first step is the pile in front of bloombot: the goal spot points at it (not a park tile)
+    const spot = goalSpot(this.sim, this.hud.objective.current);
+    return spot ? { roofId: spot.roofId, x: spot.cell.x, z: spot.cell.z } : undefined;
   }
 
   /** E22.1: Pin the next request (E21's requests; until they exist there is nothing to pin). */
@@ -4011,6 +4120,13 @@ export class Game {
     };
     b.on('tile.restoring', ({ tile }) => stageSounds(tile));
     b.on('tile.restored', ({ tile, source }) => source !== 'pulse' && source !== 'broad' && stageSounds(tile));
+    // #608: greening the park counts toward the fountain, and the count shows where the player is looking
+    b.on('tile.restored', ({ tile }) => {
+      const t = s.fountain.next();
+      if (!t || t.needs.parkTiles === undefined || tile.roofId !== GROUND || s.areas.areaOf(tile) !== PARK || this.cinematic) return;
+      const c = s.fountain.condition(t);
+      this.hud.guide.tally(WORDS.objective.park, Math.min(c.have, c.need), c.need);
+    });
     b.on('tile.prepared', ({ tile }) => {
       this.grid.refresh(tile, true);
       this.tileFx.flash(tile, '#6cc24a', 0.35, 0.7, 0.1);
@@ -4815,14 +4931,16 @@ export class Game {
       this.readyFrames = ready ? this.readyFrames + 1 : 0;
     }
     this.updateChainPresentation(wdt);
+    this.updateGuideLines();
+    this.updatePileGlints();
+    // #613: resting at home charges bloombot: show it, so the player knows to stand still
+    if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
     if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(wdt);
-    // First-tile beacon until the player restores something.
-    if (this.sim.state.progression.tutorialStep === 0 && !this.cinematic && !this.photo.active) {
-      const tiles = this.sim.progression.tilesFor(HOME);
-      const t = tiles.find((x) => x.ground === 'prepared' && !x.occupantId) ?? tiles.find((x) => x.ground === 'polluted' && !x.blocked && !x.occupantId);
-      if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
-    } else this.overlays.hideBeacon();
+    // #605 / #607: the gold arrow: Show me where's spot, or the first step's salvage pile
+    const spot = !this.cinematic && !this.photo.active ? this.beaconSpot() : undefined;
+    if (spot) this.overlays.showBeacon(spot.roofId, spot.x, spot.z);
+    else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.waterLevels.update();
     this.pipes.update(dt);

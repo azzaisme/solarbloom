@@ -81,7 +81,7 @@ describe('E22.1: the new button map', () => {
 
   it('a saved Harvest binding is ignored: F and d-pad left eat (E23.1.4)', () => {
     const b = new Bindings({ v: BINDINGS_VERSION, keys: { harvest: ['KeyH'] } as never, pad: { harvest: 14 } as never });
-    expect(b.actionForCode('KeyH')).toBeUndefined();
+    expect(b.actionForCode('KeyH')).toBe('showWhere'); // #605: H is Show me where now; the old Harvest binding never comes back
     expect(Object.keys(b.keys)).not.toContain('harvest');
     expect(Object.keys(b.pad)).not.toContain('harvest');
     expect(b.actionForCode('KeyF')).toBe('eat');
@@ -224,5 +224,22 @@ describe('E22.1: the new button map', () => {
     // Nothing customised before: nothing to reset, no notice.
     expect(migrateBindings(undefined).reset).toBe(false);
     expect(migrateBindings({ keys: {}, pad: {} }).reset).toBe(false);
+  });
+});
+
+describe('#605: RT is Show me where whenever bloombot is out walking, and nothing else wants it', () => {
+  const b = new Bindings();
+  const RT = 7;
+  it('walking (and sitting, the cat chase: those are walking contexts) gets Show me where; build mode keeps Remove; a panel or a Keeper talk leaves it alone', () => {
+    expect(defaultPad().showWhere).toBe(RT);
+    expect(b.actionForButton(RT, ['world', 'any'])).toBe('showWhere');
+    expect(b.actionForButton(RT, ['build', 'world', 'any'])).toBe('removeMode');
+    // menus, the backpack, the build tray and a Keeper's talk (OldCityPanel) all resolve in the panel context
+    expect(b.actionForButton(RT, ['panel', 'any'])).toBeUndefined();
+  });
+  it('no other action outside build mode is on RT or on H', () => {
+    const others = ACTIONS.filter((a) => a.id !== 'showWhere' && a.context !== 'build');
+    expect(others.filter((a) => b.pad[a.id] === RT).map((a) => a.id)).toEqual([]);
+    expect(others.filter((a) => b.keys[a.id].includes('KeyH')).map((a) => a.id)).toEqual([]);
   });
 });

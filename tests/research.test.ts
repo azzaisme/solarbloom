@@ -132,7 +132,7 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     sim.state.salvage!.research.done = ['pw-lines'];
     expect(sim.research.stations()).toBe(1);
     expect(sim.research.start('pw-battery')).toBe(true);
-    expect(sim.research.problem('fm-compost')).toBe('Not open yet');
+    expect(sim.research.problem('fm-compost')).toBe('Look closely at the find it comes from first');
     sim.research.analyse({ material: 'seeds' });
     expect(sim.research.problem('fm-compost')).toBe('The bench is busy');
     sim.state.salvage!.research.done.push('pw-station');

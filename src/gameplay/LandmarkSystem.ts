@@ -131,7 +131,7 @@ export class LandmarkSystem {
       return false;
     }
     if (s.inventory.room(get) < TRADE.get) {
-      s.bus.emit('action.failed', { reason: `Your ${MATERIALS[get].name} stack is full` });
+      s.bus.emit('action.failed', { reason: `You can't carry more ${MATERIALS[get].name}` });
       return false;
     }
     s.inventory.pay({ [give]: TRADE.give });
