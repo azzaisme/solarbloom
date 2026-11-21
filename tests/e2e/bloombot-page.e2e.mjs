@@ -123,7 +123,7 @@ try {
     check(/Bloombot/.test(p.tab), `${L}: E moves from Items to the Bloombot tab ("${p.tab}")`);
     check(p.rows.length === 12 && p.rows[0] === 'Pry · Next' && p.rows.slice(1, 4).every((r) => / · Later$/.test(r)), `${L}: four moves, Pry next (${p.rows.slice(0, 4).join(' | ')})`);
     check(/^Spreading pulse · \d+ of 20$/.test(p.rows[4]) && p.rows[5] === 'Steady charge · Later' && p.rows[6] === 'Nimble hands · Later', `${L}: #622: three park milestones, the first counting the park (${p.rows.slice(4, 7).join(' | ')})`);
-    check(p.rows.slice(7).every((r) => / · Level 0 of 3$/.test(r)), `${L}: five upgrades, none started (${p.rows.slice(7).join(' | ')})`);
+    check(p.rows.slice(7).every((r) => / · Level 0 of 5$/.test(r)), `${L}: five upgrades, none started (${p.rows.slice(7).join(' | ')})`);
     check(/Bring the fountain what it asks for and it teaches this/.test(p.detail) && /Show me where/.test(p.detail), `${L}: Pry says how to learn it, with Show me where ("${p.detail}")`);
     await shot('3-page-early');
     // the detail's end is above the footer, or the detail scrolls to it (the wheel, and Show me where at its foot)
@@ -161,7 +161,7 @@ try {
     p = await page.evaluate(pageNow);
     check(p.rows.slice(0, 4).every((r) => / · Learned$/.test(r)), `${L}: every move learned (${p.rows.slice(0, 4).join(' | ')})`);
     check(p.rows.slice(4, 7).every((r) => / · Grown$/.test(r)), `${L}: #622: every park milestone grown (${p.rows.slice(4, 7).join(' | ')})`);
-    check(p.rows.includes('Bigger charge · Top level') && p.rows.includes('Roomier backpack · Level 2 of 3') && p.rows.includes('Wider pulse · Level 1 of 3'), `${L}: upgrade levels show (${p.rows.slice(7).join(' | ')})`);
+    check(p.rows.includes('Bigger charge · Level 3 of 5') && p.rows.includes('Roomier backpack · Level 2 of 5') && p.rows.includes('Wider pulse · Level 1 of 5'), `${L}: upgrade levels show (${p.rows.slice(7).join(' | ')})`);
     // the arrows move through the rows; the one in focus fills the detail
     await page.focus('#bb-backpack');
     await page.waitForTimeout(200);
@@ -194,11 +194,11 @@ try {
       if (i >= 0) ideas.splice(i, 1);
     });
     const first = await say(() => window.solarbloom.sim.bus.emit('research.upgraded', { id: 'pulseRadius', level: 2 }));
-    check(/^Bloombot got better: Wider pulse, level 2 of 3/.test(first) && /See what's next on its page in the backpack \(Tab or I\)\./.test(first), `${L}: the first moment names the upgrade and points to the page ("${first}")`);
+    check(/^Bloombot got better: Wider pulse, level 2 of 5/.test(first) && /See what's next on its page in the backpack \(Tab or I\)\./.test(first), `${L}: the first moment names the upgrade and points to the page ("${first}")`);
     await shot('7-grew');
     await page.waitForTimeout(6500);
     const second = await say(() => window.solarbloom.sim.bus.emit('research.upgraded', { id: 'backpack', level: 3 }));
-    check(second === 'Bloombot got better: Roomier backpack, level 3 of 3', `${L}: later moments just say what grew ("${second}")`);
+    check(second === 'Bloombot got better: Roomier backpack, level 3 of 5', `${L}: later moments just say what grew ("${second}")`);
     await page.waitForTimeout(4000);
     // #622: the park's milestone, with what it does
     const park = await say(() => window.solarbloom.sim.bus.emit('bloombot.parkGrew', { step: 1, id: 'spill' }), 'park helped');

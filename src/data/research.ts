@@ -77,7 +77,7 @@ export interface ResearchUpgradeDef {
   per: number;
   /** the system it works through (offered only once that system reads it) */
   needs: UpgradeSystemId;
-  /** at most three levels, each paid for in materials */
+  /** one to five levels, each paid for in materials (#623: the Bloombot ones go to five, levels 4 and 5 in late materials) */
   levels: UpgradeLevelDef[];
 }
 
@@ -89,16 +89,24 @@ export const RESEARCH = {
   draw: 2,
   /** "Longer stride": each level makes sprinting this share faster (its `per` is the share off sprint's charge) */
   sprintSpeedPerLevel: 0.05,
+  /**
+   * #623: "Wider pulse" levels 1 to 3 each step the pulse up a tier (data/tuning pulseTiers); levels 4 and 5 each add
+   * this many tiles to the radius instead (a tier further would leap to Radiant at 4 and do nothing at 5)
+   */
+  pulseTierLevels: 3,
+  pulseTilesPerLateLevel: 1,
+  /** #623: the widest a pulse ever reaches, every bonus counted (Radiant's 7.1 and a tile) */
+  pulseMaxRadius: 8.1,
 };
 
 /** Research-opened upgrades. Who reads each level: the sub-epic named beside it, through `sim.research.level(id)`. */
 export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   // Bloombot (E23.2 reads charge, efficiency, sprint and pulse; the backpack is ours)
-  { id: 'chargeCells', branch: 'bloombot', name: 'Bigger charge', each: 'One more battery cell in bloombot', per: 1, needs: 'charge', levels: [{ cost: { batteryCell: 2 } }, { cost: { batteryCell: 3, gears: 4 } }, { cost: { batteryCell: 4, sunstone: 4 } }] },
-  { id: 'chargeEfficiency', branch: 'bloombot', name: 'Gentler on charge', each: 'Pulses and abilities use a little less charge', per: 1, needs: 'charge', levels: [{ cost: { wire: 4, copper: 6 } }, { cost: { wire: 6, gears: 6 } }, { cost: { motor: 2, sunstone: 6 } }] },
-  { id: 'sprint', branch: 'bloombot', name: 'Longer stride', each: 'Sprinting costs less and goes a little faster', per: 0.1, needs: 'charge', levels: [{ cost: { gears: 4, wire: 2 } }, { cost: { motor: 1, gears: 6 } }, { cost: { motor: 2, sunstone: 4 } }] },
-  { id: 'pulseRadius', branch: 'bloombot', name: 'Wider pulse', each: 'The pulse reaches a tile further', per: 1, needs: 'always', levels: [{ cost: { seeds: 10, copper: 6 } }, { cost: { seeds: 16, glassPane: 4 } }, { cost: { seeds: 24, sunCell: 2 } }] },
-  { id: 'backpack', branch: 'bloombot', name: 'Roomier backpack', each: '20 more in every stack', per: 20, needs: 'always', levels: [{ cost: { planks: 6, scrap: 10 } }, { cost: { planks: 10, clay: 10 } }, { cost: { planks: 14, gears: 10 } }] },
+  { id: 'chargeCells', branch: 'bloombot', name: 'Bigger charge', each: 'One more battery cell in Bloombot', per: 1, needs: 'charge', levels: [{ cost: { batteryCell: 2 } }, { cost: { batteryCell: 3, gears: 4 } }, { cost: { batteryCell: 4, sunstone: 4 } }, { cost: { batteryCell: 4, sunCell: 3 } }, { cost: { sunCell: 6, sunstone: 14 } }] },
+  { id: 'chargeEfficiency', branch: 'bloombot', name: 'Gentler on charge', each: 'Pulses and abilities use a little less charge', per: 1, needs: 'charge', levels: [{ cost: { wire: 4, copper: 6 } }, { cost: { wire: 6, gears: 6 } }, { cost: { motor: 2, sunstone: 6 } }, { cost: { motor: 3, sunCell: 2 } }, { cost: { motor: 4, sunCell: 4 } }] },
+  { id: 'sprint', branch: 'bloombot', name: 'Longer stride', each: 'Sprinting costs less and goes a little faster', per: 0.1, needs: 'charge', levels: [{ cost: { gears: 4, wire: 2 } }, { cost: { motor: 1, gears: 6 } }, { cost: { motor: 2, sunstone: 4 } }, { cost: { motor: 4, sunstone: 8 } }, { cost: { motor: 6, sunCell: 3 } }] },
+  { id: 'pulseRadius', branch: 'bloombot', name: 'Wider pulse', each: 'The pulse reaches a tile further', per: 1, needs: 'always', levels: [{ cost: { seeds: 10, copper: 6 } }, { cost: { seeds: 16, glassPane: 4 } }, { cost: { seeds: 24, sunCell: 2 } }, { cost: { sunCell: 3, sunstone: 10 } }, { cost: { sunCell: 5, sunstone: 16 } }] },
+  { id: 'backpack', branch: 'bloombot', name: 'Roomier backpack', each: '20 more in every stack', per: 20, needs: 'always', levels: [{ cost: { planks: 6, scrap: 10 } }, { cost: { planks: 10, clay: 10 } }, { cost: { planks: 14, gears: 10 } }, { cost: { motor: 2, sunstone: 8 } }, { cost: { motor: 3, sunCell: 3 } }] },
   // Power (E23.3 reads these)
   { id: 'poleReach', branch: 'power', name: 'Longer lines', each: 'Power poles reach further', per: 0.15, needs: 'power', levels: [{ cost: { wire: 6 } }, { cost: { wire: 10, copper: 10 } }, { cost: { wire: 14, gears: 6 } }] },
   { id: 'solarYield', branch: 'power', name: 'Clearer panels', each: 'Solar panels make a little more', per: 0.1, needs: 'power', levels: [{ cost: { glassPane: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }, { cost: { sunCell: 2, glassPane: 6 } }] },

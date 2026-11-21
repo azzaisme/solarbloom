@@ -3,6 +3,7 @@ import { GROUND } from '../core/GameState';
 import type { PlantKind, RestoreSource, TileData } from '../core/types';
 import { PLANT_LOAD, PULSE_LOAD, type PulseLoadDef } from '../data/pulse';
 import { TUNING } from '../data/tuning';
+import { RESEARCH } from '../data/research';
 import type { Sim } from './Sim';
 
 /** Can a pulse go here? A pulse costs only charge (E23.2.1; E23.1.4: no energy or water). */
@@ -167,7 +168,9 @@ export class RestorationSystem {
   pulseRadius(overcharged = false, extraReach = 0): number {
     const tiers = TUNING.pulseTiers;
     const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + extraReach + (overcharged ? 1 : 0));
-    return overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    const r = overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    // #623: Wider pulse's late levels add flat tiles; never past the widest a pulse goes
+    return r > 0 ? Math.min(RESEARCH.pulseMaxRadius, r + this.sim.upgrades.broadTiles) : r;
   }
 
   /**
