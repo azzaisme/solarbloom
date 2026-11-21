@@ -103,6 +103,8 @@ export class Backpack {
       this.tab(e.key === 'ArrowRight' ? 1 : -1, true);
     });
     this.body.addEventListener('click', (e) => this.click(e.target as HTMLElement));
+    // a scroll doesn't bubble: caught on the way down, for the detail's faded edge
+    this.body.addEventListener('scroll', (e) => (e.target as HTMLElement).id === 'bpDetail' && this.current === 'bloombot' && this.edge(e.target as HTMLElement), true);
     // the cell or page in focus is the one shown beside the list (keyboard and pad read by moving)
     this.body.addEventListener('focusin', (e) => {
       // #629: stepping to a detail's Show me where (or its last lines) brings how to get it out from under the head
@@ -301,6 +303,17 @@ export class Backpack {
     const stop = !d.querySelector('#bb-where') && d.scrollHeight > d.clientHeight + 1;
     if (stop) how.tabIndex = 0;
     else how.removeAttribute('tabindex');
+    this.edge(d);
+  }
+
+  /**
+   * The detail's bottom edge fades while there is more below, so a line cut by the edge reads as "more below" and
+   * never as a line sliced in half (E25 playthrough, Deck 150%). Kept up to date as it scrolls.
+   */
+  private edge(d: HTMLElement) {
+    // words still below the edge (not just the card's bottom padding, which would fade a last line that is whole)
+    const last = d.lastElementChild?.getBoundingClientRect();
+    d.classList.toggle('more', !!last && last.bottom > d.getBoundingClientRect().bottom + 0.5);
   }
 
   private move(act: string, n: string) {

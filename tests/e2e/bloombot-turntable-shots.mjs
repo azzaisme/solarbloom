@@ -70,6 +70,32 @@ const headSeen = (page) =>
       at: { top: Math.round(d.top), does: Math.round(D.querySelector('.bb-does').getBoundingClientRect().top), scroll: Math.round(D.scrollTop), head: Math.round(head.bottom), h4: Math.round(h4.top), how: Math.round(how.bottom), btn: btn && Math.round(btn.top), bottom: Math.round(d.bottom) },
     };
   });
+/**
+ * The detail's lines at rest: none is cut by the bottom edge in plain sight. A line the edge cuts must lie wholly in
+ * the faded band at the bottom (the detail fades there while there is more below), so it reads as "more below".
+ */
+const edgeCut = (page) =>
+  page.evaluate(() => {
+    const D = document.querySelector('#bpDetail');
+    const d = D.getBoundingClientRect();
+    const st = getComputedStyle(D);
+    const more = D.classList.contains('more') && (st.maskImage || st.webkitMaskImage || 'none') !== 'none';
+    const fade = more ? parseFloat(st.getPropertyValue('--bb-fade')) * (parseFloat(getComputedStyle(document.querySelector('#hud')).zoom) || 1) : 0;
+    const bad = [];
+    let hidden = false;
+    const walk = document.createTreeWalker(D, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      if (!n.textContent.trim()) continue;
+      const r = document.createRange();
+      r.selectNodeContents(n);
+      for (const b of r.getClientRects()) {
+        if (b.bottom > d.bottom + 0.5) hidden = true;
+        if (b.bottom <= d.bottom + 0.5 || b.top >= d.bottom - 0.5) continue; // whole, or wholly below
+        if (!(more && b.top >= d.bottom - fade - 0.5)) bad.push(`"${n.textContent.trim().slice(0, 24)}" ${Math.round(b.top)}-${Math.round(b.bottom)} edge ${Math.round(d.bottom)} fade ${Math.round(fade)}`);
+      }
+    }
+    return { bad, more, hidden, fade: Math.round(fade) };
+  });
 /** chooses a row by clicking it, like the mouse */
 const click = (page, id) => page.click(`#bb-${id}`);
 
@@ -92,7 +118,7 @@ for (const S of SIZES) {
       sv.keepers.pylon = { step: 'request1' };
       sv.research ??= { analysed: [], done: [], running: [], levels: {} };
       sv.research.done.push('rb-cells', 'rb-backpack', 'rb-pulse', 'rb-efficiency', 'rb-sprint', 'rb-lantern', 'rb-eye');
-      sv.research.levels = { chargeCells: 2, backpack: 1, pulseRadius: 3, sprint: 2, keenEye: 1 };
+      sv.research.levels = { chargeCells: 2, backpack: 1, pulseRadius: 3, sprint: 2, keenEye: 1, quickHands: 3 };
       g.sim.state.progression.parkGrowth = 1;
       const [fx, fz] = g.sim.areas.info('park').landmark;
       g.bot.teleport('g', fx - 2.5, fz + 4.5);
@@ -180,6 +206,20 @@ for (const S of SIZES) {
       if (!r.ok) cut.push(`${id} "${r.h4}" ${JSON.stringify(r.at)}`);
     }
     check(!cut.length, `${L}: #661: every row in focus shows its second heading and its first line (${rowIds.length} rows) ${cut.join(' | ')}`);
+    // E25 playthrough: at rest (a row in focus, the detail at its top) no line sits half under the bottom edge
+    const halfCut = [];
+    let faded = 0;
+    for (const id of rowIds) {
+      await page.focus(`#bb-${id}`);
+      await page.waitForTimeout(60);
+      const e = await edgeCut(page);
+      if (e.more) faded++;
+      if (e.bad.length || e.hidden !== e.more) halfCut.push(`${id} ${JSON.stringify(e)}`);
+    }
+    check(!halfCut.length, `${L}: no detail line sits half under the bottom edge at rest; the edge fades only while words are still below it (${faded} of ${rowIds.length} rows fade) ${halfCut.join(' | ')}`);
+    await page.focus('#bb-quickHands');
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: `${out}/10-quick-hands-top-${L}.png` });
     for (const [id, what] of [['pry', 'learned'], ['glide', 'later'], ['climb', 'next']]) {
       await page.focus(`#bb-${id}`);
       await page.waitForTimeout(900);
@@ -276,6 +316,40 @@ for (const S of SIZES) {
     failed++;
     console.log('✗', L, e);
     await page.screenshot({ path: `${out}/x-error-${L}.png` }).catch(() => {});
+  }
+  await page.close();
+}
+// E25 playthrough: a fresh save, Pry in focus at Deck 150% (its "how to learn it" ran half under the edge)
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  page.setDefaultTimeout(180000);
+  try {
+    await page.goto(`http://localhost:${port}/?slot=1&new=1&gfx=deck`);
+    await page.waitForFunction(() => window.solarbloom?.bot?.visuals?.loaded && document.querySelector('#loading')?.classList.contains('gone'));
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.pause.clear('blur');
+      g.hud.setUiScale(150);
+      g.hud.toggleBackpack(true);
+      g.hud.backpack.show('bloombot', true);
+    });
+    await page.waitForTimeout(600);
+    await page.focus('#bb-pry');
+    await page.waitForTimeout(900);
+    const e = await edgeCut(page);
+    check(!e.bad.length && e.hidden === e.more, `fresh save, deck-150: Pry's detail has no line half under the edge (${JSON.stringify(e)})`);
+    await page.screenshot({ path: `${out}/10-pry-fresh-deck-150.png` });
+    // scrolled to its end, the fade goes and the last line is whole
+    const end = await page.evaluate(() => {
+      const D = document.querySelector('#bpDetail');
+      D.scrollTop = D.scrollHeight;
+      return new Promise((r) => requestAnimationFrame(() => r(D.classList.contains('more'))));
+    });
+    const e2 = await edgeCut(page);
+    check(end === false && !e2.bad.length, `fresh save, deck-150: at its end the fade goes and nothing is cut (${JSON.stringify(e2)})`);
+  } catch (err) {
+    failed++;
+    console.log('✗ fresh save', err);
   }
   await page.close();
 }
