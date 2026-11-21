@@ -163,6 +163,29 @@ export const WORKBENCH = {
 /** Lucky Cat rewards: units of the local material by variant. */
 export const CAT_REWARD = { standard: 10, golden: 25, rainbow: 60 };
 
+/** #610: what an ability lets the player do, said to someone who has never used it. */
+const ABILITY_NEWS: Record<AbilityId, string> = {
+  pry: 'You can pry rubble open now.',
+  hover: "You can hover over deep water now, so the canals won't stop you.",
+  climb: 'You can climb onto the roofs now: look for ladders.',
+  glide: 'You can glide from roof edges now, right across the gaps.',
+};
+
+/**
+ * #610: a fountain step's toast, in sentences rather than a list of names: what the player can do now, what's new
+ * to build, and how much the backpack holds.
+ */
+export function fountainStepNews(t: TierDef): string {
+  const gives = tierGives(t);
+  const built = gives.filter((g) => Object.values(MACHINES).some((m) => m.name === g));
+  const stack = gives.map((g) => /^Stacks of (\d+)$/.exec(g)?.[1]).find(Boolean);
+  const list = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0]);
+  const out = [t.ability ? ABILITY_NEWS[t.ability] : 'The whole city is in flower.'];
+  if (built.length) out.push(`New to build: ${list(built)}.`);
+  if (stack) out.push(`Your backpack holds ${stack} of each thing.`);
+  return out.join(' ');
+}
+
 /** §3: Tally's trade once the Market Hall is awake. */
 export const TRADE = { give: 3, get: 1 };
 

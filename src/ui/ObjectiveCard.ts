@@ -99,7 +99,7 @@ export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim
       next: urgent?.next ?? W.pryNext,
       topic: urgent?.topic ?? 'keeper',
       where: urgent?.where ?? { kind: 'focus', x, z },
-      place: urgent ? urgent.place : { kind: 'gate', name: `the rubble into ${rubble.name}` },
+      place: urgent ? urgent.place : { kind: 'gate', name: 'the rubble' },
     };
   }
   const parts = fountainParts(sim);

@@ -234,7 +234,7 @@ export class AreaSystem {
   clear(id: string, force = false): boolean {
     const s = this.sim;
     if (!force && !this.ready(id)) {
-      s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : 'Restore more of this area first' });
+      s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : 'Pulse more of the ground here green first' });
       return false;
     }
     if (this.fog(id) === 'cleared') return false;

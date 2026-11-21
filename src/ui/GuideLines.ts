@@ -56,26 +56,26 @@ const listWords = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', 
 export const IDEAS: readonly Idea[] = [
   {
     id: 'salvage',
-    text: (k) => `Old things lie everywhere. Hold ${k('interact')} by a pile to salvage it.`,
+    text: (k) => `Hold ${k('interact')} by a glinting pile to pick through it.`,
     comes: () => true,
     known: salvaged,
   },
   {
     id: 'pulse',
-    text: (k) => (k('pulse') === CLICK ? 'Click to pulse dead ground back to life.' : `Press ${k('pulse')} to pulse dead ground back to life.`),
+    text: (k) => (k('pulse') === CLICK ? 'Click the bare red ground to turn it green.' : `Press ${k('pulse')} by the bare red ground to turn it green.`),
     comes: salvaged,
     known: (sim) => (sim.state.stats.pulses ?? 0) > 0,
   },
   {
     id: 'park',
-    text: () => 'The fountain wants the park alive around it. Every tile you bring back counts.',
+    text: () => 'Keep pulsing the ground around the fountain. Every green patch helps wake it.',
     // after the player's own first pulse (a drone's tile at the start is not the moment)
     comes: (sim) => (sim.state.stats.pulses ?? 0) > 0,
     known: (sim) => (sv(sim)?.tier ?? 0) >= 1 || sim.areas.counts(PARK).restored >= (sim.fountain.next()?.needs.parkTiles ?? Infinity),
   },
   {
     id: 'fountain',
-    text: (k) => `The fountain takes what you salvage. Walk up to it and press ${k('interact')} to hand things in.`,
+    text: (k) => `Take what you find to the fountain in the middle. Press ${k('interact')} there to hand it in.`,
     comes: carriesForFountain,
     known: handedIn,
   },
@@ -85,8 +85,8 @@ export const IDEAS: readonly Idea[] = [
     text: (k, sim) => {
       const short = stillWanted(sim);
       return short.length
-        ? `That's the park alive around the fountain. It still needs ${listWords(short)}: look for the piles that glint.`
-        : `That's the park alive around the fountain. Walk up to it and press ${k('interact')}.`;
+        ? `The fountain still needs ${listWords(short)}. Hold ${k('interact')} by the glinting piles to find them.`
+        : `The fountain has all it needs. Walk up to it and press ${k('interact')} to wake it.`;
     },
     comes: (sim) => {
       const t = sim.fountain.next();
@@ -96,19 +96,19 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'build',
-    text: (k) => `Water's back, and you can build now. Press ${k('buildMenu')} to see what.`,
+    text: (k) => `You can build things now. Press ${k('buildMenu')} to see what you can put down.`,
     comes: (sim) => (sv(sim)?.tier ?? 0) >= 1,
     known: built,
   },
   {
     id: 'pry',
-    text: (k) => `Bloombot can pry now. Hold ${k('interact')} at the rubble that blocks a way out of the park.`,
+    text: (k) => `You can pry rubble open now. Hold ${k('interact')} at the rubble piled across a way out of the park.`,
     comes: (sim) => !!sv(sim)?.abilities.includes('pry'),
     known: pried,
   },
   {
     id: 'keepers',
-    text: (k) => (k('pulse') === CLICK ? 'A Keeper sleeps past the rubble. Click to pulse it awake, then see what it needs.' : `A Keeper sleeps past the rubble. Pulse it awake with ${k('pulse')}, then see what it needs.`),
+    text: (k) => (k('pulse') === CLICK ? 'A robot sleeps past the rubble. Click it to pulse it, then talk to it.' : `A robot sleeps past the rubble. Press ${k('pulse')} by it to pulse it, then talk to it.`),
     comes: pried,
     known: keeperAwake,
   },

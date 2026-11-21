@@ -80,7 +80,7 @@ export class BuildSystem {
     if (cells.some((c) => c!.ramp || c!.level !== cells[0]!.level)) return 'Needs level ground';
     for (const c of cells) {
       if (!c) continue;
-      if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'Lost in the fog: clear the ground here first';
+      if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'Hidden in the fog. Pulse the ground next to it green to push the fog back';
       if (c.blocked) return 'A rusty vent is in the way';
       // E23.5.4.6: a Keeper's pond is water (silted or restored): build beside it, never in it
       if (c.roofId === GROUND && regionPond(c.x, c.z, s.state.layers.find((l) => l.kind === 'ground')?.dryPonds)) return 'That’s a Keeper’s pond: build beside it';
@@ -90,7 +90,7 @@ export class BuildSystem {
       }
       if (s.drones.isReserved(c.id)) return 'Your drone is about to work here';
       if (c.ground === 'growing') return 'Let it finish growing first';
-      if (!allowed.includes(c.ground)) return 'Needs restored or mossy ground: pulse it first';
+      if (!allowed.includes(c.ground)) return 'Needs green or mossy ground: pulse it first';
     }
     return undefined;
   }
@@ -126,9 +126,9 @@ export class BuildSystem {
     if (!r) return undefined;
     const m = this.sim.inventory.shortfall(r);
     if (!m) return undefined;
-    if (m === 'biomass') return 'Needs more Greens 🌿: gather it from restored ground';
+    if (m === 'biomass') return 'Needs more Greens 🌿: gather them from flowering ground';
     // E23.6.1: a component is made at the crafting table (no region to name)
-    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon}: make it at the crafting table`;
+    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon}: make it at the crafting table in the shed`;
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 

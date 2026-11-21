@@ -39,6 +39,7 @@ const QUICK = [
   'shader-warmup',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
   'clear-path',
+  'first-time-text',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
   // E24 (#609): the way marked on the map and in the world

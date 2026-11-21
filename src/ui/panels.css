@@ -261,7 +261,7 @@ button.pp-opt:hover { border-color: var(--leaf); background: var(--leaf-soft); }
 #tip b .icon { width: 1.25em; height: 1.25em; vertical-align: -.26em; }
 #tip .bad { color: var(--clay-ink); font-weight: 800; }
 #tip .ok { color: var(--leaf-ink); font-weight: 800; }
-#fail { position: absolute; z-index: 8; display: none; max-width: 300px; padding: 8px 14px; pointer-events: none; border-radius: 999px; border: 1.5px solid var(--clay); background: var(--clay-soft); box-shadow: var(--shadow-sm); font: 800 16px/1.3 var(--font-ui); color: var(--clay-ink); }
+#fail { position: absolute; z-index: 8; display: none; max-width: 300px; padding: 8px 14px; pointer-events: none; border-radius: 22px; /* #610: a pill on one line, and a long refusal wraps inside it */ border: 1.5px solid var(--clay); background: var(--clay-soft); box-shadow: var(--shadow-sm); font: 800 16px/1.3 var(--font-ui); color: var(--clay-ink); }
 #fail .icon { width: 1.1em; height: 1.1em; vertical-align: -.22em; }
 #catPanel { position: absolute; right: calc(18px + var(--safe-r)); top: calc(214px + var(--safe-t)); z-index: 4; width: 300px; padding: 14px 52px 14px 16px; border-radius: var(--r); background: var(--paper-a); animation: toastIn .35s cubic-bezier(.2, 1.6, .4, 1); }
 #catPanel[hidden] { display: none; }

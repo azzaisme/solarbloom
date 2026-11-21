@@ -16,7 +16,7 @@ import { SightPicker } from '../rendering/SightPicker';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, MaterialId, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
-import { MATERIALS, SALVAGE, TIERS, tierGives } from '../data/salvage';
+import { MATERIALS, SALVAGE, TIERS, fountainStepNews } from '../data/salvage';
 import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
@@ -405,9 +405,9 @@ export class Game {
     // City 05.2: the park cheers up in stages as you restore it.
     this.chunks.onParkStage = (stage) => {
       const lines: Record<number, string> = {
-        1: '🧹 The park paths are swept clean.<small>A quarter of the way to waking the fountain.</small>',
-        2: '🪑 The benches are mended.<small>Halfway there: the birds will want to sit here again.</small>',
-        3: '💡 The lamps are lit again!<small>The planter trees leaf out and bunting goes up on the bandstand.</small>',
+        1: '🧹 A quarter of the way there<small>Keep pulsing the ground around the fountain to wake it.</small>',
+        2: '🪑 Halfway there<small>Keep pulsing the ground around the fountain. The birds will want to sit here again.</small>',
+        3: '💡 Three quarters of the way there<small>The lamps are lit again. A little more green around the fountain and it wakes.</small>',
       };
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
       this.vfx.ring(new pc.Vec3(8, 0.3, 8), PALETTE.gold, 6, 1.0);
@@ -1335,7 +1335,7 @@ export class Game {
       return;
     }
     if (r === 'full') this.hud.showFail('Fully charged');
-    else if (r === 'none') this.hud.showFail('Nothing to eat: Greens or Food fills up bloombot\'s charge');
+    else if (r === 'none') this.hud.showFail('Nothing to eat. Gather Greens from flowering ground first, then try again.');
   }
 
   private wireKeys() {
@@ -3592,7 +3592,7 @@ export class Game {
   private checkCozyUnlocks() {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
-    for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
+    for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Grow it in an empty plot on green ground.</small>`, 'gold', 4.5);
     for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
@@ -3988,7 +3988,7 @@ export class Game {
       const info = s.areas.info(areaId);
       // E21.5: an Old City region names itself; its backstreets open quietly
       if (info.region) this.hud.toast(`🔓 ${s.gates.regionById(info.region)!.name} is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>`, 'gold', 4);
-      else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>The fog lifts. Restore it to wake the ${info.landmarkName}.</small>`, 'gold', 4);
+      else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>Pulse its ground green to wake the ${info.landmarkName}.</small>`, 'gold', 4);
       if (!info.noLandmark) this.sfx.fanfare();
       this.save();
     });
@@ -4015,7 +4015,7 @@ export class Game {
     b.on('area.specialty', ({ areaId, met }) => {
       if (!met || s.areas.ready(areaId) || this.specialtyToasted.has(areaId)) return;
       this.specialtyToasted.add(areaId);
-      this.hud.toast(`✓ ${s.areas.info(areaId).landmarkName}: that's the hard part done<small>Restore the rest of its ground to wake it.</small>`, 'gold', 3.5);
+      this.hud.toast(`✓ ${s.areas.info(areaId).landmarkName}: that's the hard part done<small>Pulse the rest of the ground here green to wake it.</small>`, 'gold', 3.5);
     });
     b.on('tile.restoring', ({ tile, source }) => {
       this.grid.refresh(tile, true);
@@ -4294,7 +4294,7 @@ export class Game {
       this.celebrateTier(tier);
       if (tier === 1) return this.playCoreSequence();
       const t = TIERS[tier - 1];
-      this.hud.toast(`⛲ ${t.name}!<small>${tierGives(t).join(' · ')}</small>`, 'gold', 6);
+      this.hud.toast(`⛲ ${t.name}!<small>${fountainStepNews(t)}</small>`, 'gold', 6);
       this.sfx.fanfare();
       this.save();
     });
@@ -4723,7 +4723,7 @@ export class Game {
     this.camera.shake(0.06);
     const a = s.areas.info(id);
     const fresh = a.neighbours.filter((n) => s.areas.fog(n) === 'frontier').length;
-    this.hud.toast(`🌫️ The fog lifts from the ${AREA_TYPES[a.type].name.toLowerCase()}!<small>${a.landmarkName} wakes${fresh ? ` · ${fresh} new area${fresh > 1 ? 's' : ''} emerge from the gloom` : ''}.</small>`, 'gold', 4.5);
+    this.hud.toast(`🌫️ The fog lifts from the ${AREA_TYPES[a.type].name.toLowerCase()}!<small>${a.landmarkName} is awake.${fresh ? ' New places have opened nearby: go and look.' : ''}</small>`, 'gold', 4.5);
     this.save();
   }
 

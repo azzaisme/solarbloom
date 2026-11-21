@@ -193,7 +193,7 @@ export class KeeperSystem {
       }
       const m = this.giftMaterial();
       if (!m || !s.inventory.pay({ [m]: WAKE_GIFT })) {
-        s.bus.emit('action.failed', { reason: `${d.name} stirs: bring ${WAKE_GIFT} of anything to wake it` });
+        s.bus.emit('action.failed', { reason: `It needs ${WAKE_GIFT} of any one thing to wake, like Scrap or Seeds. The glinting piles have plenty.` });
         this.say(id, d.say.stirred);
         return 'stirs';
       }
@@ -523,15 +523,15 @@ export class KeeperSystem {
     const st = this.state(id);
     switch (st.step) {
       case 'asleep':
-        return st.pulsed ? `${d.name} stirs. Hand it ${WAKE_GIFT} of anything to wake it.` : `${d.name} is asleep. Pulse it to wake it.`;
+        return st.pulsed ? `A robot is stirring. Bring it ${WAKE_GIFT} of any one thing, like Scrap or Seeds, and talk to it.` : 'A robot is asleep here. Pulse it to stir it.';
       case 'request1':
-        return `${d.name} asks for ${costText(this.wants(id) ?? {})}.`;
+        return `Bring ${d.name} ${costText(this.wants(id) ?? {})}.`;
       case 'request2': {
         const p = this.patch(id);
-        return `${d.name} asks you to restore ${this.region(id).patch.name.toLowerCase()}: ${p.restored} of ${p.total} tiles.`;
+        return `Pulse ${this.region(id).patch.name.toLowerCase()} green for ${d.name}: ${p.restored} of ${p.total}.`;
       }
       case 'landmark':
-        return `${d.name}: wake the ${this.region(id).landmark.name} with ${costText(this.wants(id) ?? {})}.`;
+        return `Bring ${costText(this.wants(id) ?? {})} to the ${this.region(id).landmark.name} to wake it.`;
       default: {
         // E23.9.2: until it is a friend, what it loves (the backpack's names; things not found yet stay unnamed)
         if (this.isFriend(id) || !this.story(id)) return `${d.name} looks after ${this.region(id).name}.`;

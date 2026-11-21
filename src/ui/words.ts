@@ -76,7 +76,7 @@ export const WORDS = {
     /** #605: the fountain's next step as the goal: step 1 wakes it, later steps go by the fountain panel's name */
     fountain: (step: number, name: string) => (step === 1 ? 'Wake the fountain' : `Fountain step ${step}: ${name}`),
     /** #605: the goal when everything it wants is there */
-    fountainReady: (step: number) => (step === 1 ? 'The fountain is ready. Go and wake it.' : 'The fountain is ready for its next step. Go and see it.'),
+    fountainReady: (step: number) => (step === 1 ? 'The fountain has all it needs. Go and wake it.' : 'The fountain has all it needs. Walk up to it for its next step.'),
     /** #605: what the step brings, in a few plain words */
     why: {
       pry: 'Bloombot learns to pry open rubble',
@@ -86,9 +86,9 @@ export const WORDS = {
       bloom: 'The whole city comes back into flower',
     },
     /** #605: after the fountain wakes, until the first pry: the goal is the rubble nearest bloombot */
-    pry: (region: string) => `Pry open the rubble into ${region}`,
-    pryWhy: 'A Keeper sleeps on the other side',
-    pryNext: 'Walk up to the rubble. Bloombot can pry it open now.',
+    pry: (_region: string) => 'Pry open the rubble at the edge of the park',
+    pryWhy: 'A robot sleeps on the other side, and it can help you',
+    pryNext: 'Walk up to the rubble and pry it open. Show me where leads you there.',
     /** #605 / #608: the park's part of a fountain step */
     park: 'Park',
     landmarks: 'Landmarks awake',

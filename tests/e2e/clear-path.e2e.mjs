@@ -96,7 +96,7 @@ try {
     const g1 = await page.evaluate(() => window.solarbloom.hud.guide.lastText);
     const start = await page.evaluate(() => ({ pulses: window.solarbloom.sim.state.stats.pulses ?? 0, ideas: [...(window.solarbloom.sim.state.progression.ideas ?? [])] }));
     check(start.pulses === 0 && !start.ideas.includes('pulse') && !start.ideas.includes('park'), `${L}: a new game hasn't pulsed yet, so its pulse line is still to come (${JSON.stringify(start)})`);
-    check(/^Old things lie everywhere\. Hold .+ by a pile to salvage it\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
+    check(/^Hold .+ by a glinting pile to pick through it\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
     const arrow = await page.evaluate(() => {
       const g = window.solarbloom;
       // #609: the waymark stands on the goal spot (Game.goal, looked up twice a second); at the start bloombot is
@@ -199,9 +199,9 @@ try {
       g.bot.pose.facing = Math.PI;
       return s.fountain.condition().done;
     });
-    await page.waitForFunction(() => /park alive/.test(window.solarbloom.hud.guide.text ?? ''), null, { timeout: 20000 }).catch(() => {});
+    await page.waitForFunction(() => /still needs Scrap/.test(window.solarbloom.hud.guide.text ?? ''), null, { timeout: 20000 }).catch(() => {});
     const g5 = await page.evaluate(() => window.solarbloom.hud.guide.text);
-    check(done && g5 === "That's the park alive around the fountain. It still needs Scrap and Seeds: look for the piles that glint.", `${L}: the park part done says so, and where to look ("${g5}")`);
+    check(done && /^The fountain still needs Scrap and Seeds\. Hold .+ by the glinting piles to find them\.$/.test(g5 ?? ''), `${L}: the park part done says so, and where to look ("${g5}")`);
     const glints = await page.evaluate(async () => {
       const g = window.solarbloom;
       const burst = g.vfx.burst.bind(g.vfx);
@@ -230,7 +230,7 @@ try {
     });
     await page.waitForFunction(() => /^Pry open the rubble/.test(document.querySelector('#objTitle')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
     const c5 = await page.evaluate(cardNow);
-    check(/^Pry open the rubble into /.test(c5.title) && c5.why === 'A Keeper sleeps on the other side' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
+    check(c5.title === 'Pry open the rubble at the edge of the park' && c5.why === 'A robot sleeps on the other side, and it can help you' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
     await page.keyboard.press('KeyH');
     await page.waitForTimeout(1600);
     const r5 = await page.evaluate(() => {

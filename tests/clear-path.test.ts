@@ -90,7 +90,7 @@ describe('#605: the goal card says why and where', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.delivered = { scrap: 20, seeds: 6 };
     restorePark(sim, 60);
-    if (sim.fountain.canAdvance()) expect(objectiveSentence(sim).text).toBe('The fountain is ready. Go and wake it.');
+    if (sim.fountain.canAdvance()) expect(objectiveSentence(sim).text).toBe('The fountain has all it needs. Go and wake it.');
     sim.state.salvage!.tier = TIERS.length;
     const g = sim.advisor.suggest();
     expect(objectiveSentence(sim).text).toBe(g.text);
@@ -111,7 +111,7 @@ describe('#607: the guide\'s lines, once each', () => {
     expect(dueIdea(fresh)).toBeUndefined();
     const first = dueIdea(sim)!;
     expect(first.id).toBe('salvage');
-    expect(first.text(key as never, sim)).toBe('Old things lie everywhere. Hold E by a pile to salvage it.');
+    expect(first.text(key as never, sim)).toBe('Hold E by a glinting pile to pick through it.');
     markShown(sim, 'salvage');
     expect(dueIdea(sim)).toBeUndefined(); // pulsing comes up once something is salvaged
     sim.state.salvage!.piles['p-test'] = 1;
@@ -181,10 +181,10 @@ describe('#608: greening moves you forward', () => {
     expect(sim.fountain.condition().done).toBe(true);
     const idea = dueIdea(sim)!;
     expect(idea.id).toBe('parkDone');
-    expect(idea.text(key as never, sim)).toBe("That's the park alive around the fountain. It still needs Scrap and Seeds: look for the piles that glint.");
+    expect(idea.text(key as never, sim)).toBe('The fountain still needs Scrap and Seeds. Hold E by the glinting piles to find them.');
     // the card's next step names a pile to salvage, with a place to show
     const o = objectiveSentence(sim);
-    expect(o.next).toMatch(/^Salvage piles to find (Scrap|Seeds)\. Show me where leads to one\.$/);
+    expect(o.next).toMatch(/^Look for (Scrap|Seeds) in the glinting piles\. Show me where points to one\.$/);
     expect(o.where?.kind).toBe('focus');
   });
 
@@ -194,7 +194,7 @@ describe('#608: greening moves you forward', () => {
     restorePark(sim, 200);
     const idea = IDEAS.find((i) => i.id === 'parkDone')!;
     expect(idea.comes(sim)).toBe(true);
-    expect(idea.text(key as never, sim)).toBe("That's the park alive around the fountain. Walk up to it and press E.");
+    expect(idea.text(key as never, sim)).toBe('The fountain has all it needs. Walk up to it and press E to wake it.');
   });
 });
 
@@ -274,15 +274,15 @@ describe('#605: after the fountain wakes, the rubble is the goal until the first
   it('the card leads to the nearest rubble, and the goal spot points at it', () => {
     const sim = woke();
     const o = objectiveSentence(sim);
-    expect(o.text).toMatch(/^Pry open the rubble into /);
-    expect(o.why).toBe('A Keeper sleeps on the other side');
-    expect(o.next).toBe('Walk up to the rubble. Bloombot can pry it open now.');
+    expect(o.text).toBe('Pry open the rubble at the edge of the park');
+    expect(o.why).toBe('A robot sleeps on the other side, and it can help you');
+    expect(o.next).toBe('Walk up to the rubble and pry it open. Show me where leads you there.');
     const s = goalSpot(sim, o)!;
     expect(s.kind).toBe('gate');
     const r = REGIONS.find((q) => q.gate.needs.ability === 'pry' && q.gate.cells.some(([x, z]) => x === s.cell.x && z === s.cell.z))!;
     expect(r).toBeTruthy();
     expect(sim.gates.problem(r.gate)).toBeUndefined();
-    expect(o.text).toBe(`Pry open the rubble into ${r.name}`);
+    expect(o.where).toEqual({ kind: 'focus', x: r.gate.cells[0][0], z: r.gate.cells[0][1] }); // the nearest rubble, by Show me where
     for (const line of [o.text, o.why!, o.next!]) expect(bannedIn(line), line).toEqual([]);
   });
   it('running low still shows under it', () => {
@@ -314,17 +314,17 @@ describe('#605 review: salvaging counts at once, and a full backpack goes to the
     const sim = new Sim(createInitialState(7));
     sim.inventory.add('scrap', 20);
     const o = objectiveSentence(sim);
-    expect(o.next).toBe('Take the Scrap to the fountain.');
+    expect(o.next).toBe('Take the Scrap to the fountain and hand it in.');
     expect(goalSpot(sim, o)).toMatchObject({ kind: 'fountain', name: 'the fountain' });
     sim.inventory.add('seeds', 2); // some Seeds too: both go
-    expect(objectiveSentence(sim).next).toBe('Take the Scrap and Seeds to the fountain.');
+    expect(objectiveSentence(sim).next).toBe('Take the Scrap and Seeds to the fountain and hand them in.');
   });
 
   it('carrying a little of it, with piles about: salvage more first', () => {
     const sim = new Sim(createInitialState(7));
     sim.inventory.add('scrap', 3);
     const o = objectiveSentence(sim);
-    expect(o.next).toMatch(/^Salvage piles to find (Scrap|Seeds)\. Show me where leads to one\.$/);
+    expect(o.next).toMatch(/^Look for (Scrap|Seeds) in the glinting piles\. Show me where points to one\.$/);
     expect(goalSpot(sim, o)!.kind).toBe('pile');
   });
 });
@@ -333,9 +333,9 @@ describe('#607 review: the guide names the input the way a player would', () => 
   it('the left mouse button is "Click"; a key or pad button is its glyph', () => {
     const sim = new Sim(createInitialState(7));
     const pulse = IDEAS.find((i) => i.id === 'pulse')!;
-    expect(pulse.text(() => CLICK, sim)).toBe('Click to pulse dead ground back to life.');
-    expect(pulse.text(() => '<svg>RB</svg>', sim)).toBe('Press <svg>RB</svg> to pulse dead ground back to life.');
+    expect(pulse.text(() => CLICK, sim)).toBe('Click the bare red ground to turn it green.');
+    expect(pulse.text(() => '<svg>RB</svg>', sim)).toBe('Press <svg>RB</svg> by the bare red ground to turn it green.');
     const keepers = IDEAS.find((i) => i.id === 'keepers')!;
-    expect(keepers.text(() => CLICK, sim)).toBe('A Keeper sleeps past the rubble. Click to pulse it awake, then see what it needs.');
+    expect(keepers.text(() => CLICK, sim)).toBe('A robot sleeps past the rubble. Click it to pulse it, then talk to it.');
   });
 });
