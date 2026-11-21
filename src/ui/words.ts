@@ -64,6 +64,11 @@ export const RESOURCE_NAME = { energy: 'Energy', water: 'Water', biomass: 'Green
 
 /** Old-city strings: the objective card, the gauges, the prompt's refusals, the menu and the loading tips. */
 export const WORDS = {
+  /** #620: Bloombot grows (a short moment when it happens) */
+  bloombot: {
+    learned: (a: string) => `Bloombot can ${a} now`,
+    upgraded: (name: string, level: number, max: number) => `${name}: level ${level} of ${max}`,
+  },
   objective: {
     restore: 'Bring the park back to life around the fountain',
     flower: 'Get the park in flower round the fountain',

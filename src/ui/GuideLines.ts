@@ -18,6 +18,9 @@ export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'b
 /** What the key function gives for an action on the mouse's left button: the line says "Click" instead. */
 export const CLICK = 'Click';
 
+/** #620: kept in the same list: the first Bloombot moment has pointed at its page (later ones don't). */
+export const BLOOMBOT_PAGE = 'bloombotPage';
+
 export interface Idea {
   id: IdeaId;
   /**

@@ -2,7 +2,8 @@ import { CHUNK } from '../core/Hash';
 import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { WORDS } from '../ui/words';
-import { CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
+import { BLOOMBOT_PAGE, CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
+import { RESEARCH_UPGRADES } from '../data/research';
 import { goalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
@@ -497,6 +498,10 @@ export class Game {
         },
         glyph: (a) => this.glyph(a),
         showWhere: () => this.showWhere(),
+        pointTo: (at) => {
+          this.syncPanelPause();
+          this.pointTo({ ...at, cell: { x: at.x, z: at.z }, x: at.x + 0.5, z: at.z + 0.5 });
+        },
         focusTile: (x, z) => {
           if (this.cinematic) return;
           this.camera.glide(x + 0.5, 0, z + 0.5, Math.max(this.camera.zoom, 0.9));
@@ -1537,6 +1542,26 @@ export class Game {
     if (!this.bot || this.cinematic || this.photo.active) return false;
     const spot = goalSpot(this.sim, this.hud.objective.current);
     if (!spot) return false;
+    return this.pointTo(spot);
+  }
+
+  /**
+   * #620: Bloombot learned a move or got an upgrade level: a short moment once it is out walking again (after the
+   * fountain's cinematic, outside panels). The first one also says where its page is; later ones don't.
+   */
+  private grown: string[] = [];
+  private showGrowth() {
+    const title = this.grown.shift();
+    if (!title) return;
+    const p = this.sim.state.progression;
+    const first = !(p.ideas ??= []).includes(BLOOMBOT_PAGE);
+    if (first) p.ideas.push(BLOOMBOT_PAGE);
+    this.hud.toast(first ? `${title}<small>See what's next on its page in the backpack (${esc(this.hudKeys('backpack'))}).</small>` : title, 'gold', first ? 6 : 3.5);
+  }
+
+  /** #605 / #620: mark a place and turn the camera to it (the card's goal spot, or a place the Bloombot page names). */
+  private pointTo(spot: { roofId: string; x: number; z: number; cell: { x: number; z: number } }): boolean {
+    if (!this.bot || this.cinematic || this.photo.active) return false;
     this.wayMark = { roofId: spot.roofId, x: spot.cell.x, z: spot.cell.z, until: performance.now() + WAY_MARK_MS };
     if (this.resting?.active) return true;
     const p = this.bot.pose;
@@ -1563,8 +1588,10 @@ export class Game {
     const was = this.ideaShowing;
     if (was && this.hud.guide.text && (!was.comes(this.sim) || was.known(this.sim))) this.hud.guide.hide();
     if (!this.bot || this.cinematic || this.photo.active || this.paused || this.hud.modalOpen || this.panelOpen()) return;
-    if (document.body.classList.contains('loading-on') || this.settings.hints === false || this.settings.potter) return;
-    startIdeas(this.sim);
+    if (document.body.classList.contains('loading-on')) return;
+    startIdeas(this.sim); // before anything adds to the list (a save from before E24 is sorted out first)
+    this.showGrowth();
+    if (this.settings.hints === false || this.settings.potter) return;
     if (now - this.ideaAt < IDEA_GAP_MS) return;
     const idea = dueIdea(this.sim);
     if (!idea) return;
@@ -4267,6 +4294,15 @@ export class Game {
       const [wx, wy, wz] = this.sim.grid.tileWorld(t);
       this.vfx.burst(new pc.Vec3(wx, wy + 0.3, wz), 10, { up: 1.6, speed: 0.9, size: 0.05, life: 1.1 });
     });
+    // #620: Bloombot grows: a move from the fountain, a level from the workshop
+    b.on('fountain.tier', ({ tier }) => {
+      const a = TIERS[tier - 1]?.ability;
+      if (a) this.grown.push(WORDS.bloombot.learned(a));
+    });
+    b.on('research.upgraded', ({ id, level }) => {
+      const u = RESEARCH_UPGRADES.find((x) => x.id === id);
+      if (u?.branch === 'bloombot') this.grown.push(WORDS.bloombot.upgraded(u.name, level, u.levels.length));
+    });
     b.on('fountain.tier', ({ tier }) => {
       this.applyFountainLook(false);
       this.celebrateTier(tier);
@@ -4914,6 +4950,8 @@ export class Game {
     this.updateChainPresentation(wdt);
     this.updateGuideLines();
     this.updatePileGlints();
+    // #620: Bloombot wears what it has grown into (moves learned, Bigger charge, Roomier backpack)
+    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities.length ?? 0, cells: this.sim.research.level('chargeCells'), pockets: this.sim.research.level('backpack') });
     // #613: resting at home charges bloombot: show it, so the player knows to stand still
     if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
     if (!this.cinematic) this.checkCozyUnlocks();

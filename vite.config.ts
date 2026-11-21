@@ -38,7 +38,7 @@ const QUICK = [
   // E23 polish (#596): shaders warm behind the loading screen
   'shader-warmup',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
-  'clear-path',
+  'clear-path', 'bloombot-page',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
