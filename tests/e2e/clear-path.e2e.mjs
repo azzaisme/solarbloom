@@ -94,6 +94,8 @@ try {
     check(c1.parts.length === 3 && /Scrap.*0 of 20/.test(c1.parts[0]) && /Seeds.*0 of 6/.test(c1.parts[1]) && /Park.*of 60/.test(c1.parts[2]), `${L}: every part counted from the start (${c1.parts.join(' | ')})`);
     check(!!c1.next && /Show me where/.test(c1.where), `${L}: the next step under it, with Show me where ("${c1.next}" · "${c1.where}")`);
     const g1 = await page.evaluate(() => window.solarbloom.hud.guide.text);
+    const start = await page.evaluate(() => ({ pulses: window.solarbloom.sim.state.stats.pulses ?? 0, ideas: [...(window.solarbloom.sim.state.progression.ideas ?? [])] }));
+    check(start.pulses === 0 && !start.ideas.includes('pulse'), `${L}: a new game hasn't pulsed yet, so its pulse line is still to come (${JSON.stringify(start)})`);
     check(/^Old things lie everywhere\. Hold .+ by a pile to salvage it\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
     const arrow = await page.evaluate(() => {
       const g = window.solarbloom;
@@ -107,7 +109,14 @@ try {
     await shot('1-new-game');
 
     // ── 2. Show me where (H): the camera turns to look that way ──
-    const before = await page.evaluate(() => window.solarbloom.camera.heading);
+    // (a new game starts beside its first pile, where the mark has nothing to show: step away from it first)
+    const before = await page.evaluate(() => {
+      const g = window.solarbloom;
+      const [fx, fz] = g.sim.areas.info('park').landmark;
+      g.bot.teleport('g', fx + 0.5, fz + 4.5);
+      return g.camera.heading;
+    });
+    await page.waitForTimeout(600);
     await page.keyboard.press('KeyH');
     await page.waitForTimeout(1600);
     const after = await page.evaluate(() => {
@@ -210,6 +219,28 @@ try {
     check(!bad.length, `${L}: the line sits clear of everything ${bad.join(', ')}`);
     await shot('5-park-done');
 
+    // ── 5b. the fountain awake, nothing pried yet: the rubble is the goal, and Show me where points at it ──
+    await page.evaluate(() => {
+      const s = window.solarbloom.sim;
+      s.state.salvage.tier = 1;
+      if (!s.state.salvage.abilities.includes('pry')) s.state.salvage.abilities.push('pry');
+      window.solarbloom.hud.objective.adviceAt = -Infinity;
+    });
+    await page.waitForFunction(() => /^Pry open the rubble/.test(document.querySelector('#objTitle')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
+    const c5 = await page.evaluate(cardNow);
+    check(/^Pry open the rubble into /.test(c5.title) && c5.why === 'A Keeper sleeps on the other side' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
+    await page.keyboard.press('KeyH');
+    await page.waitForTimeout(1600);
+    const r5 = await page.evaluate(() => {
+      const g = window.solarbloom;
+      const w = g.wayMark;
+      return w ? { gate: !!g.sim.gates.gateAt(w.x, w.z) } : null;
+    });
+    check(!!r5?.gate, `${L}: and Show me where marks the rubble (${JSON.stringify(r5)})`);
+    bad = await page.evaluate(layout);
+    check(!bad.length, `${L}: the card sits clear of everything ${bad.join(', ')}`);
+    await shot('5b-pry-goal');
+
     // ── 6. a Keeper's request sits under the fountain goal ──
     const keeper = await page.evaluate(() => {
       const g = window.solarbloom;
@@ -229,6 +260,8 @@ try {
       return { id, pinned: s.keepers.pinned()?.text ?? null };
     });
     await page.waitForTimeout(1200);
+    const g6 = await page.evaluate(() => window.solarbloom.hud.guide.text);
+    check(!/park alive/.test(g6 ?? ''), `${L}: the park-done line goes once the fountain moves on ("${g6 ?? ''}")`);
     const c6 = await page.evaluate(cardNow);
     check(/^Fountain step 2: /.test(c6.title) && !!keeper.pinned && c6.next.includes(keeper.pinned), `${L}: the Keeper's request sits under the fountain goal ("${c6.title}" · "${c6.next}")`);
     bad = await page.evaluate(layout);

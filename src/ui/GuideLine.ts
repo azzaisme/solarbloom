@@ -65,6 +65,14 @@ export class GuideLine extends HudPart {
     this.place();
   }
 
+  /** Fades the line now (its moment has passed). */
+  hide() {
+    const el = $(this.root, '#guide');
+    if (el.hidden || this.fadeAt) return;
+    el.classList.add('out');
+    this.fadeAt = performance.now() + FADE_MS;
+  }
+
   /** The line showing now, if any (tests and shots read it). */
   get text(): string | undefined {
     const el = $(this.root, '#guide');
@@ -94,6 +102,7 @@ export class GuideLine extends HudPart {
   /** Just above the prompt (whatever its height), or where the prompt would sit when there is none. */
   private place() {
     const el = $(this.root, '#guide');
+    this.fit(el);
     const p = $(this.root, '#prompt');
     const cs = p ? getComputedStyle(p) : undefined;
     const base = cs ? parseFloat(cs.bottom) || 26 : 26;
@@ -103,5 +112,25 @@ export class GuideLine extends HudPart {
     const tally = $(this.root, '#tally');
     const over = `${Math.round(base + up + (el.hidden ? 0 : el.offsetHeight + 8))}px`;
     if (tally.style.bottom !== over) tally.style.bottom = over;
+  }
+
+  /**
+   * Centred between the minimap (bottom left) and the dock (bottom right), never over either, nor over a toast beside
+   * it: at a large interface size on a small screen the line wraps instead (1280 × 800 at 150%).
+   */
+  private fit(el: HTMLElement) {
+    const box = (sel: string) => {
+      const r = document.querySelector(sel)?.getBoundingClientRect();
+      return r && r.width > 0 && r.height > 0 ? r : undefined;
+    };
+    const me = el.getBoundingClientRect();
+    const left = box('#minimap');
+    const toasts = box('#toasts');
+    const rights = [box('#dock'), toasts && me.height && toasts.bottom > me.top && toasts.top < me.bottom ? toasts : undefined];
+    const mid = innerWidth / 2;
+    const half = Math.min(left ? mid - left.right : mid, ...rights.map((r) => (r ? r.left - mid : mid))) - 14;
+    const zoom = parseFloat(getComputedStyle(this.root).getPropertyValue('--ui-zoom')) || 1;
+    const max = `${Math.min(560, Math.max(200, Math.floor((2 * half) / zoom)))}px`;
+    if (el.style.maxWidth !== max) el.style.maxWidth = max;
   }
 }

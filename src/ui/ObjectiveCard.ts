@@ -7,6 +7,8 @@ import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import type { ItemId, MaterialId } from '../core/types';
 import { oldCityHint } from './OldCityGuide';
+import { REGIONS, type RegionDef } from '../data/oldcity';
+import { PARK } from '../core/Areas';
 
 /**
  * E22.10 (#348) / E22.5 (#342): the objective card (top left). #605 (E24): the goal stays on top for as long as the
@@ -78,6 +80,20 @@ export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim
   const t = f.next();
   // after the last step: the advisor's step is the goal (nothing is left to wait under)
   if (!t) return { text: advice?.text ?? W.explore, topic: advice?.topic, where: advice?.action, place: advice?.place };
+  // after the fountain wakes, until the first pry: the rubble is the goal (the step after can wait)
+  const rubble = firstRubble(sim);
+  if (rubble) {
+    const [x, z] = rubble.gate.cells[0];
+    const urgent = advice && URGENT.has(advice.topic) ? next : undefined;
+    return {
+      text: W.pry(rubble.name),
+      why: W.pryWhy,
+      next: urgent?.next ?? W.pryNext,
+      topic: urgent?.topic ?? 'keeper',
+      where: urgent?.where ?? { kind: 'focus', x, z },
+      place: urgent ? urgent.place : { kind: 'gate', name: `the rubble into ${rubble.name}` },
+    };
+  }
   const parts = fountainParts(sim);
   const progress = parts.reduce((a, p) => a + (p.need > 0 ? p.have / p.need : 1), 0) / Math.max(1, parts.length);
   return {
@@ -87,6 +103,22 @@ export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim
     progress,
     ...next,
   };
+}
+
+/**
+ * #605: bloombot can pry and hasn't yet: the shut rubble nearest it that pry opens (the first Keeper's way in), so
+ * the card leads there before the fountain's next step. Undefined once any rubble is pried.
+ */
+export function firstRubble(sim: Sim): RegionDef | undefined {
+  const sv = sim.state.salvage;
+  if (!sv?.abilities.includes('pry')) return undefined;
+  const pry = REGIONS.filter((r) => r.gate.needs.ability === 'pry');
+  if (pry.some((r) => sim.gates.isOpen(r.gate.id))) return undefined;
+  const [fx, fz] = sim.areas.info(PARK).landmark;
+  const bx = sim.bot?.x ?? sim.state.bot?.x ?? fx;
+  const bz = sim.bot?.z ?? sim.state.bot?.z ?? fz;
+  const d = (r: RegionDef) => Math.hypot(r.gate.cells[0][0] + 0.5 - bx, r.gate.cells[0][1] + 0.5 - bz);
+  return pry.filter((r) => !sim.gates.problem(r.gate)).sort((a, b) => d(a) - d(b))[0];
 }
 
 /**

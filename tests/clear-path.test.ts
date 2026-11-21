@@ -115,7 +115,7 @@ describe('#607: the guide\'s lines, once each', () => {
     const sim = new Sim(createInitialState(7));
     startIdeas(sim);
     sim.state.salvage!.piles['p-test'] = 1; // salvaged before the line could show
-    sim.state.stats.tilesRestored = 3; // and pulsed
+    sim.state.stats.pulses = 3; // and pulsed
     markKnown(sim);
     expect(sim.state.progression.ideas).toEqual(expect.arrayContaining(['salvage', 'pulse']));
     expect(dueIdea(sim)?.id).toBe('park');
@@ -250,5 +250,41 @@ describe('#609 / #613: one goal spot for Show me where, the arrow, the beam and 
     const r = new Resting({ sim: { rest: { sitting: { kind: 'bench' } }, bus: { on() {} } }, bot: {} } as never);
     expect(r.active).toBe(true);
     expect(r.action('showWhere')).toBe(false);
+  });
+});
+
+describe('#605: after the fountain wakes, the rubble is the goal until the first pry', () => {
+  const woke = () => {
+    const sim = new Sim(createInitialState(7));
+    sim.state.salvage!.tier = 1;
+    sim.state.salvage!.abilities.push('pry');
+    return sim;
+  };
+  it('the card leads to the nearest rubble, and the goal spot points at it', () => {
+    const sim = woke();
+    const o = objectiveSentence(sim);
+    expect(o.text).toMatch(/^Pry open the rubble into /);
+    expect(o.why).toBe('A Keeper sleeps on the other side');
+    expect(o.next).toBe('Walk up to the rubble. Bloombot can pry it open now.');
+    const s = goalSpot(sim, o)!;
+    expect(s.kind).toBe('gate');
+    const r = REGIONS.find((q) => q.gate.needs.ability === 'pry' && q.gate.cells.some(([x, z]) => x === s.cell.x && z === s.cell.z))!;
+    expect(r).toBeTruthy();
+    expect(sim.gates.problem(r.gate)).toBeUndefined();
+    expect(o.text).toBe(`Pry open the rubble into ${r.name}`);
+    for (const line of [o.text, o.why!, o.next!]) expect(bannedIn(line), line).toEqual([]);
+  });
+  it('running low still shows under it', () => {
+    const sim = woke();
+    (sim as unknown as Record<string, unknown>).charge = { low: true, share: 0.1 };
+    const o = objectiveSentence(sim);
+    expect(o.text).toMatch(/^Pry open the rubble/);
+    expect(o.next).toMatch(/running low/);
+    expect(goalSpot(sim, o)!.kind).toBe('rest');
+  });
+  it('once any rubble is pried, the fountain\'s next step is the goal again', () => {
+    const sim = woke();
+    sim.state.salvage!.opened.push(REGIONS.find((r) => r.gate.needs.ability === 'pry')!.gate.id);
+    expect(objectiveSentence(sim).text).toBe(`Fountain step 2: ${TIERS[1].name}`);
   });
 });

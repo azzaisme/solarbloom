@@ -67,6 +67,8 @@ export class RestorationSystem {
       return false;
     }
     this.sim.charge.use('pulse');
+    // #607: the player's own pulses (drones and chains restore too: the guide asks whether the player has pulsed)
+    this.sim.state.stats.pulses = (this.sim.state.stats.pulses ?? 0) + 1;
     // E23.2.2: the pulse uses one unit of its load (or fires empty) and sends out its reveal ripple
     const load = this.sim.pulseLoad.take();
     const ripple = this.sim.pulseLoad.ripple(t);

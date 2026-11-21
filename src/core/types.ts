@@ -300,6 +300,8 @@ export interface Stats {
   /** chains of at least TUNING.mega.bigChain, by who started them */
   bigChains?: { player: number; auto: number };
   tilesRestored: number;
+  /** #607 (E24): the player's own pulses that landed (missing in older saves) */
+  pulses?: number;
   maxCombo: number;
   chains: number;
   catsFound: number;

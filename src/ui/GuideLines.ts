@@ -58,7 +58,7 @@ export const IDEAS: readonly Idea[] = [
     id: 'pulse',
     text: (k) => `Press ${k('pulse')} to pulse dead ground back to life.`,
     comes: salvaged,
-    known: (sim) => sim.state.stats.tilesRestored > 0,
+    known: (sim) => (sim.state.stats.pulses ?? 0) > 0,
   },
   {
     id: 'park',

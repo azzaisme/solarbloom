@@ -85,6 +85,10 @@ export const WORDS = {
       glide: 'Bloombot learns to glide from the roof edges',
       bloom: 'The whole city comes back into flower',
     },
+    /** #605: after the fountain wakes, until the first pry: the goal is the rubble nearest bloombot */
+    pry: (region: string) => `Pry open the rubble into ${region}`,
+    pryWhy: 'A Keeper sleeps on the other side',
+    pryNext: 'Walk up to the rubble. Bloombot can pry it open now.',
     /** #605 / #608: the park's part of a fountain step */
     park: 'Park',
     landmarks: 'Landmarks awake',

@@ -2,7 +2,7 @@ import { CHUNK } from '../core/Hash';
 import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { WORDS } from '../ui/words';
-import { dueIdea, markShown, startIdeas } from '../ui/GuideLines';
+import { dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
 import { goalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
@@ -1554,10 +1554,14 @@ export class Game {
    */
   private ideaCheckAt = 0;
   private ideaAt = -Infinity;
+  /** the idea whose line is showing: it fades early once its moment passes, or the player has done it */
+  private ideaShowing?: Idea;
   private updateGuideLines() {
     const now = performance.now();
     if (now - this.ideaCheckAt < 500) return;
     this.ideaCheckAt = now;
+    const was = this.ideaShowing;
+    if (was && this.hud.guide.text && (!was.comes(this.sim) || was.known(this.sim))) this.hud.guide.hide();
     if (!this.bot || this.cinematic || this.photo.active || this.paused || this.hud.modalOpen || this.panelOpen()) return;
     if (document.body.classList.contains('loading-on') || this.settings.hints === false || this.settings.potter) return;
     startIdeas(this.sim);
@@ -1566,6 +1570,7 @@ export class Game {
     if (!idea) return;
     markShown(this.sim, idea.id);
     this.ideaAt = now;
+    this.ideaShowing = idea;
     this.hud.guide.show(idea.text((a) => this.hudKey(a), this.sim));
   }
 

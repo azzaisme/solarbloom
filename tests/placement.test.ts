@@ -17,7 +17,7 @@ describe('placement', () => {
     expect(sim.build.check('droneHub', 'r1', 6, 4).ok).toBe(true);
     const sim2 = makeSim();
     rich(sim2);
-    expect(sim2.build.check('solar', 'r1', 6, 6).reason).toMatch(/pulse/);
+    expect(sim2.build.check('solar', 'r1', 6, 6).reason).toMatch(/pulse/i);
   });
 
   it('missing materials are reported separately from a bad spot (E23.1.1: the Old City recipe)', () => {

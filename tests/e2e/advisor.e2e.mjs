@@ -49,12 +49,12 @@ try {
   // bloombot runs low (E23.2's ChargeSystem shape: low / share)
   // (the card asks the advisor twice a second; a software-rendered frame can take seconds, so wait for the line)
   const lineIs = (re) => page.waitForFunction((src) => new RegExp(src, 'i').test(document.querySelector('#objNext')?.textContent ?? ''), re.source, { timeout: 60_000 }).catch(() => {});
-  await page.evaluate(() => (window.solarbloom.sim.charge = { low: true, share: 0.1 }));
+  await page.evaluate(() => window.solarbloom.sim.charge.drainForTest());
   await lineIs(/running low/);
   const low = await nextLine();
   check(/running low/i.test(low) && (await title()) === start, `running low shows under the goal, the goal kept ("${low}")`);
   await page.screenshot({ path: `${dir}/advisor-low.png`, timeout: 180_000 });
-  await page.evaluate(() => (window.solarbloom.sim.charge = { low: false, share: 1 }));
+  await page.evaluate(() => window.solarbloom.sim.charge.refillForTest());
   await page.waitForFunction(() => !/running low/i.test(document.querySelector('#objNext')?.textContent ?? ''), null, { timeout: 60_000 }).catch(() => {});
   const back = await nextLine();
   check(!/running low/i.test(back) && (await title()) === start, `and the next step goes back to the fountain once charged ("${back}")`);
