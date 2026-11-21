@@ -63,6 +63,8 @@ export class BotController {
   onPad?: (button: number) => void;
   /** Island release: bloombot headed into the closed causeway and turns back; the game shows the card (once per approach). */
   onMainlandClosed?: () => void;
+  /** A key press something on screen takes instead of walking (the load wheel's arrows), checked on a fresh press. */
+  claims?: (code: string) => boolean;
   /** Island release: the turn back at the closed causeway (gameplay/TurnBack). */
   readonly turnBack = new TurnBack();
   /** Third person: aiming a build, bloombot faces the way the camera looks and strafes instead of turning */
@@ -93,6 +95,7 @@ export class BotController {
     this.save();
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
+      if (!e.repeat && this.claims?.(e.code)) return; // the press belongs to something on screen (the load wheel)
       const a = this.bindings.actionForCode(e.code, ['world']);
       if (a === 'up' || a === 'down' || a === 'left' || a === 'right' || a === 'sprint') {
         this.held.add(e.code);
