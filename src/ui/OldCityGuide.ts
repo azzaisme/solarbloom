@@ -5,6 +5,7 @@ import { isComponent, itemDef } from '../data/items';
 import { REGIONS } from '../data/oldcity';
 import { MATERIALS } from '../data/salvage';
 import type { Sim } from '../gameplay/Sim';
+import { withKeys } from './words';
 
 export interface Objective {
   title: string;
@@ -106,7 +107,7 @@ export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'inter
       return panelHint(sim, keyFor);
     default:
       // E23.1.5: after the first fifteen minutes the hint line carries the advisor's next step in the loop
-      return { text: sim.advisor.suggest().text };
+      return { text: withKeys(sim.advisor.suggest().text, keyFor) };
   }
 }
 

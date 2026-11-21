@@ -18,6 +18,9 @@ export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'b
 /** What the key function gives for an action on the mouse's left button: the line says "Click" instead. */
 export const CLICK = 'Click';
 
+/** #620: kept in the same list: the first Bloombot moment has pointed at its page (later ones don't). */
+export const BLOOMBOT_PAGE = 'bloombotPage';
+
 export interface Idea {
   id: IdeaId;
   /**
@@ -56,26 +59,26 @@ const listWords = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', 
 export const IDEAS: readonly Idea[] = [
   {
     id: 'salvage',
-    text: (k) => `Old things lie everywhere. Hold ${k('interact')} by a pile to salvage it.`,
+    text: (k) => `Hold ${k('interact')} beside a junk pile to dig out what the fountain needs.`,
     comes: () => true,
     known: salvaged,
   },
   {
     id: 'pulse',
-    text: (k) => (k('pulse') === CLICK ? 'Click to pulse dead ground back to life.' : `Press ${k('pulse')} to pulse dead ground back to life.`),
+    text: (k) => (k('pulse') === CLICK ? 'Click to bring the dry ground around Bloombot back to life.' : `Press ${k('pulse')} to bring the dry ground around Bloombot back to life.`),
     comes: salvaged,
     known: (sim) => (sim.state.stats.pulses ?? 0) > 0,
   },
   {
     id: 'park',
-    text: () => 'The fountain wants the park alive around it. Every tile you bring back counts.',
+    text: () => 'The fountain needs the ground around it alive again. Every patch you bring back adds to Park on the goal card.',
     // after the player's own first pulse (a drone's tile at the start is not the moment)
     comes: (sim) => (sim.state.stats.pulses ?? 0) > 0,
     known: (sim) => (sv(sim)?.tier ?? 0) >= 1 || sim.areas.counts(PARK).restored >= (sim.fountain.next()?.needs.parkTiles ?? Infinity),
   },
   {
     id: 'fountain',
-    text: (k) => `The fountain takes what you salvage. Walk up to it and press ${k('interact')} to hand things in.`,
+    text: (k) => `The fountain needs what you dig out of the piles. Walk up to it and press ${k('interact')} to hand it over.`,
     comes: carriesForFountain,
     known: handedIn,
   },
@@ -85,8 +88,8 @@ export const IDEAS: readonly Idea[] = [
     text: (k, sim) => {
       const short = stillWanted(sim);
       return short.length
-        ? `That's the park alive around the fountain. It still needs ${listWords(short)}: look for the piles that glint.`
-        : `That's the park alive around the fountain. Walk up to it and press ${k('interact')}.`;
+        ? `The ground round the fountain is alive again. It still needs ${listWords(short)}: look for piles that glint.`
+        : `The ground round the fountain is alive again. Walk up to it and press ${k('interact')} to wake it.`;
     },
     comes: (sim) => {
       const t = sim.fountain.next();
@@ -96,19 +99,19 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'build',
-    text: (k) => `Water's back, and you can build now. Press ${k('buildMenu')} to see what.`,
+    text: (k) => `The water's running again, so you can build. Press ${k('buildMenu')} to see what you can make.`,
     comes: (sim) => (sv(sim)?.tier ?? 0) >= 1,
     known: built,
   },
   {
     id: 'pry',
-    text: (k) => `Bloombot can pry now. Hold ${k('interact')} at the rubble that blocks a way out of the park.`,
+    text: (k) => `Bloombot can move rubble now. Hold ${k('interact')} beside the heap of rubble blocking a path out of the park.`,
     comes: (sim) => !!sv(sim)?.abilities.includes('pry'),
     known: pried,
   },
   {
     id: 'keepers',
-    text: (k) => (k('pulse') === CLICK ? 'A Keeper sleeps past the rubble. Click to pulse it awake, then see what it needs.' : `A Keeper sleeps past the rubble. Pulse it awake with ${k('pulse')}, then see what it needs.`),
+    text: (k) => (k('pulse') === CLICK ? 'Another robot is asleep past the rubble. Click beside it to wake it, then see what it needs.' : `Another robot is asleep past the rubble. Press ${k('pulse')} beside it to wake it, then see what it needs.`),
     comes: pried,
     known: keeperAwake,
   },

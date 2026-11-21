@@ -47,6 +47,31 @@ svg.mi-unknown .mi-line { stroke: var(--text-strong); }
 .bp-detail .pn-moves .pn-btn { min-width: 64px; }
 .bp-detail .bp-all .pn-btn { width: 100%; }
 .unseen { color: var(--ink-2); }
+/* #620: Bloombot */
+.bb-main { display: flex; flex-direction: column; gap: 6px; }
+.bb-count { margin-left: 8px; font: 800 16px var(--font-ui); color: var(--ink-2); }
+.bb-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+.bb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px 12px; min-height: 48px; padding: 8px 14px; border-radius: var(--r-tile); border: 1.5px solid transparent; background: var(--paper-2); text-align: left; font: 800 16px var(--font-ui); color: var(--ink); cursor: pointer; }
+.bb-row:hover { border-color: var(--leaf); }
+.bb-row[aria-selected=true] { background: var(--key-bg); border-color: var(--line-2); }
+.bb-row .bb-name { grid-row: 1; grid-column: 1; font-weight: 900; }
+.bb-row .bb-pips { grid-row: 1; grid-column: 3; }
+.bb-row .bb-state { grid-row: 1; grid-column: 2; font: 700 16px var(--font-ui); color: var(--ink-2); }
+.bb-row.have .bb-state { color: var(--leaf-ink); }
+.bb-row.later { color: var(--ink-2); }
+.bb-row.later .bb-name { color: var(--ink-2); }
+.bb-pips { font: 900 18px/1 var(--font-ui); letter-spacing: 3px; color: var(--sun-ink); }
+/* #620: side by side, the rows and the detail each scroll inside the sheet, so the detail's end is never under the
+   footer: the wheel scrolls either, and the arrows / d-pad / stick reach Show me where at its foot (focus brings it in) */
+@container sheet (min-width: 641px) {
+  #bpBody:has(> .bb-split) { overflow: hidden; display: flex; flex-direction: column; }
+  .bb-split { flex: 1; min-height: 0; height: 100%; }
+  .bb-main { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 6px 8px 2px; }
+  .bb-detail { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+}
+.bb-detail .bb-level { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font: 800 16px var(--font-ui); color: var(--ink-2); }
+.bb-detail .bb-does { font: 800 17px/1.45 var(--font-ui); color: var(--ink); }
+.bb-detail .bb-where { margin-top: 10px; }
 /* Requests */
 .bp-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .bp-req { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 4px 12px; width: 100%; min-height: 96px; padding: 12px 16px; border-radius: var(--r-tile); border: 1.5px solid transparent; background: var(--paper-2); text-align: left; font: 900 17px var(--font-ui); color: var(--ink); cursor: pointer; }
@@ -78,6 +103,6 @@ svg.mi-unknown .mi-line { stroke: var(--text-strong); }
 .bp-group li.unseen b { color: var(--ink-2); }
 .bp-special li span { color: var(--ink-2); font-weight: 700; }
 @container sheet (max-width: 900px) {
-  .bp-list, .bp-pages, .bp-groups, .bp-group ul { grid-template-columns: 1fr; }
+  .bp-list, .bp-pages, .bp-groups, .bp-group ul, .bb-rows { grid-template-columns: 1fr; }
   .bp-read { width: 320px; }
 }
