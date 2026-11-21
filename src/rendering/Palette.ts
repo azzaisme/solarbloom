@@ -450,7 +450,14 @@ const signal = {
   /** E24 (#609): the waymark, a soft shaft of sunlight on the current goal (its ring on the ground, its motes) */
   waymark: '#ffd88a',
   waymarkRing: '#fff1bf',
+  /** by day the beam and ring go a deeper amber, or they vanish against pale sky, sand and paving */
+  waymarkDay: '#ffaa2e',
+  waymarkRingDay: '#ffc04f',
   waymarkMote: '#fff6dc',
+  /** #632: Show me where's trail of glowing dots on the ground */
+  trail: '#ffe6a8',
+  /** by day: a warmer gold, so it reads on pale ground */
+  trailDay: '#ffc24a',
   /** E19: the build hologram bloombot projects */
   holo: '#5fe8ff',
   /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
