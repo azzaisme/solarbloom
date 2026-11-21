@@ -162,6 +162,29 @@ for (const S of SIZES) {
     await page.waitForTimeout(500);
     h = await headSeen(page);
     check(h.focus === 'bb-chargeCells' && h.name && h.does && h.view && h.viewSize[1] >= 90, `${L}: on a row, the detail shows what it does and Bloombot (${JSON.stringify(h)})`);
+    // #661: every row, in focus (as the arrows, the d-pad and the stick leave it): its second heading (How to get it,
+    // Learned, Where to use it...) and the start of what it says are in sight under what it does, button or not
+    const cut = [];
+    for (const id of rowIds) {
+      await page.focus(`#bb-${id}`);
+      await page.waitForTimeout(60);
+      const r = await page.evaluate(() => {
+        const D = document.querySelector('#bpDetail');
+        const d = D.getBoundingClientRect();
+        const head = D.querySelector('.bb-head').getBoundingClientRect();
+        const h4 = D.querySelector('h4').getBoundingClientRect();
+        const how = D.querySelector('#bb-how').getBoundingClientRect();
+        const line = parseFloat(getComputedStyle(D.querySelector('#bb-how')).lineHeight) || 20;
+        return { ok: h4.top >= head.bottom - 1 && h4.bottom <= d.bottom + 1 && how.top + line <= d.bottom + 1, h4: D.querySelector('h4').textContent, at: [Math.round(h4.top), Math.round(h4.bottom), Math.round(how.top), Math.round(d.bottom)] };
+      });
+      if (!r.ok) cut.push(`${id} "${r.h4}" ${JSON.stringify(r.at)}`);
+    }
+    check(!cut.length, `${L}: #661: every row in focus shows its second heading and its first line (${rowIds.length} rows) ${cut.join(' | ')}`);
+    for (const [id, what] of [['pry', 'learned'], ['glide', 'later'], ['climb', 'next']]) {
+      await page.focus(`#bb-${id}`);
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `${out}/9-row-${what}-${L}.png` });
+    }
     await page.focus('#bb-luckyPulse');
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(400);

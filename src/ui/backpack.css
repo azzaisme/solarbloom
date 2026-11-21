@@ -95,6 +95,9 @@ svg.mi-unknown .mi-line { stroke: var(--text-strong); }
   .bb-split > .bb-detail { width: min(460px, 58%); padding-top: 12px; }
   .bb-head { top: -12px; margin-top: -12px; padding-top: 12px; }
   .bb-head .pn-badge { display: none; }
+  /* #661: a smaller view, so the second heading (How to get it, Learned...) and its first lines show under what it
+     does without a scroll */
+  .bb-about.has-view { grid-template-columns: minmax(0, 1fr) 104px; }
 }
 /* a detail too tall to show whole: its last lines are a focus stop (Backpack.fitDetail), ringed when reached */
 .bb-detail .bb-how[tabindex] { border-radius: 10px; padding: 2px 6px; margin: 0 -6px 4px; }
