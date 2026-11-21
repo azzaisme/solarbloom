@@ -50,13 +50,16 @@ async function close(page, name, what) {
   await page.screenshot({ path: `${out}/${name}.jpg`, type: 'jpeg', quality: 90, clip });
   shots.push(`${name}.jpg: ${what} (close)`);
 }
-const PAD = { A: 0, B: 1, LB: 4, RB: 5, UP: 12, DOWN: 13 };
+const PAD = { A: 0, B: 1, LB: 4, RB: 5, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 /** A pad button held for a few frames, then let go (the game reads the pad each frame). */
 async function pad(page, b) {
+  // #576: held for game frames as well as time: the game reads the pad once a frame, so on a slow frame a press held
+  // for a fixed time could come and go between two reads and be lost
+  const frames = (n) => page.evaluate((n) => new Promise((r) => (function f(k) { k ? requestAnimationFrame(() => f(k - 1)) : r(); })(n)), n);
   await page.evaluate((b) => Object.assign(window.__pad.buttons[b], { pressed: true, value: 1 }), b);
-  await page.waitForTimeout(250);
+  await Promise.all([page.waitForTimeout(250), frames(3)]);
   await page.evaluate((b) => Object.assign(window.__pad.buttons[b], { pressed: false, value: 0 }), b);
-  await page.waitForTimeout(300);
+  await Promise.all([page.waitForTimeout(300), frames(3)]);
 }
 async function key(page, code) {
   await page.keyboard.press(code);
@@ -146,21 +149,42 @@ const grow = (page, tier) =>
 /** Every settled animal, measured against bloombot's real surface, the bench or the pad; one row per animal. */
 /**
  * Bloombot's underside over the seat or pad (`under`: the box and its top, from measure) across a whole breathing and
- * leg-swing cycle (REST.settle.cycle, 4.5 s), looked at every 150 ms: its lowest point there, less the top, each time.
+ * leg-swing cycle (REST.settle.cycle, 11 s: the swing grows and calms over that), looked at every 150 ms: its lowest
+ * point there, less the top, each time.
  */
 const underside = (page, under) =>
   page.evaluate(async ({ box, top }) => {
     const g = window.solarbloom;
     const P = window.__probe;
     const lows = [];
-    const end = performance.now() + 4500;
+    // and the lowest look: where that point is (from the box's middle), and bloombot then (its settle, the clip's
+    // time, what it is doing), so a dip says what dipped
+    let worst;
+    const v = g.bot.visuals;
+    const end = performance.now() + 11000;
     while (performance.now() < end) {
       await new Promise((r) => requestAnimationFrame(() => r()));
-      const over = P.points(g.bot.visuals.model).filter((p) => p[0] > box.min[0] && p[0] < box.max[0] && p[2] > box.min[2] && p[2] < box.max[2] && p[1] > box.min[1]);
-      if (over.length) lows.push(Math.min(...over.map((p) => p[1])) - top);
+      const over = P.points(v.model).filter((p) => p[0] > box.min[0] && p[0] < box.max[0] && p[2] > box.min[2] && p[2] < box.max[2] && p[1] > box.min[1]);
+      if (over.length) {
+        const p = over.reduce((a, b) => (b[1] < a[1] ? b : a));
+        const low = p[1] - top;
+        lows.push(low);
+        if (!worst || low < worst.low) {
+          const layer = v.model.anim?.baseLayer;
+          worst = {
+            low: +low.toFixed(3),
+            at: [p[0] - (box.min[0] + box.max[0]) / 2, p[2] - (box.min[2] + box.max[2]) / 2].map((n) => +n.toFixed(3)),
+            settle: [v.settleUp, v.settleOut].map((n) => +n.toFixed(3)),
+            state: v.settling,
+            clip: layer ? `${layer.activeState}@${layer.activeStateCurrentTime?.toFixed(2)}` : '-',
+            busy: v.busy ?? null,
+            pose: v.pose,
+          };
+        }
+      }
       await new Promise((r) => setTimeout(r, 150));
     }
-    return lows;
+    return { lows, worst };
   }, under);
 
 const measure = (page, seat) =>
@@ -273,7 +297,8 @@ const settle = (page) =>
     () => {
       const w = window.solarbloom.sim.wildlife;
       const now = window.solarbloom.sim.time;
-      return w.visits.every((v) => now >= v.arrive + 1.2 && (v.perch !== 'passBy' || now >= v.leave + 2));
+      // and bloombot has sat down (the clip into the pose takes a few seconds) and settled onto the seat or pad
+      return window.solarbloom.bot.visuals.settled && w.visits.every((v) => now >= v.arrive + 1.2 && (v.perch !== 'passBy' || now >= v.leave + 2));
     },
     undefined,
     180000,
@@ -452,10 +477,11 @@ try {
       check(m.botClear, `${name} at the ${where}: bloombot clear of the ${where === 'bench' ? 'seat and backrest' : 'pad'} (its points inside: ${m.botIn.join(', ')})`);
       // sitting on it, not floating over it, all through a breath and a leg swing: never into it, and down to within
       // a centimetre of its top
-      const lows = await underside(page, m.under);
+      const { lows, worst } = await underside(page, m.under);
       const lo = Math.min(...lows);
       const hi = Math.max(...lows);
-      check(lows.length >= 10 && lo > -0.008 && lo < 0.012, `${name} at the ${where}: bloombot sits on the ${where === 'bench' ? 'seat' : 'pad'} through a whole breath (its underside ${lo.toFixed(3)}..${hi.toFixed(3)} from the top over ${lows.length} looks)`);
+      const onIt = lows.length >= 25 && lo > -0.008 && lo < 0.012;
+      check(onIt, `${name} at the ${where}: bloombot sits on the ${where === 'bench' ? 'seat' : 'pad'} through a whole breath (its underside ${lo.toFixed(3)}..${hi.toFixed(3)} from the top over ${lows.length} looks)${onIt ? '' : ` [lowest look: ${JSON.stringify(worst)}]`}`);
       for (const r of m.rows)
         check(r.ok, `${name} at the ${where}: ${r.kind}@${r.perch} sits on ${r.on}${r.into ? `, ${r.intoText}` : ''}${r.inSolid.length ? `, inside the ${r.inSolid.map(([k, c, b]) => `${k} (${c}; ${b})`).join(', ')}` : ''}${r.ok ? '' : r.why}`);
       if (tier !== 'bare') {
@@ -517,22 +543,38 @@ try {
       const b = body.getBoundingClientRect();
       return { focused: /^Visitors\b/.test(title), title, inView: r.top >= b.top - 1 && r.bottom <= b.bottom + 1, text: f.innerText };
     });
+  // #576: the Collection's groups sit in two columns, so Visitors may be across as well as down: step towards it as a
+  // player would (down or up while it is above or below, then left or right), with real keys or pad buttons
   const toVisitors = async (page, step) => {
-    for (let i = 0; i < 12; i++) {
+    const path = [];
+    for (let i = 0; i < 16; i++) {
       const v = await visitorsShown(page);
-      if (v.focused) return v;
-      await step();
+      if (v.focused) return { ...v, path: path.join(' ') };
+      path.push(`${v.title.split(' ')[0] || (await page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName))}`);
+      const dir = await page.evaluate(() => {
+        const t = [...document.querySelectorAll('#bpBody .bp-group')].find((g) => /^Visitors\b/.test(g.querySelector('h3')?.textContent ?? ''));
+        if (!t) return 'no Visitors group';
+        const c = document.activeElement;
+        if (!c || !c.closest?.('#bpBody')) return 'down'; // still on the tabs: down into the groups
+        const a = c.getBoundingClientRect(), b = t.getBoundingClientRect();
+        if (b.top >= a.bottom - 2) return 'down';
+        if (b.bottom <= a.top + 2) return 'up';
+        return b.left >= a.right - 2 ? 'right' : 'left';
+      });
+      path.push(dir);
+      if (dir.startsWith('no ')) break;
+      await step(dir);
     }
-    return visitorsShown(page);
+    return { ...(await visitorsShown(page)), path: path.join(' ') };
   };
-  // keyboard: I opens it, E moves along the tabs to Collection, the arrows move down the groups to Visitors
+  // keyboard: I opens it, E moves along the tabs to Collection, the arrows move through the groups (two columns) to Visitors
   await key(page, 'KeyI');
   check(await until(page, () => window.solarbloom.hud.backpackOpen, undefined, 5000), 'I opens the backpack');
   for (let i = 0; i < 6 && (await tabIs(page)) !== 'bptab-collection'; i++) await key(page, 'KeyE');
   check((await tabIs(page)) === 'bptab-collection', 'E moves along the tabs to Collection');
-  const kb = await toVisitors(page, () => key(page, 'ArrowDown'));
-  check(kb.focused && kb.inView && /Sat with you/.test(kb.text), `the arrow keys move down to the Visitors group, scrolled into view (focus: ${kb.title})`);
-  await shot(page, '40-visitor-log-keyboard', 'the visitor log, reached with the keyboard (I, E to Collection, arrows down to Visitors)');
+  const kb = await toVisitors(page, (d) => key(page, { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' }[d]));
+  check(kb.focused && kb.inView && /Sat with you/.test(kb.text), `the arrow keys move to the Visitors group, scrolled into view (focus: ${kb.title}; ${kb.path})`);
+  await shot(page, '40-visitor-log-keyboard', 'the visitor log, reached with the keyboard (I, E to Collection, arrows to Visitors)');
   await key(page, 'Escape');
   check(await until(page, () => !window.solarbloom.hud.backpackOpen, undefined, 5000), 'Esc closes it');
   // pad: d-pad up opens it, RB moves along the tabs, d-pad down moves down the groups, B closes it
@@ -540,9 +582,9 @@ try {
   check(await until(page, () => window.solarbloom.hud.backpackOpen, undefined, 5000), 'd-pad up opens the backpack');
   for (let i = 0; i < 6 && (await tabIs(page)) !== 'bptab-collection'; i++) await pad(page, PAD.RB);
   check((await tabIs(page)) === 'bptab-collection', 'RB moves along the tabs to Collection');
-  const gp = await toVisitors(page, () => pad(page, PAD.DOWN));
-  check(gp.focused && gp.inView && /Sat with you/.test(gp.text), `the d-pad moves down to the Visitors group, scrolled into view (focus: ${gp.title})`);
-  await shot(page, '41-visitor-log-pad', 'the visitor log, reached with the pad (d-pad up, RB to Collection, d-pad down to Visitors)');
+  const gp = await toVisitors(page, (d) => pad(page, { up: PAD.UP, down: PAD.DOWN, left: PAD.LEFT, right: PAD.RIGHT }[d]));
+  check(gp.focused && gp.inView && /Sat with you/.test(gp.text), `the d-pad moves to the Visitors group, scrolled into view (focus: ${gp.title}; ${gp.path})`);
+  await shot(page, '41-visitor-log-pad', 'the visitor log, reached with the pad (d-pad up, RB to Collection, d-pad to Visitors)');
   await pad(page, PAD.B);
   check(await until(page, () => !window.solarbloom.hud.backpackOpen, undefined, 5000), 'B closes it');
   await page.close();

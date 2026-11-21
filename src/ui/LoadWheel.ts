@@ -25,15 +25,31 @@ export class LoadWheel extends HudPart {
     this.chip = $(this.root, '#loadChip');
   }
 
+  /** Is the ring up right now? */
+  get isOpen(): boolean {
+    return this.shown > 0;
+  }
+
+  /**
+   * While the ring is up, an arrow key or the d-pad picks the load that way (up Nothing, right Seeds, down Rare seed,
+   * left Fertiliser), and the ring stays up a moment longer. False when the ring is down (the press does its usual job).
+   */
+  pick(dir: keyof typeof LOAD_WHEEL.directions): boolean {
+    if (!this.isOpen) return false;
+    this.sim.pulseLoad.choose(LOAD_WHEEL.directions[dir]);
+    this.show();
+    return true;
+  }
+
   /** The wheel turned: show the ring for a moment (longer for its one-time introduction). */
   show(seconds: number = LOAD_WHEEL.showSeconds) {
     this.shown = Math.max(this.shown, seconds);
   }
 
   update(dt: number) {
+    this.shown = Math.max(0, this.shown - dt);
     if (!this.wheel || !this.chip) return;
     const pl = this.sim.pulseLoad;
-    this.shown = Math.max(0, this.shown - dt);
     const open = this.shown > 0;
     if (this.wheel.hidden === open) this.wheel.hidden = !open;
     const choice = pl.choice;

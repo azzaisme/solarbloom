@@ -129,11 +129,12 @@ try {
       check(await onScreen(page, '#buildbar'), `${tag} keys: the build dock fits the screen`);
       // one tidy row: every slot and mode button the same height from the same top, every key badge on one line
       // inside the dock, and no name broken or cut short (the owner's two lines across the dock)
-      for (const scale of [100, 125]) {
+      for (const scale of [100, 125, 150]) {
         await page.evaluate((s) => window.solarbloom.hud.setUiScale(s), scale);
-        await page.waitForTimeout(900); // the dock finds its place within 400 ms of a size change
+        await page.waitForTimeout(300); // #565: the dock finds its place as the scale changes
         const row = await page.evaluate(() => {
-          const dock = document.querySelector('#buildbar').getBoundingClientRect();
+          const bar = document.querySelector('#buildbar');
+          const dock = bar.getBoundingClientRect();
           const mm = document.querySelector('#minimap').getBoundingClientRect();
           const items = [...document.querySelectorAll('#buildbar .bslot, #buildbar .bmode')].map((e) => e.getBoundingClientRect());
           const keys = [...document.querySelectorAll('#buildbar .bg')].map((e) => e.getBoundingClientRect());
@@ -145,16 +146,31 @@ try {
             keyTops: spread(keys.map((r) => r.top)),
             inside: [...items, ...keys].every((r) => r.top >= dock.top - 0.5 && r.bottom <= dock.bottom + 0.5),
             lines: names.filter((e) => e.getClientRects().length !== 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.textContent),
-            clear: dock.left >= mm.right - 0.5 || dock.bottom <= mm.top + 0.5,
+            clear: dock.left >= mm.right - 0.5 || dock.bottom <= mm.top + 0.5 || getComputedStyle(document.querySelector('#minimap')).visibility === 'hidden',
             onScreen: dock.left >= 0 && dock.right <= innerWidth + 0.5,
             cut: names.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent),
+            // #565: the slots fit inside the dock (they can't run past its edge, where the box check can't see them)
+            fits: bar.scrollWidth <= bar.clientWidth + 1 && items.every((r) => r.left >= dock.left - 0.5 && r.right <= dock.right + 0.5),
+            aside: getComputedStyle(document.querySelector('#minimap')).visibility === 'hidden',
+            tight: bar.classList.contains('tight'),
+            // #599: the piece's tooltip stays clear of the prompt (with its cost chips), Stop building and the dock
+            tipClear: (() => {
+              const tip = document.querySelector('#tip');
+              const t = tip && getComputedStyle(tip).display !== 'none' ? tip.getBoundingClientRect() : undefined;
+              if (!t || !t.width) return true;
+              return ['#prompt', '#buildStop', '#buildbar'].every((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return !r || !r.width || t.right <= r.left || t.left >= r.right || t.bottom <= r.top || t.top >= r.bottom; });
+            })(),
+            // the prompt and Stop building stay above it
+            above: ['#prompt', '#buildStop'].every((s) => { const e = document.querySelector(s); const r = e?.getBoundingClientRect(); return !r || !r.height || r.bottom <= dock.top + 0.5; }),
           };
         });
-        // (at 125% on the smaller screen the dock may run out of room: then a name ends in …, never breaks)
-        check(row.tops < 1 && row.heights < 1 && row.keyTops < 1 && row.inside && !row.lines.length && row.clear && row.onScreen && (scale > 100 || !row.cut.length), `${tag} keys at ${scale}%: the dock is one even row, clear of the minimap ${JSON.stringify(row)}`);
+        // (above 100% the dock may run out of room: then it draws tighter, and on the smaller screen at 150% the
+        // minimap steps aside while building and the dock takes the width; #599: its names stay whole throughout)
+        check(row.tops < 1 && row.heights < 1 && row.keyTops < 1 && row.inside && !row.lines.length && row.clear && row.onScreen && row.fits && row.above && row.tipClear && !row.cut.length, `${tag} keys at ${scale}%: the dock is one even row, clear of the minimap ${JSON.stringify(row)}`);
         await page.screenshot({ path: `${out}/build-dock-${tag}-${scale}.png`, clip: await page.evaluate(() => { const r = document.querySelector('#buildbar').getBoundingClientRect(); return { x: Math.max(0, r.left - 12), y: Math.max(0, r.top - 70), width: Math.min(innerWidth, r.width + 24), height: r.height + 82 }; }) });
       }
       await page.evaluate(() => window.solarbloom.hud.setUiScale(100));
+      check(await page.evaluate(() => getComputedStyle(document.querySelector('#minimap')).visibility !== 'hidden'), `${tag} keys: back at 100% the minimap is back beside the dock`);
       const dsmall = await smallText(page, '#buildbar', 14);
       check(dsmall.length === 0, `${tag} keys: the dock's labels are 14 px or more ${dsmall.slice(0, 4).join(', ')}`);
       const dock = await page.evaluate(() => ({
@@ -176,7 +192,7 @@ try {
       check(!errors.length, `${tag} keys: no page errors ${errors.join(' | ')}`);
       await page.close();
     }
-    // ── a pad: a Bench in hand; d-pad right walks the slots, d-pad up changes the view ──
+    // ── a pad: a Solar Panel in hand; d-pad right walks the slots, d-pad up changes the view ──
     {
       const { page, errors } = await open(w, h, q, true);
       await pressPad(page, 3); // Y: the build menu
@@ -207,7 +223,7 @@ try {
         view: document.querySelector('#buildbar .bmode.view .bl')?.textContent,
         prompt: document.querySelector('#prompt')?.textContent,
       }));
-      check(pad.keys === 0 && pad.edges === 2 && /^View: /.test(pad.view ?? '') && /Place the /.test(pad.prompt) && /Turn/.test(pad.prompt), `${tag} pad: no number keys, the d-pad at both ends, one View button, Place and Turn (${JSON.stringify(pad)})`);
+      check(pad.keys === 0 && pad.edges === 2 && /^View: /.test(pad.view ?? '') && /Build a Solar Panel/.test(pad.prompt) && !/Turn/.test(pad.prompt), `${tag} pad: no number keys, the d-pad at both ends, one View button, Build (a machine doesn't turn: Turn is for decorations) (${JSON.stringify(pad)})`);
       await pressPad(page, 15); // d-pad right: the next slot
       await page.waitForTimeout(200);
       const next = await page.evaluate(() => window.solarbloom.hud.currentTool);

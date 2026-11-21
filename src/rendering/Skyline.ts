@@ -1,7 +1,18 @@
 import * as pc from 'playcanvas';
-import { SKY } from '../data/sky';
+import { SKY, SKYLINE_FOG } from '../data/sky';
 import { skyColour, skyMaterial } from './Sky';
 import type { ModelLibrary } from './Models';
+
+/** #635: how far the weather's view share (1 clear … WEATHER.fog.view) veils the skyline toward the fog colour. */
+export function skylineVeil(view: number): number {
+  const { max, foggiest } = SKYLINE_FOG;
+  return max * Math.min(1, Math.max(0, (1 - view) / (1 - foggiest)));
+}
+
+/** #635: a colour veiled toward the fog colour by `veil` (0 … 1). */
+export function veiled(c: readonly number[], fog: readonly number[], veil: number): [number, number, number] {
+  return [c[0] + (fog[0] - c[0]) * veil, c[1] + (fog[1] - c[1]) * veil, c[2] + (fog[2] - c[2]) * veil];
+}
 
 type Key = 'stone' | 'green' | 'glass' | 'water' | 'glowWarm';
 const KEYS: Key[] = ['stone', 'green', 'glass', 'water', 'glowWarm'];
@@ -198,8 +209,14 @@ export class Skyline {
   private mistA: number[] = [];
   private mistHaze: number[] = [];
   private builtClarity = -1;
+  private builtVeil = -1;
+  private builtFog: [number, number, number] = [-1, -1, -1];
   private time = 0;
   clarity = 0.4;
+  /** #635: 0 … 1, how far fog or rain veils the skyline toward `fog` (see `skylineVeil`) */
+  veil = 0;
+  /** #635: the fog colour now (Sky.hazeColour, 0–1 sRGB) */
+  fog: [number, number, number] = [1, 1, 1];
   reducedMotion = false;
 
   constructor(
@@ -434,6 +451,7 @@ export class Skyline {
 
   private recolour() {
     const k = this.clarity;
+    const { veil, fog } = this;
     const haze = skyColour(SKY.haze, k);
     const cols = KEYS.map((key) => skyColour(SKY[key], k));
     const b = (c: number) => Math.round(Math.min(1, Math.max(0, c)) * 255);
@@ -446,9 +464,10 @@ export class Skyline {
         const glow = kit.key[i] === 4 ? 0.35 + 0.65 * k : 0; // lamps light up as the city wakes
         const s = kit.shade[i] + glow * 0.4;
         const h = kit.haze[i] * (1 - glow * 0.5);
-        out[i * 4] = b(c[0] * s + (haze[0] - c[0] * s) * h);
-        out[i * 4 + 1] = b(c[1] * s + (haze[1] - c[1] * s) * h);
-        out[i * 4 + 2] = b(c[2] * s + (haze[2] - c[2] * s) * h);
+        const v = veiled([c[0] * s + (haze[0] - c[0] * s) * h, c[1] * s + (haze[1] - c[1] * s) * h, c[2] * s + (haze[2] - c[2] * s) * h], fog, veil);
+        out[i * 4] = b(v[0]);
+        out[i * 4 + 1] = b(v[1]);
+        out[i * 4 + 2] = b(v[2]);
         out[i * 4 + 3] = 255;
       }
       L.mesh.setColors32(out);
@@ -456,17 +475,31 @@ export class Skyline {
     }
     const w = skyColour(SKY.water, k);
     const fc: number[] = [];
-    for (const h of this.fallsHaze) fc.push(b(w[0] + (haze[0] - w[0]) * h), b(w[1] + (haze[1] - w[1]) * h), b(w[2] + (haze[2] - w[2]) * h), b(0.5 + 0.5 * k));
+    for (const h of this.fallsHaze) {
+      const v = veiled([w[0] + (haze[0] - w[0]) * h, w[1] + (haze[1] - w[1]) * h, w[2] + (haze[2] - w[2]) * h], fog, veil);
+      fc.push(b(v[0]), b(v[1]), b(v[2]), b((0.5 + 0.5 * k) * (1 - veil)));
+    }
     this.fallsMesh.setColors32(fc);
     this.fallsMesh.update(pc.PRIMITIVE_TRIANGLES);
     const mc: number[] = [];
     this.mistA.forEach((a, i) => {
       const h = this.mistHaze[i] * 0.5;
-      mc.push(b(1 + (haze[0] - 1) * h), b(1 + (haze[1] - 1) * h), b(1 + (haze[2] - 1) * h), b(a * (0.4 + 0.6 * k)));
+      const v = veiled([1 + (haze[0] - 1) * h, 1 + (haze[1] - 1) * h, 1 + (haze[2] - 1) * h], fog, veil);
+      mc.push(b(v[0]), b(v[1]), b(v[2]), b(a * (0.4 + 0.6 * k) * (1 - veil)));
     });
     this.mistMesh.setColors32(mc);
     this.mistMesh.update(pc.PRIMITIVE_TRIANGLES);
     this.builtClarity = k;
+    this.builtVeil = veil;
+    this.builtFog = [fog[0], fog[1], fog[2]];
+  }
+
+  /** True when clarity, the veil or the fog colour has moved far enough to rebuild the colours. */
+  private stale(): boolean {
+    const step = SKYLINE_FOG.step;
+    if (Math.abs(this.builtClarity - this.clarity) > step || Math.abs(this.builtVeil - this.veil) > step) return true;
+    // the fog colour only shows through the veil
+    return this.veil > 0 && this.fog.some((c, i) => Math.abs(c - this.builtFog[i]) * this.veil > step / 2);
   }
 
   /**
@@ -476,11 +509,12 @@ export class Skyline {
    * The rings stand just past where the haze is complete. The whole skyline is then scaled down toward the
    * camera (which leaves how it looks unchanged) so it fits well inside the far clip plane, whatever the
    * zoom: the world's far plane can stop right at the haze. The sky layer is drawn first and the depth
-   * buffer cleared after it (`Sky.clearLayer`), so the world always draws over the backdrop.
+   * buffer cleared after it (`Sky.clearLayer`), so the world always draws over the backdrop. In fog the far
+   * plane comes in close, so the skyline does too; `veil` fades it into the fog colour so it still reads as far.
    */
   update(dt: number, target: pc.Vec3, cam: pc.Vec3, _dist: number, _nearness: number, yaw: number, hazeEnd: number, farClip: number) {
     this.time += dt;
-    if (Math.abs(this.builtClarity - this.clarity) > 0.02) this.recolour();
+    if (this.stale()) this.recolour();
     // Sideways pans turn each ring a little (nearer rings more): parallax that never runs out.
     const yr = (yaw * Math.PI) / 180;
     const lateral = target.x * Math.cos(yr) - target.z * Math.sin(yr);

@@ -11,13 +11,22 @@ import { PALETTE } from './Materials';
 export const WATER = { drop: 0.13, fillet: 0.42, wide: 0.78, arc: 7, grid: 4, deepAt: 1.15 };
 
 /**
+ * #563: night water, on every tier. By deep night the albedo is multiplied by `tint` (deep navy) and the aqua glow
+ * keeps only `glow` of its day strength, so under the blue moonlight the ponds read as some of the darkest surfaces
+ * rather than pale lit ice. Day (night 0) is untouched.
+ */
+export const POOL_NIGHT = { tint: [0.07, 0.11, 0.24] as const, glow: 0.05 };
+
+/**
  * The clean-water look: the vertex colour carries the shallow-to-deep gradient and its alpha the depth (0 at the
  * bank … 1 deep). On top of that the shader draws a drifting net of light (caustics), ripple rings, a line of foam
  * lapping the bank, and a few glints. All from world position and time: no textures.
  */
 const POOL_DIFFUSE_PS = /* glsl */ `
+#define POOL_NIGHT_TINT vec3(${POOL_NIGHT.tint.join(', ')})
 uniform vec3 material_diffuse;
 uniform float uPoolTime;
+uniform float uPoolNight;
 float sbPoolHash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -56,6 +65,8 @@ void getAlbedo() {
 	float tw = sbPoolHash(floor(gp));
 	float glint = step(0.965, tw) * (0.5 + 0.5 * sin(t * 3.0 + tw * 40.0)) * (1.0 - smoothstep(0.0, 0.3, distance(fract(gp), vec2(0.5))));
 	dAlbedo += vec3(glint * 0.9);
+	// #563: by night the water goes deep moonlit navy (caustics, foam and glints darken with it)
+	dAlbedo = mix(dAlbedo, dAlbedo * POOL_NIGHT_TINT, uPoolNight);
 }
 `;
 
@@ -120,7 +131,7 @@ export function poolMaterial(device?: pc.GraphicsDevice): pc.StandardMaterial {
   const glow = new pc.Color();
   glow.fromString(PALETTE.aqua.water);
   m.emissive = glow;
-  m.emissiveIntensity = 0.22;
+  m.emissiveIntensity = POOL_GLOW;
   try {
     const chunks = m.getShaderChunks(pc.SHADERLANGUAGE_GLSL);
     chunks.set('diffusePS', POOL_DIFFUSE_PS);
@@ -130,6 +141,7 @@ export function poolMaterial(device?: pc.GraphicsDevice): pc.StandardMaterial {
     /* an engine without per-material chunks: still water with its depth gradient */
   }
   m.setParameter('uPoolTime', 0);
+  m.setParameter('uPoolNight', 0);
   m.setParameter('uPoolReflect', 0);
   m.setParameter('uPoolSkyLow', [0, 0, 0]);
   m.setParameter('uPoolSkyHigh', [0, 0, 0]);
@@ -137,6 +149,25 @@ export function poolMaterial(device?: pc.GraphicsDevice): pc.StandardMaterial {
   m.setParameter('uPoolLight', [0, 0, 0]);
   m.update();
   return (material = m);
+}
+
+/** The pool's own aqua glow by day (unlit emission; it fades at night, see setPoolNight). */
+export const POOL_GLOW = 0.22;
+let night = 0;
+/** How far into night it is (0 day … 1 deep night, DayNight's daylight): darkens the water toward navy. */
+export function setPoolNight(n: number) {
+  const k = Math.max(0, Math.min(1, n));
+  const m = material;
+  if (!m || Math.abs(k - night) < 0.004) return;
+  night = k;
+  m.setParameter('uPoolNight', k);
+  m.emissiveIntensity = poolGlowAt(k);
+  m.update();
+}
+
+/** The pool's emissive intensity at a night amount (exactly POOL_GLOW by day). */
+export function poolGlowAt(n: number): number {
+  return POOL_GLOW * (1 - (1 - POOL_NIGHT.glow) * Math.max(0, Math.min(1, n)));
 }
 
 /** Advances the water (once per frame; hold the time still for reduced motion). */

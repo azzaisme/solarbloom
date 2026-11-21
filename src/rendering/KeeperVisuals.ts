@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { benchClip, benchMode, benchOffset, SEAT_CLIPS } from './KeeperSeat';
-import { foldLegs, hipsAbove, SEAT_HIPS } from './SeatPose';
+import { foldLegs, hipsAbove, hipsAt, SEAT_HIPS } from './SeatPose';
 import { GROUND } from '../core/GameState';
 import { KEEPER_HELP } from '../data/keepers';
 import { KEEPERS, MODEL_NAMES, type KeeperDef } from '../data/oldcity';
@@ -17,8 +17,13 @@ const STAND_IN_URL = new URL('../../assets/raw/bloombot/bloombot.glb', import.me
 const STAND_IN_SCALE = 0.95; // bloombot's own holder scale (its rig root carries a 0.01 centimetre scale)
 /** The Keepers' own models share bloombot's rig layout (an Armature at 0.01) and stand 1.0 m (bloombot 0.85 m). */
 const MODEL_SCALE = 0.95;
-/** The sleep clip lowers into a seated doze with nothing underneath: a dozing Keeper sits on a stone block this high. */
+/**
+ * The sleep clip lowers into a seated doze with nothing underneath: a dozing Keeper sits on a stone block `height`
+ * tall (the Keeper is lifted that much). `scale` is the block's width; its height is fitted to `height`.
+ */
 const SEAT = { model: 'stone-block', scale: 0.42, height: 0.32 };
+const INV = new pc.Mat4();
+const HIP = new pc.Vec3();
 
 interface KeeperView {
   def: KeeperDef;
@@ -36,6 +41,8 @@ interface KeeperView {
   clip?: string;
   /** its model's clips and their lengths (seconds) */
   lens: Map<string, number>;
+  /** dozing on its stone block: how far the body is lifted, and where the block stands (root-local), eased */
+  doze?: { lift: number; x: number; z: number };
   /** on a bench beside bloombot (E23.2.3): where, since when, and when it began to get up */
   bench?: { x: number; y: number; z: number; facing: number; seat: number; since: number; upAt?: number };
 }
@@ -81,6 +88,54 @@ export class KeeperVisuals {
     return l.origin[1] + l.height + SLAB_TOP + this.sim.grid.groundOffset(GROUND, Math.floor(x), Math.floor(z));
   }
 
+  /**
+   * The stone block a Keeper with its own model dozes on (the real sleep clip sits down; the stand-in only slumps).
+   * Made the first time its model is there: a Keeper near bloombot is built while the game is still loading, before
+   * the block's model has arrived, and without the block it must not be lifted onto it (it would float).
+   */
+  private seatOf(v: KeeperView): pc.Entity | null {
+    if (v.standIn) return null;
+    const have = v.root.findByName('seat') as pc.Entity | null;
+    if (have) return have;
+    const block = MODELS?.instantiateMerged(SEAT.model);
+    if (!block) return null;
+    // the block, SEAT.height tall whatever shape its model has, standing on the ground inside a holder that
+    // update() moves under the sleeping Keeper's hips
+    const b = MODELS?.bounds(SEAT.model);
+    const tall = b ? b.y1 - b.y0 : 0;
+    const sy = tall > 0.01 ? SEAT.height / tall : SEAT.scale;
+    block.setLocalScale(SEAT.scale, sy, SEAT.scale);
+    block.setLocalPosition(0, b ? -b.y0 * sy : 0, 0);
+    const seat = new pc.Entity('seat');
+    seat.addChild(block);
+    seat.setLocalPosition(0, 0, -0.12);
+    seat.enabled = false;
+    v.root.addChild(seat);
+    return seat;
+  }
+
+  /**
+   * Dozing on its block: the sleep clip sits down with nothing under it, so the body is lifted until the hips rest
+   * SEAT_HIPS.sit above the block's top, and the block stands under the hips. Both are measured from the pose each
+   * frame (the clip breathes) and eased, so nothing jitters.
+   */
+  private dozeOn(v: KeeperView, seat: pc.Entity, dt: number) {
+    const h = v.rig ? hipsAt(v.rig) : undefined;
+    const lift = v.body.getLocalPosition().y; // the lift the measured pose was drawn with
+    if (!h) {
+      v.body.setLocalPosition(0, SEAT.height, 0);
+      return;
+    }
+    const above = h.y - v.root.getPosition().y - lift; // the hips above the feet in this pose
+    const local = INV.copy(v.root.getWorldTransform()).invert().transformPoint(h, HIP);
+    const want = { lift: Math.max(0, SEAT.height + SEAT_HIPS.sit - above), x: local.x, z: local.z };
+    const d = v.doze;
+    const k = d ? Math.min(1, dt * 4) : 1;
+    v.doze = d ? { lift: d.lift + (want.lift - d.lift) * k, x: d.x + (want.x - d.x) * k, z: d.z + (want.z - d.z) * k } : want;
+    v.body.setLocalPosition(0, v.doze.lift, 0);
+    seat.setLocalPosition(v.doze.x, 0, v.doze.z);
+  }
+
   private make(def: KeeperDef): KeeperView {
     const root = new pc.Entity(`keeper-${def.id}`);
     const body = new pc.Entity('body');
@@ -111,17 +166,7 @@ export class KeeperVisuals {
       v.rig = e;
       v.clip = undefined;
     });
-    // a stone block to doze on (the real sleep clip sits down; the stand-in only slumps)
-    if (own) {
-      const seat = MODELS?.instantiateMerged(SEAT.model);
-      if (seat) {
-        seat.name = 'seat';
-        seat.setLocalScale(SEAT.scale, SEAT.scale, SEAT.scale);
-        seat.setLocalPosition(0, 0, -0.12);
-        seat.enabled = false;
-        root.addChild(seat);
-      }
-    }
+    // its stone block to doze on is added by seatOf() once the block's model has loaded
     // the Keeper's prop (its own model once it lands; stand-in models until then)
     const prop = oldCityModel(def.prop) ?? (MODELS?.has(def.prop) ? def.prop : undefined);
     const p = prop ? MODELS?.instantiateMerged(prop) : undefined;
@@ -171,7 +216,7 @@ export class KeeperVisuals {
       if (!v) v = this.make(def);
       v.root.enabled = true;
       const step = k.step(def.id);
-      const seat = v.root.findByName('seat') as pc.Entity | null;
+      const seat = this.seatOf(v);
       const dozing = step === 'asleep' || (step === 'settled' && night);
       if (seat) seat.enabled = dozing && !v.standIn;
       // E23.2.3: on a bench beside bloombot (handled first, so its own clip choice below doesn't fight the sitting)
@@ -216,11 +261,16 @@ export class KeeperVisuals {
       if (step === 'asleep') {
         // the real model dozes on its seat; the stand-in slumps forward, visor dark
         if (v.standIn) v.body.setLocalEulerAngles(28, 0, 8);
-        else v.body.setLocalPosition(0, SEAT.height, 0);
+        else if (seat) this.dozeOn(v, seat, dt);
+        else v.body.setLocalPosition(0, 0, 0); // no block yet: it dozes on the ground
         this.play(v, 'sleep');
       } else {
         v.body.setLocalEulerAngles(0, 0, 0);
-        v.body.setLocalPosition(0, dozing && !v.standIn ? SEAT.height : 0, 0);
+        if (dozing && seat) this.dozeOn(v, seat, dt);
+        else {
+          v.body.setLocalPosition(0, 0, 0);
+          v.doze = undefined;
+        }
         const waving = this.clock < v.waveUntil && !this.reducedMotion;
         // E23.9.2: where it is and what it is doing come from the sim (KeeperSystem.pose: it wanders its region,
         // walks home when bloombot is near, walks to a tile and works it), so it is talked to where it is drawn

@@ -62,8 +62,19 @@ export function plainWords(text: string): string {
 /** The resources' names on screen (biomass is "Greens"). */
 export const RESOURCE_NAME = { energy: 'Energy', water: 'Water', biomass: 'Greens' } as const;
 
+/**
+ * A line that names a control as `{interact}` (an Action in braces), filled with the player's own key or button.
+ * The goal card and the hint line use it, so a card line can say what to press without knowing the device.
+ */
+export const withKeys = (text: string, keyFor: (a: never) => string) => text.replace(/\{(\w+)\}/g, (_, a: string) => keyFor(a as never));
+
 /** Old-city strings: the objective card, the gauges, the prompt's refusals, the menu and the loading tips. */
 export const WORDS = {
+  /** #620: Bloombot grows (a short moment when it happens) */
+  bloombot: {
+    learned: { pry: 'Bloombot can pry rubble out of the way now', hover: 'Bloombot can hover over deep water now', climb: 'Bloombot can climb onto the roofs now', glide: 'Bloombot can glide down from the roofs now' } as Record<string, string>,
+    upgraded: (name: string, level: number, max: number) => `Bloombot got better: ${name}, level ${level} of ${max}`,
+  },
   objective: {
     restore: 'Bring the park back to life around the fountain',
     flower: 'Get the park in flower round the fountain',
@@ -73,8 +84,50 @@ export const WORDS = {
     wake: (landmark: string, region: string) => `Wake the ${landmark} in the ${region}`,
     clear: (region: string) => `Bring the ${region} back to life`,
     explore: 'Walk out into the city and see what wakes next',
+    /**
+     * #605: the fountain's next step as the goal: step 1 wakes it; later steps go by their own name, the one the
+     * fountain's panel shows ("Light on the roofs"), always one line. `nextLead` says what that name is.
+     */
+    fountain: (step: number, name: string) => (step === 1 ? 'Wake the fountain' : name),
+    /** #620: before the move line on a later step, so its name reads as the fountain's */
+    nextLead: "The fountain's next step.",
+    /** #605: the goal when everything it wants is there */
+    fountainReady: (step: number) => (step === 1 ? 'The fountain has all it needs. Walk up to it and press {interact} to wake it.' : 'The fountain has all it needs. Walk up to it and press {interact}.'),
+    /** #605: what the step brings, in a few plain words */
+    /** #620: each step names the move it teaches (the verb the Bloombot page names it by) and what it's for */
+    why: {
+      pry: 'Bloombot learns to pry open rubble',
+      hover: 'Bloombot learns to hover over deep water',
+      climb: 'Bloombot learns to climb onto the roofs',
+      glide: 'Bloombot learns to glide off the roofs',
+      bloom: 'The whole city comes back into flower',
+    },
+    /** #605: after the fountain wakes, until the first pry: the goal is the rubble nearest bloombot */
+    /** the region's name isn't known yet: the rubble is what the player can see */
+    pry: 'Pry open the rubble',
+    pryWhy: 'Another robot like Bloombot is asleep on the other side',
+    pryNext: 'Hold {interact} beside the rubble to pry it open.',
+    /** #605 / #608: the park's part of a fountain step */
+    park: 'Park',
+    landmarks: 'Landmarks awake',
+    /** #605: the card's button that points the way */
+    showWhere: 'Show me where',
+    /** #613: resting at home (the fountain or the house), shown while it charges */
+    charging: 'Charging up',
+    /** #605: Show me where with nowhere to point */
+    nowhere: 'Nothing to point at just now',
     /** a count, only for things gathered or restored by hand */
     count: (n: number, of: number) => `${n} of ${of}`,
+  },
+  /** #632: Show me where's trail, when it can't go all the way: what stops it, and what to do about it */
+  trail: {
+    stops: 'The path stops here',
+    hidden: "Bloombot can't get any further this way yet. The card at the top says what to do next.",
+    water: "The water's too deep to wade here. Bloombot learns to hover over water at the fountain later on.",
+    level: "That's up on a roof, and Bloombot can't get up there from here yet. The card at the top says what to do next.",
+    blocked: 'Something is in the way. Walk a little closer and press Show me where again.',
+    /** a shut way in that bloombot can open already */
+    openNow: 'Walk up to it. Bloombot can open it now.',
   },
   gauges: {
     energy: 'Energy',
@@ -87,7 +140,7 @@ export const WORDS = {
     needs: (what: string) => `Needs ${what}`,
   },
   toasts: {
-    controlsReset: 'Controls were updated. Your custom keys were reset.',
+    controlsReset: 'The controls changed in this update, so your own keys are back to the defaults.',
     saved: 'Saved',
     padLost: 'The controller was disconnected',
     noRequests: 'No requests to pin yet',

@@ -1,3 +1,4 @@
+import type { WarmupSample } from './ShaderWarmup';
 import * as pc from 'playcanvas';
 import { SOLID_SINK, type GeoBounds } from '../core/Solids';
 import { MODEL_NAMES } from '../data/oldcity';
@@ -191,6 +192,9 @@ function partsOf(container: pc.ContainerResource): ModelPart[] {
   return out;
 }
 
+/** #567: the loading screen stops waiting for models only after this long with no file finishing (stuck requests). */
+export const MODEL_STALL_MS = 45000;
+
 export class ModelLibrary {
   private models = new Map<string, Loaded>();
   /** every model that finished loading (near version at least) */
@@ -198,8 +202,26 @@ export class ModelLibrary {
   /** called once, when every model has loaded or failed */
   onReady?: () => void;
   ready = false;
+  /** #567: files that failed to load (the game keeps the procedural look for these) */
+  readonly failed = new Set<string>();
+  /** #567: when a file last finished (loaded or failed), or when loading began */
+  lastProgress: number;
 
-  constructor(private app: pc.AppBase) {}
+  constructor(
+    private app: pc.AppBase,
+    private now: () => number = () => performance.now(),
+  ) {
+    this.lastProgress = now();
+  }
+
+  /**
+   * #567: is the loading screen done waiting for models? Once every file has loaded or failed, yes. While files are
+   * still arriving it keeps waiting however slow they are (a second game in the same browser can take well over 30 s
+   * on a slow GPU); it gives up only when nothing has finished for `stallMs`, i.e. the rest are truly stuck.
+   */
+  waitOver(stallMs = MODEL_STALL_MS): boolean {
+    return this.ready || this.now() - this.lastProgress > stallMs;
+  }
 
   /** Names of all models on disk. */
   static names(): string[] {
@@ -213,7 +235,9 @@ export class ModelLibrary {
     if (!useModels()) return;
     const files = Object.entries(URLS);
     let pending = files.length;
+    this.lastProgress = this.now();
     const done = () => {
+      this.lastProgress = this.now();
       if (--pending > 0) return;
       this.ready = true;
       this.onReady?.();
@@ -223,8 +247,10 @@ export class ModelLibrary {
       const far = file.endsWith('.lod1');
       const name = far ? file.slice(0, -5) : file;
       this.app.assets.loadFromUrl(url, 'container', (err, asset) => {
-        if (err || !asset) console.warn(`Model ${file} failed to load; keeping the procedural look.`, err);
-        else {
+        if (err || !asset) {
+          console.warn(`Model ${file} failed to load; keeping the procedural look.`, err);
+          this.failed.add(file);
+        } else {
           const m: Loaded = this.models.get(name) ?? { parts: [[], []], merged: [undefined, undefined] };
           const res = asset.resource as pc.ContainerResource;
           shareTextures(res);
@@ -285,6 +311,9 @@ export class ModelLibrary {
     const m = this.models.get(name);
     if (!m) return [];
     const i = far && m.parts[1].length ? 1 : 0;
+    // asked for before its meshes have arrived: nothing yet, and nothing cached (an empty merge kept for good would
+    // leave the model invisible after it loads: a dozing Keeper's stone block)
+    if (!m.parts[i].length) return [];
     const merged = (m.merged[i] ??= mergeParts(this.app.graphicsDevice, m.parts[i]));
     if (!neglected) return merged;
     m.neglected ??= [undefined, undefined];
@@ -338,6 +367,24 @@ export class ModelLibrary {
    * instead of one per palette material (up to 14). For models that are placed whole (machines, landmarks); models
    * with moving parts found by name use `instantiate`.
    */
+  /**
+   * #596: one part per material and vertex layout across every loaded model, near and far, in its living look (a
+   * new game draws most props neglected; waking an area turns them alive, which would compile their shaders then).
+   */
+  warmupSamples(): WarmupSample[] {
+    const seen = new Set<string>();
+    const out: WarmupSample[] = [];
+    for (const name of this.models.keys())
+      for (const far of [false, true])
+        for (const part of this.batchParts(name, far)) {
+          const key = `${part.material.id}|${part.mesh.vertexBuffer?.format.renderingHashString ?? ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ mesh: part.mesh, material: part.material });
+        }
+    return out;
+  }
+
   instantiateMerged(name: string, shadows = true): pc.Entity | undefined {
     const parts = this.batchParts(name);
     if (!parts.length) return undefined;

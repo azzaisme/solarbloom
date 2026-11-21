@@ -151,9 +151,11 @@ try {
   // ── a friend Keeper sits beside bloombot ──
   await page.evaluate(() => {
     const s = window.solarbloom.sim;
-    s.state.salvage.keepers.pylon = { step: 'settled' };
+    // a friend (E23.9.2): settled, and given the three gifts it loves (FRIENDSHIP.giftsToFriend)
+    s.state.salvage.keepers.pylon = { step: 'settled', hearts: 3 };
     s.state.areas.mastRow = { ...(s.state.areas.mastRow ?? { revealedAt: 0 }), fog: 'cleared' };
   });
+  check(await page.evaluate(() => window.solarbloom.sim.keepers.isFriend('pylon')), 'Pylon is a friend (three hearts)');
   await page.waitForTimeout(800);
   await before(page, bench.x, bench.z);
   await key(page, 'KeyE');

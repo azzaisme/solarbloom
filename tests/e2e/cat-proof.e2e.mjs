@@ -12,6 +12,7 @@
 //
 //   npm run build && node tests/e2e/cat-proof.e2e.mjs        (serves the build)
 //   BASE=http://localhost:5181 node tests/e2e/cat-proof.e2e.mjs
+//   GPU=1 runs on the real GPU (d3d11); without it, SwiftShader (slow, but the same on every machine).
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { preview } from 'vite';
@@ -22,13 +23,14 @@ mkdirSync(out, { recursive: true });
 const port = Number(process.env.PORT ?? 4392);
 const server = process.env.BASE ? undefined : await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
 const base = process.env.BASE ?? `http://localhost:${port}`;
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ args: process.env.GPU ? ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let page;
 const errors = [];
 /** A new game in a fresh browser context (an empty save), loaded and past the intro. */
 const load = async () => {
   page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
   page.on('pageerror', (e) => errors.push(String(e)));
+  await page.addInitScript(`window.__paws = ${PAWS.toString()};`);
   await page.addInitScript(() => {
     if (sessionStorage.getItem('seeded')) return;
     sessionStorage.setItem('seeded', '1');
@@ -47,6 +49,18 @@ const shot = async (file) => {
   await page.screenshot({ path: `${out}/${file}` });
   console.log('shot', file);
 };
+/**
+ * In the page: whether any paw-print hint is showing. The E23.11 HUD dropped the old paw chip (#pawBtn); the hint is
+ * now the trail of prints drawn in front of a hiding cat (CatVisuals.setHint). A chip that exists must be hidden.
+ */
+const PAWS = () => {
+  const g = window.solarbloom;
+  const chip = document.querySelector('#pawBtn');
+  const views = [...(g.cat.views?.values?.() ?? [])];
+  const active = g.sim.state.cat.active;
+  return { chip: !!chip && !chip.hidden, prints: views.some((v) => !!v.prints), activePrints: !!(active && g.cat.views?.get(active.id)?.prints) };
+};
+
 /** The same word list as tests/cat-secrecy.test.ts. */
 const CAT_WORD = /\b(cats?|kitt(?:y|en|ens)|kitties|meows?|mews?|paws?|pawprints?|whiskers?|purr\w*|felines?|tabby|something (?:small|little)|hiding (?:nearby|close by|close|here))\b|🐱|🐈|🐾|😺|😸/i; // as tests/cat-secrecy.test.ts
 
@@ -184,7 +198,7 @@ try {
     const re = new RegExp(CAT.src, CAT.flags);
     const t = s.grid.get('g', Math.floor(window.__c.x), Math.floor(window.__c.z));
     return {
-      paw: !document.querySelector('#pawBtn')?.hidden,
+      paw: window.__paws(),
       meows: window.__meows,
       words: (document.body.innerText.match(new RegExp(re.source, 'gi')) ?? []).join(' '),
       tile: g.pawHint(t),
@@ -192,7 +206,8 @@ try {
       hinted: s.cat.hinted(s.state.cat.active),
     };
   }, { src: CAT_WORD.source, flags: CAT_WORD.flags });
-  check(!before.paw, 'no paw-print chip');
+  check(!before.paw.chip, 'no paw-print chip');
+  check(!before.paw.prints, 'no paw prints drawn in the world');
   check(before.meows === 0, `no meow in 25 s with a cat hiding (${before.meows})`);
   check(!before.words, `no cat words on screen (${before.words})`);
   check(before.tile === '', 'the tile beside the cat has no paw-print note');
@@ -346,13 +361,78 @@ try {
     } else {
       check((await lookAround(c, 1.6)) !== undefined, `${label}: the view turns until the cat can be seen`);
     }
+    // a player turns bloombot to the cat before saying hello: Interact only offers a cat in front of bloombot (within
+    // 70° of its facing), and the view above placed bloombot beside the cat without turning it
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      const v = g.cat.targetWorld(g.sim.state.cat.active.id);
+      const [bx, , bz] = g.bot.world();
+      if (v) g.bot.pose.facing = Math.atan2(v.x - bx, v.z - bz);
+    });
+    // as a player would: press Interact once the prompt offers "Say hello" (the game measures what is seen after each
+    // frame, so on a fast GPU the prompt can lag the turn by a few frames), then wait for the find to land
+    const hello = () => page.evaluate(() => /Say hello/.test(document.querySelector('#interactPrompt, .interact-prompt, #prompt')?.textContent ?? ''));
+    await page.waitForFunction(() => /Say hello/.test(document.querySelector('#interactPrompt, .interact-prompt, #prompt')?.textContent ?? ''), null, { timeout: 15000 }).catch(() => {});
+    if (!(await hello())) {
+      // something nearer wins the prompt (Interact takes the nearest target: a gate's tile, say): as a player would,
+      // step round to another side of the cat, facing it, until bloombot offers to say hello
+      const cells = await page.evaluate(() => {
+        const g = window.solarbloom;
+        const v = g.cat.targetWorld(g.sim.state.cat.active.id);
+        const out = [];
+        for (let dx = -2; dx <= 2; dx++)
+          for (let dz = -2; dz <= 2; dz++) {
+            const x = Math.floor(v.x) + dx, z = Math.floor(v.z) + dz;
+            const d = Math.hypot(x + 0.5 - v.x, z + 0.5 - v.z);
+            if (d > 0.4 && d < 2 && g.bot.walker.walkable(g.bot.pose.roofId, x, z)) out.push({ x, z, d });
+          }
+        return out.sort((a, b) => a.d - b.d);
+      });
+      for (const cell of cells) {
+        await page.evaluate((cell) => {
+          const g = window.solarbloom;
+          const v = g.cat.targetWorld(g.sim.state.cat.active.id);
+          g.bot.teleport('g', cell.x + 0.5, cell.z + 0.5);
+          const [bx, , bz] = g.bot.world();
+          g.bot.pose.facing = Math.atan2(v.x - bx, v.z - bz);
+        }, cell);
+        await page.waitForFunction(() => /Say hello/.test(document.querySelector('#interactPrompt, .interact-prompt, #prompt')?.textContent ?? ''), null, { timeout: 4000 }).catch(() => {});
+        if (await hello()) break;
+      }
+    }
     const prompt = await page.evaluate(() => document.querySelector('#interactPrompt, .interact-prompt, #prompt')?.textContent ?? '');
     const found0 = await page.evaluate(() => window.solarbloom.sim.state.cat.found);
+    // what stands between the key and the cat, if it isn't found (a panel, the menu, the cat not seen, too far)
+    const why = await page.evaluate(() => {
+      const g = window.solarbloom;
+      const c = g.sim.state.cat.active;
+      const a = c && g.sim.cat.anchor(c.anchorId);
+      const b = g.bot.pose;
+      return {
+        px: c ? Math.round(g.catSeenPixels(c.id)) : null,
+        dist: a ? +Math.hypot(a.pos[0] - b.x, a.pos[2] - b.z).toFixed(2) : null,
+        // where Interact aims at the cat (CatVisuals.targetWorld), and how far off bloombot's facing it is
+        aim: (() => {
+          const v = c && g.cat.targetWorld(c.id);
+          if (!v) return null;
+          const [wx, , wz] = g.bot.world();
+          const d = Math.hypot(v.x - wx, v.z - wz);
+          const dot = d > 0 ? (Math.sin(b.facing) * (v.x - wx) + Math.cos(b.facing) * (v.z - wz)) / d : 1;
+          return { d: +d.toFixed(2), deg: Math.round((Math.acos(Math.max(-1, Math.min(1, dot))) * 180) / Math.PI), y: +v.y.toFixed(2), known: g.sim.cat.known };
+        })(),
+        catPanel: !!document.querySelector('#catPanel') && !document.querySelector('#catPanel').hidden,
+        modal: g.hud.modalOpen,
+        panel: !!g.padFocus?.panel?.(),
+        active: document.activeElement?.id || document.activeElement?.tagName,
+        paused: !!g.paused,
+      };
+    });
     await page.keyboard.press('e');
-    await page.waitForTimeout(1500);
+    await page.waitForFunction((n) => window.solarbloom.sim.state.cat.found > n, found0, { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(800); // the panel opens
     await page.evaluate(() => (window.solarbloom.overviewOn = false));
     const r = await page.evaluate(() => ({ found: window.solarbloom.sim.state.cat.found, panel: document.querySelector('#catPanelBody')?.innerText ?? '', last: window.solarbloom.sim.state.cat.lastReward }));
-    check(r.found === found0 + 1, `${label}: bloombot finds the cat with Interact${prompt ? ` ("${prompt.trim()}")` : ''}`);
+    check(r.found === found0 + 1, `${label}: bloombot finds the cat with Interact${prompt ? ` ("${prompt.trim()}")` : ''}${r.found === found0 + 1 ? '' : ` ${JSON.stringify(why)}`}`);
     return r;
   };
   const first = await findWith(hid.c, 'the first cat');
@@ -365,10 +445,10 @@ try {
     s.state.time += 120;
     return { c };
   });
-  // the HUD shows the chip on its next refresh (game time runs slow in software GL): wait for it
-  await page.waitForFunction(() => !document.querySelector('#pawBtn')?.hidden, null, { timeout: 20000 }).catch(() => {});
-  const opened = await page.evaluate(() => ({ paw: !document.querySelector('#pawBtn')?.hidden, hinted: window.solarbloom.sim.cat.hinted(window.solarbloom.sim.state.cat.active) }));
-  check(opened.hinted && opened.paw, `once a cat has been found, the next one leaves paw prints (hinted ${opened.hinted}, chip ${opened.paw})`);
+  // the prints go down on the next frames (game time runs slow in software GL): wait for them
+  await page.waitForFunction(() => window.__paws().activePrints, null, { timeout: 20000 }).catch(() => {});
+  const opened = await page.evaluate(() => ({ paw: window.__paws(), hinted: window.solarbloom.sim.cat.hinted(window.solarbloom.sim.state.cat.active) }));
+  check(opened.hinted && opened.paw.activePrints, `once a cat has been found, the next one leaves paw prints in the world (hinted ${opened.hinted}, prints ${opened.paw.activePrints})`);
   await page.evaluate((c) => window.aim(c.x + 2.5, c.z + 2.5, 1.6), after.c);
   await page.waitForTimeout(1500);
   await shot('3-paw-prints-after-first.png');
@@ -776,7 +856,8 @@ try {
   check(errors.length === 0, `no page errors ${errors.join(' | ')}`);
 } finally {
   console.log(failed ? `cat proof: ${failed} check(s) failed` : 'cat proof: all checks passed');
-  await browser.close();
-  server?.httpServer.close();
-  process.exitCode = failed ? 1 : 0;
+  // a clean exit: closing the browser can hang in software GL, and the preview server keeps its sockets open
+  await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 15000))]).catch(() => {});
+  await Promise.race([server?.close?.() ?? server?.httpServer.close(), new Promise((r) => setTimeout(r, 5000))]).catch(() => {});
+  process.exit(failed ? 1 : 0);
 }

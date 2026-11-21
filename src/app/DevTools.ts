@@ -33,7 +33,7 @@ export type PresetName = 'fresh' | 'screenshot' | 'rich';
 export const PRESETS: Record<PresetName, string> = {
   fresh: 'A brand-new park.',
   screenshot: 'The Phase 4 screenshot: 19 park tiles restored around the fountain.',
-  rich: 'A fresh park with every buildable tier open and a full backpack, for testing builds.',
+  rich: 'A fresh park with every machine open and a full backpack, for testing builds.',
 };
 
 /** Builds a preset's starting state headlessly (also used by tests). */
