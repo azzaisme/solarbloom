@@ -111,6 +111,6 @@ describe('#620: Bloombot\'s page', () => {
 
   it('each row names the part of Bloombot it changes (E25\'s turntable lights it)', () => {
     const parts = Object.fromEntries(bloombotRows(fresh()).map((r) => [r.id, r.part]));
-    expect(parts).toMatchObject({ pry: 'leaves', glide: 'leaves', chargeCells: 'cells', backpack: 'pockets' });
+    expect(parts).toMatchObject({ pry: 'marks', glide: 'marks', chargeCells: 'cells', backpack: 'pockets', pulseRadius: 'leaves', lantern: 'lamp' });
   });
 });

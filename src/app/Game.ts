@@ -5011,8 +5011,8 @@ export class Game {
     this.updateChainPresentation(wdt);
     this.updateGuideLines();
     this.updatePileGlints();
-    // #620: Bloombot wears what it has grown into (moves learned, Bigger charge, Roomier backpack)
-    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities.length ?? 0, cells: this.sim.research.level('chargeCells'), pockets: this.sim.research.level('backpack'), park: this.sim.parkGrowth.step });
+    // #627: every upgrade, move and park growth as a part (data/botParts); rebuilt only when something changes
+    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities ?? [], levels: this.sim.state.salvage?.research?.levels ?? {}, park: this.sim.parkGrowth.step });
     // #624 Lantern: Bloombot's own light at night, from its research level (none before it)
     if (this.bot) this.bot.visuals.setLantern(this.sim.upgrades.lanternReach, 1 - this.dayNight.light, this.dayNight.lightShare, RESEARCH.lanternIntensity);
     // #613: resting at home charges bloombot: show it, so the player knows to stand still
