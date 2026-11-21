@@ -27,6 +27,13 @@ export const SKY = {
 } as const;
 
 /**
+ * #635: fog and rain veil the distant skyline toward the fog colour, so it fades into the haze with the rest of
+ * the view. A view share (WEATHER[].view) of 1 leaves it as it is; `foggiest` and below veil it by `max`, which
+ * leaves a faint outline. The skyline recolours when the veil or the fog colour moves by more than `step`.
+ */
+export const SKYLINE_FOG = { max: 0.88, foggiest: 0.32, step: 0.02 };
+
+/**
  * Haze reach (world units past the camera target) as a function of how near the view is (0 far … 1 near). Close
  * up it reaches far enough that the real city's buildings carry out to the foot of the distant skyline.
  */

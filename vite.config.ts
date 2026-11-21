@@ -48,6 +48,8 @@ const QUICK = [
   'trail',
   // #631: Bloombot's colour is green
   'bot-green',
+  // #635: the skyline fades into fog and stays behind the world
+  'fog-skyline',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
