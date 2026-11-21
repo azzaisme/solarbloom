@@ -7,6 +7,7 @@ import { surfaceTriangles, skinnedVertices, vertexOnBones } from './SkinSurface'
 import { inBox, type SeatBox } from './SeatBox';
 import { ACT_EASE, ACTS, type ActEffect, type ActId } from '../data/botActs';
 import { actPose, applyActPose, emptyPose } from './BotActs';
+import { BotProp } from './BotProps';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -71,6 +72,9 @@ export interface ActBeat {
   beat: 'tick' | 'finish';
   effect: ActEffect;
   at: pc.Vec3;
+  /** Bloombot's own sideways and backward directions in the world (to throw an effect out where it shows) */
+  side: pc.Vec3;
+  back: pc.Vec3;
 }
 
 export class BloombotVisuals {
@@ -142,6 +146,8 @@ export class BloombotVisuals {
    */
   private act?: { id: ActId; t: number; held: boolean; ending?: number; ticks: number };
   private actPoseNow = emptyPose();
+  /** #628: what it holds while it acts (made when the act starts, gone when it ends) */
+  private prop?: BotProp;
   /** #628: called for each act's effects (Game draws them with Vfx) */
   onBeat?: (b: ActBeat) => void;
 
@@ -351,7 +357,12 @@ export class BloombotVisuals {
    */
   setPose(pose: 'sit' | 'meditate' | undefined, seat = 0) {
     const was = this.pose;
-    if (pose) this.act = undefined; // #628: no act on a seat
+    // #628: no act on a seat
+    if (pose) {
+      this.act = undefined;
+      this.prop?.destroy();
+      this.prop = undefined;
+    }
     this.pose = pose;
     this.seat = seat;
     if (pose !== was) {
@@ -675,6 +686,12 @@ export class BloombotVisuals {
       }
     }
     this.act = { id, t: 0, held, ticks: 0 };
+    const want = ACTS[id].prop?.id;
+    if (this.prop?.id !== want) {
+      this.prop?.destroy();
+      this.prop = want && this.model ? new BotProp(want, this.root) : undefined;
+      this.prop?.grow(0);
+    }
   }
 
   /** #628: ends a held act: finished (`done`, with its finishing effect) or let go part way. */
@@ -700,6 +717,8 @@ export class BloombotVisuals {
   }
 
   private readonly beatAt = new pc.Vec3();
+  private readonly beatSide = new pc.Vec3();
+  private readonly beatBack = new pc.Vec3();
 
   private beat(kind: 'tick' | 'finish') {
     const a = this.act;
@@ -710,14 +729,17 @@ export class BloombotVisuals {
     const at = this.beatAt;
     const l = this.model?.findByName('LeftHand');
     const r = this.model?.findByName('RightHand');
-    if (effect.at === 'hands' && l && r) at.copy(l.getPosition()).add(r.getPosition()).mulScalar(0.5);
+    if (effect.at === 'tool' && this.prop) this.prop.tip(at);
+    else if (effect.at !== 'ground' && l && r) at.copy(l.getPosition()).add(r.getPosition()).mulScalar(0.5);
     else {
       // on the ground half a step ahead (its front is the root's local +z)
       const f = this.root.forward;
       const p = this.root.getPosition();
       at.set(p.x - f.x * 0.42, p.y, p.z - f.z * 0.42);
     }
-    this.onBeat({ act: a.id, beat: kind, effect, at });
+    this.beatSide.copy(this.root.right);
+    this.beatBack.copy(this.root.forward); // its front is the root's local +z, so the root's forward (-z) is behind it
+    this.onBeat({ act: a.id, beat: kind, effect, at, side: this.beatSide, back: this.beatBack });
   }
 
   /** #628: runs the act: eases it in and out, fires its effects, and draws its pose (after the clip has run). */
@@ -742,12 +764,38 @@ export class BloombotVisuals {
     const w = smooth(Math.min(into, out));
     if (a.ending !== undefined && out <= 0) {
       this.act = undefined;
+      this.prop?.destroy();
+      this.prop = undefined;
       if (!this.pose) this.holder?.setLocalPosition(0, 0, 0);
       return;
     }
     if (!this.model || this.pose) return;
-    const crouch = applyActPose(this.model, this.root, actPose(a.id, a.t, 1, this.reducedMotion, this.actPoseNow), w);
-    this.holder?.setLocalPosition(0, -crouch, 0);
+    // the feet as the clip has them (the model back at its rest height first), then the pose, then sink the model so
+    // the lower foot is back where it was: a crouch with its feet on the ground, never lifted off it
+    this.holder?.setLocalPosition(0, 0, 0);
+    const before = this.feetHeight();
+    if (!applyActPose(this.model, this.root, actPose(a.id, a.t, 1, this.reducedMotion, this.actPoseNow), w)) return;
+    const sink = this.feetHeight() - before;
+    this.holder?.setLocalPosition(0, -sink, 0);
+    this.lastSink = sink;
+    if (this.prop) {
+      const side = ACTS[a.id].prop!.hand === 'left' ? 'Left' : 'Right';
+      const fore = this.model.findByName(`${side}ForeArm`);
+      const hand = this.model.findByName(`${side}Hand`);
+      if (fore && hand) this.prop.place(fore.getPosition(), hand.getPosition(), this.root.up);
+      this.prop.grow(w);
+    }
+  }
+
+  /** #628: how far the act sank the model last frame (bending the knees lifts the feet; this puts them back down). */
+  lastSink = 0;
+
+  /** #628: the lower of its two feet (the ankle joints), above its root. */
+  feetHeight(): number {
+    const l = this.model?.findByName('LeftFoot');
+    const r = this.model?.findByName('RightFoot');
+    if (!l || !r) return 0;
+    return Math.min(l.getPosition().y, r.getPosition().y) - this.root.getPosition().y;
   }
 
   update(dt: number) {

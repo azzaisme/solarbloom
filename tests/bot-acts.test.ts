@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ACTS, HOLD_ACTS, VERB_ACTS, actForVerb, type ActId } from '../src/data/botActs';
 import { NIGHT_FIND_GIVES } from '../src/data/time';
+import { PROPS } from '../src/data/botProps';
 import { actPose } from '../src/rendering/BotActs';
 
 const read = (f: string) => readFileSync(f, 'utf8');
@@ -68,6 +69,48 @@ describe('Bloombot acts out every Interact verb (#628)', () => {
       for (const k of Object.keys(full) as (keyof typeof full)[]) expect(half[k]).toBeCloseTo(full[k] / 2);
       expect(Object.values(actPose(id, 0.1, 0, false)).every((v) => Math.abs(v) < 1e-9)).toBe(true);
     }
+  });
+
+  it('each act but the quick reach holds something that reads from behind, and its effects come from it', () => {
+    for (const [id, d] of Object.entries(ACTS)) {
+      if (id === 'reach') {
+        expect(d.prop).toBeUndefined();
+        continue;
+      }
+      expect(d.prop, id).toBeDefined();
+      expect(PROPS[d.prop!.id], id).toBeDefined();
+    }
+    expect(ACTS.pry.prop?.id).toBe('bar');
+    expect(ACTS.dig.prop?.id).toBe('trowel');
+    expect(ACTS.plant.prop?.id).toBe('trowel');
+    expect(ACTS.tend.prop?.id).toBe('can');
+    expect(ACTS.gather.prop?.id).toBe('basket');
+    expect(ACTS.harvest.prop?.id).toBe('basket');
+    expect(ACTS.repair.prop?.id).toBe('wrench');
+    // an effect at the tool needs a tool
+    for (const [id, d] of Object.entries(ACTS)) for (const e of [d.tick, d.finish]) if (e?.at === 'tool') expect(d.prop, id).toBeDefined();
+    // every prop is used, and each has pieces and a working end
+    const used = new Set(Object.values(ACTS).map((d) => d.prop?.id));
+    for (const [id, p] of Object.entries(PROPS)) {
+      expect(used.has(id as never), id).toBe(true);
+      expect(p.pieces.length, id).toBeGreaterThan(0);
+      expect(p.tip).toHaveLength(3);
+    }
+  });
+
+  it('the busy acts throw their dust and soil out to the sides or back, where the follow camera sees it', () => {
+    for (const id of ['rummage', 'pry', 'gather', 'dig', 'plant', 'harvest'] as ActId[]) {
+      const e = ACTS[id].tick!;
+      expect((e.fan ?? 0) + (e.back ?? 0), id).toBeGreaterThan(0.8);
+      expect(e.up ?? 0, id).toBeGreaterThan(1.5);
+    }
+  });
+
+  it('the crouching acts bend the knees well down (the model sinks to keep its feet on the ground)', () => {
+    expect(ACTS.dig.channels.knee![0]).toBeGreaterThanOrEqual(50);
+    expect(ACTS.plant.channels.knee![0]).toBeGreaterThanOrEqual(60);
+    expect(ACTS.pry.channels.lean![0]).toBeLessThan(-10);
+    expect(read('src/rendering/BloombotVisuals.ts')).toMatch(/const sink = this\.feetHeight\(\) - before/);
   });
 
   it('the game starts the acts: the prompt verb after a press, the holds, planting and harvesting', () => {

@@ -80,24 +80,51 @@ try {
       g.app.on('prerender', window.__closeUp);
     }, close);
   const views = [
-    // behind it and a little above, as the follow camera sees it (its back to the camera)
-    { name: 'follow', facing: Math.PI, yaw: 360, zoom: 1.9, size: 520, close: [0.35, 1.25, -2.3] },
-    // from its left side and a little in front
+    // the follow camera as played: behind Bloombot (its back to the camera), the crop around it
+    { name: 'follow', facing: Math.PI, yaw: 360, zoom: 1.9, size: 340 },
+    // close behind it and a little above
+    { name: 'behind', facing: Math.PI, yaw: 360, zoom: 1.9, size: 520, close: [0.35, 1.25, -2.3] },
+    // from its right side and a little in front
     { name: 'side', facing: Math.PI / 2, yaw: 360, zoom: 1.9, size: 520, close: [-2.1, 0.75, 0.9] },
   ];
+  const clipFor = async (v) => (v.close ? { x: 640 - v.size / 2, y: 400 - v.size / 2, width: v.size, height: v.size } : await around(v.size));
+  // the feet: how high the lower ankle stands above Bloombot's root, idle and part way through every act
+  const idleFeet = await page.evaluate(() => window.solarbloom.bot.visuals.feetHeight());
+  let lowestFeet = Infinity;
+  let highestFeet = -Infinity;
   for (const v of views) {
     await stand(v.facing, v.yaw, v.zoom);
     await closeUp(v.close);
     for (const act of ACTS) {
       await page.evaluate((act) => window.solarbloom.bot.visuals.startAct(act, true), act);
       await page.waitForTimeout(450);
-      const now = await page.evaluate(() => window.solarbloom.bot.visuals.acting);
-      if (now !== act) fail(`${act}: the act didn't start (acting: ${now})`);
-      await page.screenshot({ path: `${dir}/${v.name}-${act}.png`, clip: { x: 640 - v.size / 2, y: 400 - v.size / 2, width: v.size, height: v.size } });
+      const now = await page.evaluate(() => ({ acting: window.solarbloom.bot.visuals.acting, feet: window.solarbloom.bot.visuals.feetHeight() }));
+      if (now.acting !== act) fail(`${act}: the act didn't start (acting: ${now.acting})`);
+      lowestFeet = Math.min(lowestFeet, now.feet);
+      highestFeet = Math.max(highestFeet, now.feet);
+      await page.screenshot({ path: `${dir}/${v.name}-${act}.png`, clip: await clipFor(v) });
       await page.evaluate(() => window.solarbloom.bot.visuals.endAct(true));
       await page.waitForTimeout(700);
     }
     console.log(`  ✓ ${dir}/${v.name}-*.png`);
+  }
+  console.log(`  feet: idle ${idleFeet.toFixed(3)} above the root · during the acts ${lowestFeet.toFixed(3)} to ${highestFeet.toFixed(3)}`);
+  if (highestFeet > idleFeet + 0.02) fail('an act lifted Bloombot off the ground');
+
+  // Motion strips (and GIFs): frames through a loop and a half of the held acts and the planting, from the follow
+  // camera's side of Bloombot (close behind it)
+  await stand(Math.PI, 360, 1.9);
+  await closeUp([0.35, 1.25, -2.3]);
+  const STRIPS = ['rummage', 'pry', 'plant', 'tend'];
+  for (const act of STRIPS) {
+    await page.evaluate((act) => window.solarbloom.bot.visuals.startAct(act, true), act);
+    await page.waitForTimeout(300);
+    for (let f = 0; f < 10; f++) {
+      await page.screenshot({ path: `${dir}/strip-${act}-${f}.png`, clip: { x: 640 - 230, y: 400 - 230, width: 460, height: 460 } });
+      await page.waitForTimeout(90);
+    }
+    await page.evaluate(() => window.solarbloom.bot.visuals.endAct(true));
+    await page.waitForTimeout(800);
   }
   await closeUp(null);
 
@@ -160,25 +187,35 @@ try {
 }
 try {
   const py = `
-import sys
+import sys, glob, os
 from PIL import Image, ImageDraw
-d, acts = sys.argv[1], sys.argv[2].split(',')
-for v in ('follow', 'side'):
+d, acts, strips = sys.argv[1], sys.argv[2].split(','), sys.argv[3].split(',')
+for v in ('follow', 'behind', 'side'):
     ims = [Image.open(f'{d}/{v}-{a}.png') for a in acts]
-    w, h = ims[0].size
     t = 220
     cols = 7
     sheet = Image.new('RGB', (cols * t, ((len(ims) + cols - 1) // cols) * (t + 22)), 'white')
     dr = ImageDraw.Draw(sheet)
     for i, (a, im) in enumerate(zip(acts, ims)):
         x, y = (i % cols) * t, (i // cols) * (t + 22)
-        sheet.paste(im.resize((t, t)), (x, y + 22))
+        sheet.paste(im.convert('RGB').resize((t, t)), (x, y + 22))
         dr.text((x + 6, y + 5), a, fill='black')
     sheet.save(f'{d}/sheet-{v}.png')
+for a in strips:
+    files = sorted(glob.glob(f'{d}/strip-{a}-*.png'), key=lambda f: int(f.rsplit('-', 1)[1][:-4]))
+    ims = [Image.open(f).convert('RGB') for f in files]
+    t = 200
+    strip = Image.new('RGB', (t * 5, t * 2), 'white')
+    for i, im in enumerate(ims[:10]):
+        strip.paste(im.resize((t, t)), ((i % 5) * t, (i // 5) * t))
+    strip.save(f'{d}/strip-{a}.png')
+    small = [im.resize((300, 300)) for im in ims]
+    small[0].save(f'{d}/{a}.gif', save_all=True, append_images=small[1:], duration=110, loop=0)
+    for f in files: os.remove(f)
 `;
-  execFileSync('python', ['-c', py, dir, ACTS.join(',')], { stdio: 'inherit' });
-  console.log(`  ✓ ${dir}/sheet-follow.png, sheet-side.png`);
+  execFileSync('python', ['-c', py, dir, ACTS.join(','), 'rummage,pry,plant,tend'], { stdio: 'inherit' });
+  console.log(`  ✓ ${dir}/sheet-*.png, strip-*.png, *.gif`);
 } catch (e) {
-  console.log(`  (no contact sheet: ${e.message.split('\n')[0]})`);
+  console.log(`  (no contact sheets: ${e.message.split('\n')[0]})`);
 }
 process.exit(failed ? 1 : 0);

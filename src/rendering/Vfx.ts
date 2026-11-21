@@ -361,7 +361,11 @@ export class Vfx {
     p.twinkle = false;
   }
 
-  burst(pos: pc.Vec3, count: number, opts: { speed?: number; up?: number; size?: number; life?: number; gravity?: number; hex?: string; glow?: number } = {}) {
+  /**
+   * `push` adds a velocity to every bit; `fan` throws each one out along that axis, either way at random up to its
+   * length (#628: dust thrown out to Bloombot's sides, where the follow camera sees it).
+   */
+  burst(pos: pc.Vec3, count: number, opts: { speed?: number; up?: number; size?: number; life?: number; gravity?: number; hex?: string; glow?: number; push?: pc.Vec3; fan?: pc.Vec3 } = {}) {
     const n = Math.max(1, Math.round(count * this.density));
     for (let i = 0; i < n; i++) {
       const p = this.free();
@@ -372,6 +376,17 @@ export class Vfx {
       p.vx = Math.cos(a) * sp;
       p.vz = Math.sin(a) * sp;
       p.vy = (opts.up ?? 2.4) * (0.6 + Math.random() * 0.6);
+      if (opts.push) {
+        p.vx += opts.push.x;
+        p.vy += opts.push.y;
+        p.vz += opts.push.z;
+      }
+      if (opts.fan) {
+        const f = (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.5);
+        p.vx += opts.fan.x * f;
+        p.vy += opts.fan.y * f;
+        p.vz += opts.fan.z * f;
+      }
       p.max = (opts.life ?? 0.9) * (0.7 + Math.random() * 0.5);
       p.size = (opts.size ?? 0.06) * (0.6 + Math.random() * 0.8);
       p.spin = (Math.random() - 0.5) * 720;

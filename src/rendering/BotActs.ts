@@ -8,7 +8,7 @@ import { ACTS, type ActChannel, type ActId } from '../data/botActs';
  */
 export type ActPose = Record<ActChannel, number>;
 
-const CHANNELS: readonly ActChannel[] = ['lean', 'twist', 'crouch', 'knee', 'headPitch', 'headYaw', 'headRoll', 'lRaise', 'lOut', 'lElbow', 'rRaise', 'rOut', 'rElbow'];
+const CHANNELS: readonly ActChannel[] = ['lean', 'twist', 'knee', 'headPitch', 'headYaw', 'headRoll', 'lRaise', 'lOut', 'lElbow', 'rRaise', 'rOut', 'rElbow'];
 
 export function emptyPose(): ActPose {
   return Object.fromEntries(CHANNELS.map((c) => [c, 0])) as ActPose;
@@ -79,11 +79,11 @@ function aim(node: pc.GraphNode | null, tip: pc.GraphNode | null, dir: pc.Vec3, 
  * turned the way Bloombot faces (its front is the facer's local +z, so its own left is the facer's +x). Turning
  * about +x by a positive angle tips anything pointing up toward the front. The arms are aimed: each upper arm
  * points down, raised `raise` degrees toward the front and `out` degrees out to its side; each forearm bends
- * `elbow` degrees from it, toward the front while the arm hangs and upward as it rises. Returns how far to lower
- * the model (the crouch).
+ * `elbow` degrees from it, toward the front while the arm hangs and upward as it rises. The knees bend in place:
+ * the caller sinks the model so its feet stay down (BloombotVisuals). False when the rig has no hips.
  */
-export function applyActPose(rig: pc.GraphNode, facer: pc.GraphNode, p: ActPose, weight = 1): number {
-  if (!bone(rig, 'Hips') || weight <= 0) return 0;
+export function applyActPose(rig: pc.GraphNode, facer: pc.GraphNode, p: ActPose, weight = 1): boolean {
+  if (!bone(rig, 'Hips') || weight <= 0) return false;
   const w = weight;
   RIGHT.copy(facer.right); // +x: Bloombot's left
   FWD.copy(facer.forward).mulScalar(-1); // +z: its front
@@ -128,5 +128,5 @@ export function applyActPose(rig: pc.GraphNode, facer: pc.GraphNode, p: ActPose,
     DIR.copy(ARM).mulScalar(Math.cos(e)).add(BEND.mulScalar(Math.sin(e))).normalize();
     aim(fore, hand, DIR, w);
   }
-  return p.crouch * w;
+  return true;
 }
