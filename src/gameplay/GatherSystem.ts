@@ -40,7 +40,7 @@ export class GatherSystem {
   /** Why gathering here won't work right now (undefined: it will). */
   problem(t: TileData): string | undefined {
     if (!this.canGather(t)) return 'Nothing to gather here';
-    if (this.sim.inventory.room('biomass') <= 0) return 'Your Greens stack is full: put some in storage first';
+    if (this.sim.inventory.room('biomass') <= 0) return 'Your Greens stack is full: leave some in the storage at the fountain';
     return undefined;
   }
 
@@ -61,7 +61,8 @@ export class GatherSystem {
   clip(t: TileData, into: 'pack' | 'store'): number {
     const s = this.sim;
     if (!this.canGather(t)) return 0;
-    const want = this.yieldOf(t);
+    // #625 Green thumb (Moss): Bloombot's own gathering gives more (not a Harvester's)
+    const want = into === 'pack' ? Math.round(this.yieldOf(t) * s.knacks.gather) : this.yieldOf(t);
     const got = into === 'store' ? (s.inventory.addToStore('biomass', want), want) : want - s.inventory.add('biomass', want);
     if (got <= 0) return 0;
     const sv = s.state.salvage!;

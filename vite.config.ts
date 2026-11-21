@@ -11,7 +11,7 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
 const QUICK = [
   'smoke', 'advisor', 'grid', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics',
-  'relay-city', 'no-growing-prices', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
+  'relay-city', 'no-growing-prices', 'look', 'wall-edges', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
   'bloombot-walk', 'bindings', 'padFocus', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glow-setting', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art', 'keeper-seat', 'model-wait', 'visitor-models', 'visitor-sit-shape', 'bloombot-settle',
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
@@ -38,7 +38,8 @@ const QUICK = [
   // E23 polish (#596): shaders warm behind the loading screen
   'shader-warmup',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
-  'clear-path', 'bloombot-levels', 'bloombot-page', 'park-growth', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
+  'clear-path', 'goal-reachable', 'bloombot-levels', 'bloombot-page', 'park-growth', 'knacks', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
+  'first-time-text',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
   // E24 (#609): the way marked on the map and in the world
@@ -47,6 +48,10 @@ const QUICK = [
   'trail',
   // #628: Bloombot acts out each Interact verb
   'bot-acts',
+  // #631: Bloombot's colour is green
+  'bot-green',
+  // #635: the skyline fades into fog and stays behind the world
+  'fog-skyline',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

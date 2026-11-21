@@ -284,7 +284,7 @@ describe('#626: the Bloombot page shows the second levels', () => {
     expect(rows.every((r) => r.kind === 'move2' && r.state === 'later')).toBe(true);
     expect(rows[0].how).toBe('Bloombot has to learn Hover at the fountain first. Then the crafting table in the house can work out “Pry II”.');
     expect(rows[0].where?.name).toBe('the fountain');
-    expect(BLOOMBOT_GROUPS.map((g) => g.kind)).toEqual(['move', 'move2', 'park', 'upgrade']);
+    expect(BLOOMBOT_GROUPS.map((g) => g.kind)).toEqual(['move', 'move2', 'park', 'knack', 'upgrade']);
     expect(bloombotRows(sim).filter((r) => r.kind === 'move2')).toHaveLength(4);
   });
 

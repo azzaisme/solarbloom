@@ -223,7 +223,7 @@ export class RestorationSystem {
     const p = this.sim.state.progression;
     if (!p.coreActivated) return;
     const was = p.megaCharge ?? 0;
-    p.megaCharge = Math.min(TUNING.mega.charge, was + 1);
+    p.megaCharge = Math.min(TUNING.mega.charge, was + (this.sim.knacks?.mega ?? 1)); // #625 Good timing (Tock)
     if (p.megaCharge >= TUNING.mega.charge && was < TUNING.mega.charge) this.sim.bus.emit('mega.ready', {});
   }
 

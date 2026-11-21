@@ -264,6 +264,7 @@ export class FarmSystem {
       rate *= this.sim.farmExtras.cropBoost(m); // E23.5.4.1: settled beehives in reach
       rate *= machineStrengthAt('planter', m.x, m.z); // E23.8.1: fertile soil (Elder Grove) grows faster
       rate *= 1 + (this.sim.research?.effect('cropGrowth') ?? 0); // E23.6.2: Kind soil (research)
+      rate *= this.sim.knacks?.crops ?? 1; // #625 Warm hands (Fern)
     }
     return { crop, progress, stage, ripe, wilting, resting, rate, met, unmet };
   }

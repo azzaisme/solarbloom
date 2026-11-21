@@ -2,7 +2,9 @@ import type { AbilityId } from '../core/types';
 import { UPGRADE_PART, type PartId } from '../data/botParts';
 import { GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
-import { PARK_GROWTH } from '../data/bloombot';
+import { KNACKS, PARK_GROWTH } from '../data/bloombot';
+import { keeperById, regionById } from '../core/OldCityLayout';
+import { WAKE_GIFT } from '../gameplay/KeeperSystem';
 import { itemDef } from '../data/items';
 import { PARK_SET } from '../data/oldcity';
 import { PROJECTS, RESEARCH_UPGRADES, type ProjectDef } from '../data/research';
@@ -20,7 +22,7 @@ import type { Sim } from '../gameplay/Sim';
  * E25 (#629) grows this page: a turntable of Bloombot beside the list, the part each row changes lit up. Each row's
  * `part` names that part (BloombotVisuals' growth pieces) so the view can find it.
  */
-export type BloombotRowKind = 'move' | 'move2' | 'park' | 'upgrade';
+export type BloombotRowKind = 'move' | 'move2' | 'park' | 'knack' | 'upgrade';
 /** have: learned or at its top level; next: the one to work on now; later: not yet. */
 export type BloombotRowState = 'have' | 'next' | 'later';
 
@@ -107,7 +109,7 @@ export function moveRows(sim: Sim): BloombotRow[] {
 /** How to open an upgrade that research hasn't opened yet. */
 function openHow(sim: Sim, p: ProjectDef | undefined, move = false): string {
   const r = sim.research;
-  if (!p) return 'Research opens it in the workshop.';
+  if (!p) return 'Research at the crafting table in the house opens it.';
   const name = `“${p.name}”`;
   if (!r.on) return `The crafting table in the house can work out how to ${move ? 'do' : 'make'} this. It starts once you wake another robot out in the city.`;
   if (r.running(p.id)) return `The crafting table in the house is working out ${name} now. ${move ? 'Bloombot learns it' : 'You can make this'} once it's done.`;
@@ -210,9 +212,33 @@ export function parkRows(sim: Sim): BloombotRow[] {
   });
 }
 
-/** The whole page: moves, their second levels, what the park grew, then upgrades. */
+/**
+ * #625: what the Keepers teach, one each, in map order. A Keeper teaches its knack as it wakes, so the way to one is
+ * waking its Keeper: the ones Bloombot can reach now are next (Show me where goes to the sleeping Keeper), the ones
+ * still out of reach are later.
+ */
+export function knackRows(sim: Sim): BloombotRow[] {
+  return KNACKS.map((k) => {
+    const d = keeperById(k.keeper)!;
+    const place = regionById(d.region)?.name ?? 'the old city';
+    const have = sim.knacks.has(k.keeper);
+    const reach = sim.keepers.visible(k.keeper);
+    const stirred = !!sim.state.salvage?.keepers?.[k.keeper]?.pulsed;
+    const how = have
+      ? `${d.name} taught Bloombot this when it woke in ${place}.`
+      : !reach
+        ? `${d.name}, a robot asleep in ${place}, teaches this when it wakes. Find the way into ${place} first.`
+        : stirred
+          ? `${d.name} is stirring in ${place}. Bring it ${WAKE_GIFT} of anything and talk to it, and it wakes and teaches this.`
+          : `${d.name} is a robot asleep in ${place}. Pulse it to stir it, then bring it ${WAKE_GIFT} of anything to wake it. It teaches this as it wakes.`;
+    const where = have || !reach ? undefined : { roofId: GROUND, x: d.x, z: d.z + 1, name: d.name };
+    return { id: `knack-${k.keeper}`, kind: 'knack', name: k.name, does: k.does, state: have ? 'have' : reach ? 'next' : 'later', how, where, part: 'knacks' };
+  });
+}
+
+/** The whole page: moves, their second levels, what the park grew, the Keepers' knacks, then upgrades. */
 export function bloombotRows(sim: Sim): BloombotRow[] {
-  return [...moveRows(sim), ...moveTwoRows(sim), ...parkRows(sim), ...bloombotUpgradeRows(sim)];
+  return [...moveRows(sim), ...moveTwoRows(sim), ...parkRows(sim), ...knackRows(sim), ...bloombotUpgradeRows(sim)];
 }
 
 /** The page's groups, in order, each with the count beside its title. */
@@ -220,6 +246,7 @@ export const BLOOMBOT_GROUPS: readonly { kind: BloombotRowKind; title: string; n
   { kind: 'move', title: 'Moves', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length} learned` },
   { kind: 'move2', title: 'Stronger moves', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length} learned` },
   { kind: 'park', title: 'Grown with the park', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length}` },
+  { kind: 'knack', title: 'Knacks from the Keepers', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length} learned` },
   {
     kind: 'upgrade',
     title: 'Upgrades',
@@ -232,6 +259,7 @@ export function howHeading(r: BloombotRow): string {
   if (r.kind === 'move2' && r.state === 'have') return 'Where to use it';
   if (r.kind === 'move' || r.kind === 'move2') return r.state === 'have' ? 'Learned' : 'How to learn it';
   if (r.kind === 'park') return r.state === 'have' ? 'Grown' : 'How it grows';
+  if (r.kind === 'knack') return r.state === 'have' ? 'Learned' : 'How to learn it';
   return r.state === 'have' ? 'At its top level' : r.level ? 'The next level' : 'How to get it';
 }
 
@@ -240,7 +268,7 @@ export const pips = (level: number, max: number) => '●'.repeat(Math.min(level,
 
 /** What a row's state reads as, for its chip. */
 export function stateWords(r: BloombotRow): string {
-  if (r.kind === 'move' || r.kind === 'move2') return r.state === 'have' ? 'Learned' : r.state === 'next' ? 'Next' : 'Later';
+  if (r.kind === 'move' || r.kind === 'move2' || r.kind === 'knack') return r.state === 'have' ? 'Learned' : r.state === 'next' ? 'Next' : 'Later';
   if (r.kind === 'park') return r.state === 'have' ? 'Grown' : r.state === 'next' ? `${r.level} of ${r.max}` : 'Later';
   if (r.state === 'have') return 'Top level';
   return `Level ${r.level} of ${r.max}`;

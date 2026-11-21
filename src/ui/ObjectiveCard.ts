@@ -1,6 +1,7 @@
 import { $, esc, HudPart } from './HudPart';
 import type { Sim } from '../gameplay/Sim';
 import type { Place, Suggestion, SuggestionAction } from '../gameplay/Advisor';
+import { nearestByFoot } from '../gameplay/Advisor';
 import { WORDS, withKeys } from './words';
 import { pinnedRequest as pinnedKeeper } from './BackpackModel';
 import { MATERIALS } from '../data/salvage';
@@ -8,7 +9,6 @@ import { itemDef } from '../data/items';
 import type { ItemId, MaterialId } from '../core/types';
 import { oldCityHint } from './OldCityGuide';
 import { ITEMS, REGIONS, type RegionDef } from '../data/oldcity';
-import { PARK } from '../core/Areas';
 
 /**
  * E22.10 (#348) / E22.5 (#342): the objective card (top left). #605 (E24): the goal stays on top for as long as the
@@ -127,12 +127,9 @@ export function firstRubble(sim: Sim): RegionDef | undefined {
   if (!sv?.abilities.includes('pry')) return undefined;
   const pry = REGIONS.filter((r) => r.gate.needs.ability === 'pry');
   if (pry.some((r) => sim.gates.isOpen(r.gate.id))) return undefined;
-  const [fx, fz] = sim.areas.info(PARK).landmark;
-  const bx = sim.bot?.x ?? sim.state.bot?.x ?? fx;
-  const bz = sim.bot?.z ?? sim.state.bot?.z ?? fz;
-  const d = (r: RegionDef) => Math.hypot(r.gate.cells[0][0] + 0.5 - bx, r.gate.cells[0][1] + 0.5 - bz);
+  // #644: the rubble bloombot can walk up to soonest (one it can't reach only if it can reach none)
   // (a pry gate's only other bar is charge: running low never changes the goal, it shows under it)
-  return [...pry].sort((a, b) => d(a) - d(b))[0];
+  return nearestByFoot(sim, pry, (r) => ({ x: r.gate.cells[0][0], z: r.gate.cells[0][1] }));
 }
 
 /**

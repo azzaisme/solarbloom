@@ -48,8 +48,8 @@ export class SalvageSystem {
     if (!p) return 'Nothing to salvage here';
     if (this.left(id) <= 0) return 'Nothing left here';
     const area = this.sim.areas.map.areaOfCell(p.x, p.z);
-    if (this.sim.areas.fog(area) === 'hidden') return 'Lost in the cloud: open the way here first';
-    if (this.sim.inventory.room(p.material) <= 0) return `Your ${MATERIALS[p.material].name} stack is full: put some in storage first`;
+    if (this.sim.areas.fog(area) === 'hidden') return 'Hidden in the fog. Find the way in first';
+    if (this.sim.inventory.room(p.material) <= 0) return `Your ${MATERIALS[p.material].name} stack is full: leave some in the storage at the fountain`;
     return undefined;
   }
 
@@ -82,14 +82,17 @@ export class SalvageSystem {
     const fit = Math.min(give, room);
     const used = give === take ? fit : Math.ceil(fit / SALVAGE.seedsBonus);
     s.inventory.add(p.material, fit);
+    // #625 Eye for value (Tally): every fourth dig turns up one extra piece (if it fits)
+    const extra = fit > 0 ? Math.min(s.knacks.extraDig(), s.inventory.room(p.material)) : 0;
+    if (extra) s.inventory.add(p.material, extra);
     const now = left - used;
     s.state.salvage!.piles[id] = now;
     // E23.7.4: the refill clock starts (or keeps running) from the first take
     const sv = s.state.salvage!;
     if (!sv.since?.[id]) (sv.since ??= {})[id] = s.state.time;
     if (now <= 0) this.clearTile(p);
-    s.bus.emit('pile.salvaged', { pileId: id, material: p.material, got: fit, left: now, x: p.x, z: p.z });
-    return fit;
+    s.bus.emit('pile.salvaged', { pileId: id, material: p.material, got: fit + extra, left: now, x: p.x, z: p.z });
+    return fit + extra;
   }
 
   /** An emptied pile's tile: open ground (it takes the pile back when it refills, E23.7.4). */
@@ -123,7 +126,7 @@ export class SalvageSystem {
   perUnit(p: PileDef): number {
     const lore = this.sim.state.salvage?.blueprints.includes('salvageLore') ? SALVAGE.loreRefill : 1; // Terraces' blueprint
     const days = isMainlandPile(p) ? SALVAGE_FIELDS.respawnDays : SALVAGE.refillDays;
-    return gameDays(days) / lore / this.size(p);
+    return gameDays(days) / lore / this.sim.knacks.refill / this.size(p); // #625 Beachcomber (Tide)
   }
 
   /**

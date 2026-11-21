@@ -69,7 +69,9 @@ export class ChargeSystem {
     const stride = use === 'sprint' ? 1 - (this.sim.research?.effect('sprint') ?? 0) : 1;
     // #622: Steady charge, from greening the park, takes a little off everything
     const park = this.sim.parkGrowth?.chargeFactor ?? 1;
-    return base * Math.pow(1 - CHARGE.efficiencyStep, eff) * stride * park;
+    // #625: Float along (Sluice) for running, Starlight (Vega) at night
+    const knack = this.sim.knacks?.chargeFactor(use) ?? 1;
+    return base * Math.pow(1 - CHARGE.efficiencyStep, eff) * stride * park * knack;
   }
 
   /** May bloombot do this now? Anything is allowed with charge left, however little (it bottoms out at zero). */
@@ -175,7 +177,7 @@ export class ChargeSystem {
     const moved = !at || !this.lastAt || Math.hypot(at.x - this.lastAt.x, at.z - this.lastAt.z) > 0.02;
     this.still = moved ? 0 : this.still + dt;
     this.lastAt = at ? { x: at.x, z: at.z } : undefined;
-    if (this.resting) this.recharge(CHARGE.home.perSecond * dt, 'home');
+    if (this.resting) this.recharge(CHARGE.home.perSecond * dt * (this.sim.knacks?.rest ?? 1), 'home'); // #625 Easy rest (Gable)
     else if (this.soaking) this.recharge(this.sunSoakRate() * dt, 'sun');
   }
 

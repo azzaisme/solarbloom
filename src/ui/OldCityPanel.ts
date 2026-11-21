@@ -221,26 +221,40 @@ export function fountainHtml(sim: Sim): string {
 export class SpeechBubble {
   readonly el: HTMLElement;
   private until = 0;
+  /** a second bubble from the same speaker, shown once this one has been read */
+  private next?: { name: string; lines: string[] };
   constructor(root: HTMLElement) {
     this.el = document.createElement('div');
     this.el.className = 'oc-bubble';
     this.el.hidden = true;
     root.appendChild(this.el);
   }
-  say(name: string, lines: string[], secs = 3 + lines.length * 1.6) {
+  say(name: string, lines: string[], secs = 3 + lines.length * 1.6, then?: string[], now = performance.now()) {
+    this.next = then?.length ? { name, lines: then } : undefined;
     this.el.innerHTML = iconize(`<b>${escHtml(name)}</b>${lines.map((l) => `<p>${escHtml(l)}</p>`).join('')}`);
     this.el.hidden = false;
-    this.until = performance.now() + secs * 1000;
+    this.until = now + secs * 1000;
   }
-  /** Per frame: follow the speaker on screen (undefined: off screen or gone). */
-  place(at: { x: number; y: number } | undefined) {
+  /**
+   * Per frame: follow the speaker on screen (undefined: off screen or gone). A second bubble waits for the first to
+   * be read and for its speaker to be on screen, so walking away mid-speech never loses it (#625: the knack and the
+   * first request come in it).
+   */
+  place(at: { x: number; y: number } | undefined, now = performance.now()) {
+    if (at && now > this.until && this.next) {
+      const n = this.next;
+      this.say(n.name, n.lines, undefined, undefined, now);
+    }
     if (this.el.hidden) return;
-    if (!at || performance.now() > this.until) {
+    if (!at || now > this.until) {
       this.el.hidden = true;
       return;
     }
-    this.el.style.left = `${at.x}px`;
-    this.el.style.top = `${at.y}px`;
+    // #610: kept whole on screen (a speaker near an edge used to squeeze it to a word a line, or push it off)
+    const half = this.el.offsetWidth / 2;
+    const room = this.el.offsetParent?.clientWidth ?? innerWidth;
+    this.el.style.left = `${Math.max(half + 16, Math.min(room - half - 16, at.x))}px`;
+    this.el.style.top = `${Math.max(this.el.offsetHeight + 16, at.y)}px`;
   }
 }
 
