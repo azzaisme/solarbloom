@@ -40,6 +40,14 @@ function hub(sim: Sim, x = 12, z = -12): MachineData {
     t.occupantId = p.id;
     sim.grid.indexMachine(p);
   }
+  // E23.6.3: a restorer runs on Biomass from a Storage chest beside its hub
+  const ct = sim.grid.get(GROUND, x, z + 2)!;
+  Object.assign(ct, { ground: 'restored', blocked: false });
+  const chest: MachineData = { id: sim.newId('m'), type: 'chest', roofId: GROUND, x, z: z + 2, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+  sim.state.machines.push(chest);
+  ct.occupantId = chest.id;
+  sim.grid.indexMachine(chest);
+  sim.inventory.addToStore('biomass', 100);
   return m;
 }
 const mastRestored = (sim: Sim) => sim.areas.counts('mastRow').restored;
@@ -56,15 +64,19 @@ describe('E21.9: bloombot first', () => {
     const target = sim.areas.shareTarget('mastRow');
     expect(target).toBe(Math.ceil(Math.ceil(sim.areas.counts('mastRow').restorable / 2) / 4));
     let n = 0;
-    for (let z = -30; z < -2 && (sim.state.areas.mastRow.byBot ?? 0) < target; z++)
-      for (let x = 1; x < 30 && (sim.state.areas.mastRow.byBot ?? 0) < target; x++) {
-        const t = sim.grid.get(GROUND, x, z)!;
-        sim.charge.sleep(); // E23.2.1: kept topped up (this test is about the share, not the charge)
-        if (!sim.restoration.checkPulse(t).ok || t.ground === 'restored') continue;
-        sim.restoration.pulse(t.id);
-        sim.advance(2);
-        n++;
-      }
+    // nearest the hub first, so its helper has dead ground in reach once the share is met
+    const spots: [number, number][] = [];
+    for (let z = -30; z < -2; z++) for (let x = 1; x < 30; x++) spots.push([x, z]);
+    spots.sort((a, b) => (a[0] - 12) ** 2 + (a[1] + 12) ** 2 - ((b[0] - 12) ** 2 + (b[1] + 12) ** 2));
+    for (const [x, z] of spots) {
+      if ((sim.state.areas.mastRow.byBot ?? 0) >= target) break;
+      const t = sim.grid.get(GROUND, x, z)!;
+      sim.charge.sleep(); // E23.2.1: kept topped up (this test is about the share, not the charge)
+      if (!sim.restoration.checkPulse(t).ok || t.ground === 'restored') continue;
+      sim.restoration.pulse(t.id);
+      sim.advance(2);
+      n++;
+    }
     expect(sim.state.areas.mastRow.byBot).toBeGreaterThanOrEqual(target);
     expect(sim.areas.helpersMayWork('mastRow')).toBe(true);
     const mid = mastRestored(sim);

@@ -4,6 +4,7 @@ import { HOME } from '../gameplay/ProgressionSystem';
 import { WORDS } from '../ui/words';
 import { BLOOMBOT_PAGE, CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
 import { RESEARCH_UPGRADES } from '../data/research';
+import { PARK_GROWTH } from '../data/bloombot';
 import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
@@ -1592,7 +1593,7 @@ export class Game {
     const p = this.sim.state.progression;
     const first = !(p.ideas ??= []).includes(BLOOMBOT_PAGE);
     if (first) p.ideas.push(BLOOMBOT_PAGE);
-    this.hud.toast(first ? `${title}<small>See what's next on its page in the backpack (${esc(this.hudKeys('backpack'))}).</small>` : title, 'gold', first ? 6 : 3.5);
+    this.hud.toast(first ? `${title}<small>See what's next on its page in the backpack (${esc(this.hudKeys('backpack'))}).</small>` : title, 'gold', first ? 6 : title.includes('<small>') ? 5 : 3.5);
   }
 
   /** #605 / #620: mark a place and turn the camera to it (the card's goal spot, or a place the Bloombot page names). */
@@ -2274,7 +2275,7 @@ export class Game {
     if (this.atHouse(f) && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
     if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
     const pile = s.salvage.pileAt(f.x, f.z);
-    if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
+    if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: s.parkGrowth.salvageHold, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
     if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : s.keepers.giftFor(keeper.id) ? 'Give a gift to' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
     const page = s.journal.pageAt(f.x, f.z);
@@ -4329,6 +4330,11 @@ export class Game {
       const a = TIERS[tier - 1]?.ability;
       if (a) this.grown.push(WORDS.bloombot.learned[a] ?? `Bloombot can ${a} now`);
     });
+    // #622: the park grew Bloombot
+    b.on('bloombot.parkGrew', ({ id }) => {
+      const d = PARK_GROWTH.find((x) => x.id === id);
+      if (d) this.grown.push(WORDS.bloombot.park(d.name, d.does));
+    });
     b.on('research.upgraded', ({ id, level }) => {
       const u = RESEARCH_UPGRADES.find((x) => x.id === id);
       if (u?.branch === 'bloombot') this.grown.push(WORDS.bloombot.upgraded(u.name, level, u.levels.length));
@@ -4982,7 +4988,7 @@ export class Game {
     this.updateGuideLines();
     this.updatePileGlints();
     // #620: Bloombot wears what it has grown into (moves learned, Bigger charge, Roomier backpack)
-    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities.length ?? 0, cells: this.sim.research.level('chargeCells'), pockets: this.sim.research.level('backpack') });
+    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities.length ?? 0, cells: this.sim.research.level('chargeCells'), pockets: this.sim.research.level('backpack'), park: this.sim.parkGrowth.step });
     // #613: resting at home charges bloombot: show it, so the player knows to stand still
     if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
     if (!this.cinematic) this.checkCozyUnlocks();
