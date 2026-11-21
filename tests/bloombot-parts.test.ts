@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/core/GameState';
-import { botParts, growthKey, MOVE_ORDER, nextGrowth, partsAdded, UPGRADE_PART, type BotGrowth, type PartPiece } from '../src/data/botParts';
+import { botParts, growthKey, MOVE_ORDER, nextGrowth, partsAdded, pieceOf, UPGRADE_PART, type BotGrowth, type PartPiece } from '../src/data/botParts';
 import { KEEPERS } from '../src/data/oldcity';
 import { PARK_GROWTH } from '../src/data/bloombot';
 import { RESEARCH_UPGRADES } from '../src/data/research';
@@ -109,17 +109,21 @@ describe('#629: what the next level adds (the turntable shows it as a ghost)', (
 
   it("a knack (#625): its bead, in its Keeper's colour", () => {
     const k = KEEPERS[0];
-    const [bead] = partsAdded(g, nextGrowth(g, { kind: 'knack', id: k.id }));
+    const [bead] = partsAdded(g, nextGrowth(g, { kind: 'knack', id: `knack-${k.id}` }));
     expect(bead.name).toBe(`grow-knacks-${k.id}`);
     expect(bead.tint).toBe(k.tint);
-    expect(partsAdded({ ...g, knacks: [k.id] }, nextGrowth({ ...g, knacks: [k.id] }, { kind: 'knack', id: k.id }))).toEqual([]);
+    expect(partsAdded({ ...g, knacks: [k.id] }, nextGrowth({ ...g, knacks: [k.id] }, { kind: 'knack', id: `knack-${k.id}` }))).toEqual([]);
+    expect(pieceOf({ kind: 'knack', id: `knack-${k.id}` })).toBe(k.id);
   });
 
   it('every row on the page shows its ghost on its own part', () => {
     const sim = new Sim(createInitialState(7));
     for (const r of bloombotRows(sim)) {
       const ps = partsAdded(none, nextGrowth(none, r));
-      if (r.kind === 'upgrade' || r.kind === 'move') expect(ps.length, r.id).toBeGreaterThan(0);
+      if (r.kind === 'upgrade' || r.kind === 'move' || r.kind === 'knack') expect(ps.length, r.id).toBeGreaterThan(0);
+      // a move or knack row glows its own piece: one that is drawn once it has it
+      const own = pieceOf(r);
+      if (own) expect(ps.map((p) => p.name), r.id).toEqual([`grow-${r.part}-${own}`]);
       if (r.kind !== 'park') for (const p of ps) expect(p.part, r.id).toBe(r.part);
     }
   });

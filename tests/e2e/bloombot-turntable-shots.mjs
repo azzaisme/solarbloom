@@ -134,6 +134,17 @@ for (const S of SIZES) {
     check(v.focus === 'collar' && v.ghosts.join() === 'ghost-grow-collar-ring', `${L}: Steady charge, next: the collar shows as a ghost (${v.ghosts.join(', ')})`);
     await page.screenshot({ path: `${out}/5-collar-${L}.png` });
 
+    // #625: the Keepers' knacks: Pylon (woken) has its bead, which glows in Pylon's colour; Tally's is to come
+    await click(page, 'knack-pylon');
+    await page.waitForTimeout(1000);
+    v = await view(page);
+    check(v.focus === 'knacks' && v.glowing.join() === 'grow-knacks-pylon' && !v.ghosts.length, `${L}: Pylon's knack, learned: its bead glows (${v.glowing.join(', ')})`);
+    await click(page, 'knack-tally');
+    await page.waitForTimeout(700);
+    v = await view(page);
+    check(v.ghosts.join() === 'ghost-grow-knacks-tally', `${L}: Tally's knack, to come: its bead shows as a ghost (${v.ghosts.join(', ')})`);
+    await page.screenshot({ path: `${out}/7-knack-${L}.png` });
+
     // the detail's last line can be reached under the view
     const reach = await page.evaluate(() => {
       const d = document.querySelector('#bpScreen .bb-detail > #bpDetail');

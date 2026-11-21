@@ -213,8 +213,15 @@ export function nextGrowth(g: BotGrowth, row: { kind: string; id: string; level?
     const step = PARK_STEPS[row.id];
     return step && g.park < step ? { ...g, park: step } : undefined;
   }
-  if (row.kind === 'knack') return (g.knacks ?? []).includes(row.id) ? undefined : { ...g, knacks: [...(g.knacks ?? []), row.id] };
+  if (row.kind === 'knack') {
+    const k = pieceOf(row)!;
+    return (g.knacks ?? []).includes(k) ? undefined : { ...g, knacks: [...(g.knacks ?? []), k] };
+  }
   return undefined;
+}
+/** #629: which of a part's pieces a page row is (a move's mark, a knack's bead, named by its Keeper), if just one */
+export function pieceOf(row: { kind: string; id: string }): string | undefined {
+  return row.kind === 'move' ? row.id : row.kind === 'knack' ? row.id.replace(/^knack-/, '') : undefined;
 }
 const PARK_STEPS: Record<string, number> = { spill: 1, thrift: 2, quick: 3 };
 

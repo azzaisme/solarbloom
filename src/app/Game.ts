@@ -108,7 +108,7 @@ import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { benchBoxes, type WorldBox } from '../rendering/SeatBox';
 import { Minimap } from '../ui/Minimap';
 import { Turntable } from '../rendering/Turntable';
-import { nextGrowth, partsAdded, type BotGrowth } from '../data/botParts';
+import { nextGrowth, partsAdded, pieceOf, type BotGrowth } from '../data/botParts';
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
@@ -594,7 +594,7 @@ export class Game {
         tt.show(canvas);
         if (!canvas) return;
         const now = this.botGrowth();
-        tt.focus(row?.part, row && (row.kind === 'move' || (row.kind as string) === 'knack') ? row.id : undefined /* #625 adds the 'knack' kind */, row ? partsAdded(now, nextGrowth(now, row)) : []);
+        tt.focus(row?.part, row && pieceOf(row), row ? partsAdded(now, nextGrowth(now, row)) : []);
       };
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
@@ -1695,7 +1695,7 @@ export class Game {
 
   /** #627: what Bloombot has grown into, for its parts (and #629's turntable) */
   private botGrowth(): BotGrowth {
-    return { moves: this.sim.state.salvage?.abilities ?? [], levels: this.sim.state.salvage?.research?.levels ?? {}, park: this.sim.parkGrowth.step };
+    return { moves: this.sim.state.salvage?.abilities ?? [], levels: this.sim.state.salvage?.research?.levels ?? {}, park: this.sim.parkGrowth.step, knacks: this.sim.knacks.list() };
   }
 
   /** #605: is Show me where's mark still standing (asked for a moment ago, and bloombot not there yet)? */
@@ -4377,6 +4377,11 @@ export class Game {
     b.on('bloombot.parkGrew', ({ id }) => {
       const d = PARK_GROWTH.find((x) => x.id === id);
       if (d) this.grown.push(WORDS.bloombot.park(d.name, d.does));
+    });
+    // #625: a Keeper taught Bloombot its knack
+    b.on('bloombot.knack', ({ keeper }) => {
+      const k = s.knacks.of(keeper);
+      if (k) this.grown.push(WORDS.bloombot.knack(s.keepers.def(keeper).name, k.name, k.does));
     });
     b.on('research.upgraded', ({ id, level }) => {
       const u = RESEARCH_UPGRADES.find((x) => x.id === id);
