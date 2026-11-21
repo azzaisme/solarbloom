@@ -228,3 +228,50 @@ describe('#625: each Keeper teaches Bloombot a knack', () => {
     expect(sim.knacks.list()).toEqual(['pylon', 'tide']);
   });
 });
+
+describe('#625: the second wake bubble is never lost', () => {
+  /** A SpeechBubble on a stand-in element (the tests run without a page). */
+  async function bubble() {
+    const el = { hidden: true, innerHTML: '', className: '', style: {} as Record<string, string> };
+    (globalThis as { document?: unknown }).document ??= { createElement: () => el };
+    const { SpeechBubble } = await import('../src/ui/OldCityPanel');
+    const b = new SpeechBubble({ appendChild: () => {} } as unknown as HTMLElement);
+    return { b, el: b.el as unknown as typeof el };
+  }
+  const ON = { x: 100, y: 100 };
+
+  it('shows after the first, once it has been read', async () => {
+    const { b, el } = await bubble();
+    b.say('Tide', ['Tide, keeper of Saltwind Beach.'], 2, ['The sea always brings things back.'], 0);
+    b.place(ON, 1000);
+    expect(el.innerHTML).toContain('keeper of Saltwind');
+    b.place(ON, 2500);
+    expect(el.hidden).toBe(false);
+    expect(el.innerHTML).toContain('The sea always brings things back.');
+  });
+
+  it('waits while Tide is off screen, and shows when it is back', async () => {
+    const { b, el } = await bubble();
+    b.say('Tide', ['Tide, keeper of Saltwind Beach.'], 2, ['The sea always brings things back.'], 0);
+    b.place(undefined, 2500); // walked away before the first one ended
+    expect(el.hidden).toBe(true);
+    b.place(undefined, 60_000);
+    expect(el.hidden).toBe(true);
+    b.place(ON, 61_000); // back: the knack and the first request are still said
+    expect(el.hidden).toBe(false);
+    expect(el.innerHTML).toContain('The sea always brings things back.');
+    b.place(ON, 70_000);
+    expect(el.hidden).toBe(true); // and said once
+    b.place(ON, 71_000);
+    expect(el.hidden).toBe(true);
+  });
+
+  it('something new said in the meantime replaces it', async () => {
+    const { b, el } = await bubble();
+    b.say('Tide', ['Tide, keeper of Saltwind Beach.'], 2, ['The sea always brings things back.'], 0);
+    b.say('Pylon', ['Bzzt.'], 2, undefined, 500);
+    b.place(ON, 3000);
+    b.place(ON, 4000);
+    expect(el.innerHTML).not.toContain('The sea');
+  });
+});

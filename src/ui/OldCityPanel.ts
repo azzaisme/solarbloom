@@ -229,22 +229,25 @@ export class SpeechBubble {
     this.el.hidden = true;
     root.appendChild(this.el);
   }
-  say(name: string, lines: string[], secs = 3 + lines.length * 1.6, then?: string[]) {
+  say(name: string, lines: string[], secs = 3 + lines.length * 1.6, then?: string[], now = performance.now()) {
     this.next = then?.length ? { name, lines: then } : undefined;
     this.el.innerHTML = iconize(`<b>${escHtml(name)}</b>${lines.map((l) => `<p>${escHtml(l)}</p>`).join('')}`);
     this.el.hidden = false;
-    this.until = performance.now() + secs * 1000;
+    this.until = now + secs * 1000;
   }
-  /** Per frame: follow the speaker on screen (undefined: off screen or gone). */
-  place(at: { x: number; y: number } | undefined) {
-    if (this.el.hidden) return;
-    if (at && performance.now() > this.until && this.next) {
+  /**
+   * Per frame: follow the speaker on screen (undefined: off screen or gone). A second bubble waits for the first to
+   * be read and for its speaker to be on screen, so walking away mid-speech never loses it (#625: the knack and the
+   * first request come in it).
+   */
+  place(at: { x: number; y: number } | undefined, now = performance.now()) {
+    if (at && now > this.until && this.next) {
       const n = this.next;
-      this.say(n.name, n.lines);
+      this.say(n.name, n.lines, undefined, undefined, now);
     }
-    if (!at || performance.now() > this.until) {
+    if (this.el.hidden) return;
+    if (!at || now > this.until) {
       this.el.hidden = true;
-      this.next = undefined;
       return;
     }
     this.el.style.left = `${at.x}px`;

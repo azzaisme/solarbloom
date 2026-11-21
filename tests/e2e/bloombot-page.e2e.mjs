@@ -181,7 +181,34 @@ try {
     await page.waitForTimeout(200);
     p = await page.evaluate(pageNow);
     check(/Green thumb/.test(p.detail) && /Moss taught Bloombot this when it woke in Elder Grove\./.test(p.detail), `${L}: #625: a learned knack says who taught it ("${p.detail}")`);
-    await shot('9-page-knack');
+    // the longest "how" on the page: Enter on its row steps to the detail's end (Show me where, or its last lines when
+    // the detail is too tall to show whole), and that end is in view
+    // (the longest with Show me where, and the longest without: a Keeper not reached yet)
+    const longest = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('#bpScreen .bb-row')];
+      const best = { where: ['', 0], none: ['', 0] };
+      for (const r of rows) {
+        r.focus();
+        const n = document.querySelector('#bpScreen #bb-how')?.textContent.length ?? 0;
+        const k = document.querySelector('#bpScreen #bb-where') ? 'where' : 'none';
+        if (n > best[k][1]) best[k] = [r.id, n];
+      }
+      return [best.where[0], best.none[0]];
+    });
+    for (const [i, row] of longest.entries()) {
+      await page.focus(`#${row}`);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(400);
+      const end = await page.evaluate(() => {
+        const d = document.querySelector('#bpScreen .bb-detail').getBoundingClientRect();
+        const a = document.activeElement;
+        const r = a.getBoundingClientRect();
+        return { focus: a.id, top: Math.round(r.top), bottom: Math.round(r.bottom), detailTop: Math.round(d.top), detailBottom: Math.round(d.bottom), how: document.querySelector('#bpScreen #bb-how').textContent };
+      });
+      const fits = end.focus === 'bb-where' || end.focus === 'bb-how' || end.focus === row; // a row whose detail fits keeps the focus
+      check(fits && (end.focus === row || (end.bottom <= end.detailBottom + 1 && end.top >= end.detailTop - 1)), `${L}: #625: the longest detail ${i ? 'without' : 'with'} Show me where (${row}) can be read to its end with the keys (${JSON.stringify(end)})`);
+      await shot(`9-page-longest-${i ? 'no-button' : 'button'}`);
+    }
     await page.focus('#bb-knack-tide');
     await page.waitForTimeout(200);
     p = await page.evaluate(pageNow);
