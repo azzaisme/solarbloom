@@ -192,6 +192,10 @@ const TOO_FAR = 'Too far: walk closer';
 /** E21: what dead ground is called in the Old City, by its feature */
 const OLD_DEAD_NAME: Record<string, string> = { sand: 'Dead sand', paving: 'Cracked paving', road: 'Cracked road', lawn: 'Dead grass', litter: 'Dead leaf litter', clay: 'Cracked clay', water: 'Murky water' };
 
+/** The d-pad's buttons (12–15) to the load wheel's directions; the arrow keys stand for the same buttons. */
+const WHEEL_DPAD: Record<number, 'up' | 'down' | 'left' | 'right'> = { 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
+const WHEEL_KEYS: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
+
 export class Game {
   readonly app: pc.Application;
   readonly bus = new EventBus();
@@ -544,6 +548,7 @@ export class Game {
       // E21.22: the right stick's up and down tilts the view (it zooms only in photo mode)
       bot.onZoom = (f) => (this.photo?.active ? this.photo.zoom(f) : this.camTurn(0, -(Math.log(f) / Math.log(1.8)) * 60));
       bot.onPad = (i) => {
+        if (this.wheelPick(i)) return; // the load wheel is up: the d-pad picks a load
         const a = this.resolveButton(i);
         if (a && a !== 'sprint') this.doAction(a);
       };
@@ -555,6 +560,8 @@ export class Game {
       };
       // Island release: the mainland is a future update (data/mainland MAINLAND.open). Heading onto the causeway,
       // bloombot turns back towards the island (BotController.turnBack) and a card says so, once per approach.
+      // While the load wheel is up the arrow keys pick a load, so they don't walk bloombot too
+      bot.claims = (code) => this.hud.loadWheel.isOpen && code in WHEEL_KEYS;
       bot.onMainlandClosed = () => this.hud.toast(`${MAINLAND_CLOSED.title}<small>${MAINLAND_CLOSED.detail}</small>`, 'gold', MAINLAND_CLOSED.seconds);
       this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
       this.keepers.reducedMotion = !!this.settings.reducedMotion;
@@ -1358,6 +1365,11 @@ export class Game {
           this.padFocus.button(0);
           return;
         }
+        // the load wheel is up: the arrow keys pick a load, as the d-pad does
+        if (!e.repeat && WHEEL_KEYS[e.code] !== undefined && this.wheelPick(WHEEL_KEYS[e.code])) {
+          e.preventDefault();
+          return;
+        }
         const a = this.resolveKey(e.code);
         if (!a) return;
         if (a === 'backpack' || a === 'debug' || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
@@ -1379,6 +1391,12 @@ export class Game {
       else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
       else if (k === '-') this.camera.zoomBy(1 / 1.15);
     });
+  }
+
+  /** The load wheel is up and a d-pad button (12–15) points at a load: pick it. True when the press was used. */
+  private wheelPick(button: number): boolean {
+    const dir = WHEEL_DPAD[button];
+    return !!dir && !this.cinematic && !this.panelOpen() && this.hud.loadWheel.pick(dir);
   }
 
   /** Bloombot: one action from a key, mouse input or pad button. Movement and sprint are read by BotController. */
@@ -3705,12 +3723,12 @@ export class Game {
         const st = r.check(m.id, role, slot);
         const owned = r.owns(m, role);
         const on = role === current;
-        const note = on ? 'In use' : owned ? 'Owned' : st.reason && !st.reason.startsWith('Needs ') ? esc(st.reason) : `<span class="${st.ok ? '' : 'short'}">${st.price} Biomass</span>`;
+        const note = on ? 'In use' : owned ? 'Owned' : st.reason && !st.reason.startsWith('Needs ') ? esc(st.reason) : `<span class="${st.ok ? '' : 'short'}">${st.price} Greens</span>`;
         return `<button class="role-btn${on ? ' on' : ''}" data-role="${m.id}|${role}|${slot}" ${on || (!owned && !st.ok) ? 'disabled' : ''} aria-pressed="${on}" title="${esc(ROLE_INFO[role].job)}"><span class="ri">${ROLE_INFO[role].icon}</span><span class="rn">${ROLE_INFO[role].name}</span><span class="rp">${note}</span></button>`;
       }).join('');
     const tier = m.tier ?? 1;
     const current = r.roleOf(m);
-    let html = `<div class="roles"><p class="rh">Role${tier >= 2 ? ' · slot 1' : ''}: <b>${ROLE_INFO[current].icon} ${ROLE_INFO[current].name}</b> — ${esc(ROLE_INFO[current].job)}</p><div class="role-row">${row(1, current)}</div>`;
+    let html = `<div class="roles"><p class="rh">${tier >= 2 ? 'First role' : 'Role'}: <b>${ROLE_INFO[current].icon} ${ROLE_INFO[current].name}</b>. ${esc(ROLE_INFO[current].job)}</p><div class="role-row">${row(1, current)}</div>`;
     if (tier === 2) {
       const second = m.role2 ?? current;
       html += `<p class="rh">Second role (half the drones): <b>${ROLE_INFO[second].icon} ${ROLE_INFO[second].name}</b></p><div class="role-row">${row(2, second)}</div>`;
@@ -3728,7 +3746,7 @@ export class Game {
         .join('');
     }
     const reach = current === 'scout' ? r.scoutReach(m) : s.upgrades.droneRadius(m);
-    html += `<p>Works within ${reach} tiles (highlighted). ${esc(ROLE_INFO[current].upgrades)}. Teaching it a new role costs once; going back to one it knows is free.</p></div>`;
+    html += `<p>Works within ${reach} tiles (highlighted). ${esc(ROLE_INFO[current].upgrades)}. A new role costs the Greens on its button, the first time only. Switching back to one it already knows is free.</p></div>`;
     return html;
   }
 
@@ -4132,7 +4150,8 @@ export class Game {
       if (!s.pulseLoad.introDue()) return;
       s.pulseLoad.introduced();
       this.hud.loadWheel.show(LOAD_WHEEL.introSeconds);
-      this.hud.toast(`Bloombot can load its pulse<small>Press ${this.hudKeys('loadNext')} or ${this.hudKeys('loadPrev')} to choose what a pulse grows. Each pulse uses up one of what you load.</small>`, '', LOAD_WHEEL.introSeconds);
+      const arrows = this.bot?.lastInput === 'pad' ? 'the d-pad' : 'the arrow keys';
+      this.hud.toast(`Bloombot can load its pulse<small>Press ${this.hudKeys('loadNext')} or ${this.hudKeys('loadPrev')} to choose what a pulse grows, or use ${arrows} while the wheel's up. Each pulse uses up one of what you load.</small>`, '', LOAD_WHEEL.introSeconds);
     };
     b.on('pack.changed', introWheel);
     introWheel();
