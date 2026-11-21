@@ -104,8 +104,10 @@ export class Sky {
     this.clearLayer.clearDepthBuffer = false;
     if (!comp.getLayerByName('SkyDepthClear')) comp.insertOpaque(this.clearLayer, comp.getTransparentIndex(this.layer) + 1);
     const clearLayer = this.clearLayer;
+    // (GraphicsDevice.clear is public on every device but missing from the typings)
+    const device0 = app.graphicsDevice as unknown as { clear(o: { flags: number; depth: number }): void };
     app.scene.on('prerender:layer', (_cam: pc.CameraComponent, layer: pc.Layer, transparent: boolean) => {
-      if (layer === clearLayer && !transparent) app.graphicsDevice.clear({ flags: pc.CLEARFLAG_DEPTH, depth: 1 });
+      if (layer === clearLayer && !transparent) device0.clear({ flags: pc.CLEARFLAG_DEPTH, depth: 1 });
     });
     const device = app.graphicsDevice;
 
