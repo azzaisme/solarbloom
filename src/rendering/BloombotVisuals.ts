@@ -5,6 +5,8 @@ import { VISIT_POINTS, type Perch } from '../data/wildlife';
 import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
 import { surfaceTriangles, skinnedVertices, vertexOnBones } from './SkinSurface';
 import { inBox, type SeatBox } from './SeatBox';
+import { ACT_EASE, ACTS, type ActEffect, type ActId } from '../data/botActs';
+import { actPose, applyActPose, emptyPose } from './BotActs';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -62,6 +64,14 @@ export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
 /** the one-shot clips into and out of sitting (oneShot) */
 type SeatClip = typeof BOT_CLIPS.sitDown | typeof BOT_CLIPS.standUp;
 const LOOPS: readonly string[] = ['idle', 'walk', 'hover', 'sit', 'meditate', 'doze'];
+
+/** #628: a moment in an act for its effect: as it works ('tick') or as it finishes ('finish'), at `at` (world). */
+export interface ActBeat {
+  act: ActId;
+  beat: 'tick' | 'finish';
+  effect: ActEffect;
+  at: pc.Vec3;
+}
 
 export class BloombotVisuals {
   /** placed at bloombot's feet, turned to its facing */
@@ -126,6 +136,14 @@ export class BloombotVisuals {
   private growth: BotGrowth = { moves: 0, cells: 0, pockets: 0 };
   private pieces: GrowthPiece[] = [];
   private boneRest = new Map<string, pc.Quat>();
+  /**
+   * #628: the act under way: `held` loops until endAct; `ending` is when it began to ease out (it is drawn until
+   * ACT_EASE.out after that); `ticks` counts the work effects so far.
+   */
+  private act?: { id: ActId; t: number; held: boolean; ending?: number; ticks: number };
+  private actPoseNow = emptyPose();
+  /** #628: called for each act's effects (Game draws them with Vfx) */
+  onBeat?: (b: ActBeat) => void;
 
   constructor(
     private app: pc.AppBase,
@@ -333,6 +351,7 @@ export class BloombotVisuals {
    */
   setPose(pose: 'sit' | 'meditate' | undefined, seat = 0) {
     const was = this.pose;
+    if (pose) this.act = undefined; // #628: no act on a seat
     this.pose = pose;
     this.seat = seat;
     if (pose !== was) {
@@ -602,6 +621,8 @@ export class BloombotVisuals {
     const want: BotLoop = this.pose && this.clips.has(this.pose) ? this.pose : speed < 0.05 ? 'idle' : hovering ? 'hover' : 'walk';
     const anim = this.model?.anim;
     if (!anim) return;
+    // #628: walking off ends a one-press act (a held one ends when the hold does)
+    if (this.act && !this.act.held && this.act.ending === undefined && speed > 0.3) this.act.ending = this.act.t;
     if (!this.action) {
       if (want !== this.loop) anim.baseLayer?.transition(want, BLEND);
       anim.speed = want === 'walk' ? pc.math.clamp(speed / WALK_STRIDE, 0.5, 1.8) : 1;
@@ -616,6 +637,7 @@ export class BloombotVisuals {
     if (!anim || !len) return 0;
     if (this.reducedMotion && name === 'cheer') return 0;
     if (this.pose) return 0; // sitting or meditating: no standing gestures (a cheer would pop it up off the seat)
+    if (this.act && !this.act.ending) this.act.ending = this.act.t;
     anim.speed = name === 'pulse' ? 1.6 : name === 'assemble' ? 1.2 : 1;
     anim.baseLayer?.transition(name, 0.1);
     const dur = len / anim.speed;
@@ -634,8 +656,103 @@ export class BloombotVisuals {
     return this.action?.name;
   }
 
+  /**
+   * #628: starts an act. `held` loops it until endAct (a hold on Interact); otherwise it plays for its `once` seconds
+   * and finishes by itself. A one-press act never cuts into a held one, and nothing acts while seated.
+   */
+  startAct(id: ActId, held = false) {
+    if (this.pose) return;
+    if (!held && this.act?.held && this.act.ending === undefined) return;
+    // a cheer that the same press set off (a landmark waking, a Keeper's thanks) plays as it is
+    if (!held && this.action?.name === 'cheer') return;
+    // the act is drawn over the idle clip, not over the old reach-out gesture
+    if (this.action && !this.isSeatClip(this.action.name)) {
+      this.action = undefined;
+      const anim = this.model?.anim;
+      if (anim) {
+        anim.speed = 1;
+        anim.baseLayer?.transition(this.loop, 0.1);
+      }
+    }
+    this.act = { id, t: 0, held, ticks: 0 };
+  }
+
+  /** #628: ends a held act: finished (`done`, with its finishing effect) or let go part way. */
+  endAct(done: boolean) {
+    const a = this.act;
+    if (!a || a.ending !== undefined) return;
+    if (done) this.beat('finish');
+    a.ending = a.t;
+  }
+
+  /** #628: the act being drawn now (tests). */
+  get acting(): ActId | undefined {
+    return this.act?.id;
+  }
+
+  /** #628: is the act held (looping until let go)? */
+  get actHeld(): boolean {
+    return !!this.act?.held && this.act.ending === undefined;
+  }
+
+  private isSeatClip(n: string): boolean {
+    return n === BOT_CLIPS.sitDown || n === BOT_CLIPS.standUp;
+  }
+
+  private readonly beatAt = new pc.Vec3();
+
+  private beat(kind: 'tick' | 'finish') {
+    const a = this.act;
+    if (!a || !this.onBeat) return;
+    const d = ACTS[a.id];
+    const effect = kind === 'tick' ? d.tick : d.finish;
+    if (!effect) return;
+    const at = this.beatAt;
+    const l = this.model?.findByName('LeftHand');
+    const r = this.model?.findByName('RightHand');
+    if (effect.at === 'hands' && l && r) at.copy(l.getPosition()).add(r.getPosition()).mulScalar(0.5);
+    else {
+      // on the ground half a step ahead (its front is the root's local +z)
+      const f = this.root.forward;
+      const p = this.root.getPosition();
+      at.set(p.x - f.x * 0.42, p.y, p.z - f.z * 0.42);
+    }
+    this.onBeat({ act: a.id, beat: kind, effect, at });
+  }
+
+  /** #628: runs the act: eases it in and out, fires its effects, and draws its pose (after the clip has run). */
+  private runAct(dt: number) {
+    const a = this.act;
+    if (!a) return;
+    a.t += dt;
+    const d = ACTS[a.id];
+    if (!a.held && a.ending === undefined && a.t >= d.once) {
+      this.beat('finish');
+      a.ending = a.t;
+    }
+    if (a.ending === undefined && d.tick) {
+      const n = Math.floor(a.t / d.tick.every);
+      if (n > a.ticks) {
+        a.ticks = n;
+        this.beat('tick');
+      }
+    }
+    const into = Math.min(1, a.t / ACT_EASE.in);
+    const out = a.ending === undefined ? 1 : Math.max(0, 1 - (a.t - a.ending) / ACT_EASE.out);
+    const w = smooth(Math.min(into, out));
+    if (a.ending !== undefined && out <= 0) {
+      this.act = undefined;
+      if (!this.pose) this.holder?.setLocalPosition(0, 0, 0);
+      return;
+    }
+    if (!this.model || this.pose) return;
+    const crouch = applyActPose(this.model, this.root, actPose(a.id, a.t, 1, this.reducedMotion, this.actPoseNow), w);
+    this.holder?.setLocalPosition(0, -crouch, 0);
+  }
+
   update(dt: number) {
     this.clock += dt;
+    this.runAct(dt);
     this.placeGrowth();
     if (this.pose) this.posed();
     // Faces: an expression times out back to happy; now and then a blink.
@@ -660,4 +777,9 @@ export class BloombotVisuals {
     this.asset?.unload();
     if (this.asset) this.app.assets.remove(this.asset);
   }
+}
+
+function smooth(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
 }
