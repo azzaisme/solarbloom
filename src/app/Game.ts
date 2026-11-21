@@ -2108,7 +2108,7 @@ export class Game {
     const aim = this.building() ? this.buildAim() : undefined; // E19.2: build mode acts where the hologram is
     const p = aim ? aim.p : this.frontPick();
     if (!p || !p.tile) return;
-    if (aim && p.roofId === this.bot.pose.roofId && !this.bot.walking) this.bot.pose.facing = Math.atan2(p.fx - this.bot.pose.x, p.fz - this.bot.pose.z); // turns to build
+    if (aim && p.roofId === this.bot.pose.roofId && !this.bot.walking) this.bot.faceToward(p.fx, p.fz); // turns to build (#670: smoothly)
     this.bot.following = true;
     const tool = this.hud.currentTool === 'inspect' ? 'pulse' : this.hud.currentTool;
     const sc = aim ?? this.botTileScreen(p.tile);
@@ -2194,7 +2194,7 @@ export class Game {
       out.push({
         kind: 'cat', id: `cat:${id}`, verb: 'Say hello', name: '', distance: d,
         run: () => {
-          b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
+          b.turnTo(Math.atan2(v.x - wx, v.z - wz));
           this.sim.cat.claim(id);
           b.visuals.play('cheer');
         },

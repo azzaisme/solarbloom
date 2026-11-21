@@ -1,3 +1,5 @@
+import { applyTurnLook, stepPhase, turnLook, type TurnLook } from './BotTurn';
+import { TURN_LOOK } from '../data/botMotion';
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
 import { botParts, growthKey, type BotGrowth, type BotMat, type PartId, type PartPiece } from '../data/botParts';
@@ -147,6 +149,12 @@ export class BloombotVisuals {
   private prop?: BotProp;
   /** #628: called for each act's effects (Game draws them with Vfx) */
   onBeat?: (b: ActBeat) => void;
+  /** #670: the turn this frame (BotController sets it), the steps' phase, the lean as drawn, and the look worked out */
+  private turnNow = { left: 0, vel: 0, speed: 0 };
+  private stepAt = 0;
+  private leanNow = 0;
+  private turnLookNow: TurnLook = { headYaw: 0, twist: 0, stepL: 0, stepR: 0, lean: 0 };
+  private turnAxes = { right: new pc.Vec3(), up: new pc.Vec3() };
 
   constructor(
     private app: pc.AppBase,
@@ -519,6 +527,35 @@ export class BloombotVisuals {
   /** Where bloombot's palms are mid-pulse (world): the pulse rings leave from here. */
   palmWorld(out: pc.Vec3): pc.Vec3 {
     return this.root.getWorldTransform().transformPoint(PALM, out);
+  }
+
+  /**
+   * #670: the turn under way: how far it still has to turn (radians, + toward its left), how fast it turns (radians a
+   * second) and how fast it moves (cells a second). Drawn in `update`: the head leading, steps on the spot, a lean.
+   */
+  setTurn(left: number, vel: number, speed: number) {
+    this.turnNow.left = left;
+    this.turnNow.vel = vel;
+    this.turnNow.speed = speed;
+  }
+
+  /** #670: the turn as drawn now (tests). */
+  get turnLook(): Readonly<TurnLook> {
+    return this.turnLookNow;
+  }
+
+  /** #670: draws the turn over the clip (after any act; not while seated: the seat poses hold it still). */
+  private drawTurn(dt: number) {
+    const t = this.turnNow;
+    this.stepAt = stepPhase(this.stepAt, t.vel * dt);
+    const look = turnLook(t.left, t.vel, t.speed, this.stepAt, this.reducedMotion, this.turnLookNow);
+    // the lean settles toward its goal rather than flicking with every change of turn
+    this.leanNow += (look.lean - this.leanNow) * Math.min(1, dt * TURN_LOOK.leanEase);
+    if (this.pose) return;
+    // leaning toward its left is a roll about its front (local +z) by a negative angle
+    this.holder?.setLocalEulerAngles(this.tired ? 9 : 0, 0, -this.leanNow);
+    this.standIn?.setLocalEulerAngles(this.tired ? 9 : 0, 0, -this.leanNow);
+    if (this.model && !this.act) applyTurnLook(this.model, this.root, look, this.turnAxes);
   }
 
   /** Places bloombot (feet) and turns it to face `facing` (radians, 0 = +z). */
@@ -980,6 +1017,7 @@ export class BloombotVisuals {
   update(dt: number) {
     this.clock += dt;
     this.runAct(dt);
+    this.drawTurn(dt);
     this.placeGrowth();
     if (this.pose) this.posed();
     // Faces: an expression times out back to happy; now and then a blink.
