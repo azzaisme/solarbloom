@@ -48,8 +48,8 @@ export class SalvageSystem {
     if (!p) return 'Nothing to salvage here';
     if (this.left(id) <= 0) return 'Nothing left here';
     const area = this.sim.areas.map.areaOfCell(p.x, p.z);
-    if (this.sim.areas.fog(area) === 'hidden') return 'Lost in the cloud: open the way here first';
-    if (this.sim.inventory.room(p.material) <= 0) return `Your ${MATERIALS[p.material].name} stack is full: put some in storage first`;
+    if (this.sim.areas.fog(area) === 'hidden') return 'Hidden in the fog. Find the way in first';
+    if (this.sim.inventory.room(p.material) <= 0) return `Your ${MATERIALS[p.material].name} stack is full: leave some in the storage at the fountain`;
     return undefined;
   }
 

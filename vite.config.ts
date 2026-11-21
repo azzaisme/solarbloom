@@ -39,12 +39,15 @@ const QUICK = [
   'shader-warmup',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
   'clear-path', 'bloombot-page',
+  'first-time-text',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
   // E24 (#609): the way marked on the map and in the world
   'waymark',
   // #632: Show me where's trail along a walkable way
   'trail',
+  // #631: Bloombot's colour is green
+  'bot-green',
   // #635: the skyline fades into fog and stays behind the world
   'fog-skyline',
 ].map((name) => `tests/${name}.test.ts`);

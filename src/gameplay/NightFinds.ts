@@ -42,7 +42,7 @@ export class NightFinds {
     const f = NIGHT_FINDS.find((n) => n.id === id);
     if (!f || !this.visible(id)) return 'Nothing here';
     const g = NIGHT_FIND_GIVES[f.kind];
-    if (this.sim.state.salvage && this.sim.inventory.room(g.material) <= 0) return 'Your stack is full: put some in storage first';
+    if (this.sim.state.salvage && this.sim.inventory.room(g.material) <= 0) return 'Your stack is full: leave some in the storage at the fountain';
     return undefined;
   }
 

@@ -56,7 +56,7 @@ describe('E21.5: gates', () => {
     expect(sim.gates.problem(water)).toBeUndefined();
     const sim2 = tier1();
     const lock = region('clockPlaza').gate;
-    expect(sim2.gates.problem(lock)).toMatch(/Sea Lock/);
+    expect(sim2.gates.problem(lock)).toMatch(/the lock down on the beach/);
     sim2.bus.emit('landmark.woken', { region: 'saltwind' });
     expect(sim2.gates.isOpen(lock.id)).toBe(true);
   });

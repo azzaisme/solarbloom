@@ -32,7 +32,7 @@ describe('#620: Bloombot\'s page', () => {
     expect(ups[4].does).toBe('Bloombot can carry 20 more of each thing.');
     expect(ups.every((u) => u.level === 0 && u.max === 3 && u.state === 'later')).toBe(true);
     // before the first Keeper wakes, the workshop doesn't research yet: it says so
-    expect(ups[0].how).toBe('The workshop table in the house can work out how to make this. It starts once you wake another robot out in the city.');
+    expect(ups[0].how).toBe('The crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.');
     expect(ups[0].where?.name).toBe('the house');
   });
 
@@ -54,7 +54,7 @@ describe('#620: Bloombot\'s page', () => {
     sim.state.salvage!.keepers['k'] = { step: 'request1' } as never;
     const cells = bloombotUpgradeRows(sim).find((u) => u.id === 'chargeCells')!;
     expect(cells).toMatchObject({ state: 'next', level: 1, max: 3 });
-    expect(cells.how).toBe('Go to the workshop table in the house and make level 2 in its Upgrade tab. It takes 3 Battery cell and 4 Gears.');
+    expect(cells.how).toBe('Go to the crafting table in the house and make level 2 in its Upgrade tab. It takes 3 Battery cell and 4 Gears.');
     research(sim).levels.chargeCells = 3;
     const top = bloombotUpgradeRows(sim).find((u) => u.id === 'chargeCells')!;
     expect(top).toMatchObject({ state: 'have', how: 'As far as it goes.', where: undefined });

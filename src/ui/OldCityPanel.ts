@@ -239,8 +239,11 @@ export class SpeechBubble {
       this.el.hidden = true;
       return;
     }
-    this.el.style.left = `${at.x}px`;
-    this.el.style.top = `${at.y}px`;
+    // #610: kept whole on screen (a speaker near an edge used to squeeze it to a word a line, or push it off)
+    const half = this.el.offsetWidth / 2;
+    const room = this.el.offsetParent?.clientWidth ?? innerWidth;
+    this.el.style.left = `${Math.max(half + 16, Math.min(room - half - 16, at.x))}px`;
+    this.el.style.top = `${Math.max(this.el.offsetHeight + 16, at.y)}px`;
   }
 }
 
