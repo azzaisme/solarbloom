@@ -396,7 +396,14 @@ const PAINTED_DEAD: Record<string, string[]> = PALETTE.ground.painted;
 function paintedDead(t: TileData): string[] | undefined {
   if (t.level === undefined) return undefined;
   const g = groundTexFor(t.feature);
+  if (g === 'sand' && moveLandAt(t.x, t.z)) return PALETTE.ground.wetSand; // #626: the sandbar's wet sand
   return g ? PAINTED_DEAD[g] : undefined;
+}
+/** #626: the vertex tint on a tile's painted ground: the sandbar's sand is wet and darker than the beach's. */
+function paintTint(t: TileData, k: number): [number, number, number] {
+  if (!moveLandAt(t.x, t.z)) return [k, k, k];
+  const c = new pc.Color().fromString(PALETTE.ground.wetSandTint);
+  return [Math.round(c.r * k), Math.round(c.g * k), Math.round(c.b * k)];
 }
 const CORNERS = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
 interface PoolGeo {
@@ -887,7 +894,7 @@ export class ChunkRenderer {
    * E25 (#626): the places the level II moves reach, dressed so they read as places, not plinths. The ruins' roofs
    * are old buildings: their walls (the retaining wall's stone and courses, drawn by terrace) get a dark doorway and
    * bricked-up windows, the top edge is broken stubs of wall, and a few stones lie fallen on top. The boathouse is
-   * planked, with eaves boards and a wide boat door to the water. The sandbar has rocks, shells, driftwood and weed.
+   * planked, with eaves boards and a wide boat door to the water. The sandbar is wet sand with round stones, shells, a bleached log and tufts of grass.
    */
   private moveLand(b: Sink, t: TileData, h: number, th: number) {
     const ml = moveLandAt(t.x, t.z);
@@ -897,17 +904,44 @@ export class ChunkRenderer {
     const x = t.x + 0.5;
     const z = t.z + 0.5;
     if (ml.ground === 'sand') {
-      // keep the tiles a trip lands on clear
-      if (MOVE_TRIPS.some((m) => m.to[0] === t.x && m.to[1] === t.z)) return;
-      const y = th + 0.08; // the sand's top
-      if (r(0) < 0.55) b.add('sphere', P.seaRocks[r(1) < 0.5 ? 0 : 1], [x + (r(2) - 0.5) * 0.5, y + 0.04, z + (r(3) - 0.5) * 0.5], [0.32 + r(4) * 0.22, 0.2, 0.26 + r(5) * 0.2]);
-      if (r(6) < 0.45) {
-        const along = r(7) < 0.5;
-        const len = 0.7 + r(8) * 0.4;
-        b.add('box', P.driftwood, [x + (r(9) - 0.5) * 0.4, y + 0.03, z + (r(10) - 0.5) * 0.4], [along ? len : 0.1, 0.08, along ? 0.1 : len]);
+      // keep the tiles a trip lands on clear, and the stash's own tile
+      if (t.prop || MOVE_TRIPS.some((m) => m.to[0] === t.x && m.to[1] === t.z)) return;
+      const y = th + 0.086; // the painted sand's top
+      // each tile keeps its rocks to one corner and its log to the other, so they never run through each other
+      const flip = r(0) < 0.5 ? 1 : -1;
+      if (r(1) < 0.6) {
+        // a few round stones in a huddle, like the pebbles by the jetty steps
+        const cx = x - 0.2 * flip + (r(2) - 0.5) * 0.12;
+        const cz = z - 0.2 + (r(3) - 0.5) * 0.12;
+        const n = 1 + Math.floor(r(4) * 3);
+        for (let i = 0; i < n; i++) {
+          const sz = 0.17 + r(5 + i) * 0.1;
+          b.add('sphere', i % 2 ? PALETTE.stone.grey : PALETTE.stone.pebble, [cx + (i - 1) * 0.13, y + sz * 0.3, cz + ((i * 7) % 3 - 1) * 0.07], [sz, sz * 0.75, sz * 0.9]);
+        }
       }
-      for (let i = 0; i < 3; i++) if (r(11 + i) < 0.5) b.add('sphere', P.shells[i % P.shells.length], [x + (r(14 + i) - 0.5) * 0.8, y + 0.02, z + (r(17 + i) - 0.5) * 0.8], [0.1, 0.05, 0.08]);
-      if (r(20) < 0.45) b.add('box', P.seaweed, [x + (r(21) - 0.5) * 0.5, y + 0.006, z + (r(22) - 0.5) * 0.5], [0.3 + r(23) * 0.2, 0.01, 0.2 + r(24) * 0.2]);
+      if (r(10) < 0.4) {
+        // a bleached log: a row of rounded pieces, thicker at its root end, with a stub of branch
+        const along = r(11) < 0.5;
+        const len = 0.55 + r(12) * 0.25;
+        const lx = x + 0.18 * flip;
+        const lz = z + 0.2;
+        // pieces close enough to run together into one smooth trunk
+        const n = 10;
+        for (let i = 0; i < n; i++) {
+          const k = i / (n - 1) - 0.5;
+          const d = 0.14 - i * 0.005;
+          const piece = (len / (n - 1)) * 2.2;
+          b.add('sphere', i === 0 ? P.driftwoodEnd : P.driftwood, [lx + (along ? k * len : 0), y + d * 0.4, lz + (along ? 0 : k * len)], [along ? piece : d, d * 0.8, along ? d : piece]);
+        }
+        b.add('sphere', P.driftwood, [lx + (along ? len * 0.15 : 0.08), y + 0.06, lz + (along ? 0.08 : len * 0.15)], [0.05, 0.05, 0.05]);
+      }
+      for (let i = 0; i < 3; i++) if (r(20 + i) < 0.5) b.add('sphere', P.shells[i % P.shells.length], [x + (r(23 + i) - 0.5) * 0.8, y + 0.02, z + (r(26 + i) - 0.5) * 0.8], [0.09, 0.045, 0.07]);
+      if (r(30) < 0.4) {
+        // a little tuft of dune grass
+        const gx = x + (r(31) - 0.5) * 0.5;
+        const gz = z + 0.25 * -flip;
+        for (let i = 0; i < 4; i++) b.add('cone', i % 2 ? P.tuftGreen : P.dryGrass, [gx + (i - 1.5) * 0.04, y + 0.07, gz + ((i * 5) % 3 - 1) * 0.035], [0.035, 0.14 + (i % 3) * 0.03, 0.035]);
+      }
       return;
     }
     if (ml.ground !== 'roof') return;
@@ -1497,6 +1531,8 @@ export class ChunkRenderer {
       // Look 6.18: while an area-clear wave rolls, ground it hasn't reached yet keeps its fogged look.
       const ahead = fog === 'cleared' && tr?.waveAhead(area, t.x, t.z);
       b.grey = fog === 'hidden' ? 0.75 : (fog === 'cleared' && !ahead) || t.ground === 'restored' ? 0 : 0.35;
+      // #626: the sea counts as cleared, but the sandbar out in it is dead ground like the beach it lies off
+      if (fog === 'cleared' && t.ground !== 'restored' && moveLandAt(t.x, t.z)?.ground === 'sand') b.grey = 0.35;
       fb.grey = b.grey;
       // E21.24: an Old City tile stands at its terrace's height; cliff faces drop to lower neighbours
       const th = t.level !== undefined ? h + levelY(t.level) : h;
@@ -1547,8 +1583,8 @@ export class ChunkRenderer {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
         const cut = this.landCuts(t);
         if (this.raisedPaving(t)) this.pavedTop(b, t, th, gtex, k);
-        else if (cut) addGroundFan(gtex[GROUND_TEXTURES.indexOf(gt)], gt, [t.x + 0.5, t.z + 0.5], this.cutRing(t, cut), th + 0.086, [k, k, k]);
-        else addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);
+        else if (cut) addGroundFan(gtex[GROUND_TEXTURES.indexOf(gt)], gt, [t.x + 0.5, t.z + 0.5], this.cutRing(t, cut), th + 0.086, paintTint(t, k));
+        else addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, paintTint(t, k));
       }
       // E23.8.3.2: a rust stain in the industrial ruins, laid over the ground (and its pavers, when they are raised)
       if (!v.far && !t.blocked && t.prop?.startsWith('ruin:stain')) {

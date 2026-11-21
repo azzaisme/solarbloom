@@ -68,6 +68,12 @@ const ground = {
   /** the stone edge of dead paving where it stands above the earth beside it */
   pavingKerb: '#a48a72',
   painted: { sand: ['#e2bf7e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
+  /**
+   * E25 (#626): the sandbar out in the sea is wet sand: the painted sand is tinted by `wetSandTint` and its sides take
+   * `wetSand`: a little darker than the dry beach.
+   */
+  wetSandTint: '#c4b6a4',
+  wetSand: ['#b39c78'],
   seaFoam: '#eaf8fb',
   /** restored ground that isn't lawn ('' = use the stage grass) */
   alive: { lawn: '', paving: '#b4afa5', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d6d0c6', sand: '#e6d3a0' } as Record<string, string>,
@@ -336,13 +342,14 @@ const props = {
   /** E25 (#626): the dark inside of a forced vault, and a stash box's iron bands */
   vaultInside: '#2a2622',
   stashBand: '#4a4038',
-  /** E25 (#626): the ruins the level II moves reach: bricked-up windows, a dark doorway; the sandbar's driftwood, shells, weed */
+  /** E25 (#626): the ruins the level II moves reach: bricked-up windows, a dark doorway; the sandbar's driftwood, shells and tufts of grass */
   brickedUp: '#7a6a5c',
   doorwayDark: '#2f2a25',
   driftwood: '#b9a88e',
+  driftwoodEnd: '#8f7c64',
+  dryGrass: '#9a8c55',
   shells: ['#efe4d2', '#e8c6b4', '#d9cbb3'],
-  seaweed: '#3c4529',
-  seaRocks: ['#5f5a52', '#4c4842'],
+  tuftGreen: '#6d7a45',
   rustStain: '#5e3a28',
   stallDead: '#9a8a70',
   stallAlive: '#c9a77a',

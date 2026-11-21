@@ -119,6 +119,10 @@ try {
   p = await prompt();
   check(/Hover over to\s*the sandbar/.test(p) && !/Too far/.test(p), `hover: with Hover II it offers the trip ("${p}")`);
   await shot('hover-2-prompt');
+  // the sandbar from the jetty, wide: wet sand with stones and a log on it, not glowing like a pickup
+  await page.evaluate(() => window.solarbloom.camera.jumpZoom?.(window.solarbloom.camera.maxZoom));
+  await page.waitForTimeout(1200);
+  await shot('hover-2b-from-jetty');
   await go('hover-3', [8, 54]);
   await shot('hover-4-sandbar');
   await stash('hover-5', [8.5, 56.5], Math.PI / 2, 's-sandbar', 'glass');
@@ -216,6 +220,21 @@ try {
   const detail = await page.evaluate(() => document.querySelector('#bpScreen .bb-detail')?.textContent?.replace(/\s+/g, ' ').trim() ?? '');
   check(/Pry II/.test(detail) && /Where to use it/i.test(detail) && /old vaults to open in Mast Row/.test(detail) && /Show me where/.test(detail), `page: Pry II says where it's used, with Show me where ("${detail}")`);
   await shot('page-late');
+  // at Deck 150% the detail scrolls (#655): its last line and Show me where can be reached for each second level
+  for (const id of ['pry2', 'hover2', 'climb2', 'glide2']) {
+    await page.focus(`#bb-${id}`);
+    await page.waitForTimeout(200);
+    const reach = await page.evaluate(() => {
+      const d = document.querySelector('#bpScreen .bb-detail');
+      const foot = document.querySelector('#bpScreen .sheet-foot');
+      const r = d.getBoundingClientRect();
+      d.scrollTop = d.scrollHeight;
+      const last = d.lastElementChild.getBoundingClientRect();
+      return { bottom: Math.round(r.bottom), foot: Math.round(foot?.getBoundingClientRect().top ?? innerHeight), lastBottom: Math.round(last.bottom) };
+    });
+    check(reach.bottom <= reach.foot + 1 && reach.lastBottom <= reach.bottom + 1, `page: ${id}'s detail ends above the footer and its last line can be reached (${JSON.stringify(reach)})`);
+    if (id === 'pry2') await shot('page-late-end');
+  }
   await page.evaluate(() => {
     const s = window.solarbloom.sim;
     s.state.salvage.research.done = s.state.salvage.research.done.filter((id) => !/^rb-\w+2$/.test(id));
