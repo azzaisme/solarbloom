@@ -10,6 +10,9 @@
  * - `blur`: the window lost focus while still showing (setting "Pause when the window is not in focus").
  * - `sleep`: the Steam Deck (or the computer) went to sleep.
  * - `padLost`: the pad in use disconnected (the menu opens; resuming clears it).
+ *
+ * #673: a pause stops the world, not the sound. Music and the world's ambient sound (sea, birds, wind, the brook)
+ * play on at the player's volumes through the menu, Settings, the backpack and every other pause; see `volumesFor`.
  */
 export type PauseReason = 'menu' | 'panel' | 'hidden' | 'blur' | 'sleep' | 'padLost';
 
@@ -17,6 +20,8 @@ export class Pause {
   private reasons = new Set<PauseReason>();
   /** called when the game goes from running to paused or back */
   onChange?: (paused: boolean) => void;
+  /** #673: called whenever a reason comes or goes (hiding the page while the menu is open changes the sound) */
+  onReasons?: () => void;
 
   get paused(): boolean {
     return this.reasons.size > 0;
@@ -28,9 +33,11 @@ export class Pause {
 
   set(r: PauseReason, on = true) {
     const was = this.paused;
+    const had = this.reasons.has(r);
     if (on) this.reasons.add(r);
     else this.reasons.delete(r);
     if (was !== this.paused) this.onChange?.(this.paused);
+    if (had !== on) this.onReasons?.();
   }
 
   clear(...rs: PauseReason[]) {
@@ -40,6 +47,17 @@ export class Pause {
   list(): PauseReason[] {
     return [...this.reasons];
   }
+}
+
+/**
+ * #673: the volumes (0..1) for effects and music while the game is in this pause state. Every pause the player makes
+ * (the menu, a panel, the window losing focus, a disconnected pad) keeps the sound at the player's settings. Only when
+ * the player is away goes it quiet: the page hidden (another tab, minimised), like a closed game, or the device asleep.
+ * It fades back in on return. The Sound and Music on/off settings are applied separately and still win.
+ */
+export function volumesFor(settings: { sfxVolume?: number; musicVolume?: number }, pause: Pause): { sfx: number; music: number } {
+  if (pause.has('hidden') || pause.has('sleep')) return { sfx: 0, music: 0 };
+  return { sfx: (settings.sfxVolume ?? 100) / 100, music: (settings.musicVolume ?? 100) / 100 };
 }
 
 /** What the frame loop owes the simulation (Game keeps one; tests drive it directly). */

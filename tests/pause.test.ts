@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
-import { Pause, type PauseReason, runSimFrame } from '../src/app/Pause';
+import { Pause, type PauseReason, runSimFrame, volumesFor } from '../src/app/Pause';
 import { playedText } from '../src/ui/Menu';
 import { settingsRows } from '../src/ui/SettingsRows';
 import { SETTINGS_TABS } from '../src/ui/SettingsScreen';
@@ -116,5 +116,55 @@ describe('E22.11: the menu and Settings', () => {
     // Fast-forward is a developer tool: only with the debug overlay on.
     expect(game.some((r) => 'key' in r && r.key === 'speed')).toBe(false);
     expect(settingsRows('game', { inGame: false, debug: true }).some((r) => 'key' in r && r.key === 'speed')).toBe(true);
+  });
+});
+
+describe('#673: the sound plays on through a pause', () => {
+  const SET = { sfxVolume: 70, musicVolume: 40 };
+
+  it('every pause the player makes keeps music and world sound at their set volumes', () => {
+    for (const r of ['menu', 'panel', 'blur', 'padLost'] as PauseReason[]) {
+      const pause = new Pause();
+      pause.set(r);
+      expect(pause.paused).toBe(true);
+      expect(volumesFor(SET, pause), r).toEqual({ sfx: 0.7, music: 0.4 });
+    }
+    expect(volumesFor({}, new Pause())).toEqual({ sfx: 1, music: 1 });
+  });
+
+  it('only a hidden page or a sleeping device goes quiet, and the sound comes back on return', () => {
+    for (const r of ['hidden', 'sleep'] as PauseReason[]) {
+      const pause = new Pause();
+      pause.set('menu');
+      pause.set(r);
+      expect(volumesFor(SET, pause), r).toEqual({ sfx: 0, music: 0 });
+      pause.clear(r);
+      expect(volumesFor(SET, pause), r).toEqual({ sfx: 0.7, music: 0.4 });
+    }
+  });
+
+  it('a reason coming or going is reported even when the game was paused already (the menu open, then the tab hidden)', () => {
+    const pause = new Pause();
+    let calls = 0;
+    pause.onReasons = () => calls++;
+    pause.set('menu');
+    pause.set('hidden');
+    pause.set('hidden'); // already set: nothing changed
+    pause.clear('hidden');
+    pause.clear('blur'); // never set: nothing changed
+    expect(calls).toBe(3);
+  });
+
+  it('the game sets volumes from volumesFor on every reason change, and nothing else turns the sound down for a pause', () => {
+    const game = readFileSync('src/app/Game.ts', 'utf8');
+    expect(game).toMatch(/this\.pause\.onReasons = \(\) => this\.applyVolumes\(\)/);
+    expect(game).toMatch(/const v = volumesFor\(this\.settings, this\.pause\);\s*this\.sfx\.setVolumes\(v\.sfx, v\.music\);/);
+    expect(game).not.toMatch(/quiet \? 0\.3/);
+    // the frame loop still drives the sound while paused
+    expect(game).toMatch(/this\.sfx\.update\(realDt\)/);
+    // nothing pauses the beds or suspends the sound for a pause
+    const sfx = readFileSync('src/audio/Sfx.ts', 'utf8');
+    expect(sfx).not.toMatch(/ctx\.suspend\(/);
+    expect(game).not.toMatch(/sfx\.setMusic\(false\)|sfx\.setMuted\(true\)/);
   });
 });
