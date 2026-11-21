@@ -116,13 +116,14 @@ try {
     check(!bad.length, `${L}: the card and the guide line sit clear of everything ${bad.join(', ')}`);
     await shot('1-new-game');
 
-    // ── 2. Show me where (H): the camera turns to look that way ──
-    // (a new game starts beside its first pile, where the mark has nothing to show: step away from it first)
-    const before = await page.evaluate(() => {
+    // ── 2. Show me where (H): the spot is marked and (#632) a trail runs along the ground to it; the camera stays ──
+    // (a new game starts beside its first pile, and a trail that starts where it ends counts as walked and fades:
+    // step well away from it first)
+    await page.evaluate(() => {
       const g = window.solarbloom;
       const [fx, fz] = g.sim.areas.info('park').landmark;
-      g.bot.teleport('g', fx + 0.5, fz + 4.5);
-      return g.camera.heading;
+      g.bot.teleport('g', fx + 9.5, fz + 9.5);
+      g.trail.clear();
     });
     await page.waitForTimeout(600);
     await page.keyboard.press('KeyH');
@@ -130,12 +131,10 @@ try {
     const after = await page.evaluate(() => {
       const g = window.solarbloom;
       const w = g.wayMark;
-      const p = g.bot.pose;
-      const want = w ? ((Math.atan2(w.x + 0.5 - p.x, w.z + 0.5 - p.z) * 180) / Math.PI + 180 + 360) % 360 : NaN;
-      const now = ((g.camera.heading % 360) + 360) % 360;
-      return { mark: !!w, off: Math.abs((((want - now) % 360) + 540) % 360 - 180), now };
+      const way = g.trail.way;
+      return { mark: !!w, trail: g.trail.showing, points: way?.points?.length ?? 0, reached: way?.reached };
     });
-    check(after.mark && after.off < 25, `${L}: Show me where marks the spot and turns the camera that way (${before.toFixed(0)}° → ${after.now.toFixed(0)}°, ${after.off.toFixed(0)}° off)`);
+    check(after.mark && after.trail && after.points > 1 && after.reached === true, `${L}: Show me where marks the spot and lays a trail to it (${JSON.stringify(after)})`);
     await shot('2-show-me-where');
 
     // ── 3. a barricade's plain refusal ──

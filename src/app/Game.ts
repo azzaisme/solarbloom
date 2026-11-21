@@ -516,7 +516,7 @@ export class Game {
         showWhere: () => this.showWhere(),
         pointTo: (at) => {
           this.syncPanelPause();
-          this.pointTo({ ...at, cell: { x: at.x, z: at.z }, x: at.x + 0.5, z: at.z + 0.5 });
+          this.pointTo({ roofId: at.roofId, cell: { x: at.x, z: at.z }, x: at.x + 0.5, z: at.z + 0.5, kind: 'spot', name: at.name });
         },
         focusTile: (x, z) => {
           if (this.cinematic) return;
@@ -1596,7 +1596,7 @@ export class Game {
   }
 
   /** #605 / #620: mark a place and turn the camera to it (the card's goal spot, or a place the Bloombot page names). */
-  private pointTo(spot: { roofId: string; x: number; z: number; cell: { x: number; z: number } }): boolean {
+  private pointTo(spot: GoalSpot): boolean {
     if (!this.bot || this.cinematic || this.photo.active) return false;
     this.wayMark = { roofId: spot.roofId, x: spot.cell.x, z: spot.cell.z, until: performance.now() + WAY_MARK_MS };
     // #632: a trail on the ground along the walkable way there; the camera stays with bloombot
