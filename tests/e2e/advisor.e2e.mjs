@@ -33,27 +33,31 @@ try {
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180_000 });
   await page.waitForTimeout(1500);
   const title = () => page.evaluate(() => document.querySelector('#objTitle')?.textContent ?? '');
+  // #605: the card's whole text: the goal, its parts and the next step under it
+  const card = () => page.evaluate(() => document.querySelector('#obj')?.textContent ?? '');
+  const nextLine = () => page.evaluate(() => document.querySelector('#objNext')?.textContent ?? '');
 
   check(await page.evaluate(() => !document.querySelector('#upgBtn') && !document.querySelector('#upgrades') && !document.querySelector('[data-buy]')), 'no Upgrades button, drawer or buy button anywhere');
   await page.keyboard.press('KeyU');
   await page.waitForTimeout(400);
   check(await page.evaluate(() => !document.querySelector('.drawer.open')), 'U opens nothing');
   const start = await title();
-  check(/fountain/i.test(start) && /Scrap|Seeds/.test(start), `the objective names what the fountain wants ("${start}")`);
+  const all = await card();
+  check(/fountain/i.test(start) && /Scrap/.test(all) && /Seeds/.test(all) && /Park/.test(all), `the objective names the fountain and every part it wants ("${start}" · "${all}")`);
   await page.screenshot({ path: `${dir}/advisor-start.png`, timeout: 180_000 });
 
   // bloombot runs low (E23.2's ChargeSystem shape: low / share)
   // (the card asks the advisor twice a second; a software-rendered frame can take seconds, so wait for the line)
-  const lineIs = (re) => page.waitForFunction((src) => new RegExp(src, 'i').test(document.querySelector('#objTitle')?.textContent ?? ''), re.source, { timeout: 60_000 }).catch(() => {});
+  const lineIs = (re) => page.waitForFunction((src) => new RegExp(src, 'i').test(document.querySelector('#objNext')?.textContent ?? ''), re.source, { timeout: 60_000 }).catch(() => {});
   await page.evaluate(() => (window.solarbloom.sim.charge = { low: true, share: 0.1 }));
   await lineIs(/running low/);
-  const low = await title();
-  check(/running low/i.test(low), `running low shows on the objective line ("${low}")`);
+  const low = await nextLine();
+  check(/running low/i.test(low) && (await title()) === start, `running low shows under the goal, the goal kept ("${low}")`);
   await page.screenshot({ path: `${dir}/advisor-low.png`, timeout: 180_000 });
   await page.evaluate(() => (window.solarbloom.sim.charge = { low: false, share: 1 }));
-  await lineIs(/fountain/);
-  const back = await title();
-  check(back === start, `and goes back to the fountain once charged ("${back}")`);
+  await page.waitForFunction(() => !/running low/i.test(document.querySelector('#objNext')?.textContent ?? ''), null, { timeout: 60_000 }).catch(() => {});
+  const back = await nextLine();
+  check(!/running low/i.test(back) && (await title()) === start, `and the next step goes back to the fountain once charged ("${back}")`);
 
   // the advisor's own hint is about the loop (salvage for the fountain, here)
   const hint = await page.evaluate(() => window.solarbloom.sim.advisor.suggest());

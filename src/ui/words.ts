@@ -73,6 +73,27 @@ export const WORDS = {
     wake: (landmark: string, region: string) => `Wake the ${landmark} in the ${region}`,
     clear: (region: string) => `Bring the ${region} back to life`,
     explore: 'Walk out into the city and see what wakes next',
+    /** #605: the fountain's next step as the goal: step 1 wakes it, later steps go by the fountain panel's name */
+    fountain: (step: number, name: string) => (step === 1 ? 'Wake the fountain' : `Fountain step ${step}: ${name}`),
+    /** #605: the goal when everything it wants is there */
+    fountainReady: (step: number) => (step === 1 ? 'The fountain is ready. Go and wake it.' : 'The fountain is ready for its next step. Go and see it.'),
+    /** #605: what the step brings, in a few plain words */
+    why: {
+      pry: 'Bloombot learns to pry open rubble',
+      hover: 'Bloombot learns to hover over deep water',
+      climb: 'Bloombot learns to climb onto the roofs',
+      glide: 'Bloombot learns to glide from the roof edges',
+      bloom: 'The whole city comes back into flower',
+    },
+    /** #605 / #608: the park's part of a fountain step */
+    park: 'Park',
+    landmarks: 'Landmarks awake',
+    /** #605: the card's button that points the way */
+    showWhere: 'Show me where',
+    /** #613: resting at home (the fountain or the house), shown while it charges */
+    charging: 'Charging up',
+    /** #605: Show me where with nowhere to point */
+    nowhere: 'Nothing to point at just now',
     /** a count, only for things gathered or restored by hand */
     count: (n: number, of: number) => `${n} of ${of}`,
   },

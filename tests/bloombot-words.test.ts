@@ -101,3 +101,67 @@ describe('E22.10: plain words', () => {
     expect(BANNED.length).toBe(23);
   });
 });
+
+/**
+ * #606 (E24): when something is in the way, the game says what to do, in plain words. No "tier" anywhere a player
+ * reads it: the fountain's steps go by their place, the way its panel counts them ("Step 2").
+ */
+describe('#606: plain words when something is blocked', () => {
+  it('every gate says what is in the way and what to do, and its clouds say where it is', async () => {
+    const { bannedIn } = await import('../src/ui/words');
+    const { REGIONS, gateText } = await import('../src/data/oldcity');
+    const { PARK } = await import('../src/core/Areas');
+    const sim = new Sim(createInitialState(7));
+    sim.areas.clear(PARK, true); // the regions beside the park are revealed, each behind its gate
+    for (const r of REGIONS) {
+      const text = gateText(r.gate);
+      expect(text, r.id).toMatch(/^[A-Z][^.]*\.\s[A-Z].*\.$/); // what is there. What to do.
+      expect(bannedIn(text), text).toEqual([]);
+      expect(text, text).not.toMatch(/—|\(fountain/);
+      const why = sim.gates.problem(r.gate);
+      if (why) expect(bannedIn(why), why).toEqual([]);
+      if (sim.areas.sealed(r.id)) {
+        const seal = sim.areas.sealText(r.id);
+        expect(seal).toBe(`${r.name} is behind the clouds. ${r.gate.how}`);
+        expect(bannedIn(seal), seal).toEqual([]);
+      }
+    }
+    expect(bannedIn(sim.areas.sealText('bs_2_-1'))).toEqual([]);
+  });
+
+  it('a pry barricade tells a new player how to get Pry', async () => {
+    const { REGIONS } = await import('../src/data/oldcity');
+    const sim = new Sim(createInitialState(7));
+    const elder = REGIONS.find((r) => r.id === 'elderGrove')!;
+    expect(sim.gates.problem(elder.gate)).toBe('Rubble blocks the way. Wake the fountain and Bloombot will learn to pry it open.');
+  });
+
+  it('a machine that waits on the fountain says which step, never "tier"', async () => {
+    const { bannedIn } = await import('../src/ui/words');
+    const { MACHINE_RECIPES } = await import('../src/data/crafting');
+    const sim = new Sim(createInitialState(7));
+    const labels = MACHINE_RECIPES.map((r) => sim.crafting.unlockLabel(r.unlock)).filter(Boolean);
+    expect(labels).toContain('🔒 Fountain step 2');
+    for (const l of labels) expect(bannedIn(l), l).toEqual([]);
+    for (const r of MACHINE_RECIPES) {
+      if (!r.builds) continue;
+      const c = sim.build.check(r.builds, 'g', 8, 8);
+      if (!c.ok) expect(bannedIn(c.reason ?? ''), `${r.builds}: ${c.reason}`).toEqual([]);
+    }
+  });
+
+  it('no refusal a player can meet uses a banned word (pulse, build, salvage, gather, wake, craft)', () => {
+    const files = ['src/gameplay/RestorationSystem.ts', 'src/gameplay/BuildSystem.ts', 'src/gameplay/SalvageSystem.ts', 'src/gameplay/GatherSystem.ts', 'src/gameplay/LandmarkSystem.ts', 'src/gameplay/NightFinds.ts', 'src/gameplay/Crafting.ts', 'src/gameplay/Research.ts', 'src/gameplay/GateSystem.ts', 'src/gameplay/AreaSystem.ts', 'src/gameplay/DroneRoles.ts', 'src/data/oldcity.ts', 'src/data/salvage.ts', 'src/app/OldCity.ts'];
+    const bad: string[] = [];
+    return import('../src/ui/words').then(({ bannedIn }) => {
+      for (const f of files)
+        for (const s of literals(stripComments(readFileSync(f, 'utf8')))) {
+          // sentences only: code identifiers have no space and no capital
+          if (!/[A-Z]/.test(s) || !/ /.test(s)) continue;
+          const words = bannedIn(s.replace(/\$\{[^}]*\}/g, 'X'));
+          if (words.length) bad.push(`${f}: ${s.slice(0, 90)} (${words.join(', ')})`);
+        }
+      expect(bad).toEqual([]);
+    });
+  });
+});

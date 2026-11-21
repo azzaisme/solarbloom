@@ -2,6 +2,7 @@ import type { BuildableType, ComponentId, SalvageState } from '../core/types';
 import { COMPONENT_RECIPES, CRAFT, DECOR_RECIPES, MACHINE_RECIPES, type ComponentRecipe, type DecorRecipe, type MachineRecipe, type Unlock } from '../data/crafting';
 import { KEEPERS, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
+import { fountainStepLock } from '../data/salvage';
 import { MACHINES } from '../data/machines';
 import { MAINLAND } from '../data/mainland';
 import { HAND_JOBS } from '../data/automation';
@@ -57,7 +58,7 @@ export class Crafting {
       return `🔒 ${k?.name ?? 'A Keeper'}, ${r?.name ?? u.keeper}`;
     }
     if ('research' in u) return '🔒 Research';
-    if ('tier' in u) return `🔒 Fountain tier ${u.tier}`;
+    if ('tier' in u) return fountainStepLock(u.tier);
     if ('gift' in u) return '🔒 A Keeper hands it over: grow what one asks for in their garden';
     if ('hand' in u) {
       const job = HAND_JOBS[u.hand];

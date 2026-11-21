@@ -2,7 +2,7 @@ import type { BuildableType, GroundState, MachineData } from '../core/types';
 import { MACHINES, machineName } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
-import { MATERIALS, STORE, type MaterialCost } from '../data/salvage';
+import { MATERIALS, STORE, fountainStepLock, type MaterialCost } from '../data/salvage';
 import { regionById, regionPond } from '../core/OldCityLayout';
 import { isMainlandCell } from '../core/Mainland';
 import type { MaterialId } from '../core/types';
@@ -44,7 +44,7 @@ export class BuildSystem {
   /** Short reason a machine is still locked (hotbar label). */
   lockLabel(type: BuildableType): string {
     const cr = this.sim.crafting.machineRecipe(type);
-    return cr ? this.sim.crafting.unlockLabel(cr.unlock) : `🔒 Fountain tier ${this.recipeTier(type)}`;
+    return cr ? this.sim.crafting.unlockLabel(cr.unlock) : fountainStepLock(this.recipeTier(type));
   }
 
   /** Copies of a type standing now (a merged machine counts once). */
@@ -79,7 +79,7 @@ export class BuildSystem {
     if (cells.some((c) => c!.ramp || c!.level !== cells[0]!.level)) return 'Needs level ground';
     for (const c of cells) {
       if (!c) continue;
-      if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'Lost in the fog — clear the ground here first';
+      if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'The fog still covers this. Bring the ground near it back to life first.';
       if (c.blocked) return 'A rusty vent is in the way';
       // E23.5.4.6: a Keeper's pond is water (silted or restored): build beside it, never in it
       if (c.roofId === GROUND && regionPond(c.x, c.z, s.state.layers.find((l) => l.kind === 'ground')?.dryPonds)) return 'That’s a Keeper’s pond: build beside it';
@@ -89,7 +89,7 @@ export class BuildSystem {
       }
       if (s.drones.isReserved(c.id)) return 'Your drone is about to work here';
       if (c.ground === 'growing') return 'Let it finish growing first';
-      if (!allowed.includes(c.ground)) return 'Needs restored or mossy ground — pulse it first';
+      if (!allowed.includes(c.ground)) return 'The ground here is dead. Pulse it back to life first.';
     }
     return undefined;
   }
@@ -125,21 +125,21 @@ export class BuildSystem {
     if (!r) return undefined;
     const m = this.sim.inventory.shortfall(r);
     if (!m) return undefined;
-    if (m === 'biomass') return 'Needs more Biomass 🌿 — gather it from restored ground';
+    if (m === 'biomass') return 'Needs more Greens 🌿. Gather them from living ground.';
     // E23.6.1: a component is made at the crafting table (no region to name)
-    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon} — make it at the crafting table`;
+    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon}. Make it at the crafting table.`;
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 
-  /** " — Mast Row" once a region holding the material has been seen (revealed), else nothing; a place outside the regions always (steel's industrial ruins). */
+  /** ". Salvage it in Mast Row." once a region holding the material has been seen (revealed), else nothing; a place outside the regions always (steel's industrial ruins). */
   whereFrom(m: MaterialId): string {
-    if (MATERIALS[m].place) return ` — ${MATERIALS[m].place}`;
+    if (MATERIALS[m].place) return `. Salvage it in ${MATERIALS[m].place}.`;
     for (const home of MATERIALS[m].home) {
       if (home === 'park' || home === 'backstreet') continue;
       const r = regionById(home);
-      if (r && this.sim.state.areas[r.id]) return ` — ${r.name}`;
+      if (r && this.sim.state.areas[r.id]) return `. Salvage it in ${r.name}.`;
     }
-    return MATERIALS[m].home.includes('park') ? ' — the park' : '';
+    return MATERIALS[m].home.includes('park') ? '. Salvage it in the park.' : '';
   }
 
   /** E21.3: placement: the tier lock, the recipe, the chest limit. */
@@ -148,13 +148,13 @@ export class BuildSystem {
     const def = MACHINES[type];
     const fail = (reason: string, spotOk = false): PlacementCheck => ({ ok: false, reason, spotOk });
     const recipe = this.recipe(type);
-    if (!recipe) return fail(`${def.name} is not built in the Old City`);
+    if (!recipe) return fail(`You can't build a ${def.name} here`);
     if (!this.isUnlocked(type)) {
       const cr = s.crafting.machineRecipe(type);
-      return fail(cr ? `Not known yet: ${s.crafting.unlockLabel(cr.unlock).replace('🔒 ', '')}` : `${def.name} is not built in the Old City`);
+      return fail(cr ? `Not known yet: ${s.crafting.unlockLabel(cr.unlock).replace('🔒 ', '')}` : `You can't build a ${def.name} here`);
     }
     const roof = s.grid.roof(roofId);
-    if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
+    if (!roof || !roof.unlocked || roof.preview) return fail("Bloombot can't reach this rooftop yet");
     // E23.8.3.2: the mainland's big machines stand only past the causeway
     if (def.mainlandOnly && (roofId !== GROUND || !isMainlandCell(x) || !isMainlandCell(x + def.size - 1))) return fail(`${def.name}: only on the mainland`);
     if (type === 'chest' && s.machinesOfType('chest').length >= STORE.maxChests) return fail(`At most ${STORE.maxChests} Storage Chests`);

@@ -32,21 +32,23 @@ export class RestorationSystem {
   }
 
   checkPulse(t: TileData): PulseCheck {
+    // #606: a wait in words ("a second", "12 seconds"), not "12s"
+    const seconds = (n: number) => (Math.max(1, Math.ceil(n)) === 1 ? 'a second' : `${Math.ceil(n)} seconds`);
     const roof = this.sim.grid.roof(t.roofId);
-    if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'This rooftop is not reachable yet' };
+    if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: "Bloombot can't reach this rooftop yet" };
     const fog = this.sim.areas.fogReason(t);
     if (fog) return { ok: false, reason: fog };
-    if (t.blocked && t.feature === 'water') return { ok: false, reason: 'The open sea — nothing grows out there' };
+    if (t.blocked && t.feature === 'water') return { ok: false, reason: 'Nothing grows out on the open sea' };
     const piece = t.blocked ? this.sim.salvage?.describe(t) : undefined; // E21: a pile, a gate, a Keeper
     if (piece) return { ok: false, reason: piece.detail };
-    if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here' };
+    if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent. Nothing grows here.' };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready' };
-    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom' };
+    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in flower' };
     // E23.2.1: out of charge, no pulse (bloombot walks on; eat, sit or find a charger)
-    if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of charge. Eat something, rest or find a charger' };
-    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through — ${Math.max(1, Math.ceil(t.growthRemainingSec))}s` };
+    if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of charge. Eat something, rest or find a charger.' };
+    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through. Give it ${seconds(t.growthRemainingSec)}.` };
     const tilling = this.sim.cultivators?.remaining(t);
-    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab — ${Math.max(1, Math.ceil(tilling))}s` };
+    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab. Give it ${seconds(tilling)}.` };
     if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here' };
     return { ok: true };
   }

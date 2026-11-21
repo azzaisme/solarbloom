@@ -26,7 +26,7 @@ export const ROLE_INFO: Record<DroneRole, { name: string; icon: string; job: str
   scout: { name: 'Scout', icon: '🔭', job: 'Pushes back the fog from farther away; pays energy for distance', upgrades: 'Chain Intelligence has no effect' },
   courier: { name: 'Courier', icon: '📦', job: 'Carries charge to Mother Trees, panels, relays and condensers', upgrades: 'Sweep: one more machine per 2 levels' },
   spark: { name: 'Spark', icon: '✨', job: 'Starts a Bloom Chain in a garden cluster (once per 30 s)', upgrades: 'Dash, Radius and Squad apply' },
-  harvester: { name: 'Harvester', icon: '🧺', job: 'Turns income lost to full stores into biomass', upgrades: 'Squad applies' },
+  harvester: { name: 'Harvester', icon: '🧺', job: 'Turns what full stores would lose into Greens', upgrades: 'Squad applies' },
 };
 
 /** Machines a Courier serves. */
@@ -81,7 +81,7 @@ export class DroneRoles {
         return undefined;
       case 'gardener':
         if (!has('condenser')) return 'Build a Water Condenser first';
-        if (!s.state.progression.coreActivated && s.progression.fullBloomCount(HOME) < R.gardener.unlockFullBloom) return `Grow ${R.gardener.unlockFullBloom} tiles to full bloom first`;
+        if (!s.state.progression.coreActivated && s.progression.fullBloomCount(HOME) < R.gardener.unlockFullBloom) return `Grow ${R.gardener.unlockFullBloom} tiles into flower first`;
         return undefined;
       case 'scout':
         // While any open area still has fog (Saltwind, from the start); once a hub owns it, it never locks again.
@@ -93,7 +93,7 @@ export class DroneRoles {
       case 'spark':
         return has('pollinator', R.spark.unlockGardens) ? undefined : `Build ${R.spark.unlockGardens} Pollinator Gardens first`;
       case 'harvester':
-        return s.state.stats.firsts.gathered !== undefined || this.anyOwns('harvester') ? undefined : 'Gather biomass by hand first';
+        return s.state.stats.firsts.gathered !== undefined || this.anyOwns('harvester') ? undefined : 'Gather Greens by hand first';
     }
   }
 
@@ -120,7 +120,7 @@ export class DroneRoles {
     const locked = this.owns(hub, role) ? undefined : this.lockedReason(role);
     if (locked) return { ok: false, reason: locked, price };
     // E23.1.4: biomass from the backpack and the store within reach (a gathered item, not a counter)
-    if (price > 0 && this.sim.inventory.available('biomass') < price) return { ok: false, reason: `Needs ${price} Biomass`, price };
+    if (price > 0 && this.sim.inventory.available('biomass') < price) return { ok: false, reason: `Needs ${price} Greens`, price };
     return { ok: true, price };
   }
 
