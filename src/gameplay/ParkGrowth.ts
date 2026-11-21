@@ -1,6 +1,5 @@
 import { PARK } from '../core/Areas';
 import { PARK_GROWTH, PARK_GROWTH_TUNING as T, type ParkGrowthDef } from '../data/bloombot';
-import { SALVAGE } from '../data/salvage';
 import type { Sim } from './Sim';
 
 /**
@@ -44,9 +43,12 @@ export class ParkGrowth {
     return this.has('thrift') ? T.chargeFactor : 1;
   }
 
-  /** Nimble hands: seconds Interact is held to salvage once. */
-  get salvageHold(): number {
-    return SALVAGE.holdSeconds * (this.has('quick') ? T.holdFactor : 1);
+  /**
+   * Nimble hands: what a salvage hold takes, as a share of before (1 before it). The hold itself is worked out in
+   * one place, `UpgradeSystem.salvageHold`, with Quick hands (#624) and a floor.
+   */
+  get holdShare(): number {
+    return this.has('quick') ? T.holdFactor : 1;
   }
 
   tick(dt: number) {

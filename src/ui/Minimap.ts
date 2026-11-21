@@ -1,7 +1,6 @@
-import { REGIONS, type RegionDef } from '../data/oldcity';
+import { PARK_SET, REGIONS, type RegionDef } from '../data/oldcity';
 import { WAYMARK } from '../data/waymark';
 import { GROUND } from '../core/GameState';
-import { allPiles } from '../core/OldCityLayout';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import type { GoalSpot } from './GoalSpot';
@@ -527,10 +526,12 @@ export class Minimap {
         ctx.fillStyle = p.landmark;
         ctx.fill();
       }
-    // #624: Keen eye at its last level shows every pile with something left in it (a small gold dot), and the caches
+    // #624: Keen eye at its last level shows every pile with something left in it (a small gold dot) and every unopened
+    // cache, in the park and the regions already open (a shut region stays a hatched mystery)
     const keen = !!this.sim.upgrades?.findsOnMap;
+    const open = keen ? REGIONS.filter((r) => this.sim.gates.isOpen(r.gate.id)) : [];
     if (keen && roofId === GROUND)
-      for (const pile of allPiles()) {
+      for (const pile of [...PARK_SET.piles, ...open.flatMap((r) => r.piles)]) {
         if (this.sim.salvage.left(pile.id) <= 0) continue;
         const i = pile.x + 0.5 - x0;
         const j = pile.z + 0.5 - z0;
@@ -544,7 +545,7 @@ export class Minimap {
         ctx.stroke();
       }
     if ((keen || this.sim.landmarks.has('starLens')) && roofId === GROUND)
-      for (const c of REGIONS.flatMap((r) => r.caches)) {
+      for (const c of (this.sim.landmarks.has('starLens') ? REGIONS : open).flatMap((r) => r.caches)) {
         if (this.sim.state.salvage?.caches.includes(c.id)) continue;
         const i = c.x + 0.5 - x0;
         const j = c.z + 0.5 - z0;

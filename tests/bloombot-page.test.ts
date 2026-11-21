@@ -70,7 +70,7 @@ describe('#620: Bloombot\'s page', () => {
       ['pulseRadius', 3, 1],
       ['backpack', 3, 20],
       // #624
-      ['quickHands', 3, 0.15],
+      ['quickHands', 3, 0.1],
       ['keenEye', 3, 4],
       ['sunSoak', 3, 0.12],
       ['lantern', 2, 3],

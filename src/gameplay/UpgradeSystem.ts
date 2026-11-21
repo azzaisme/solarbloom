@@ -84,15 +84,18 @@ export class UpgradeSystem {
   }
   /** Quick hands: what a salvage or pry hold takes, as a share of before (1 without it). */
   get holdFactor(): number {
-    return Math.max(0.2, 1 - this.eff('quickHands'));
+    return 1 - this.eff('quickHands');
   }
-  /** Seconds Interact is held to dig out a pile once (Nimble hands from the park, then Quick hands). */
+  /**
+   * The one place a hold's length is worked out (#624): seconds Interact is held to dig out a pile once. Nimble
+   * hands from the park (#622) and Quick hands from research multiply, and it never drops below RESEARCH.minHold.
+   */
   get salvageHold(): number {
-    return (this.sim.parkGrowth?.salvageHold ?? SALVAGE.holdSeconds) * this.holdFactor;
+    return Math.max(RESEARCH.minHold, SALVAGE.holdSeconds * (this.sim.parkGrowth?.holdShare ?? 1) * this.holdFactor);
   }
-  /** Seconds Interact is held to pry rubble open. */
+  /** Seconds Interact is held to pry rubble open (Quick hands; never below RESEARCH.minHold either). */
   get pryHold(): number {
-    return SALVAGE.pryHoldSeconds * this.holdFactor;
+    return Math.max(RESEARCH.minHold, SALVAGE.pryHoldSeconds * this.holdFactor);
   }
   /** Keen eye: how far a pulse's ripple reaches and lights up piles, caches, pages and buried things (tiles). */
   get rippleRadius(): number {

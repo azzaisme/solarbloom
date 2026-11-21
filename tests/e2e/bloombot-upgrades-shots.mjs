@@ -96,6 +96,31 @@ try {
   const detail = await page.evaluate(() => document.querySelector('#bpScreen .bb-detail')?.textContent?.replace(/\s+/g, ' ').trim() ?? '');
   check(/own light at night/.test(detail) && /make level 1/.test(detail), `Lantern says what it does and what level 1 takes ("${detail}")`);
   await page.screenshot({ path: `${out}/2-page-lantern.png` });
+  // Quick hands on top of Nimble hands (the park's third milestone): the page shows the hold they come to together
+  await levels({ quickHands: 2 });
+  await page.evaluate(() => {
+    window.solarbloom.sim.state.progression.parkGrowth = 3;
+    window.solarbloom.hud.backpack.show('bloombot', true);
+  });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    const r = [...document.querySelectorAll('#bpScreen .bb-row')].find((x) => /Quick hands/.test(x.textContent));
+    r?.scrollIntoView({ block: 'center' });
+    r?.click();
+  });
+  await page.waitForTimeout(400);
+  const now = await page.evaluate(() => document.querySelector('#bpScreen .bb-detail .bb-now')?.textContent ?? '');
+  check(now === 'Right now digging out a pile takes 0.36 seconds, and prying rubble open 1.6 seconds.', `Quick hands shows the hold with Nimble hands ("${now}")`);
+  await page.evaluate(() => {
+    for (const e of document.querySelectorAll('#bpScreen .bb-detail, #bpScreen .bb-detail *')) e.scrollTop = 0;
+    let e = document.querySelector('#bpScreen .bb-detail');
+    while (e) {
+      if (e.scrollHeight > e.clientHeight && getComputedStyle(e).overflowY !== 'visible') e.scrollTop = 0;
+      e = e.parentElement;
+    }
+  });
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: `${out}/2b-page-quick-hands.png` });
   await page.evaluate(() => window.solarbloom.hud.toggleBackpack(false));
   await page.waitForTimeout(400);
 
@@ -144,6 +169,7 @@ try {
     let n = 0;
     s.rng.next = () => (n++ < 3 ? [0, 0.1, 0.9][n - 1] : next()); // this one pulse is lucky: 3 Seeds
     s.charge.refillForTest();
+    s.pulseLoad.introduced(); // the load wheel's one-time introduction is for another shot
     const before = s.inventory.count('seeds');
     const ok = s.restoration.pulse(t.id);
     s.rng.next = next;

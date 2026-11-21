@@ -89,6 +89,8 @@ export const RESEARCH = {
   draw: 2,
   /** "Longer stride": each level makes sprinting this share faster (its `per` is the share off sprint's charge) */
   sprintSpeedPerLevel: 0.05,
+  /** #624: the shortest a salvage or pry hold ever gets (seconds), however Nimble hands and Quick hands stack */
+  minHold: 0.33,
   /** #624 "Keen eye": at this level the piles and caches show on the minimap too */
   keenEyeMapLevel: 3,
   /** #624 "Lucky pulse": what a lucky pulse turns up, and how many (picked evenly from min to max) */
@@ -106,8 +108,8 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   { id: 'pulseRadius', branch: 'bloombot', name: 'Wider pulse', each: 'The pulse reaches a tile further', per: 1, needs: 'always', levels: [{ cost: { seeds: 10, copper: 6 } }, { cost: { seeds: 16, glassPane: 4 } }, { cost: { seeds: 24, sunCell: 2 } }] },
   { id: 'backpack', branch: 'bloombot', name: 'Roomier backpack', each: '20 more in every stack', per: 20, needs: 'always', levels: [{ cost: { planks: 6, scrap: 10 } }, { cost: { planks: 10, clay: 10 } }, { cost: { planks: 14, gears: 10 } }] },
   // #624 (E25): five more for Bloombot, each on a system that was already there
-  /** a share off how long Interact is held to dig out a pile or pry rubble (Interact holds) */
-  { id: 'quickHands', branch: 'bloombot', name: 'Quick hands', each: 'Digging out a pile and prying rubble take less time', per: 0.15, needs: 'always', levels: [{ cost: { gears: 4, scrap: 8 } }, { cost: { gears: 6, wire: 4 } }, { cost: { motor: 1, copper: 10 } }] },
+  /** a share off how long Interact is held to dig out a pile or pry rubble (UpgradeSystem.salvageHold / pryHold) */
+  { id: 'quickHands', branch: 'bloombot', name: 'Quick hands', each: 'Digging out a pile and prying rubble take less time', per: 0.1, needs: 'always', levels: [{ cost: { gears: 4, scrap: 8 } }, { cost: { gears: 6, wire: 4 } }, { cost: { motor: 1, copper: 10 } }] },
   /** tiles added to the pulse's ripple (what it lights up) and to how far the piles the fountain wants glint */
   { id: 'keenEye', branch: 'bloombot', name: 'Keen eye', each: 'Each pulse lights up piles and hidden things from further off. At level 3 they show on the map too', per: 4, needs: 'always', levels: [{ cost: { glassPane: 2, copper: 4 } }, { cost: { glassPane: 4, wire: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }] },
   /** charge a second back in full sun, standing still (times the sun's strength now) */

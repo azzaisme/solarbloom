@@ -8,7 +8,7 @@ import { PROJECTS, RESEARCH, RESEARCH_UPGRADES } from '../src/data/research';
 import { SALVAGE } from '../src/data/salvage';
 import { ITEM_DEFS } from '../src/data/items';
 import { Sim } from '../src/gameplay/Sim';
-import { bloombotUpgradeRows } from '../src/ui/BloombotPage';
+import { bloombotRows, bloombotUpgradeRows } from '../src/ui/BloombotPage';
 import { bannedIn, WORDS } from '../src/ui/words';
 
 /**
@@ -85,12 +85,40 @@ describe('#624: what each does', () => {
     expect(u.luckyChance).toBe(0);
   });
 
-  it('Quick hands: digging and prying take 15% less a level, on top of Nimble hands from the park', () => {
-    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.pryHold.toFixed(3))).toEqual([2, 1.7, 1.4, 1.1]);
-    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.salvageHold.toFixed(3))).toEqual([0.6, 0.51, 0.42, 0.33]);
-    const both = at({ quickHands: 3 });
-    both.state.progression.parkGrowth = 3; // Nimble hands
-    expect(both.upgrades.salvageHold).toBeCloseTo(0.6 * 0.75 * 0.55);
+  it('Quick hands: digging and prying take 10% less a level', () => {
+    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.pryHold.toFixed(3))).toEqual([2, 1.8, 1.6, 1.4]);
+    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.salvageHold.toFixed(3))).toEqual([0.6, 0.54, 0.48, 0.42]);
+  });
+
+  it('Quick hands stacks with Nimble hands from the park, in one place, and never below a third of a second', () => {
+    const stacked = [0, 1, 2, 3].map((l) => {
+      const sim = at({ quickHands: l });
+      sim.state.progression.parkGrowth = 3; // Nimble hands: a quarter off digging
+      return +sim.upgrades.salvageHold.toFixed(3);
+    });
+    // 0.6 × 0.75 × (1, 0.9, 0.8, 0.7): 0.45, 0.405, 0.36, then 0.315 held up at the floor
+    expect(stacked).toEqual([0.45, 0.405, 0.36, RESEARCH.minHold]);
+    expect(RESEARCH.minHold).toBeCloseTo(1 / 3, 1);
+    // every level still does something somewhere: each stacked step is quicker than the last
+    for (let i = 1; i < stacked.length; i++) expect(stacked[i]).toBeLessThan(stacked[i - 1]);
+    // the floor holds whatever the numbers: even with the levels pushed far past what can be bought
+    const silly = at({ quickHands: 20 });
+    silly.state.progression.parkGrowth = 3;
+    expect(silly.upgrades.salvageHold).toBe(RESEARCH.minHold);
+    expect(silly.upgrades.pryHold).toBe(RESEARCH.minHold);
+  });
+
+  it('the game reads its holds from that one place, and the page shows the combined time', () => {
+    const sim = at({ quickHands: 3 });
+    sim.state.progression.parkGrowth = 3;
+    const rows = bloombotRows(sim);
+    const quick = rows.find((r) => r.id === 'quickHands')!;
+    const nimble = rows.find((r) => r.id === 'quick')!;
+    expect(quick.now).toBe('Right now digging out a pile takes 0.33 seconds, and prying rubble open 1.4 seconds.');
+    expect(nimble.now).toBe(quick.now);
+    expect(bannedIn(quick.now!)).toEqual([]);
+    expect(at({}).upgrades.salvageHold).toBe(SALVAGE.holdSeconds);
+    expect(bloombotRows(at({})).find((r) => r.id === 'quickHands')!.now).toBe('Right now digging out a pile takes 0.6 seconds, and prying rubble open 2 seconds.');
   });
 
   it('Keen eye: the pulse lights up piles from 4 tiles further a level; at level 3 they show on the map', () => {
