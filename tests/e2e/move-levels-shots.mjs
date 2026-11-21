@@ -220,20 +220,25 @@ try {
   const detail = await page.evaluate(() => document.querySelector('#bpScreen .bb-detail')?.textContent?.replace(/\s+/g, ' ').trim() ?? '');
   check(/Pry II/.test(detail) && /Where to use it/i.test(detail) && /old vaults to open in Mast Row/.test(detail) && /Show me where/.test(detail), `page: Pry II says where it's used, with Show me where ("${detail}")`);
   await shot('page-late');
-  // at Deck 150% the detail scrolls (#655): its last line and Show me where can be reached for each second level
+  // at Deck 150% a detail taller than its column scrolls (#655): Enter on the row steps to the detail's end (Show me
+  // where, or its last lines), and the last line of "Where to use it" comes into view, as it does for every second level
   for (const id of ['pry2', 'hover2', 'climb2', 'glide2']) {
     await page.focus(`#bb-${id}`);
     await page.waitForTimeout(200);
-    const reach = await page.evaluate(() => {
-      const d = document.querySelector('#bpScreen .bb-detail');
-      const foot = document.querySelector('#bpScreen .sheet-foot');
-      const r = d.getBoundingClientRect();
-      d.scrollTop = d.scrollHeight;
-      const last = d.lastElementChild.getBoundingClientRect();
-      return { bottom: Math.round(r.bottom), foot: Math.round(foot?.getBoundingClientRect().top ?? innerHeight), lastBottom: Math.round(last.bottom) };
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(450);
+    const end = await page.evaluate(() => {
+      const d = document.querySelector('#bpScreen .bb-detail').getBoundingClientRect();
+      const how = document.querySelector('#bpScreen #bb-how');
+      const h = how.getBoundingClientRect();
+      const a = document.activeElement;
+      return { focus: a.id, howBottom: Math.round(h.bottom), detailTop: Math.round(d.top), detailBottom: Math.round(d.bottom), how: how.textContent.trim() };
     });
-    check(reach.bottom <= reach.foot + 1 && reach.lastBottom <= reach.bottom + 1, `page: ${id}'s detail ends above the footer and its last line can be reached (${JSON.stringify(reach)})`);
-    if (id === 'pry2') await shot('page-late-end');
+    check(end.howBottom <= end.detailBottom + 1 && end.howBottom > end.detailTop, `page: Enter on ${id} reaches the end of its detail, its last line in view (${JSON.stringify(end)})`);
+    if (id === 'pry2') {
+      check(/and Saltwind\.$/.test(end.how), `page: Pry II's last line is "...and Saltwind." ("${end.how}")`);
+      await shot('page-late-end');
+    }
   }
   await page.evaluate(() => {
     const s = window.solarbloom.sim;
