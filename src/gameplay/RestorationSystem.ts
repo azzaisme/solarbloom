@@ -2,6 +2,7 @@ import { distToFootprint } from '../core/Grid';
 import { GROUND } from '../core/GameState';
 import type { PlantKind, RestoreSource, TileData } from '../core/types';
 import { PLANT_LOAD, PULSE_LOAD, type PulseLoadDef } from '../data/pulse';
+import { RESEARCH } from '../data/research';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -122,7 +123,24 @@ export class RestorationSystem {
       extra.push(nb.id);
     }
     this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged });
+    this.lucky(tileId);
     return true;
+  }
+
+  /**
+   * #624 Lucky pulse: now and then a pulse that wakes bare ground turns up a few Seeds or Scrap. Earned only: with
+   * no level it never rolls (so the dice, and everything else seeded from them, run as they always did).
+   */
+  private lucky(tileId: string) {
+    const chance = this.sim.upgrades.luckyChance;
+    if (chance <= 0) return;
+    const rng = this.sim.rng;
+    if (rng.next() >= chance) return;
+    const L = RESEARCH.lucky;
+    const material = L.finds[Math.floor(rng.next() * L.finds.length)];
+    const n = L.min + Math.floor(rng.next() * (L.max - L.min + 1));
+    const got = n - this.sim.inventory.add(material, n);
+    if (got > 0) this.sim.bus.emit('pulse.lucky', { tileId, material, n: got });
   }
 
   /**
@@ -167,7 +185,9 @@ export class RestorationSystem {
   pulseRadius(overcharged = false, extraReach = 0): number {
     const tiers = TUNING.pulseTiers;
     const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + extraReach + (overcharged ? 1 : 0));
-    return overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    const r = overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    // #623: Wider pulse's late levels add flat tiles; never past the widest a pulse goes
+    return r > 0 ? Math.min(RESEARCH.pulseMaxRadius, r + this.sim.upgrades.broadTiles) : r;
   }
 
   /**

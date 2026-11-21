@@ -122,9 +122,9 @@ describe('#622: greening the park grows Bloombot', () => {
 
   it('Nimble hands: salvaging takes a quarter less time', () => {
     const sim = fresh();
-    expect(sim.parkGrowth.salvageHold).toBe(SALVAGE.holdSeconds);
+    expect(sim.upgrades.salvageHold).toBe(SALVAGE.holdSeconds);
     sim.state.progression.parkGrowth = 3;
-    expect(sim.parkGrowth.salvageHold).toBeCloseTo(SALVAGE.holdSeconds * PARK_GROWTH_TUNING.holdFactor, 6);
+    expect(sim.upgrades.salvageHold).toBeCloseTo(SALVAGE.holdSeconds * PARK_GROWTH_TUNING.holdFactor, 6);
   });
 
   it('the Bloombot page: its own group, counting the goal card\'s Park number, the next one first', () => {

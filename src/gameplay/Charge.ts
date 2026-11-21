@@ -9,7 +9,7 @@ import type { Sim } from './Sim';
 /** What costs charge. */
 export type ChargeUse = 'pulse' | 'sprint' | 'pry' | 'hover' | 'climb' | 'glide';
 /** Where charge comes back from (E23.3's chargers call `recharge(amount, 'charger')`). */
-export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'cat' | 'other';
+export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'cat' | 'sun' | 'other';
 
 /**
  * E23.2.1 (#371): bloombot's charge, the only meter on screen.
@@ -176,6 +176,18 @@ export class ChargeSystem {
     this.still = moved ? 0 : this.still + dt;
     this.lastAt = at ? { x: at.x, z: at.z } : undefined;
     if (this.resting) this.recharge(CHARGE.home.perSecond * dt, 'home');
+    else if (this.soaking) this.recharge(this.sunSoakRate() * dt, 'sun');
+  }
+
+  /** #624 Sun soak: charge a second it takes in now, standing still (the research level times the sun's strength). */
+  sunSoakRate(): number {
+    const per = this.sim.upgrades?.sunSoak ?? 0;
+    return per > 0 ? per * (this.sim.clock?.solarFactor() ?? 0) : 0;
+  }
+
+  /** #624 Sun soak: standing still in the sun, charging (never at home, whose rest is quicker already). */
+  get soaking(): boolean {
+    return !!this.sim.bot && this.still >= CHARGE.home.stillSeconds && !this.resting && this.sunSoakRate() > 1e-6 && this.value() < this.max - 1e-6;
   }
 
   /** Bloombot can always walk (at zero, the low-power walk). For the gentle-failure suite (E23.10). */

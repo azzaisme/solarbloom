@@ -290,6 +290,7 @@ export class Backpack {
       `<h3><span class="pn-badge">${icon(r.kind === 'move' || r.kind === 'move2' ? 'sprout' : r.kind === 'park' ? 'star' : 'spark')}</span>${esc(r.name)}</h3>` +
       level +
       `<p class="bb-does">${esc(r.does)}</p>` +
+      (r.now ? `<p class="bb-now">${esc(r.now)}</p>` : '') +
       `<h4>${esc(howHeading(r))}</h4><p>${esc(r.how)}</p>` +
       where
     );

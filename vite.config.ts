@@ -38,13 +38,15 @@ const QUICK = [
   // E23 polish (#596): shaders warm behind the loading screen
   'shader-warmup',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
-  'clear-path', 'bloombot-page', 'park-growth', 'move-levels',
+  'clear-path', 'bloombot-levels', 'bloombot-page', 'park-growth', 'bloombot-new-upgrades', 'move-levels',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
   // E24 (#609): the way marked on the map and in the world
   'waymark',
   // #632: Show me where's trail along a walkable way
   'trail',
+  // #628: Bloombot acts out each Interact verb
+  'bot-acts',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

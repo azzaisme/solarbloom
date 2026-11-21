@@ -89,13 +89,14 @@ export class PulseLoad {
   ripple(t: Pick<TileData, 'roofId' | 'x' | 'z'>): RippleTarget[] {
     const sv = this.sim.state.salvage;
     if (!sv || t.roofId !== GROUND) return [];
-    const r2 = RIPPLE.radius * RIPPLE.radius;
+    const R = this.sim.upgrades?.rippleRadius ?? RIPPLE.radius; // #624: Keen eye reaches further
+    const r2 = R * R;
     const near = (x: number, z: number) => (x - t.x) ** 2 + (z - t.z) ** 2 <= r2;
     const out: RippleTarget[] = [];
     for (const p of [...PARK_SET.piles, ...REGIONS.flatMap((r) => r.piles)]) if (near(p.x, p.z) && this.sim.salvage.left(p.id) > 0) out.push({ kind: 'salvage', id: p.id, x: p.x, z: p.z });
     for (const c of REGIONS.flatMap((r) => r.caches)) if (near(c.x, c.z) && !sv.caches.includes(c.id)) out.push({ kind: 'cache', id: c.id, x: c.x, z: c.z });
     for (const p of [...PARK_SET.pages, ...REGIONS.flatMap((r) => r.pages)]) if (near(p.x, p.z) && !sv.pages.includes(p.id)) out.push({ kind: 'page', id: p.id, x: p.x, z: p.z });
-    for (const b of this.sim.buried.near(t.x, t.z, RIPPLE.radius)) out.push({ kind: 'buried', id: b.id, x: b.x, z: b.z });
+    for (const b of this.sim.buried.near(t.x, t.z, R)) out.push({ kind: 'buried', id: b.id, x: b.x, z: b.z });
     return out.sort((a, b) => (a.x - t.x) ** 2 + (a.z - t.z) ** 2 - ((b.x - t.x) ** 2 + (b.z - t.z) ** 2) || a.id.localeCompare(b.id));
   }
 }

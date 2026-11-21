@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { canStep, levelAt } from '../src/core/Height';
 import { inRect, setPieceAt } from '../src/core/OldCityLayout';
-import { MOVE_LAND, MOVE_LEVEL_TWO, MOVE_TRIPS, STASHES, VAULTS } from '../src/data/moveSpots';
+import { MOVE_LAND, MOVE_LEVEL_TWO, MOVE_LEVELS, MOVE_TRIPS, STASHES, VAULTS } from '../src/data/moveSpots';
 import { PROJECTS } from '../src/data/research';
 import type { AbilityId } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
@@ -243,6 +243,25 @@ describe('#626: the trips', () => {
     for (const [k, n] of Object.entries(s.gives)) expect(sim.inventory.count(k as never), k).toBe(n);
     expect(sim.moves.stashAt(s.x, s.z)).toBeUndefined();
     expect(sim.moves.openStash(s.id)).toBeUndefined();
+  });
+
+  it('a trip is its own motion: no hold act plays over it (#628), and the vault is a held pry', async () => {
+    const { VERB_ACTS } = await import('../src/data/botActs');
+    for (const v of [...MOVE_TRIPS.map((t) => t.verb), 'Climb up onto', 'Climb down']) {
+      expect(v in VERB_ACTS, v).toBe(true);
+      expect(VERB_ACTS[v], v).toBeUndefined();
+    }
+    expect(VERB_ACTS.Pry).toBe('pry');
+    expect(VERB_ACTS.Open).toBe('reach');
+  });
+
+  it('Quick hands shortens forcing a vault, as it does prying rubble', () => {
+    const { sim } = open();
+    const before = sim.upgrades.vaultHold;
+    expect(before).toBe(MOVE_LEVELS.vaultHoldSeconds);
+    research(sim).levels.quickHands = 2;
+    expect(sim.upgrades.vaultHold).toBeLessThan(before);
+    expect(sim.upgrades.vaultHold).toBeCloseTo(before * sim.upgrades.holdFactor, 5);
   });
 
   it('every trip prompt and refusal is a plain line', () => {

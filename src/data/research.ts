@@ -81,7 +81,7 @@ export interface ResearchUpgradeDef {
   per: number;
   /** the system it works through (offered only once that system reads it) */
   needs: UpgradeSystemId;
-  /** at most three levels, each paid for in materials */
+  /** one to five levels, each paid for in materials (#623: the first five Bloombot ones go to five, levels 4 and 5 in late materials; #624's have two or three) */
   levels: UpgradeLevelDef[];
 }
 
@@ -93,16 +93,43 @@ export const RESEARCH = {
   draw: 2,
   /** "Longer stride": each level makes sprinting this share faster (its `per` is the share off sprint's charge) */
   sprintSpeedPerLevel: 0.05,
+  /**
+   * #623: "Wider pulse" levels 1 to 3 each step the pulse up a tier (data/tuning pulseTiers); levels 4 and 5 each add
+   * this many tiles to the radius instead (a tier further would leap to Radiant at 4 and do nothing at 5)
+   */
+  pulseTierLevels: 3,
+  pulseTilesPerLateLevel: 1,
+  /** #623: the widest a pulse ever reaches, every bonus counted (Radiant's 7.1 and a tile) */
+  pulseMaxRadius: 8.1,
+  /** #624: the shortest a salvage or pry hold ever gets (seconds), however Nimble hands and Quick hands stack */
+  minHold: 0.33,
+  /** #624 "Keen eye": at this level the piles and caches show on the minimap too */
+  keenEyeMapLevel: 3,
+  /** #624 "Lucky pulse": what a lucky pulse turns up, and how many (picked evenly from min to max) */
+  lucky: { finds: ['seeds', 'scrap'] as MaterialId[], min: 2, max: 3 },
+  /** #624 "Lantern": how bright Bloombot's own light is at full night (lamp posts are LIGHTING.cast.intensity 0.5) */
+  lanternIntensity: 0.55,
 };
 
 /** Research-opened upgrades. Who reads each level: the sub-epic named beside it, through `sim.research.level(id)`. */
 export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   // Bloombot (E23.2 reads charge, efficiency, sprint and pulse; the backpack is ours)
-  { id: 'chargeCells', branch: 'bloombot', name: 'Bigger charge', each: 'One more battery cell in bloombot', per: 1, needs: 'charge', levels: [{ cost: { batteryCell: 2 } }, { cost: { batteryCell: 3, gears: 4 } }, { cost: { batteryCell: 4, sunstone: 4 } }] },
-  { id: 'chargeEfficiency', branch: 'bloombot', name: 'Gentler on charge', each: 'Pulses and abilities use a little less charge', per: 1, needs: 'charge', levels: [{ cost: { wire: 4, copper: 6 } }, { cost: { wire: 6, gears: 6 } }, { cost: { motor: 2, sunstone: 6 } }] },
-  { id: 'sprint', branch: 'bloombot', name: 'Longer stride', each: 'Sprinting costs less and goes a little faster', per: 0.1, needs: 'charge', levels: [{ cost: { gears: 4, wire: 2 } }, { cost: { motor: 1, gears: 6 } }, { cost: { motor: 2, sunstone: 4 } }] },
-  { id: 'pulseRadius', branch: 'bloombot', name: 'Wider pulse', each: 'The pulse reaches a tile further', per: 1, needs: 'always', levels: [{ cost: { seeds: 10, copper: 6 } }, { cost: { seeds: 16, glassPane: 4 } }, { cost: { seeds: 24, sunCell: 2 } }] },
-  { id: 'backpack', branch: 'bloombot', name: 'Roomier backpack', each: '20 more in every stack', per: 20, needs: 'always', levels: [{ cost: { planks: 6, scrap: 10 } }, { cost: { planks: 10, clay: 10 } }, { cost: { planks: 14, gears: 10 } }] },
+  { id: 'chargeCells', branch: 'bloombot', name: 'Bigger charge', each: 'One more battery cell in Bloombot', per: 1, needs: 'charge', levels: [{ cost: { batteryCell: 2 } }, { cost: { batteryCell: 3, gears: 4 } }, { cost: { batteryCell: 4, sunstone: 4 } }, { cost: { batteryCell: 4, sunCell: 3 } }, { cost: { sunCell: 6, sunstone: 14 } }] },
+  { id: 'chargeEfficiency', branch: 'bloombot', name: 'Gentler on charge', each: 'Pulses and abilities use a little less charge', per: 1, needs: 'charge', levels: [{ cost: { wire: 4, copper: 6 } }, { cost: { wire: 6, gears: 6 } }, { cost: { motor: 2, sunstone: 6 } }, { cost: { motor: 3, sunCell: 2 } }, { cost: { motor: 4, sunCell: 4 } }] },
+  { id: 'sprint', branch: 'bloombot', name: 'Longer stride', each: 'Sprinting costs less and goes a little faster', per: 0.1, needs: 'charge', levels: [{ cost: { gears: 4, wire: 2 } }, { cost: { motor: 1, gears: 6 } }, { cost: { motor: 2, sunstone: 4 } }, { cost: { motor: 4, sunstone: 8 } }, { cost: { motor: 6, sunCell: 3 } }] },
+  { id: 'pulseRadius', branch: 'bloombot', name: 'Wider pulse', each: 'The pulse reaches a tile further', per: 1, needs: 'always', levels: [{ cost: { seeds: 10, copper: 6 } }, { cost: { seeds: 16, glassPane: 4 } }, { cost: { seeds: 24, sunCell: 2 } }, { cost: { sunCell: 3, sunstone: 10 } }, { cost: { sunCell: 5, sunstone: 16 } }] },
+  { id: 'backpack', branch: 'bloombot', name: 'Roomier backpack', each: '20 more in every stack', per: 20, needs: 'always', levels: [{ cost: { planks: 6, scrap: 10 } }, { cost: { planks: 10, clay: 10 } }, { cost: { planks: 14, gears: 10 } }, { cost: { motor: 2, sunstone: 8 } }, { cost: { motor: 3, sunCell: 3 } }] },
+  // #624 (E25): five more for Bloombot, each on a system that was already there
+  /** a share off how long Interact is held to dig out a pile or pry rubble (UpgradeSystem.salvageHold / pryHold) */
+  { id: 'quickHands', branch: 'bloombot', name: 'Quick hands', each: 'Digging out a pile and prying rubble take less time', per: 0.1, needs: 'always', levels: [{ cost: { gears: 4, scrap: 8 } }, { cost: { gears: 6, wire: 4 } }, { cost: { motor: 1, copper: 10 } }] },
+  /** tiles added to the pulse's ripple (what it lights up) and to how far the piles the fountain wants glint */
+  { id: 'keenEye', branch: 'bloombot', name: 'Keen eye', each: 'Each pulse lights up piles and hidden things from further off. At level 3 they show on the map too', per: 4, needs: 'always', levels: [{ cost: { glassPane: 2, copper: 4 } }, { cost: { glassPane: 4, wire: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }] },
+  /** charge a second back in full sun, standing still (times the sun's strength now) */
+  { id: 'sunSoak', branch: 'bloombot', name: 'Sun soak', each: 'Bloombot slowly charges standing still in the sun', per: 0.12, needs: 'charge', levels: [{ cost: { glassPane: 2, sunstone: 2 } }, { cost: { sunstone: 6, wire: 4 } }, { cost: { sunCell: 2, sunstone: 6 } }] },
+  /** how far Bloombot's own light reaches at night (tiles) */
+  { id: 'lantern', branch: 'bloombot', name: 'Lantern', each: "Bloombot's own light reaches further at night", per: 3, needs: 'always', levels: [{ cost: { glassPane: 2, wire: 2 } }, { cost: { batteryCell: 1, glassPane: 4 } }] },
+  /** the chance a pulse on bare ground turns up a few Seeds or Scrap */
+  { id: 'luckyPulse', branch: 'bloombot', name: 'Lucky pulse', each: 'Now and then a pulse on bare ground turns up a few Seeds or Scrap', per: 0.04, needs: 'always', levels: [{ cost: { seeds: 12, scrap: 12 } }, { cost: { seeds: 20, copper: 8 } }, { cost: { seeds: 30, sunstone: 4 } }] },
   // Power (E23.3 reads these)
   { id: 'poleReach', branch: 'power', name: 'Longer lines', each: 'Power poles reach further', per: 0.15, needs: 'power', levels: [{ cost: { wire: 6 } }, { cost: { wire: 10, copper: 10 } }, { cost: { wire: 14, gears: 6 } }] },
   { id: 'solarYield', branch: 'power', name: 'Clearer panels', each: 'Solar panels make a little more', per: 0.1, needs: 'power', levels: [{ cost: { glassPane: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }, { cost: { sunCell: 2, glassPane: 6 } }] },
@@ -130,6 +157,12 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'rb-sprint', branch: 'bloombot', name: 'Light feet', about: 'Easier running on old legs.', cost: { gears: 8, scrap: 10 }, days: 0.15, opens: { material: 'gears' }, gives: { upgrade: 'sprint' } },
   { id: 'rb-pulse', branch: 'bloombot', name: 'Ripples', about: 'A pulse that carries a little further.', cost: { seeds: 16, glass: 6 }, days: 0.2, opens: { project: 'rb-efficiency' }, gives: { upgrade: 'pulseRadius' } },
   { id: 'rb-backpack', branch: 'bloombot', name: 'Stitched pockets', about: 'More room in every pocket of the backpack.', cost: { timber: 10, scrap: 10 }, days: 0.1, opens: { material: 'timber' }, gives: { upgrade: 'backpack' } },
+  // #624 (E25)
+  { id: 'rb-hands', branch: 'bloombot', name: 'Oiled fingers', about: 'Hands that dig and pry without a fuss.', cost: { gears: 6, scrap: 8 }, days: 0.1, opens: { project: 'rb-sprint' }, gives: { upgrade: 'quickHands' } },
+  { id: 'rb-eye', branch: 'bloombot', name: 'Polished lenses', about: 'Eyes that catch a glint from further off.', cost: { glass: 8, copper: 4 }, days: 0.15, opens: { material: 'glass' }, gives: { upgrade: 'keenEye' } },
+  { id: 'rb-soak', branch: 'bloombot', name: 'Sun skin', about: 'A shell that drinks a little sunlight.', cost: { sunstone: 4, glass: 6 }, days: 0.2, opens: { material: 'sunstone' }, gives: { upgrade: 'sunSoak' } },
+  { id: 'rb-lantern', branch: 'bloombot', name: 'A little lamp', about: 'A light of its own for dark streets.', cost: { glass: 6, copper: 6 }, days: 0.15, opens: { project: 'rb-eye' }, gives: { upgrade: 'lantern' } },
+  { id: 'rb-lucky', branch: 'bloombot', name: 'Lucky dirt', about: 'What turns up when old ground wakes.', cost: { seeds: 12, scrap: 10 }, days: 0.15, opens: { project: 'rb-pulse' }, gives: { upgrade: 'luckyPulse' } },
   // E25 (#626): each move's second level, one fountain step after the move itself (Glide II after Climb II)
   { id: 'rb-pry2', branch: 'bloombot', name: 'Pry II', about: 'A longer bar and firmer feet, for the heavy iron doors of old vaults.', cost: { copper: 20, gears: 12, scrap: 10 }, days: 0.2, opens: { move: 'hover' }, gives: { move: 'pry' } },
   { id: 'rb-hover2', branch: 'bloombot', name: 'Hover II', about: 'A steadier hover that goes much further over the sea.', cost: { glass: 20, copper: 16, sunstone: 6 }, days: 0.25, opens: { move: 'climb' }, gives: { move: 'hover' } },

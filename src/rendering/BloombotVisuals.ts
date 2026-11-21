@@ -5,6 +5,9 @@ import { VISIT_POINTS, type Perch } from '../data/wildlife';
 import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
 import { surfaceTriangles, skinnedVertices, vertexOnBones } from './SkinSurface';
 import { inBox, type SeatBox } from './SeatBox';
+import { ACT_EASE, ACTS, type ActEffect, type ActId } from '../data/botActs';
+import { actPose, applyActPose, emptyPose } from './BotActs';
+import { BotProp } from './BotProps';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -64,6 +67,17 @@ export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
 /** the one-shot clips into and out of sitting (oneShot) */
 type SeatClip = typeof BOT_CLIPS.sitDown | typeof BOT_CLIPS.standUp;
 const LOOPS: readonly string[] = ['idle', 'walk', 'hover', 'sit', 'meditate', 'doze'];
+
+/** #628: a moment in an act for its effect: as it works ('tick') or as it finishes ('finish'), at `at` (world). */
+export interface ActBeat {
+  act: ActId;
+  beat: 'tick' | 'finish';
+  effect: ActEffect;
+  at: pc.Vec3;
+  /** Bloombot's own sideways and backward directions in the world (to throw an effect out where it shows) */
+  side: pc.Vec3;
+  back: pc.Vec3;
+}
 
 export class BloombotVisuals {
   /** placed at bloombot's feet, turned to its facing */
@@ -128,6 +142,16 @@ export class BloombotVisuals {
   private growth: BotGrowth = { moves: 0, cells: 0, pockets: 0 };
   private pieces: GrowthPiece[] = [];
   private boneRest = new Map<string, pc.Quat>();
+  /**
+   * #628: the act under way: `held` loops until endAct; `ending` is when it began to ease out (it is drawn until
+   * ACT_EASE.out after that); `ticks` counts the work effects so far.
+   */
+  private act?: { id: ActId; t: number; held: boolean; ending?: number; ticks: number };
+  private actPoseNow = emptyPose();
+  /** #628: what it holds while it acts (made when the act starts, gone when it ends) */
+  private prop?: BotProp;
+  /** #628: called for each act's effects (Game draws them with Vfx) */
+  onBeat?: (b: ActBeat) => void;
 
   constructor(
     private app: pc.AppBase,
@@ -215,6 +239,37 @@ export class BloombotVisuals {
   }
 
   /** #620: sets what Bloombot has grown into (cheap to call every frame: it rebuilds only on a change). */
+  private lantern?: pc.Entity;
+  /**
+   * #624 Lantern: Bloombot's own light at night. A real warm point light just above its head (no shadows, like the
+   * lamp posts, E23.7.5), so the ground and anything near is lit from Bloombot and the light falls off with distance.
+   * `reach` is how far it shines (tiles; 0: no light of its own), `dark` how dark the scene is (0 day … 1 night) and
+   * `share` the scene's light share (the Power view dims it with everything else). It fades in with the dusk.
+   */
+  setLantern(reach: number, dark: number, share = 1, intensity = 0.55) {
+    const on = reach > 0 && dark > 0.03;
+    if (!on) {
+      if (this.lantern) this.lantern.enabled = false;
+      return;
+    }
+    if (!this.lantern) {
+      const e = (this.lantern = new pc.Entity('bloombot-lantern'));
+      e.addComponent('light', { type: 'omni', castShadows: false, falloffMode: pc.LIGHTFALLOFF_INVERSESQUARED, affectSpecularity: false, color: color(PALETTE.light.lamps.warm) });
+      e.setLocalPosition(0, 1.05, 0.12);
+      this.root.addChild(e);
+    }
+    this.lantern.enabled = true;
+    const l = this.lantern.light!;
+    l.range = reach + 1;
+    l.intensity = intensity * Math.min(1, dark) * share;
+  }
+
+  /** #624: the Lantern's light now, for tests and the shots (undefined: none on). */
+  get lanternLight(): { range: number; intensity: number } | undefined {
+    const l = this.lantern;
+    return l?.enabled && l.light ? { range: l.light.range, intensity: l.light.intensity } : undefined;
+  }
+
   setGrowth(g: BotGrowth) {
     const c = this.growth;
     if (c.moves === g.moves && c.cells === g.cells && c.pockets === g.pockets && (c.park ?? 0) === (g.park ?? 0)) return;
@@ -254,11 +309,26 @@ export class BloombotVisuals {
     }
     // a glowing cell on top of the pack for each level of Bigger charge
     const glow = this.material('bloombot_glow');
-    for (let i = 0; i < Math.min(3, g.cells); i++) piece(`grow-cell-${i}`, 'capsule', glow, 'Spine02', [(i - 1) * 0.06, 0.17, -0.25], [0, 0, 0], [0.032, 0.045, 0.032]);
+    // (#623: the fourth and fifth sit a little lower at either end of the row, tipped outward)
+    const cells: { at: [number, number, number]; tilt: number }[] = [
+      { at: [-0.06, 0.17, -0.25], tilt: 0 },
+      { at: [0, 0.17, -0.25], tilt: 0 },
+      { at: [0.06, 0.17, -0.25], tilt: 0 },
+      { at: [0.115, 0.15, -0.25], tilt: -25 },
+      { at: [-0.115, 0.15, -0.25], tilt: 25 },
+    ];
+    for (let i = 0; i < Math.min(cells.length, g.cells); i++) piece(`grow-cell-${i}`, 'capsule', glow, 'Spine02', cells[i].at, [0, 0, cells[i].tilt], [0.032, 0.045, 0.032]);
     // a pocket on the pack for each level of Roomier backpack: left side, right side, then the bottom
     const fabric = this.material('bloombot_fabric');
-    const pockets: [number, number, number][] = [[0.15, -0.02, -0.2], [-0.15, -0.02, -0.2], [0, -0.12, -0.24]];
-    for (let i = 0; i < Math.min(3, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i], [0, 0, 0], i < 2 ? [0.04, 0.085, 0.08] : [0.13, 0.045, 0.055]);
+    // (#623: then a small one high on each side, above the first two)
+    const pockets: { at: [number, number, number]; size: [number, number, number] }[] = [
+      { at: [0.15, -0.02, -0.2], size: [0.04, 0.085, 0.08] },
+      { at: [-0.15, -0.02, -0.2], size: [0.04, 0.085, 0.08] },
+      { at: [0, -0.12, -0.24], size: [0.13, 0.045, 0.055] },
+      { at: [0.15, 0.08, -0.2], size: [0.036, 0.05, 0.065] },
+      { at: [-0.15, 0.08, -0.2], size: [0.036, 0.05, 0.065] },
+    ];
+    for (let i = 0; i < Math.min(pockets.length, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i].at, [0, 0, 0], pockets[i].size);
     // #622: what greening the park grew: a glowing bud at the sprout's tip, a gold collar at the neck, gold cuffs
     // (placed by eye in the browser; a torus is 0.3 across its ring before scaling)
     const park = g.park ?? 0;
@@ -342,6 +412,12 @@ export class BloombotVisuals {
    */
   setPose(pose: 'sit' | 'meditate' | undefined, seat = 0) {
     const was = this.pose;
+    // #628: no act on a seat
+    if (pose) {
+      this.act = undefined;
+      this.prop?.destroy();
+      this.prop = undefined;
+    }
     this.pose = pose;
     this.seat = seat;
     if (pose !== was) {
@@ -611,6 +687,8 @@ export class BloombotVisuals {
     const want: BotLoop = this.pose && this.clips.has(this.pose) ? this.pose : speed < 0.05 ? 'idle' : hovering ? 'hover' : 'walk';
     const anim = this.model?.anim;
     if (!anim) return;
+    // #628: walking off ends a one-press act (a held one ends when the hold does)
+    if (this.act && !this.act.held && this.act.ending === undefined && speed > 0.3) this.act.ending = this.act.t;
     if (!this.action) {
       if (want !== this.loop) anim.baseLayer?.transition(want, BLEND);
       anim.speed = want === 'walk' ? pc.math.clamp(speed / WALK_STRIDE, 0.5, 1.8) : 1;
@@ -625,6 +703,7 @@ export class BloombotVisuals {
     if (!anim || !len) return 0;
     if (this.reducedMotion && name === 'cheer') return 0;
     if (this.pose) return 0; // sitting or meditating: no standing gestures (a cheer would pop it up off the seat)
+    if (this.act && !this.act.ending) this.act.ending = this.act.t;
     anim.speed = name === 'pulse' ? 1.6 : name === 'assemble' ? 1.2 : 1;
     anim.baseLayer?.transition(name, 0.1);
     const dur = len / anim.speed;
@@ -643,8 +722,140 @@ export class BloombotVisuals {
     return this.action?.name;
   }
 
+  /**
+   * #628: starts an act. `held` loops it until endAct (a hold on Interact); otherwise it plays for its `once` seconds
+   * and finishes by itself. A one-press act never cuts into a held one, and nothing acts while seated.
+   */
+  startAct(id: ActId, held = false) {
+    if (this.pose) return;
+    if (!held && this.act?.held && this.act.ending === undefined) return;
+    // a cheer that the same press set off (a landmark waking, a Keeper's thanks) plays as it is
+    if (!held && this.action?.name === 'cheer') return;
+    // the act is drawn over the idle clip, not over the old reach-out gesture
+    if (this.action && !this.isSeatClip(this.action.name)) {
+      this.action = undefined;
+      const anim = this.model?.anim;
+      if (anim) {
+        anim.speed = 1;
+        anim.baseLayer?.transition(this.loop, 0.1);
+      }
+    }
+    this.act = { id, t: 0, held, ticks: 0 };
+    const want = ACTS[id].prop?.id;
+    if (this.prop?.id !== want) {
+      this.prop?.destroy();
+      this.prop = want && this.model ? new BotProp(want, this.root) : undefined;
+      this.prop?.grow(0);
+    }
+  }
+
+  /** #628: ends a held act: finished (`done`, with its finishing effect) or let go part way. */
+  endAct(done: boolean) {
+    const a = this.act;
+    if (!a || a.ending !== undefined) return;
+    if (done) this.beat('finish');
+    a.ending = a.t;
+  }
+
+  /** #628: the act being drawn now (tests). */
+  get acting(): ActId | undefined {
+    return this.act?.id;
+  }
+
+  /** #628: is the act held (looping until let go)? */
+  get actHeld(): boolean {
+    return !!this.act?.held && this.act.ending === undefined;
+  }
+
+  private isSeatClip(n: string): boolean {
+    return n === BOT_CLIPS.sitDown || n === BOT_CLIPS.standUp;
+  }
+
+  private readonly beatAt = new pc.Vec3();
+  private readonly beatSide = new pc.Vec3();
+  private readonly beatBack = new pc.Vec3();
+
+  private beat(kind: 'tick' | 'finish') {
+    const a = this.act;
+    if (!a || !this.onBeat) return;
+    const d = ACTS[a.id];
+    const effect = kind === 'tick' ? d.tick : d.finish;
+    if (!effect) return;
+    const at = this.beatAt;
+    const l = this.model?.findByName('LeftHand');
+    const r = this.model?.findByName('RightHand');
+    if (effect.at === 'tool' && this.prop) this.prop.tip(at);
+    else if (effect.at !== 'ground' && l && r) at.copy(l.getPosition()).add(r.getPosition()).mulScalar(0.5);
+    else {
+      // on the ground half a step ahead (its front is the root's local +z)
+      const f = this.root.forward;
+      const p = this.root.getPosition();
+      at.set(p.x - f.x * 0.42, p.y, p.z - f.z * 0.42);
+    }
+    this.beatSide.copy(this.root.right);
+    this.beatBack.copy(this.root.forward); // its front is the root's local +z, so the root's forward (-z) is behind it
+    this.onBeat({ act: a.id, beat: kind, effect, at, side: this.beatSide, back: this.beatBack });
+  }
+
+  /** #628: runs the act: eases it in and out, fires its effects, and draws its pose (after the clip has run). */
+  private runAct(dt: number) {
+    const a = this.act;
+    if (!a) return;
+    a.t += dt;
+    const d = ACTS[a.id];
+    if (!a.held && a.ending === undefined && a.t >= d.once) {
+      this.beat('finish');
+      a.ending = a.t;
+    }
+    if (a.ending === undefined && d.tick) {
+      const n = Math.floor(a.t / d.tick.every);
+      if (n > a.ticks) {
+        a.ticks = n;
+        this.beat('tick');
+      }
+    }
+    const into = Math.min(1, a.t / ACT_EASE.in);
+    const out = a.ending === undefined ? 1 : Math.max(0, 1 - (a.t - a.ending) / ACT_EASE.out);
+    const w = smooth(Math.min(into, out));
+    if (a.ending !== undefined && out <= 0) {
+      this.act = undefined;
+      this.prop?.destroy();
+      this.prop = undefined;
+      if (!this.pose) this.holder?.setLocalPosition(0, 0, 0);
+      return;
+    }
+    if (!this.model || this.pose) return;
+    // the feet as the clip has them (the model back at its rest height first), then the pose, then sink the model so
+    // the lower foot is back where it was: a crouch with its feet on the ground, never lifted off it
+    this.holder?.setLocalPosition(0, 0, 0);
+    const before = this.feetHeight();
+    if (!applyActPose(this.model, this.root, actPose(a.id, a.t, 1, this.reducedMotion, this.actPoseNow), w)) return;
+    const sink = this.feetHeight() - before;
+    this.holder?.setLocalPosition(0, -sink, 0);
+    this.lastSink = sink;
+    if (this.prop) {
+      const side = ACTS[a.id].prop!.hand === 'left' ? 'Left' : 'Right';
+      const fore = this.model.findByName(`${side}ForeArm`);
+      const hand = this.model.findByName(`${side}Hand`);
+      if (fore && hand) this.prop.place(fore.getPosition(), hand.getPosition(), this.root.up);
+      this.prop.grow(w);
+    }
+  }
+
+  /** #628: how far the act sank the model last frame (bending the knees lifts the feet; this puts them back down). */
+  lastSink = 0;
+
+  /** #628: the lower of its two feet (the ankle joints), above its root. */
+  feetHeight(): number {
+    const l = this.model?.findByName('LeftFoot');
+    const r = this.model?.findByName('RightFoot');
+    if (!l || !r) return 0;
+    return Math.min(l.getPosition().y, r.getPosition().y) - this.root.getPosition().y;
+  }
+
   update(dt: number) {
     this.clock += dt;
+    this.runAct(dt);
     this.placeGrowth();
     if (this.pose) this.posed();
     // Faces: an expression times out back to happy; now and then a blink.
@@ -669,4 +880,9 @@ export class BloombotVisuals {
     this.asset?.unload();
     if (this.asset) this.app.assets.remove(this.asset);
   }
+}
+
+function smooth(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
 }
