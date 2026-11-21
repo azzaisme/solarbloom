@@ -171,15 +171,22 @@ export class Backpack {
     }
     this.body.setAttribute('aria-labelledby', `bptab-${tab}`);
     this.body.innerHTML = this[tab]();
+    this.syncView();
     this.fitDetail();
     this.bar();
-    this.syncView();
   }
 
   /** #629: points the turntable at the Bloombot page's canvas and its row in focus (or stops it). */
+  private bbCanvas?: HTMLCanvasElement;
   private syncView() {
     if (!this.botView) return;
-    const canvas = this.isOpen && this.current === 'bloombot' ? (this.body.querySelector<HTMLCanvasElement>('#bbView') ?? undefined) : undefined;
+    // one canvas for as long as the page lives, moved into each redrawn detail's view (the turntable keeps drawing)
+    const slot = this.isOpen && this.current === 'bloombot' ? this.body.querySelector<HTMLElement>('#bpDetail .bb-view') : null;
+    let canvas: HTMLCanvasElement | undefined;
+    if (slot) {
+      canvas = this.bbCanvas ??= Object.assign(document.createElement('canvas'), { id: 'bbView', width: 480, height: 300 });
+      if (canvas.parentElement !== slot) slot.appendChild(canvas);
+    }
     const row = canvas ? bloombotRows(this.host.sim).find((r) => r.id === this.selBot) : undefined;
     this.botView(canvas, row);
   }
@@ -189,10 +196,10 @@ export class Backpack {
     if (!this.isOpen) return;
     const id = (document.activeElement as HTMLElement | null)?.id;
     this.body.innerHTML = this[this.current]();
+    this.syncView();
     this.fitDetail();
     if (id) this.body.querySelector<HTMLElement>(`#${CSS.escape(id)}`)?.focus({ focusVisible: true } as FocusOptions);
     this.bar();
-    this.syncView();
   }
 
   /** The action bar: what Enter / A does on this tab, the tab buttons and Back. */
@@ -313,9 +320,7 @@ export class Backpack {
       const id = `bbH-${g.kind}`;
       return `<h3 class="pn-label" id="${id}">${esc(g.title)} <span class="bb-count">${esc(g.note(list))}</span></h3><div class="bb-rows" role="listbox" aria-labelledby="${id}">${list.map(row).join('')}</div>`;
     }).join('');
-    // #629: the live look at Bloombot above the detail (the turntable draws into the canvas; the detail redraws apart)
-    const view = this.botView ? `<div class="bb-view" aria-hidden="true"><canvas id="bbView" width="480" height="300"></canvas></div>` : '';
-    return `<div class="pn-split bb-split"><div class="pn-main bb-main">${groups}</div><aside class="pn-detail bp-detail bb-detail${view ? ' has-view' : ''}">${view}<div id="bpDetail">${this.botDetail()}</div></aside></div>`;
+    return `<div class="pn-split bb-split"><div class="pn-main bb-main">${groups}</div><aside class="pn-detail bp-detail bb-detail" id="bpDetail">${this.botDetail()}</aside></div>`;
   }
 
   private botDetail(): string {
@@ -323,10 +328,14 @@ export class Backpack {
     if (!r) return '';
     const level = r.kind === 'upgrade' ? `<p class="bb-level"><span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>${esc(stateWords(r))}</p>` : `<p class="bb-level">${esc(stateWords(r))}</p>`;
     const where = r.where ? `<button class="pn-btn primary bb-where" id="bb-where" data-bbwhere="${r.id}">${icon('pin', 's')}Show me where</button>` : '';
+    // #629: the head (the live look at Bloombot, the name, the level and what it does) stays in view while the rest
+    // scrolls under it, so choosing a row never scrolls away what you are looking at
+    const view = this.botView ? `<div class="bb-view" aria-hidden="true"></div>` : '';
     return (
+      `<div class="bb-head${view ? ' has-view' : ''}">${view}<div class="bb-title">` +
       `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : r.kind === 'park' ? 'star' : r.kind === 'knack' ? 'heart' : 'spark')}</span>${esc(r.name)}</h3>` +
       level +
-      `<p class="bb-does">${esc(r.does)}</p>` +
+      `<p class="bb-does">${esc(r.does)}</p></div></div>` +
       (r.now ? `<p class="bb-now">${esc(r.now)}</p>` : '') +
       `<h4>${esc(howHeading(r))}</h4><p class="bb-how" id="bb-how">${esc(r.how)}</p>` +
       where

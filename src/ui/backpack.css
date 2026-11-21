@@ -67,24 +67,37 @@ svg.mi-unknown .mi-line { stroke: var(--text-strong); }
    footer: the wheel scrolls either, and the arrows / d-pad / stick reach Show me where at its foot (focus brings it in) */
 @container sheet (min-width: 641px) {
   #bpBody:has(> .bb-split) { overflow: hidden; display: flex; flex-direction: column; }
-  .bb-split { flex: 1; min-height: 0; height: 100%; }
+  /* #629: a size container, so a short detail column (the Deck's 150%) can set the view beside the words */
+  .bb-split { flex: 1; min-height: 0; height: 100%; container: bbsplit / size; }
   /* room on every side for the focus ring (it would be cut off at the scroller's edge), given back by the margin so
      the rows still line up with the headings */
   .bb-main { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; margin: -12px; }
   .bb-detail { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
-  .bb-detail.has-view { overflow: hidden; }
-  /* room for the focus ring of Show me where, given back by the margin */
-  .has-view > #bpDetail { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px; margin: -6px; }
 }
 .bb-detail .bb-level { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font: 800 16px var(--font-ui); color: var(--ink-2); }
 .bb-detail .bb-does { font: 800 17px/1.45 var(--font-ui); color: var(--ink); }
 .bb-detail .bb-now { margin-top: 6px; font: 700 15px/1.45 var(--font-ui); color: var(--ink-2, var(--ink)); }
 .bb-detail .bb-where { margin-top: 10px; }
-/* #629: the live look at Bloombot, at the top of the detail (smaller at a bigger interface size, where the words need the room). Side by side, it keeps its place and the words under it
-   scroll on their own, so the view is never squeezed away and the detail's end can still be reached */
-.bb-view { flex: none; border-radius: var(--r-tile); background: radial-gradient(ellipse at 50% 72%, var(--paper) 0%, var(--paper-2) 70%); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
-.bb-view canvas { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; max-height: min(210px, calc(26vh / var(--ui-zoom, 1) / var(--ui-zoom, 1))); object-fit: contain; }
-.has-view > #bpDetail { display: flex; flex-direction: column; gap: 10px; }
+/* #629: the detail's head (the live look at Bloombot, the name, the level, what it does) stays at the top of the
+   detail while the rest scrolls under it: choosing a row, or stepping to Show me where, never scrolls away what you
+   are looking at. The view sits above the words, or beside them when the column is short. */
+.bb-head { position: sticky; top: 0; z-index: 3; margin: -18px -18px 0; padding: 18px 18px 8px; background: var(--paper-2); box-shadow: 0 1px 0 var(--line); display: grid; gap: 10px; }
+.bb-title { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.bb-view { position: relative; border-radius: var(--r-tile); background: radial-gradient(ellipse at 50% 72%, var(--paper) 0%, var(--paper-2) 70%); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; aspect-ratio: 8 / 5; max-height: 180px; }
+/* the canvas fills its box and never sizes it (the turntable matches its pixels to the box) */
+.bb-view canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+@container bbsplit (max-height: 420px) {
+  /* wider, so the words beside the view keep a readable line (the rows take the narrower side) */
+  .bb-split > .bb-detail { width: min(460px, 58%); }
+  .bb-head.has-view { grid-template-columns: minmax(0, 1fr) 120px; align-items: stretch; }
+  .bb-head .bb-view { grid-column: 2; grid-row: 1; aspect-ratio: auto; max-height: none; min-height: 120px; }
+  /* short: the name and its level share a line, so what it does still shows over the rest */
+  .bb-head { padding-top: 12px; margin-top: -12px; }
+  .bb-head .bb-title { grid-column: 1; grid-row: 1; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+  .bb-head .bb-title .pn-badge { display: none; }
+  .bb-head .bb-title .bb-level { margin: 0; }
+  .bb-head .bb-title .bb-does { flex-basis: 100%; }
+}
 /* a detail too tall to show whole: its last lines are a focus stop (Backpack.fitDetail), ringed when reached */
 .bb-detail .bb-how[tabindex] { border-radius: 10px; padding: 2px 6px; margin: 0 -6px 4px; }
 /* Requests */

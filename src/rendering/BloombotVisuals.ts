@@ -70,6 +70,9 @@ export interface ActBeat {
   back: pc.Vec3;
 }
 
+/** #629: how much bigger the turntable draws the ghost of a small piece than the piece itself */
+const GHOST_BIGGER: Partial<Record<PartPiece['part'], number>> = { marks: 1.7, knacks: 1.9, lens: 1.4 };
+
 export class BloombotVisuals {
   /** placed at bloombot's feet, turned to its facing */
   readonly root = new pc.Entity('bloombot');
@@ -371,7 +374,7 @@ export class BloombotVisuals {
       if (!mi?.material) continue;
       const m = (mi.material as pc.StandardMaterial).clone();
       m.emissive = color(PALETTE.botGlowFocus);
-      m.emissiveIntensity = 0.6;
+      m.emissiveIntensity = 1;
       m.update();
       this.hiMats.push({ mi, was: mi.material });
       mi.material = m;
@@ -382,8 +385,8 @@ export class BloombotVisuals {
         g.name = 'bloombot_ghost';
         g.diffuse = color(PALETTE.botGhost);
         g.emissive = color(PALETTE.botGhost);
-        g.emissiveIntensity = 0.5;
-        g.opacity = 0.45;
+        g.emissiveIntensity = 0.9;
+        g.opacity = 0.6;
         g.blendType = pc.BLEND_NORMAL;
         g.depthWrite = false;
         g.update();
@@ -391,12 +394,28 @@ export class BloombotVisuals {
       for (const d of hi.ghost) {
         const e = new pc.Entity(`ghost-${d.name}`);
         e.addComponent('render', { type: d.shape, material: this.ghostMat, castShadows: false, layers: [hi.layer] });
-        e.setLocalScale(d.scale[0], d.scale[1], d.scale[2]);
+        // the smallest pieces (a move's mark, a knack's bead, the lens) show a little bigger as ghosts, to catch the eye
+        const k = GHOST_BIGGER[d.part] ?? 1;
+        e.setLocalScale(d.scale[0] * k, d.scale[1] * k, d.scale[2] * k);
         this.root.addChild(e);
         this.ghosts.push({ e, part: d.part, bone: d.bone, at: new pc.Vec3(...d.at), turn: new pc.Quat().setFromEulerAngles(d.euler[0], d.euler[1], d.euler[2]) });
       }
     }
     this.placeGrowth();
+  }
+
+  /** The turntable's breath, 0 to 1: the glow brightens and the ghost firms up and fades. */
+  pulseHighlight(k: number) {
+    for (const h of this.hiMats) {
+      const m = h.mi.material as pc.StandardMaterial;
+      m.emissiveIntensity = 0.7 + 0.9 * k;
+      m.update();
+    }
+    if (this.ghostMat && this.ghosts.length) {
+      this.ghostMat.opacity = 0.55 + 0.4 * k;
+      this.ghostMat.emissiveIntensity = 0.9 + 0.6 * k;
+      this.ghostMat.update();
+    }
   }
 
   /** What the turntable shows in focus now (tests and the shots read it). */

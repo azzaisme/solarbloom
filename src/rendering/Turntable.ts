@@ -13,25 +13,33 @@ import type { BloombotVisuals } from './BloombotVisuals';
  * on the paper, the same by day or night.
  */
 
-/** Where to look from for each part: yaw round Bloombot (0 in front, 180 behind), height and distance. */
+/**
+ * Where to look from for each part: yaw round Bloombot (0 in front of its face, 180 behind), the height looked at and
+ * the distance. Bloombot always reads as itself: the whole of it for the big parts, its head and body (never cut at
+ * the chest) for the small ones on its pack and head, so a mark, a bead or the lamp is big enough to see.
+ */
+const AT = (yaw: number, up = 0.5, far = 2.05) => ({ yaw, up, far });
 const VIEW: Record<PartId, { yaw: number; up: number; far: number }> = {
-  marks: { yaw: 180, up: 0.5, far: 1.15 },
-  knacks: { yaw: 180, up: 0.5, far: 1.15 },
-  cells: { yaw: 160, up: 0.62, far: 1.3 },
-  pockets: { yaw: 145, up: 0.5, far: 1.4 },
-  core: { yaw: 180, up: 0.45, far: 1.15 },
-  panel: { yaw: 155, up: 0.7, far: 1.35 },
-  lamp: { yaw: 130, up: 0.7, far: 1.4 },
-  charm: { yaw: 215, up: 0.5, far: 1.2 },
-  leaves: { yaw: 30, up: 0.85, far: 1.3 },
-  bud: { yaw: 25, up: 0.85, far: 1.25 },
-  lens: { yaw: 50, up: 0.72, far: 1.15 },
-  collar: { yaw: 20, up: 0.6, far: 1.3 },
-  hands: { yaw: 70, up: 0.4, far: 1.4 },
-  cuffs: { yaw: 70, up: 0.4, far: 1.4 },
-  feet: { yaw: 30, up: 0.15, far: 1.3 },
+  marks: AT(180, 0.45, 1.65),
+  knacks: AT(180, 0.42, 1.65),
+  cells: AT(165, 0.5, 1.75),
+  pockets: AT(140, 0.45, 1.75),
+  core: AT(180, 0.45, 1.65),
+  panel: AT(160, 0.55, 1.7),
+  lamp: AT(125, 0.6, 1.65),
+  charm: AT(220, 0.45, 1.65),
+  leaves: AT(25, 0.62, 1.6),
+  bud: AT(20, 0.62, 1.6),
+  lens: AT(40, 0.65, 1.5),
+  collar: AT(15, 0.6, 1.6),
+  hands: AT(65, 0.45),
+  cuffs: AT(65, 0.45),
+  feet: AT(30, 0.42),
 };
-const WHOLE = { yaw: 30, up: 0.45, far: 2.1 };
+const WHOLE = AT(30);
+/** the studio's sky light (a share of its day strength) and a touch of even ambient */
+const STUDIO_SKY = 0.9;
+const STUDIO_AMBIENT = new Float32Array([0.06, 0.06, 0.06]); // linear
 /** drawn at twice the page canvas's size and scaled down: smooth edges */
 const SS = 2;
 
@@ -76,8 +84,8 @@ export class Turntable {
     app.root.addChild(cam);
     // a warm key from the front left and above, a cool fill from behind: the same studio light day or night
     for (const [name, at, colour, intensity] of [
-      ['turntable-key', [-35, 40], [1, 0.96, 0.88], 1.6],
-      ['turntable-fill', [150, 25], [0.78, 0.86, 1], 0.7],
+      ['turntable-key', [-35, 40], [1, 0.97, 0.92], 1.6],
+      ['turntable-fill', [150, 25], [0.8, 0.88, 1], 0.8],
     ] as const) {
       const e = new pc.Entity(name);
       e.addComponent('light', { type: 'directional', castShadows: false, layers: [this.layer.id], color: new pc.Color(colour[0], colour[1], colour[2]), intensity });
@@ -86,7 +94,39 @@ export class Turntable {
       app.root.addChild(e);
       this.lights.push(e);
     }
+    // The world's look is worked out for the world's camera: its golden rim light (LookShaders) edges whatever turns
+    // edge-on to that camera on the sun's side, and the sky's light dims at night. While this camera draws its layer,
+    // those shader values are its own (the rim from this camera, towards the key light; the sky at its day strength),
+    // and set back after, so Bloombot looks the same on the page whichever way it faces out there, by day or night.
+    const scope = app.graphicsDevice.scope;
+    const ids = ['look_camPos', 'look_rimDir', 'skyboxIntensity', 'light_globalAmbient'].map((n) => scope.resolve(n));
+    const mine = (cam: pc.CameraComponent, layer: pc.Layer) => cam === this.cam.camera && layer === this.layer;
+    const kept: unknown[] = [];
+    const camPos = new Float32Array(3);
+    const rimDir = new Float32Array(3);
+    this.studio = [
+      app.scene.on('prerender:layer', (cam: pc.CameraComponent, layer: pc.Layer) => {
+        if (!mine(cam, layer)) return;
+        ids.forEach((id, k) => (kept[k] = id.value && typeof id.value === 'object' ? Array.from(id.value as ArrayLike<number>) : id.value));
+        const c = this.cam.getPosition();
+        camPos.set([c.x, c.y, c.z]);
+        const up = this.lights[0].up; // the key shines down its -y: towards the key is its +y
+        rimDir.set([up.x, up.y, up.z]);
+        ids[0].setValue(camPos);
+        ids[1].setValue(rimDir);
+        ids[2].setValue(LOOK.env.intensity * STUDIO_SKY);
+        ids[3].setValue(STUDIO_AMBIENT);
+      }),
+      app.scene.on('postrender:layer', (cam: pc.CameraComponent, layer: pc.Layer) => {
+        if (!mine(cam, layer)) return;
+        ids.forEach((id, k) => {
+          const v = kept[k];
+          if (v !== undefined) id.setValue(Array.isArray(v) ? new Float32Array(v) : (v as number));
+        });
+      }),
+    ];
   }
+  private studio: pc.EventHandle[] = [];
 
   /** Is it drawing into a canvas now? */
   get showing(): boolean {
@@ -103,7 +143,8 @@ export class Turntable {
     for (const l of this.lights) l.enabled = on;
     this.bot()?.showOnLayer(this.layer.id, on);
     if (!canvas) return;
-    if (canvas.width * SS !== this.w || canvas.height * SS !== this.h || !this.rt) this.makeTarget(canvas.width * SS, canvas.height * SS);
+    this.fit(canvas);
+    if (!this.rt) this.makeTarget(canvas.width * SS, canvas.height * SS);
     this.snap();
   }
 
@@ -151,7 +192,10 @@ export class Turntable {
     this.last = nowMs;
     const v = this.bot();
     if (!this.canvas || !v || !this.rt) return;
+    this.fit(this.canvas);
     this.t += dt;
+    // the chosen part's glow and its ghost breathe, so they catch the eye even small
+    v.pulseHighlight(this.reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(this.t * 3.2));
     // ease to the view wanted, then sway gently round it so Bloombot feels alive (still, with reduced motion)
     const k = 1 - Math.exp(-dt * 5);
     const dy = ((this.want.yaw - this.yaw + 540) % 360) - 180;
@@ -169,10 +213,35 @@ export class Turntable {
     const look = new pc.Vec3(p.x, p.y + this.up, p.z);
     this.cam.setPosition(look.x + Math.sin(a) * this.far, look.y + this.far * 0.18, look.z + Math.cos(a) * this.far);
     this.cam.lookAt(look);
-    // the key and fill turn with the view, so the side looked at is always lit
-    this.lights[0].setEulerAngles(-40, round - 35, 0);
-    this.lights[1].setEulerAngles(-25, round + 150, 0);
+    // the key and fill turn with the view, so the side looked at is always lit: the key from above and to the left of
+    // the camera, a soft rim from behind on the right. A directional light shines down its -y: aim -z, then tip it.
+    this.aim(this.lights[0], look, round - 40, 45);
+    this.aim(this.lights[1], look, round + 160, 20);
     this.copy();
+  }
+
+  /** Points a directional light at `look` from round `yaw` (degrees, as the camera) and `rise` degrees up. */
+  private aim(e: pc.Entity, look: pc.Vec3, yaw: number, rise: number) {
+    const a = (yaw * Math.PI) / 180;
+    const r = (rise * Math.PI) / 180;
+    e.setPosition(look.x + Math.sin(a) * Math.cos(r), look.y + Math.sin(r), look.z + Math.cos(a) * Math.cos(r));
+    e.lookAt(look);
+    e.rotateLocal(90, 0, 0);
+  }
+
+  /** Sizes the canvas's pixels to its box on the page (above the words, or a square beside them), its long side 480. */
+  private fit(c: HTMLCanvasElement) {
+    const cw = c.clientWidth;
+    const ch = c.clientHeight;
+    if (cw < 8 || ch < 8) return;
+    const k = 480 / Math.max(cw, ch);
+    const w = Math.round(cw * k);
+    const h = Math.round(ch * k);
+    if (w !== c.width || h !== c.height) {
+      c.width = w;
+      c.height = h;
+    }
+    if (w * SS !== this.w || h * SS !== this.h) this.makeTarget(w * SS, h * SS);
   }
 
   /** Copies the last frame's pixels into the page's canvas (one read in flight at a time; it never stalls a frame). */
@@ -202,6 +271,7 @@ export class Turntable {
 
   destroy() {
     this.show(undefined);
+    for (const h of this.studio) h.off();
     this.cam.destroy();
     for (const l of this.lights) l.destroy();
     this.rt?.destroy();

@@ -132,8 +132,7 @@ try {
     await shot('3-page-early');
     // the detail's end is above the footer, or the detail scrolls to it (the wheel, and Show me where at its foot)
     const reach = await page.evaluate(() => {
-      // #629: with the view of Bloombot at its top, the words under it are what scrolls
-      const d = document.querySelector('#bpScreen .bb-detail > #bpDetail') ?? document.querySelector('#bpScreen .bb-detail');
+      const d = document.querySelector('#bpScreen .bb-detail');
       const foot = document.querySelector('#bpScreen .sheet-foot');
       const r = d.getBoundingClientRect();
       const f = foot?.getBoundingClientRect();
@@ -175,7 +174,7 @@ try {
     await page.focus('#bb-backpack');
     await page.waitForTimeout(200);
     p = await page.evaluate(pageNow);
-    check(/Roomier backpack/.test(p.detail) && /Go to the workshop table in the house and make level 3 in its Upgrade tab\. It takes /.test(p.detail), `${L}: the upgrade in focus says how to get its next level ("${p.detail}")`);
+    check(/Roomier backpack/.test(p.detail) && /Go to the crafting table in the house and make level 3 in its Upgrade tab\. It takes /.test(p.detail), `${L}: the upgrade in focus says how to get its next level ("${p.detail}")`);
     await shot('6-page-late');
     // #625: a knack's detail, and the next one's way
     await page.focus('#bb-knack-moss');

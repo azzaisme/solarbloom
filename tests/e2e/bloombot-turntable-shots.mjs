@@ -40,6 +40,17 @@ const view = (page) =>
     const g = window.solarbloom;
     return { drawn: drawn / (c.width * c.height), ...g.bot.visuals.focusView, target: g.turntable.target, showing: g.turntable.showing, focus: g.turntable.focusPart };
   });
+/** the detail's head (name, what it does) and the view are in sight, whatever the detail scrolled to */
+const headSeen = (page) =>
+  page.evaluate(() => {
+    const d = document.querySelector('#bpDetail').getBoundingClientRect();
+    const seen = (sel) => {
+      const r = document.querySelector(sel)?.getBoundingClientRect();
+      return !!r && r.height > 0 && r.top >= d.top - 1 && r.bottom <= d.bottom + 1;
+    };
+    const v = document.querySelector('#bbView')?.getBoundingClientRect();
+    return { name: seen('#bpDetail h3'), does: seen('#bpDetail .bb-does'), view: seen('#bpDetail .bb-view'), viewSize: v ? [Math.round(v.width), Math.round(v.height)] : null, focus: document.activeElement?.id };
+  });
 /** chooses a row by clicking it, like the mouse */
 const click = (page, id) => page.click(`#bb-${id}`);
 
@@ -99,8 +110,21 @@ for (const S of SIZES) {
     await page.waitForTimeout(900);
     v = await view(page);
     check(v.focus === 'lamp' && !v.glowing.length && v.ghosts.includes('ghost-grow-lamp-bulb'), `${L}: Lantern: its lamp to come shows as a ghost (${v.ghosts.join(', ')})`);
+    let h = await headSeen(page);
+    check(h.focus === 'bb-where' && h.name && h.does && h.view && h.viewSize[1] >= 100, `${L}: chosen, the focus steps to Show me where and the name, what it does and Bloombot stay in sight (${JSON.stringify(h)})`);
     await page.screenshot({ path: `${out}/2-lantern-ghost-${L}.png` });
 
+    // the keys: Enter on a row steps to its Show me where, the head still in sight; right from the list reaches it too
+    await page.focus('#bb-sprint');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(400);
+    h = await headSeen(page);
+    check(h.focus === 'bb-where' && h.name && h.does, `${L}: Enter on Longer stride steps to Show me where, its name and what it does in sight (${JSON.stringify(h)})`);
+    await page.focus('#bb-luckyPulse');
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(400);
+    h = await headSeen(page);
+    check(h.focus === 'bb-where' && h.name, `${L}: right from the list reaches Show me where (${h.focus})`);
     // the arrow keys move the focus, and the view follows
     await page.focus('#bb-lantern');
     await page.keyboard.press('ArrowUp');
@@ -124,7 +148,7 @@ for (const S of SIZES) {
     await click(page, 'sprint');
     await page.waitForTimeout(1200);
     v = await view(page);
-    check(v.focus === 'feet' && v.target.up < 0.3 && v.ghosts.length > 0, `${L}: Longer stride: the view looks at the feet, and level 3's heel fins are a ghost (${v.ghosts.join(', ')})`);
+    check(v.focus === 'feet' && v.target.up < 0.5 && v.ghosts.length > 0, `${L}: Longer stride: the view looks lower, at the feet, and level 3's heel fins are a ghost (${v.ghosts.join(', ')})`);
     await page.screenshot({ path: `${out}/4-feet-${L}.png` });
 
     // a park milestone: Steady charge (the collar), next
@@ -145,16 +169,16 @@ for (const S of SIZES) {
     check(v.ghosts.join() === 'ghost-grow-knacks-tally', `${L}: Tally's knack, to come: its bead shows as a ghost (${v.ghosts.join(', ')})`);
     await page.screenshot({ path: `${out}/7-knack-${L}.png` });
 
-    // the detail's last line can be reached under the view
+    // the detail's last line can be reached, and the head stays in sight over it
     const reach = await page.evaluate(() => {
-      const d = document.querySelector('#bpScreen .bb-detail > #bpDetail');
+      const d = document.querySelector('#bpDetail');
       d.scrollTop = d.scrollHeight;
-      const last = d.lastElementChild.getBoundingClientRect();
       const r = d.getBoundingClientRect();
-      const view = document.querySelector('.bb-view').getBoundingClientRect();
-      return { last: Math.round(last.bottom), bottom: Math.round(r.bottom), viewBottom: Math.round(view.bottom), viewTop: Math.round(view.top), top: Math.round(r.top) };
+      const last = d.lastElementChild.getBoundingClientRect();
+      const name = d.querySelector('h3').getBoundingClientRect();
+      return { last: Math.round(last.bottom), bottom: Math.round(r.bottom), name: Math.round(name.top), top: Math.round(r.top), scrolled: d.scrollTop };
     });
-    check(reach.last <= reach.bottom + 1 && reach.viewBottom - reach.viewTop > 100 && reach.viewBottom <= reach.top + 8, `${L}: the detail's last line can be reached, and the view keeps its place above it (${JSON.stringify(reach)})`);
+    check(reach.last <= reach.bottom + 1 && reach.name >= reach.top - 1, `${L}: the detail's last line can be reached, the name still in sight above it (${JSON.stringify(reach)})`);
 
     // another tab, and closing: the view stops
     await page.evaluate(() => window.solarbloom.hud.backpack.show('items'));
