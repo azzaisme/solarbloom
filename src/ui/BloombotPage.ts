@@ -33,6 +33,8 @@ export interface BloombotRow {
   max?: number;
   /** what the next level adds (upgrades below their top level) */
   next?: string;
+  /** #624: what it comes to now, with everything that stacks on it (the hold rows: how long digging takes) */
+  now?: string;
   /** how to get it, or its next level, in plain words */
   how: string;
   /** where Show me where leads (a cell on the ground), when there is somewhere to go */
@@ -55,6 +57,12 @@ const UPGRADE_DOES: Record<string, string> = {
   sprint: 'Running uses less charge and goes a little faster.',
   pulseRadius: 'Each pulse brings back more ground at once.',
   backpack: 'Bloombot can carry 20 more of each thing.',
+  // #624
+  quickHands: 'Digging things out of piles and prying rubble open go quicker.',
+  keenEye: 'Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too.',
+  sunSoak: 'Standing still in the sun slowly charges Bloombot, so it can top up anywhere by day.',
+  lantern: 'Bloombot carries its own light at night, so dark streets are easier to see.',
+  luckyPulse: 'Now and then a pulse on bare red ground turns up a few Seeds or Scrap.',
 };
 
 /** The part each upgrade changes on Bloombot. */
@@ -64,6 +72,11 @@ const UPGRADE_PART: Record<string, BloombotRow['part']> = {
   sprint: 'stride',
   pulseRadius: 'pulse',
   backpack: 'pockets',
+  quickHands: 'cuffs',
+  keenEye: 'core',
+  sunSoak: 'cells',
+  lantern: 'core',
+  luckyPulse: 'pulse',
 };
 
 const listWords = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : (xs[0] ?? ''));
@@ -116,7 +129,7 @@ function openHow(sim: Sim, p: ProjectDef | undefined): string {
   return `Take a close look at ${r.findName(p.opens)} at the workshop table in the house. That opens ${name} in its Research tab.`;
 }
 
-/** The five workshop upgrades for Bloombot, in data order. */
+/** The workshop upgrades for Bloombot (#620 and #624), in data order. */
 export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
   const r = sim.research;
   const open = r.upgrades();
@@ -140,6 +153,7 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
       level,
       max,
       next: top ? undefined : u.each,
+      now: u.id === 'quickHands' ? holdNow(sim) : undefined,
       how,
       where: top ? undefined : houseSpot(),
       part: UPGRADE_PART[u.id] ?? 'core',
@@ -163,7 +177,7 @@ export function parkRows(sim: Sim): BloombotRow[] {
       : isNext
         ? `Keep bringing the park back to life around the fountain. This grows at ${d.tiles} on the goal card's Park count, and it's at ${Math.min(n, d.tiles)} now.`
         : `Keep bringing the park back to life. This grows at ${d.tiles} on the goal card's Park count.`;
-    return { id: d.id, kind: 'park', name: d.name, does: d.does, state: have ? 'have' : isNext ? 'next' : 'later', level: Math.min(n, d.tiles), max: d.tiles, how, where: have ? undefined : fountainSpot(sim), part: d.part };
+    return { id: d.id, kind: 'park', name: d.name, does: d.does, state: have ? 'have' : isNext ? 'next' : 'later', level: Math.min(n, d.tiles), max: d.tiles, now: d.id === 'quick' ? holdNow(sim) : undefined, how, where: have ? undefined : fountainSpot(sim), part: d.part };
   });
 }
 
@@ -199,4 +213,15 @@ export function stateWords(r: BloombotRow): string {
   if (r.kind === 'park') return r.state === 'have' ? 'Grown' : r.state === 'next' ? `${r.level} of ${r.max}` : 'Later';
   if (r.state === 'have') return 'Top level';
   return `Level ${r.level} of ${r.max}`;
+}
+
+/** Seconds, as the page says them: "0.42 seconds", "1.4 seconds", "2 seconds". */
+const secs = (n: number) => `${+n.toFixed(2)} second${n === 1 ? '' : 's'}`;
+
+/**
+ * #624: how long digging and prying take now, with Nimble hands and Quick hands together (and the floor), for the
+ * two rows that change it.
+ */
+export function holdNow(sim: Sim): string {
+  return `Right now digging out a pile takes ${secs(sim.upgrades.salvageHold)}, and prying rubble open ${secs(sim.upgrades.pryHold)}.`;
 }

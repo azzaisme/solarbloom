@@ -27,10 +27,10 @@ describe('#620: Bloombot\'s page', () => {
     expect(moves[1].how).toBe("The fountain teaches this once you've brought it what it asks for twice more.");
     expect(moves[0].where?.name).toBe('the fountain');
     const ups = bloombotUpgradeRows(sim);
-    expect(ups.map((u) => u.name)).toEqual(['Bigger charge', 'Gentler on charge', 'Longer stride', 'Wider pulse', 'Roomier backpack']);
+    expect(ups.map((u) => u.name)).toEqual(['Bigger charge', 'Gentler on charge', 'Longer stride', 'Wider pulse', 'Roomier backpack', 'Quick hands', 'Keen eye', 'Sun soak', 'Lantern', 'Lucky pulse']);
     expect(ups[0].does).toBe('Bloombot holds more charge, so it can keep going longer before it rests.');
     expect(ups[4].does).toBe('Bloombot can carry 20 more of each thing.');
-    expect(ups.every((u) => u.level === 0 && u.max === 5 && u.state === 'later')).toBe(true);
+    expect(ups.every((u) => u.level === 0 && u.max === (u.id === 'lantern' ? 2 : ['quickHands', 'keenEye', 'sunSoak', 'luckyPulse'].includes(u.id) ? 3 : 5) && u.state === 'later')).toBe(true);
     // before the first Keeper wakes, the workshop doesn't research yet: it says so
     expect(ups[0].how).toBe('The workshop table in the house can work out how to make this. It starts once you wake another robot out in the city.');
     expect(ups[0].where?.name).toBe('the house');
@@ -69,6 +69,12 @@ describe('#620: Bloombot\'s page', () => {
       ['sprint', 5, 0.1],
       ['pulseRadius', 5, 1],
       ['backpack', 5, 20],
+      // #624
+      ['quickHands', 3, 0.1],
+      ['keenEye', 3, 4],
+      ['sunSoak', 3, 0.12],
+      ['lantern', 2, 3],
+      ['luckyPulse', 3, 0.04],
     ]);
   });
 

@@ -8,6 +8,8 @@ const tierOutput = (m: { tier?: number; project?: { stage: number } }, t2: numbe
   !isBuilt(m) ? 0 : tier3(m) ? TUNING.super.outputMult : tier2(m) ? t2 : 1;
 import { TUNING } from '../data/tuning';
 import { RESEARCH } from '../data/research';
+import { RIPPLE } from '../data/pulse';
+import { SALVAGE } from '../data/salvage';
 import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADES } from '../data/upgrades';
 import type { MachineData } from '../core/types';
 import type { Sim } from './Sim';
@@ -80,6 +82,50 @@ export class UpgradeSystem {
   get broadTiles() {
     return Math.max(0, (this.sim.research?.level('pulseRadius') ?? 0) - RESEARCH.pulseTierLevels) * RESEARCH.pulseTilesPerLateLevel;
   }
+  // ───────────── #624 (E25): Bloombot's research upgrades on systems that were already there ─────────────
+  private eff(id: string): number {
+    return this.sim.research?.effect(id) ?? 0;
+  }
+  /** Quick hands: what a salvage or pry hold takes, as a share of before (1 without it). */
+  get holdFactor(): number {
+    return 1 - this.eff('quickHands');
+  }
+  /**
+   * The one place a hold's length is worked out (#624): seconds Interact is held to dig out a pile once. Nimble
+   * hands from the park (#622) and Quick hands from research multiply, and it never drops below RESEARCH.minHold.
+   */
+  get salvageHold(): number {
+    return Math.max(RESEARCH.minHold, SALVAGE.holdSeconds * (this.sim.parkGrowth?.holdShare ?? 1) * this.holdFactor);
+  }
+  /** Seconds Interact is held to pry rubble open (Quick hands; never below RESEARCH.minHold either). */
+  get pryHold(): number {
+    return Math.max(RESEARCH.minHold, SALVAGE.pryHoldSeconds * this.holdFactor);
+  }
+  /** Keen eye: how far a pulse's ripple reaches and lights up piles, caches, pages and buried things (tiles). */
+  get rippleRadius(): number {
+    return RIPPLE.radius + this.eff('keenEye');
+  }
+  /** Keen eye: tiles added to how far the piles the fountain still wants glint. */
+  get glintExtra(): number {
+    return this.eff('keenEye');
+  }
+  /** Keen eye at its last level: piles and unopened caches show on the minimap. */
+  get findsOnMap(): boolean {
+    return (this.sim.research?.level('keenEye') ?? 0) >= RESEARCH.keenEyeMapLevel;
+  }
+  /** Sun soak: charge a second, standing still in full sun (Charge scales it by the sun now). */
+  get sunSoak(): number {
+    return this.eff('sunSoak');
+  }
+  /** Lantern: how far Bloombot's own light reaches at night (0: no light of its own). */
+  get lanternReach(): number {
+    return this.eff('lantern');
+  }
+  /** Lucky pulse: the chance a pulse on bare ground turns up a few Seeds or Scrap (0 without it). */
+  get luckyChance(): number {
+    return this.eff('luckyPulse');
+  }
+
   get overchargeEvery() {
     const l = this.level('overcharge');
     return l > 0 ? 7 - l : 0;

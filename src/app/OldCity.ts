@@ -4,7 +4,7 @@ import type { Sim } from '../gameplay/Sim';
 import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
-import { MATERIALS, SALVAGE } from '../data/salvage';
+import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
 import { HOLD_ACTS } from '../data/botActs';
@@ -245,7 +245,7 @@ export class OldCityController {
       const sc = this.host.screenOf(front.x, front.z);
       if (why) this.host.hud.showFail(why, sc.x, sc.y);
       else if (gate.kind === 'barricade')
-        this.startHold('pry', SALVAGE.pryHoldSeconds, () => {
+        this.startHold('pry', this.sim.upgrades.pryHold, () => {
           if (this.sim.gates.open(gate.id)) {
             this.host.sound('pry');
             for (const [x, z] of gate.cells) this.host.markTile(x, z);
@@ -305,7 +305,7 @@ export class OldCityController {
       this.host.hud.showFail(why, sc.x, sc.y);
       return;
     }
-    this.startHold('salvage', this.sim.parkGrowth.salvageHold, () => this.sim.salvage.salvage(id), viaClick);
+    this.startHold('salvage', this.sim.upgrades.salvageHold, () => this.sim.salvage.salvage(id), viaClick);
   }
 
   /** E23.5.2: a planter: harvest a ripe bed straight away, otherwise open its panel (plant, feed, extras). */
