@@ -427,7 +427,7 @@ export class OldCityController {
     this.panel.open(
       () => fountainHtml(this.sim),
       (act) => {
-        if (act === 'storage') return this.openStorage('Storage — at the fountain');
+        if (act === 'storage') return this.openStorage('Storage at the fountain');
         if (act === 'giveAll' && this.sim.fountain.giveAll() > 0) this.host.sound('deliver');
       },
     );

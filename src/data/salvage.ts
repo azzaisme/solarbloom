@@ -143,11 +143,6 @@ export const TIERS: TierDef[] = [
   { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom', 'Grid Battery'], look: 'bloom' },
 ];
 
-/** #606: a lock that waits on the fountain, in the fountain panel's own words ("Step 2"), never "tier". */
-export function fountainStepLock(tier: number): string {
-  return `🔒 Fountain step ${tier}`;
-}
-
 export const ABILITIES: Record<AbilityId, { name: string; blurb: string }> = {
   pry: { name: 'Pry', blurb: 'Clears rubble barricades' },
   hover: { name: 'Hover', blurb: 'Crosses deep water' },

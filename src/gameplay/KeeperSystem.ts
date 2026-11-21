@@ -528,7 +528,7 @@ export class KeeperSystem {
         return `${d.name} asks for ${costText(this.wants(id) ?? {})}.`;
       case 'request2': {
         const p = this.patch(id);
-        return `${d.name} asks you to restore ${this.region(id).patch.name.toLowerCase()}: ${p.restored}/${p.total}.`;
+        return `${d.name} asks you to restore ${this.region(id).patch.name.toLowerCase()}: ${p.restored} of ${p.total} tiles.`;
       }
       case 'landmark':
         return `${d.name}: wake the ${this.region(id).landmark.name} with ${costText(this.wants(id) ?? {})}.`;

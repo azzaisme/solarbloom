@@ -39,6 +39,8 @@ const QUICK = [
   'shader-warmup',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
   'clear-path', 'bloombot-page',
+  // the load wheel takes the arrow keys and the d-pad (the Deck)
+  'load-wheel-arrows',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

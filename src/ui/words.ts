@@ -117,7 +117,7 @@ export const WORDS = {
     needs: (what: string) => `Needs ${what}`,
   },
   toasts: {
-    controlsReset: 'Controls were updated. Your custom keys were reset.',
+    controlsReset: 'The controls changed in this update, so your own keys are back to the defaults.',
     saved: 'Saved',
     padLost: 'The controller was disconnected',
     noRequests: 'No requests to pin yet',

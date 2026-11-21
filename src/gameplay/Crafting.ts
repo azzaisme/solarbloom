@@ -2,10 +2,10 @@ import type { BuildableType, ComponentId, SalvageState } from '../core/types';
 import { COMPONENT_RECIPES, CRAFT, DECOR_RECIPES, MACHINE_RECIPES, type ComponentRecipe, type DecorRecipe, type MachineRecipe, type Unlock } from '../data/crafting';
 import { KEEPERS, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
-import { fountainStepLock } from '../data/salvage';
 import { MACHINES } from '../data/machines';
 import { MAINLAND } from '../data/mainland';
 import { HAND_JOBS } from '../data/automation';
+import { TIERS } from '../data/salvage';
 import type { Sim } from './Sim';
 
 /**
@@ -21,6 +21,13 @@ import type { Sim } from './Sim';
 /** Island release: a mainland-only machine's recipe is hidden until the mainland opens (data/mainland `MAINLAND.open`). */
 export function islandRecipe(r: MachineRecipe): boolean {
   return MAINLAND.open || !r.builds || !MACHINES[r.builds].mainlandOnly;
+}
+
+/** #610: a lock that waits on the fountain, in the fountain panel's words ("Reach fountain step 2: The pump turns"). */
+export function fountainLock(tier: number): string {
+  if (tier <= 1) return '🔒 Wake the fountain first';
+  const t = TIERS.find((x) => x.tier === tier);
+  return t ? `🔒 Reach fountain step ${tier}: ${t.name}` : `🔒 Reach fountain step ${tier}`;
 }
 
 export class Crafting {
@@ -57,15 +64,15 @@ export class Crafting {
       const r = REGIONS.find((x) => x.id === u.keeper);
       return `🔒 ${k?.name ?? 'A Keeper'}, ${r?.name ?? u.keeper}`;
     }
-    if ('research' in u) return '🔒 Research';
-    if ('tier' in u) return fountainStepLock(u.tier);
+    if ('research' in u) return '🔒 Research it at the workshop';
+    if ('tier' in u) return fountainLock(u.tier);
     if ('gift' in u) return '🔒 A Keeper hands it over: grow what one asks for in their garden';
     if ('hand' in u) {
       const job = HAND_JOBS[u.hand];
       return `🔒 ${job.name} (${this.sim.automation?.handCount(u.hand) ?? 0} of ${job.times})`;
     }
     if ('all' in u) return this.unlockLabel(u.all.find((x) => !this.unlocked(x)) ?? u.all[0]);
-    return '🔒 Not found yet';
+    return '🔒 Still to be found';
   }
 
   component(id: string): ComponentRecipe | undefined {
