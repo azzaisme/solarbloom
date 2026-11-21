@@ -124,6 +124,18 @@ try {
     check(p.rows.slice(4).every((r) => / · Level 0 of 3$/.test(r)), `${L}: five upgrades, none started (${p.rows.slice(4).join(' | ')})`);
     check(/Bring the fountain what it asks for and it teaches this/.test(p.detail) && /Show me where/.test(p.detail), `${L}: Pry says how to learn it, with Show me where ("${p.detail}")`);
     await shot('3-page-early');
+    // the detail's end is above the footer, or the detail scrolls to it (the wheel, and Show me where at its foot)
+    const reach = await page.evaluate(() => {
+      const d = document.querySelector('#bpScreen .bb-detail');
+      const foot = document.querySelector('#bpScreen .sheet-foot');
+      const r = d.getBoundingClientRect();
+      const f = foot?.getBoundingClientRect();
+      const scrolls = getComputedStyle(d).overflowY === 'auto' && d.scrollHeight > d.clientHeight + 1;
+      d.scrollTop = d.scrollHeight;
+      const last = d.lastElementChild.getBoundingClientRect();
+      return { bottom: Math.round(r.bottom), foot: Math.round(f?.top ?? innerHeight), scrolls, lastBottom: Math.round(last.bottom), detailBottom: Math.round(r.bottom) };
+    });
+    check(reach.bottom <= reach.foot + 1 && reach.lastBottom <= reach.detailBottom + 1, `${L}: the detail ends above the footer and its last line can be reached (${JSON.stringify(reach)})`);
 
     // ── 2. late: every move, some upgrades ──
     await page.evaluate(() => window.solarbloom.hud.toggleBackpack(false));

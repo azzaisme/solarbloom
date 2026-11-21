@@ -19,8 +19,10 @@ import { PARK } from '../core/Areas';
 export interface Objective {
   /** the goal, one plain line */
   text: string;
-  /** #605: what the goal brings ("Bloombot learns Pry, to open rubble") */
+  /** #605: what the goal brings ("Bloombot learns to pry open rubble") */
   why?: string;
+  /** #620: a few words before `why` that the card drops first when room is short ("The fountain's next step.") */
+  lead?: string;
   /** #605: every part of the goal, each counted ("Scrap 4 of 20", "Park 12 of 60") */
   parts?: ObjectivePart[];
   /** "12 of 20", only for things done by hand (a goal with no parts) */
@@ -105,11 +107,14 @@ export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim
   const parts = fountainParts(sim);
   const progress = parts.reduce((a, p) => a + (p.need > 0 ? p.have / p.need : 1), 0) / Math.max(1, parts.length);
   return {
-    text: f.canAdvance() ? W.fountainReady(t.tier) : W.fountain(t.tier, t.name),
+    text: W.fountain(t.tier, t.name),
     why: t.ability ? W.why[t.ability] : W.why.bloom,
+    lead: t.tier > 1 ? W.nextLead : undefined,
     parts,
     progress,
     ...next,
+    // everything is in: say so under the goal (unless something urgent is there)
+    ...(f.canAdvance() && !(advice && URGENT.has(advice.topic)) ? { next: W.fountainReady(t.tier) } : {}),
   };
 }
 
@@ -210,7 +215,7 @@ export class ObjectiveCard extends HudPart {
     // #605: what the goal brings, and every part of it, counted from the start
     const why = $(r, '#objWhy');
     if (why.hidden !== !o.why) why.hidden = !o.why;
-    if (o.why) this.set('objWhy', why, 'text', o.why);
+    if (o.why) this.set('objWhy', why, 'html', `${o.lead ? `<span class="olead">${esc(o.lead)} </span>` : ''}${esc(o.why)}`);
     const parts = $(r, '#objParts');
     if (parts.hidden !== !o.parts?.length) parts.hidden = !o.parts?.length;
     if (o.parts?.length)
@@ -268,16 +273,16 @@ export class ObjectiveCard extends HudPart {
 
   /**
    * #620: make room between the card and the minimap below it, in as few steps as it takes:
-   *   1. wide: the card widens into the free space beside it (fewer lines, nothing lost);
-   *   2. tight: the title and the line under it keep to one line each (the rest of the card is all still there);
-   *   3. the minimap tucks down, smaller, into its corner.
+   *   1. tight: the line under the title drops its lead-in ("The fountain's next step.") and keeps to one line;
+   *   2. the minimap tucks down, smaller, into its corner.
+   * The card keeps its width: a tall card over the corner beats a wide one over the middle of the scene.
    * Each step is tried only if the one before still overlaps. The minimap's N badge stands above its disc, so it counts.
    */
   fit() {
     const card = this.root.querySelector<HTMLElement>('#obj');
     const map = this.root.querySelector<HTMLElement>('#minimap');
     if (!card) return;
-    card.classList.remove('wide', 'tight');
+    card.classList.remove('tight');
     map?.classList.remove('tuck');
     if (!map || map.hidden || map.offsetParent === null) return;
     const clear = () => {
@@ -287,8 +292,6 @@ export class ObjectiveCard extends HudPart {
       const top = Math.min(m.top, n && n.height > 0 ? n.top : m.top);
       return c.bottom + 6 <= top || c.right <= m.left || c.left >= m.right;
     };
-    if (clear()) return;
-    card.classList.add('wide');
     if (clear()) return;
     card.classList.add('tight');
     if (clear()) return;

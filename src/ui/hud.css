@@ -61,10 +61,10 @@
 #obj.nudge { animation: nudge 1.6s ease-in-out infinite; }
 /* #605: what the goal brings, its parts (each counted, ticked when done) and the one next step under it */
 #obj .owhy { margin: -4px 0 0; font: 700 15px/1.3 var(--font-ui); color: var(--ink-2); }
-/* #620: room for the minimap below (ObjectiveCard.fit): wider first, then one line each for the title and the line
-   under it, then the minimap tucks into its corner */
-#obj.wide { width: 560px; }
-#obj.tight h3, #obj.tight .owhy { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* #620: room for the minimap below (ObjectiveCard.fit): the line under the title drops its lead-in and keeps to one
+   line, then the minimap tucks into its corner. The card never widens. */
+#obj.tight .olead { display: none; }
+#obj.tight .owhy { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #minimap.tuck { transform: scale(0.72); transform-origin: left bottom; }
 #obj .owhy[hidden], #obj .oparts[hidden], #obj .onext[hidden], #obj .owhere[hidden] { display: none; }
 #obj .oparts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }

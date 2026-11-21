@@ -236,7 +236,7 @@ try {
     });
     await page.waitForFunction(() => /^Pry open the rubble/.test(document.querySelector('#objTitle')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
     const c5 = await page.evaluate(cardNow);
-    check(c5.title === 'Pry open the rubble blocking the path' && c5.why === 'Another robot like Bloombot is asleep on the other side' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
+    check(c5.title === 'Pry open the rubble' && c5.why === 'Another robot like Bloombot is asleep on the other side' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
     await page.keyboard.press('KeyH');
     await page.waitForTimeout(1600);
     const r5 = await page.evaluate(() => {
@@ -271,7 +271,7 @@ try {
     const g6 = await page.evaluate(() => window.solarbloom.hud.guide.text);
     check(!/park alive/.test(g6 ?? ''), `${L}: the park-done line goes once the fountain moves on ("${g6 ?? ''}")`);
     const c6 = await page.evaluate(cardNow);
-    check(c6.title === 'Bring the fountain these' && !!keeper.pinned && c6.next.includes(keeper.pinned), `${L}: the Keeper's request sits under the fountain goal ("${c6.title}" · "${c6.next}")`);
+    check(c6.title === 'The pump turns' && !!keeper.pinned && c6.next.includes(keeper.pinned), `${L}: the Keeper's request sits under the fountain goal ("${c6.title}" · "${c6.next}")`);
     bad = await page.evaluate(layout);
     check(!bad.length, `${L}: the card sits clear of everything ${bad.join(', ')}`);
     await shot('6-keeper-under-goal');
@@ -286,7 +286,7 @@ try {
     });
     await page.waitForFunction(() => /running low/.test(document.querySelector('#objNext')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
     const c7 = await page.evaluate(cardNow);
-    check(/^Bloombot is running low\. Stand still by the (fountain|house) for a while to charge up\.$/.test(c7.next) && c7.title === 'Bring the fountain these', `${L}: running low says where to rest, under the goal ("${c7.next}")`);
+    check(/^Bloombot is running low\. Stand still by the (fountain|house) for a while to charge up\.$/.test(c7.next) && c7.title === 'The pump turns', `${L}: running low says where to rest, under the goal ("${c7.next}")`);
     await page.keyboard.press('KeyH');
     await page.waitForTimeout(400);
     const rest = await page.evaluate(() => {
@@ -324,6 +324,16 @@ try {
         bad = (await page.evaluate(layout)).filter((b) => b.startsWith('card'));
         const fit = await page.evaluate(() => ({ card: document.querySelector('#obj').className, map: document.querySelector('#minimap').className }));
         check(!bad.length, `${L}: fountain step ${said + 1}${low ? ', running low' : ''}: the card clears the minimap and the charge ${bad.join(', ')} ("${c8.title}" · ${c8.parts.length} parts · "${c8.next}" · ${JSON.stringify(fit)})`);
+        // the title on one line, and the card no wider than its own width (tall over the corner, never wide over the scene)
+        const shape = await page.evaluate(() => {
+          const h = document.querySelector('#objTitle');
+          const lh = parseFloat(getComputedStyle(h).lineHeight);
+          const card = document.querySelector('#obj');
+          const zoom = card.getBoundingClientRect().width / card.offsetWidth;
+          const why = document.querySelector('#objWhy');
+          return { lines: Math.round(h.getBoundingClientRect().height / zoom / lh), width: card.offsetWidth, whyCut: why.scrollWidth > why.clientWidth + 1 };
+        });
+        check(shape.lines === 1 && shape.width <= 380 && !shape.whyCut, `${L}: fountain step ${said + 1}${low ? ', running low' : ''}: "${c8.title}" on one line, the card ${shape.width} wide (${JSON.stringify(shape)})`);
         if (tier === 3 && low) await shot('8-step-4-low');
       }
     }

@@ -61,7 +61,14 @@ svg.mi-unknown .mi-line { stroke: var(--text-strong); }
 .bb-row.later { color: var(--ink-2); }
 .bb-row.later .bb-name { color: var(--ink-2); }
 .bb-pips { font: 900 18px/1 var(--font-ui); letter-spacing: 3px; color: var(--sun-ink); }
-.bb-detail { position: sticky; top: 0; }
+/* #620: side by side, the rows and the detail each scroll inside the sheet, so the detail's end is never under the
+   footer: the wheel scrolls either, and the arrows / d-pad / stick reach Show me where at its foot (focus brings it in) */
+@container sheet (min-width: 641px) {
+  #bpBody:has(> .bb-split) { overflow: hidden; display: flex; flex-direction: column; }
+  .bb-split { flex: 1; min-height: 0; height: 100%; }
+  .bb-main { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 6px 8px 2px; }
+  .bb-detail { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+}
 .bb-detail .bb-level { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font: 800 16px var(--font-ui); color: var(--ink-2); }
 .bb-detail .bb-does { font: 800 17px/1.45 var(--font-ui); color: var(--ink); }
 .bb-detail .bb-where { margin-top: 10px; }

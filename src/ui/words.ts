@@ -85,24 +85,26 @@ export const WORDS = {
     clear: (region: string) => `Bring the ${region} back to life`,
     explore: 'Walk out into the city and see what wakes next',
     /**
-     * #605: the fountain's next step as the goal. What the player does, not the step's name (a new player doesn't know
-     * "The pump turns"); the line under it says what the step teaches. The fountain's own panel keeps the names.
+     * #605: the fountain's next step as the goal: step 1 wakes it; later steps go by their own name, the one the
+     * fountain's panel shows ("Light on the roofs"), always one line. `nextLead` says what that name is.
      */
-    fountain: (step: number, _name?: string) => (step === 1 ? 'Wake the fountain' : 'Bring the fountain these'),
+    fountain: (step: number, name: string) => (step === 1 ? 'Wake the fountain' : name),
+    /** #620: before the move line on a later step, so its name reads as the fountain's */
+    nextLead: "The fountain's next step.",
     /** #605: the goal when everything it wants is there */
-    fountainReady: (step: number) => (step === 1 ? 'The fountain is ready. Go and wake it.' : 'The fountain is ready for its next step. Go and see it.'),
+    fountainReady: (step: number) => (step === 1 ? 'The fountain has all it needs. Walk up to it and press {interact} to wake it.' : 'The fountain has all it needs. Walk up to it and press {interact}.'),
     /** #605: what the step brings, in a few plain words */
     /** #620: each step names the move it teaches (the verb the Bloombot page names it by) and what it's for */
     why: {
       pry: 'Bloombot learns to pry open rubble',
       hover: 'Bloombot learns to hover over deep water',
       climb: 'Bloombot learns to climb onto the roofs',
-      glide: 'Bloombot learns to glide down from the roofs',
+      glide: 'Bloombot learns to glide off the roofs',
       bloom: 'The whole city comes back into flower',
     },
     /** #605: after the fountain wakes, until the first pry: the goal is the rubble nearest bloombot */
     /** the region's name isn't known yet: the rubble is what the player can see */
-    pry: 'Pry open the rubble blocking the path',
+    pry: 'Pry open the rubble',
     pryWhy: 'Another robot like Bloombot is asleep on the other side',
     pryNext: 'Hold {interact} beside the rubble to pry it open.',
     /** #605 / #608: the park's part of a fountain step */

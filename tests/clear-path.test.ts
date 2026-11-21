@@ -49,7 +49,8 @@ describe('#605: the goal card says why and where', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
     const o = objectiveSentence(sim);
-    expect(o.text).toBe('Bring the fountain these');
+    expect(o.text).toBe(TIERS[1].name);
+    expect(o.lead).toBe("The fountain's next step.");
     expect(o.why).toBe('Bloombot learns to hover over deep water');
     expect(o.parts?.map((p) => p.label)).toEqual(['Copper', 'Timber', 'Glass', 'Landmarks awake']);
     sim.state.salvage!.tier = 4;
@@ -67,7 +68,8 @@ describe('#605: the goal card says why and where', () => {
     const pinned = sim.keepers.pinned();
     expect(pinned).toBeTruthy();
     const o = objectiveSentence(sim);
-    expect(o.text).toBe('Bring the fountain these');
+    expect(o.text).toBe(TIERS[1].name);
+    expect(o.lead).toBe("The fountain's next step.");
     expect(o.next).toContain(pinned!.text);
     expect(o.topic).toBe('keeper');
   });
@@ -90,7 +92,7 @@ describe('#605: the goal card says why and where', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.delivered = { scrap: 20, seeds: 6 };
     restorePark(sim, 60);
-    if (sim.fountain.canAdvance()) expect(objectiveSentence(sim).text).toBe('The fountain is ready. Go and wake it.');
+    if (sim.fountain.canAdvance()) expect(objectiveSentence(sim)).toMatchObject({ text: 'Wake the fountain', next: 'The fountain has all it needs. Walk up to it and press {interact} to wake it.' });
     sim.state.salvage!.tier = TIERS.length;
     const g = sim.advisor.suggest();
     expect(objectiveSentence(sim).text).toBe(g.text);
@@ -274,7 +276,7 @@ describe('#605: after the fountain wakes, the rubble is the goal until the first
   it('the card leads to the nearest rubble, and the goal spot points at it', () => {
     const sim = woke();
     const o = objectiveSentence(sim);
-    expect(o.text).toBe('Pry open the rubble blocking the path');
+    expect(o.text).toBe('Pry open the rubble');
     expect(o.why).toBe('Another robot like Bloombot is asleep on the other side');
     expect(o.next).toBe('Hold {interact} beside the rubble to pry it open.');
     const s = goalSpot(sim, o)!;
@@ -282,7 +284,7 @@ describe('#605: after the fountain wakes, the rubble is the goal until the first
     const r = REGIONS.find((q) => q.gate.needs.ability === 'pry' && q.gate.cells.some(([x, z]) => x === s.cell.x && z === s.cell.z))!;
     expect(r).toBeTruthy();
     expect(sim.gates.problem(r.gate)).toBeUndefined();
-    expect(o.text).toBe('Pry open the rubble blocking the path');
+    expect(o.text).toBe('Pry open the rubble');
     expect(o.place).toMatchObject({ name: `the rubble into ${r.name}` });
     for (const line of [o.text, o.why!, o.next!]) expect(bannedIn(line), line).toEqual([]);
   });
@@ -297,7 +299,7 @@ describe('#605: after the fountain wakes, the rubble is the goal until the first
   it('once any rubble is pried, the fountain\'s next step is the goal again', () => {
     const sim = woke();
     sim.state.salvage!.opened.push(REGIONS.find((r) => r.gate.needs.ability === 'pry')!.gate.id);
-    expect(objectiveSentence(sim).text).toBe('Bring the fountain these');
+    expect(objectiveSentence(sim).text).toBe(TIERS[1].name);
   });
 });
 
