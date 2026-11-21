@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/core/GameState';
 import { RESEARCH_UPGRADES } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
-import { bloombotRows, moveRows, bloombotUpgradeRows, pips, stateWords } from '../src/ui/BloombotPage';
+import { bloombotRows, howHeading, moveRows, bloombotUpgradeRows, pips, stateWords } from '../src/ui/BloombotPage';
 import { TABS } from '../src/ui/BackpackModel';
 import { bannedIn, WORDS } from '../src/ui/words';
 
@@ -27,10 +27,10 @@ describe('#620: Bloombot\'s page', () => {
     expect(moves[1].how).toBe("The fountain teaches this once you've brought it what it asks for twice more.");
     expect(moves[0].where?.name).toBe('the fountain');
     const ups = bloombotUpgradeRows(sim);
-    expect(ups.map((u) => u.name)).toEqual(['Bigger charge', 'Gentler on charge', 'Longer stride', 'Wider pulse', 'Roomier backpack']);
+    expect(ups.map((u) => u.name)).toEqual(['Bigger charge', 'Gentler on charge', 'Longer stride', 'Wider pulse', 'Roomier backpack', 'Quick hands', 'Keen eye', 'Sun soak', 'Lantern', 'Lucky pulse']);
     expect(ups[0].does).toBe('Bloombot holds more charge, so it can keep going longer before it rests.');
     expect(ups[4].does).toBe('Bloombot can carry 20 more of each thing.');
-    expect(ups.every((u) => u.level === 0 && u.max === 3 && u.state === 'later')).toBe(true);
+    expect(ups.every((u) => u.level === 0 && u.max === (u.id === 'lantern' ? 2 : ['quickHands', 'keenEye', 'sunSoak', 'luckyPulse'].includes(u.id) ? 3 : 5) && u.state === 'later')).toBe(true);
     // before the first Keeper wakes, the workshop doesn't research yet: it says so
     expect(ups[0].how).toBe('The crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.');
     expect(ups[0].where?.name).toBe('the house');
@@ -41,7 +41,7 @@ describe('#620: Bloombot\'s page', () => {
     sim.state.salvage!.abilities.push('pry');
     const moves = moveRows(sim);
     expect(moves.map((m) => m.state)).toEqual(['have', 'next', 'later', 'later']);
-    expect(moves[0]).toMatchObject({ how: 'Learned.', where: undefined });
+    expect(moves[0]).toMatchObject({ how: 'The fountain taught Bloombot this.', where: undefined });
     sim.state.salvage!.tier = 1;
     expect(moveRows(sim)[1].how).toBe('Bring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.');
   });
@@ -53,22 +53,28 @@ describe('#620: Bloombot\'s page', () => {
     // the research station is there once a Keeper wakes
     sim.state.salvage!.keepers['k'] = { step: 'request1' } as never;
     const cells = bloombotUpgradeRows(sim).find((u) => u.id === 'chargeCells')!;
-    expect(cells).toMatchObject({ state: 'next', level: 1, max: 3 });
+    expect(cells).toMatchObject({ state: 'next', level: 1, max: 5 });
     expect(cells.how).toBe('Go to the crafting table in the house and make level 2 in its Upgrade tab. It takes 3 Battery cell and 4 Gears.');
-    research(sim).levels.chargeCells = 3;
+    research(sim).levels.chargeCells = 5; // #623: five levels
     const top = bloombotUpgradeRows(sim).find((u) => u.id === 'chargeCells')!;
     expect(top).toMatchObject({ state: 'have', how: 'As far as it goes.', where: undefined });
     expect(stateWords(top)).toBe('Top level');
   });
 
-  it('reads only: no cost or number changes (the upgrades are the workshop\'s, as they were)', () => {
+  it('reads only: the page changes no cost or number (#623: the Bloombot upgrades go to five levels)', () => {
     const bloom = RESEARCH_UPGRADES.filter((u) => u.branch === 'bloombot');
     expect(bloom.map((u) => [u.id, u.levels.length, u.per])).toEqual([
-      ['chargeCells', 3, 1],
-      ['chargeEfficiency', 3, 1],
-      ['sprint', 3, 0.1],
-      ['pulseRadius', 3, 1],
-      ['backpack', 3, 20],
+      ['chargeCells', 5, 1],
+      ['chargeEfficiency', 5, 1],
+      ['sprint', 5, 0.1],
+      ['pulseRadius', 5, 1],
+      ['backpack', 5, 20],
+      // #624
+      ['quickHands', 3, 0.2],
+      ['keenEye', 3, 4],
+      ['sunSoak', 3, 0.12],
+      ['lantern', 2, 3],
+      ['luckyPulse', 3, 0.04],
     ]);
   });
 
@@ -105,6 +111,25 @@ describe('#620: Bloombot\'s page', () => {
 
   it('each row names the part of Bloombot it changes (E25\'s turntable lights it)', () => {
     const parts = Object.fromEntries(bloombotRows(fresh()).map((r) => [r.id, r.part]));
-    expect(parts).toMatchObject({ pry: 'leaves', glide: 'leaves', chargeCells: 'cells', backpack: 'pockets' });
+    expect(parts).toMatchObject({ pry: 'marks', glide: 'marks', chargeCells: 'cells', backpack: 'pockets', pulseRadius: 'leaves', lantern: 'lamp' });
+  });
+});
+
+describe('#663: the page and the crafting table use the same plain words', () => {
+  it('a learned row never just repeats its heading', () => {
+    const sim = fresh();
+    sim.state.salvage!.abilities.push('pry');
+    for (const r of bloombotRows(sim).filter((x) => x.state === 'have')) expect(r.how.replace(/\.$/, ''), r.name).not.toBe(howHeading(r));
+  });
+
+  it('the table speaks of moves, running and ground, not abilities, sprinting, tiles or stacks', () => {
+    for (const u of RESEARCH_UPGRADES.filter((x) => x.branch === 'bloombot')) expect(u.each, u.id).not.toMatch(/\b(abilit\w*|sprint\w*|tiles?|stacks?)\b/i);
+  });
+
+  it('one name for the piles Bloombot digs: glinting piles, never junk piles', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const f of ['src/data/bloombot.ts', 'src/ui/BloombotPage.ts', 'src/data/research.ts', 'src/gameplay/Advisor.ts', 'src/ui/GuideLines.ts', 'src/gameplay/KeeperSystem.ts', 'src/ui/OldCityPanel.ts']) {
+      expect(readFileSync(f, 'utf8'), f).not.toMatch(/junk piles?/i);
+    }
   });
 });

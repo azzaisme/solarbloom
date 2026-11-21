@@ -283,6 +283,8 @@ export interface Progression {
   introSeen: boolean;
   /** #607 (E24): the guide's ideas already shown or known (each line shows once); missing in saves from before E24 */
   ideas?: string[];
+  /** #622 (E25): park milestones Bloombot has grown from (0 to 3); missing in older saves */
+  parkGrowth?: number;
   /** manual pulses since the last Overcharge */
   pulseCharge: number;
   /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */
@@ -387,6 +389,8 @@ export interface KeeperState {
  * ticket (E21.1 pack and store, E21.2 piles, E21.5 opened gates, E21.6 tier, E21.8 keepers, …).
  */
 export interface SalvageState {
+  /** #625 Eye for value (Tally): digs at junk piles since the last extra piece */
+  digs?: number;
   /** E21.1: what bloombot carries (whole numbers, a stack limit per material) */
   pack: Partial<Record<ItemId, number>>;
   /** E21.1: the city's shared, unlimited store */

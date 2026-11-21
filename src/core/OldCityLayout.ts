@@ -1,5 +1,6 @@
 import { chunkPiles, chunkRuins, isMainlandCell, mainlandPileById, mainlandShore, onCauseway, type RuinDef } from './Mainland';
 import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type GateDef, type KeeperDef, type PileDef, type RegionDef, type RegionId, type WaterRect } from '../data/oldcity';
+import { MOVE_LAND, STASHES, VAULTS, type MoveLandDef, type StashDef, type VaultDef } from '../data/moveSpots';
 
 /**
  * E21: the Old City's fixed layout as lookups, built once from data/oldcity (pure, no seed: the Old City is the
@@ -15,7 +16,10 @@ export type SetPiece =
   | { kind: 'page'; id: string; region?: RegionId }
   | { kind: 'lookout'; id: string; region: RegionId }
   | { kind: 'shed' }
-  | { kind: 'ruin'; ruin: RuinDef };
+  | { kind: 'ruin'; ruin: RuinDef }
+  /** E25 (#626): a sealed vault door (Pry II) and a stash a level II move reaches */
+  | { kind: 'vault'; vault: VaultDef }
+  | { kind: 'stash'; stash: StashDef };
 
 const key = (x: number, z: number) => `${x},${z}`;
 
@@ -44,6 +48,13 @@ function build() {
     put(r.lookout.x, r.lookout.z, { kind: 'lookout', id: r.lookout.id, region: r.id });
   }
   for (const k of KEEPERS) put(k.x, k.z, { kind: 'keeper', keeper: k });
+  for (const v of VAULTS) put(v.x, v.z, { kind: 'vault', vault: v });
+  for (const st of STASHES) put(st.x, st.z, { kind: 'stash', stash: st });
+}
+
+/** E25 (#626): the new ground a level II move reaches (a sandbar, a sea stack, a ruin's roof), if this cell is on it. */
+export function moveLandAt(x: number, z: number): MoveLandDef | undefined {
+  return MOVE_LAND.find((m) => inRect(m, x, z));
 }
 
 /** What set piece stands on a ground cell, if any. */
@@ -122,7 +133,7 @@ export function onJetty(x: number, z: number): boolean {
 
 /** E21.26 / E21.4: is this cell sea (open sea, the bay, the coast band), not counting the jetty? */
 export function seaCell(x: number, z: number): boolean {
-  if (onJetty(x, z)) return false;
+  if (onJetty(x, z) || moveLandAt(x, z)) return false;
   // E23.8.3.1: the Long Causeway is never sea; the mainland is land past its rocky shore
   if (onCauseway(x, z)) return false;
   if (isMainlandCell(x)) return mainlandShore(x, z);

@@ -3,7 +3,8 @@ import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { WORDS } from '../ui/words';
 import { BLOOMBOT_PAGE, CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
-import { RESEARCH_UPGRADES } from '../data/research';
+import { RESEARCH, RESEARCH_UPGRADES } from '../data/research';
+import { PARK_GROWTH } from '../data/bloombot';
 import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
@@ -17,7 +18,8 @@ import { SightPicker } from '../rendering/SightPicker';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, MaterialId, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
-import { MATERIALS, SALVAGE, TIERS, fountainStepNews } from '../data/salvage';
+import { MATERIALS, TIERS, fountainStepNews } from '../data/salvage';
+import { actForVerb } from '../data/botActs';
 import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
@@ -105,6 +107,8 @@ import { settingsRows } from '../ui/SettingsRows';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { benchBoxes, type WorldBox } from '../rendering/SeatBox';
 import { Minimap } from '../ui/Minimap';
+import { Turntable } from '../rendering/Turntable';
+import { nextGrowth, partsAdded, pieceOf, type BotGrowth } from '../data/botParts';
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
@@ -320,6 +324,8 @@ export class Game {
   readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
   private minimap?: Minimap;
+  /** #629: the Bloombot page's live look at Bloombot */
+  turntable?: Turntable;
   /** E24 (#609): the current goal spot (looked up twice a second) and the light that marks it in the world */
   private goal?: GoalSpot;
   private goalT = 0;
@@ -560,6 +566,16 @@ export class Game {
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
+      // #628: an act's small effects (dust, soil, bits of leaf, sparkles) where Bloombot works
+      // thrown out to its sides and back toward the camera, so it shows from behind
+      const push = new pc.Vec3();
+      const fan = new pc.Vec3();
+      visuals.onBeat = ({ effect: e, at, side, back }) => {
+        if (e.kind === 'sparkles') return this.vfx.sparkles(at, e.count, true);
+        push.copy(back).mulScalar(e.back ?? 0);
+        fan.copy(side).mulScalar(e.fan ?? 0);
+        this.vfx.burst(at, e.count, { hex: e.hex, speed: e.speed, up: e.up, size: e.size, life: e.life, gravity: e.gravity, glow: 0.15, push, fan });
+      };
       // E22.1: bindings saved before the new map are reset once, with a notice.
       const st = this.settings;
       const mig = migrateBindings(st.keys || st.pad ? { v: st.bindingsV, keys: st.keys, pad: st.pad } : undefined);
@@ -570,6 +586,16 @@ export class Game {
       }
       const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
       this.bot = bot;
+      // #629: the Bloombot page's live look at Bloombot
+      this.turntable = new Turntable(this.app, () => this.bot?.visuals);
+      this.turntable.reducedMotion = !!this.settings.reducedMotion;
+      this.hud.backpack.botView = (canvas, row) => {
+        const tt = this.turntable!;
+        tt.show(canvas);
+        if (!canvas) return;
+        const now = this.botGrowth();
+        tt.focus(row?.part, row && pieceOf(row), row ? partsAdded(now, nextGrowth(now, row)) : []);
+      };
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
@@ -1592,7 +1618,7 @@ export class Game {
     const p = this.sim.state.progression;
     const first = !(p.ideas ??= []).includes(BLOOMBOT_PAGE);
     if (first) p.ideas.push(BLOOMBOT_PAGE);
-    this.hud.toast(first ? `${title}<small>See what's next on its page in the backpack (${esc(this.hudKeys('backpack'))}).</small>` : title, 'gold', first ? 6 : 3.5);
+    this.hud.toast(first ? `${title}<small>See what's next on its page in the backpack (${esc(this.hudKeys('backpack'))}).</small>` : title, 'gold', first ? 6 : title.includes('<small>') ? 5 : 3.5);
   }
 
   /** #605 / #620: mark a place and turn the camera to it (the card's goal spot, or a place the Bloombot page names). */
@@ -1623,6 +1649,9 @@ export class Game {
     if (was && this.hud.guide.text && (!was.comes(this.sim) || was.known(this.sim))) this.hud.guide.hide();
     if (!this.bot || this.cinematic || this.photo.active || this.paused || this.hud.modalOpen || this.panelOpen()) return;
     if (document.body.classList.contains('loading-on')) return;
+    // #662: while a Keeper talks, its bubble has the floor: Bloombot's moment (a knack it just taught) and the next
+    // guide line wait until it's done
+    if (this.oc?.bubble.speaking()) return;
     startIdeas(this.sim); // before anything adds to the list (a save from before E24 is sorted out first)
     this.showGrowth();
     if (this.settings.hints === false || this.settings.potter) return;
@@ -1658,13 +1687,18 @@ export class Game {
     const p = this.bot.pose;
     for (const pile of allPiles()) {
       if (!short.includes(pile.material) || s.salvage.left(pile.id) <= 0 || s.salvage.problem(pile.id)) continue;
-      if (Math.hypot(pile.x + 0.5 - p.x, pile.z + 0.5 - p.z) > PILE_GLINT_REACH) continue;
+      if (Math.hypot(pile.x + 0.5 - p.x, pile.z + 0.5 - p.z) > PILE_GLINT_REACH + s.upgrades.glintExtra) continue;
       const tile = s.grid.get(GROUND, pile.x, pile.z);
       if (!tile) continue;
       const v = this.tileVec(tile);
       v.y += 0.6;
       this.vfx.burst(v, this.settings.reducedMotion ? 3 : 7, { up: 0.9, speed: 0.35, size: 0.06, life: 1.2, gravity: -0.2, hex: PALETTE.gold, glow: 1.4 });
     }
+  }
+
+  /** #627: what Bloombot has grown into, for its parts (and #629's turntable) */
+  private botGrowth(): BotGrowth {
+    return { moves: this.sim.state.salvage?.abilities ?? [], levels: this.sim.state.salvage?.research?.levels ?? {}, park: this.sim.parkGrowth.step, knacks: this.sim.knacks.list() };
   }
 
   /** #605: is Show me where's mark still standing (asked for a moment ago, and bloombot not there yet)? */
@@ -2105,6 +2139,9 @@ export class Game {
       return;
     }
     t.run();
+    // #628: Bloombot acts out what it did (a hold has already started its own act)
+    const act = actForVerb(t.verb);
+    if (act) b.visuals.startAct(act);
   }
 
   /** E22.2: a hold under way (Interact kept down on the same target until `need` seconds pass). */
@@ -2274,7 +2311,7 @@ export class Game {
     if (this.atHouse(f) && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
     if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
     const pile = s.salvage.pileAt(f.x, f.z);
-    if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
+    if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: s.upgrades.salvageHold, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
     if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : s.keepers.giftFor(keeper.id) ? 'Give a gift to' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
     const page = s.journal.pageAt(f.x, f.z);
@@ -2282,7 +2319,14 @@ export class Game {
     const sp = setPieceAt(f.x, f.z);
     if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
     const gate = s.gates.gateAt(f.x, f.z);
-    if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? SALVAGE.pryHoldSeconds : undefined, refused: s.gates.problem(gate), run });
+    if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? s.upgrades.pryHold : undefined, refused: s.gates.problem(gate), run });
+    // E25 (#626): a sealed vault (Pry II), a stash, and the trips the level II moves take (over the sea, up a wall)
+    const vault = s.moves.vaultAt(f.x, f.z);
+    if (vault) out.push({ kind: 'gate', id: `vault:${vault.id}`, verb: 'Pry open', name: 'the vault door', distance: fd, at: front, ocHold: s.upgrades.vaultHold, refused: s.moves.vaultProblem(vault), run });
+    const stash = s.moves.stashAt(f.x, f.z);
+    if (stash) out.push({ kind: 'cache', id: `stash:${stash.id}`, verb: 'Open', name: 'the stash', distance: fd, at: front, run });
+    const trip = oc.tripAhead(f);
+    if (trip) out.push({ kind: 'gate', id: `trip:${trip.id}`, verb: trip.verb, name: trip.name, distance: fd, at: front, refused: s.moves.tripProblem(trip), run: () => oc.takeTrip(trip, f) });
     if (occ?.type === 'core' && s.areas.areaOf(occ) === PARK)
       out.push({ kind: 'landmark', id: `fountain:${occ.id}`, verb: 'Bring things to', name: 'the fountain', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     else if (occ?.type === 'core') {
@@ -4081,7 +4125,7 @@ export class Game {
     b.on('pulse.ripple', ({ tileId, targets }) => {
       const t = s.grid.byTileId(tileId);
       if (!t) return;
-      this.vfx.ring(this.tileVec(t), PALETTE[RIPPLE.tint], RIPPLE.radius, RIPPLE.ringSeconds);
+      this.vfx.ring(this.tileVec(t), PALETTE[RIPPLE.tint], this.sim.upgrades.rippleRadius, RIPPLE.ringSeconds);
       for (const g of targets) {
         const at = s.grid.get(GROUND, g.x, g.z);
         if (!at) continue;
@@ -4093,6 +4137,16 @@ export class Game {
             done: () => (this.vfx.ring(this.tileVec(at), hex, RIPPLE.pingRadius, RIPPLE.pingSeconds), this.vfx.sparkles(this.tileVec(at), RIPPLE.sparkles, true)),
           });
       }
+    });
+    // #624 Lucky pulse: what the pulse turned up pops out of the ground, and a short line says what it was
+    b.on('pulse.lucky', ({ tileId, material, n }) => {
+      const t = s.grid.byTileId(tileId);
+      if (t) {
+        const v = this.tileVec(t);
+        v.y += 0.3;
+        this.vfx.burst(v, this.settings.reducedMotion ? 4 : 10, { up: 1.6, speed: 0.7, size: 0.07, life: 0.9, gravity: 3, hex: PALETTE.gold, glow: 1.2 });
+      }
+      this.hud.toast(WORDS.bloombot.lucky(n, MATERIALS[material].name), '', 2.5);
     });
     b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
       const t = s.grid.byTileId(tileId);
@@ -4328,6 +4382,21 @@ export class Game {
     b.on('fountain.tier', ({ tier }) => {
       const a = TIERS[tier - 1]?.ability;
       if (a) this.grown.push(WORDS.bloombot.learned[a] ?? `Bloombot can ${a} now`);
+    });
+    // #622: the park grew Bloombot
+    b.on('bloombot.parkGrew', ({ id }) => {
+      const d = PARK_GROWTH.find((x) => x.id === id);
+      if (d) this.grown.push(WORDS.bloombot.park(d.name, d.does));
+    });
+    // E25 (#626): the workshop worked out a move's second level
+    b.on('research.done', ({ id }) => {
+      const g = this.sim.research.project(id)?.gives;
+      if (g && 'move' in g) this.grown.push(WORDS.bloombot.levelTwo[g.move]);
+    });
+    // #625: a Keeper taught Bloombot its knack
+    b.on('bloombot.knack', ({ keeper }) => {
+      const k = s.knacks.of(keeper);
+      if (k) this.grown.push(WORDS.bloombot.knack(s.keepers.def(keeper).name, k.name, k.does));
     });
     b.on('research.upgraded', ({ id, level }) => {
       const u = RESEARCH_UPGRADES.find((x) => x.id === id);
@@ -4981,8 +5050,11 @@ export class Game {
     this.updateChainPresentation(wdt);
     this.updateGuideLines();
     this.updatePileGlints();
-    // #620: Bloombot wears what it has grown into (moves learned, Bigger charge, Roomier backpack)
-    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities.length ?? 0, cells: this.sim.research.level('chargeCells'), pockets: this.sim.research.level('backpack') });
+    // #627: every upgrade, move and park growth as a part (data/botParts); rebuilt only when something changes
+    if (this.bot) this.bot.visuals.setGrowth(this.botGrowth());
+    this.turntable?.update();
+    // #624 Lantern: Bloombot's own light at night, from its research level (none before it)
+    if (this.bot) this.bot.visuals.setLantern(this.sim.upgrades.lanternReach, 1 - this.dayNight.light, this.dayNight.lightShare, RESEARCH.lanternIntensity);
     // #613: resting at home charges bloombot: show it, so the player knows to stand still
     if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
     if (!this.cinematic) this.checkCozyUnlocks();

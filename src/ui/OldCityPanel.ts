@@ -162,7 +162,7 @@ export function storageHtml(sim: Sim, title = 'Storage'): string {
     .join('');
   return (
     cardHead({ icon: icon('pack', 'l'), title, mood: 'Move things between your backpack and the store.', dock: 'sheet', choose: 'Move' }) +
-    `<div class="oc-content"><table class="oc-store"><thead><tr><th scope="col">Material</th><th scope="col">With you</th><th scope="col">Put in the store</th><th scope="col">Take out</th><th scope="col">In the store</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="oc-empty">Nothing found yet. Salvage piles to fill your backpack.</td></tr>'}</tbody></table>
+    `<div class="oc-content"><table class="oc-store"><thead><tr><th scope="col">Material</th><th scope="col">With you</th><th scope="col">Put in the store</th><th scope="col">Take out</th><th scope="col">In the store</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="oc-empty">Nothing found yet. Dig in the glinting piles to fill your backpack.</td></tr>'}</tbody></table>
     <div class="oc-row"><button class="pn-btn primary" data-act="depositAll" ${MATERIAL_IDS.some((m) => inv.count(m)) ? '' : 'disabled'}>Deposit everything</button></div></div>`
   );
 }
@@ -221,21 +221,32 @@ export function fountainHtml(sim: Sim): string {
 export class SpeechBubble {
   readonly el: HTMLElement;
   private until = 0;
+  /** a second bubble from the same speaker, shown once this one has been read */
+  private next?: { name: string; lines: string[] };
   constructor(root: HTMLElement) {
     this.el = document.createElement('div');
     this.el.className = 'oc-bubble';
     this.el.hidden = true;
     root.appendChild(this.el);
   }
-  say(name: string, lines: string[], secs = 3 + lines.length * 1.6) {
+  say(name: string, lines: string[], secs = 3 + lines.length * 1.6, then?: string[], now = performance.now()) {
+    this.next = then?.length ? { name, lines: then } : undefined;
     this.el.innerHTML = iconize(`<b>${escHtml(name)}</b>${lines.map((l) => `<p>${escHtml(l)}</p>`).join('')}`);
     this.el.hidden = false;
-    this.until = performance.now() + secs * 1000;
+    this.until = now + secs * 1000;
   }
-  /** Per frame: follow the speaker on screen (undefined: off screen or gone). */
-  place(at: { x: number; y: number } | undefined) {
+  /**
+   * Per frame: follow the speaker on screen (undefined: off screen or gone). A second bubble waits for the first to
+   * be read and for its speaker to be on screen, so walking away mid-speech never loses it (#625: the knack and the
+   * first request come in it).
+   */
+  place(at: { x: number; y: number } | undefined, now = performance.now()) {
+    if (at && now > this.until && this.next) {
+      const n = this.next;
+      this.say(n.name, n.lines, undefined, undefined, now);
+    }
     if (this.el.hidden) return;
-    if (!at || performance.now() > this.until) {
+    if (!at || now > this.until) {
       this.el.hidden = true;
       return;
     }
@@ -245,6 +256,16 @@ export class SpeechBubble {
     this.el.style.left = `${Math.max(half + 16, Math.min(room - half - 16, at.x))}px`;
     this.el.style.top = `${Math.max(this.el.offsetHeight + 16, at.y)}px`;
   }
+
+  /**
+   * #662: is a Keeper talking? While it is, Bloombot's moments and the guide's lines wait, so nothing lands under the
+   * bubble. A second bubble still to come counts for a few seconds (it waits for its speaker to be on screen; if
+   * Bloombot has walked off, the rest can go ahead).
+   */
+  speaking(now = performance.now()): boolean {
+    return !this.el.hidden || (!!this.next && now < this.until + SpeechBubble.NEXT_GRACE_MS);
+  }
+  static readonly NEXT_GRACE_MS = 4000;
 }
 
 // ───────────── Tally's trade (E21.9) ─────────────

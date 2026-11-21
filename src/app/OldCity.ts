@@ -4,9 +4,10 @@ import type { Sim } from '../gameplay/Sim';
 import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
-import { MATERIALS, SALVAGE } from '../data/salvage';
+import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
+import { HOLD_ACTS } from '../data/botActs';
 import { crossName, CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
 import { compostHtml, digesterHtml } from '../ui/CompostPanel';
@@ -15,6 +16,8 @@ import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
 import { setPieceAt } from '../core/OldCityLayout';
+import { MOVE_LEVELS } from '../data/moveSpots';
+import { MoveSpots, type MoveTrip } from '../gameplay/MoveSpots';
 
 /** What the game lends the Old City controller (kept small, so Game.ts changes little). */
 export interface OldCityHost {
@@ -58,10 +61,10 @@ export class OldCityController {
   constructor(private host: OldCityHost) {
     this.panel = new OldCityPanel(host.hud.root);
     this.bubble = new SpeechBubble(host.hud.root);
-    host.sim.bus.on('keeper.said', ({ keeperId, lines }) => {
+    host.sim.bus.on('keeper.said', ({ keeperId, lines, then }) => {
       this.speaker = keeperId;
       // #610: a Keeper's name is learned when it wakes and says it; until then it's just a sleeping robot
-      this.bubble.say(host.sim.keepers.step(keeperId) === 'asleep' ? 'A sleeping robot' : host.sim.keepers.def(keeperId).name, lines);
+      this.bubble.say(host.sim.keepers.step(keeperId) === 'asleep' ? 'A sleeping robot' : host.sim.keepers.def(keeperId).name, lines, undefined, then);
     });
     host.sim.bus.on('keeper.step', ({ keeperId, step }) => {
       if (step === 'request1') host.sound('wake');
@@ -150,7 +153,10 @@ export class OldCityController {
 
   startHold(kind: string, need: number, done: () => void, viaClick = false) {
     this.hold = { kind, t: 0, need, done, padHeld: !viaClick && this.holdToAct };
-    this.host.bot.visuals.play('assemble');
+    // #628: Bloombot acts it out while it lasts (rummaging, heaving, picking)
+    const act = HOLD_ACTS[kind];
+    if (act) this.host.bot.visuals.startAct(act, true);
+    else this.host.bot.visuals.play('assemble');
   }
 
   /** Per frame: tells the sim where bloombot is, runs a hold. */
@@ -162,11 +168,13 @@ export class OldCityController {
     if (!h) return;
     if (h.padHeld && !this.interactHeld() && h.t > 0.12) {
       this.hold = undefined;
+      this.host.bot.visuals.endAct(false);
       return;
     }
     h.t += dt;
     if (h.t >= h.need) {
       this.hold = undefined;
+      this.host.bot.visuals.endAct(true);
       h.done();
     }
   }
@@ -180,6 +188,7 @@ export class OldCityController {
   escape(): boolean {
     if (this.hold) {
       this.hold = undefined;
+      this.host.bot.visuals.endAct(false);
       return true;
     }
     if (!this.panel.isOpen) return false;
@@ -239,7 +248,7 @@ export class OldCityController {
       const sc = this.host.screenOf(front.x, front.z);
       if (why) this.host.hud.showFail(why, sc.x, sc.y);
       else if (gate.kind === 'barricade')
-        this.startHold('pry', SALVAGE.pryHoldSeconds, () => {
+        this.startHold('pry', this.sim.upgrades.pryHold, () => {
           if (this.sim.gates.open(gate.id)) {
             this.host.sound('pry');
             for (const [x, z] of gate.cells) this.host.markTile(x, z);
@@ -249,6 +258,39 @@ export class OldCityController {
         this.host.sound('deliver');
         for (const [x, z] of gate.cells) this.host.markTile(x, z);
       }
+      return true;
+    }
+    // E25 (#626): a sealed vault (Pry II holds Interact to force it), a stash, a trip a level II move takes
+    const vault = onGround ? this.sim.moves.vaultAt(front.x, front.z) : undefined;
+    if (vault) {
+      const why = this.sim.moves.vaultProblem(vault);
+      if (why) {
+        const sc = this.host.screenOf(front.x, front.z);
+        this.host.hud.showFail(why, sc.x, sc.y);
+      } else
+        this.startHold('pry', this.sim.upgrades.vaultHold, () => {
+          const got = this.sim.moves.openVault(vault.id);
+          if (!got) return;
+          this.host.sound('pry');
+          this.host.markTile(vault.x, vault.z);
+          this.host.hud.toast(`The vault door gives<small>Inside: ${MoveSpots.words(got)}</small>`, 'gold', 4);
+        });
+      return true;
+    }
+    const stash = onGround ? this.sim.moves.stashAt(front.x, front.z) : undefined;
+    if (stash) {
+      const got = this.sim.moves.openStash(stash.id);
+      if (got) {
+        this.host.sound('deliver');
+        this.host.markTile(stash.x, stash.z);
+        this.host.bot.visuals.play('interact');
+        this.host.hud.toast(`Someone left these here<small>${MoveSpots.words(got)}</small>`, 'gold', 4);
+      }
+      return true;
+    }
+    const trip = onGround ? this.tripAhead(front) : undefined;
+    if (trip) {
+      this.takeTrip(trip, front);
       return true;
     }
     // E21.6: the fountain opens its delivery panel (with a way to the store)
@@ -272,6 +314,29 @@ export class OldCityController {
     }
     void front;
     return false;
+  }
+
+  /** E25 (#626): the trip Bloombot could take from where it stands, facing `front` (MoveSpots). */
+  tripAhead(front: { x: number; z: number }): MoveTrip | undefined {
+    const b = this.host.bot;
+    if (b.pose.roofId !== GROUND) return undefined;
+    return this.sim.moves.tripFrom([Math.floor(b.pose.x), Math.floor(b.pose.z)], [front.x, front.z], (x, z) => b.walker.walkable(GROUND, x, z));
+  }
+
+  /** E25 (#626): hovers, climbs or glides there (or says why not). */
+  takeTrip(t: MoveTrip, front: { x: number; z: number }) {
+    const why = this.sim.moves.tripProblem(t);
+    if (why) {
+      const sc = this.host.screenOf(front.x, front.z);
+      this.host.hud.showFail(why, sc.x, sc.y);
+      return;
+    }
+    if (!this.sim.moves.takeTrip(t)) return;
+    const b = this.host.bot;
+    const style = t.move === 'climb' ? 'climb' : t.move === 'glide' ? 'glide' : 'hover';
+    const tiles = Math.hypot(t.to[0] + 0.5 - b.pose.x, t.to[1] + 0.5 - b.pose.z);
+    this.host.sound('click');
+    b.travel(t.to[0], t.to[1], style, MOVE_LEVELS.tripSeconds + MOVE_LEVELS.tripSecondsPerTile * tiles, MOVE_LEVELS.tripArc[style]);
   }
 
   /**
@@ -299,7 +364,7 @@ export class OldCityController {
       this.host.hud.showFail(why, sc.x, sc.y);
       return;
     }
-    this.startHold('salvage', SALVAGE.holdSeconds, () => this.sim.salvage.salvage(id), viaClick);
+    this.startHold('salvage', this.sim.upgrades.salvageHold, () => this.sim.salvage.salvage(id), viaClick);
   }
 
   /** E23.5.2: a planter: harvest a ripe bed straight away, otherwise open its panel (plant, feed, extras). */
@@ -307,7 +372,7 @@ export class OldCityController {
     const f = this.sim.farm;
     if (f.look(m).ripe) {
       f.harvest(m);
-      this.host.bot.visuals.play('interact');
+      this.host.bot.visuals.startAct('harvest');
       return;
     }
     this.host.sound('click');
@@ -319,10 +384,15 @@ export class OldCityController {
         if (act === 'plant' && f.plant(m, crop, cross)) {
           this.host.sound('salvage', 'seeds');
           this.panel.close();
+          this.host.bot.visuals.startAct('plant');
         } else if (act === 'harvest') {
           f.harvest(m);
           this.panel.close();
-        } else if (act === 'feed' && f.feed(m)) this.host.sound('deliver');
+          this.host.bot.visuals.startAct('harvest');
+        } else if (act === 'feed' && f.feed(m)) {
+          this.host.sound('deliver');
+          this.host.bot.visuals.startAct('tend');
+        }
         else if (act === 'extra' && f.addExtra(m, arg as 'trellis' | 'flooded')) this.host.sound('deliver');
       },
     );
@@ -347,7 +417,10 @@ export class OldCityController {
     this.panel.open(
       () => digesterHtml(this.sim, m),
       (act) => {
-        if (act === 'feed' && this.sim.compost.feed(m) > 0) this.host.sound('deliver');
+        if (act === 'feed' && this.sim.compost.feed(m) > 0) {
+          this.host.sound('deliver');
+          this.host.bot.visuals.startAct('tend');
+        }
       },
     );
   }
@@ -361,7 +434,11 @@ export class OldCityController {
       (act) => {
         const n =
           act === 'honey' ? x.takeHoney(m) : act === 'pick' ? x.pick(m) : act === 'prune' ? x.prune(m) : act === 'mushrooms' ? x.pickMushrooms(m) : act === 'inoculate' ? +x.inoculate(m) : act === 'worms' ? +x.feedWorms(m) : 0;
-        if (n > 0) this.host.sound(act === 'inoculate' || act === 'worms' ? 'deliver' : 'salvage', 'seeds');
+        if (n > 0) {
+          this.host.sound(act === 'inoculate' || act === 'worms' ? 'deliver' : 'salvage', 'seeds');
+          // #628: picking and taking honey is a harvest; pruning, inoculating and feeding worms is tending
+          this.host.bot.visuals.startAct(act === 'honey' || act === 'pick' || act === 'mushrooms' ? 'harvest' : 'tend');
+        }
       },
     );
   }
