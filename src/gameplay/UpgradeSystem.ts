@@ -1,3 +1,4 @@
+import { MOVE_LEVELS } from '../data/moveSpots';
 import { machinesStamp } from '../core/GameState';
 import { isBuilt, tierOf } from '../data/machines';
 
@@ -7,6 +8,9 @@ const tier3 = (m: { tier?: number }) => tierOf(m) >= 3;
 const tierOutput = (m: { tier?: number; project?: { stage: number } }, t2: number) =>
   !isBuilt(m) ? 0 : tier3(m) ? TUNING.super.outputMult : tier2(m) ? t2 : 1;
 import { TUNING } from '../data/tuning';
+import { RESEARCH } from '../data/research';
+import { RIPPLE } from '../data/pulse';
+import { SALVAGE } from '../data/salvage';
 import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADES } from '../data/upgrades';
 import type { MachineData } from '../core/types';
 import type { Sim } from './Sim';
@@ -72,9 +76,62 @@ export class UpgradeSystem {
 
   // ───────────── global effects ─────────────
   get broadExtra() {
-    // E23.6.2: the Wider pulse research upgrade, a tile further a level
-    return this.level('broadPulse') + (this.sim.research?.effect('pulseRadius') ?? 0);
+    // E23.6.2: the Wider pulse research upgrade: its first levels step the pulse up a tier each (#623: up to three)
+    return this.level('broadPulse') + Math.min(RESEARCH.pulseTierLevels, this.sim.research?.level('pulseRadius') ?? 0);
   }
+  /** #623: Wider pulse's late levels (4 and 5): a flat tile each on the pulse's radius */
+  get broadTiles() {
+    return Math.max(0, (this.sim.research?.level('pulseRadius') ?? 0) - RESEARCH.pulseTierLevels) * RESEARCH.pulseTilesPerLateLevel;
+  }
+  // ───────────── #624 (E25): Bloombot's research upgrades on systems that were already there ─────────────
+  private eff(id: string): number {
+    return this.sim.research?.effect(id) ?? 0;
+  }
+  /** Quick hands: what a pry hold (rubble, a vault door) takes, as a share of before (1 without it). Digging is Nimble hands'. */
+  get holdFactor(): number {
+    return 1 - this.eff('quickHands');
+  }
+  /**
+   * The one place a hold's length is worked out (#624): seconds Interact is held to dig out a pile once. Nimble
+   * hands from the park (#622) shortens it; Quick hands is for prying only (the owner's call, E25), so the two never
+   * pile up on digging. It never drops below RESEARCH.minHold.
+   */
+  get salvageHold(): number {
+    return Math.max(RESEARCH.minHold, SALVAGE.holdSeconds * (this.sim.parkGrowth?.holdShare ?? 1));
+  }
+  /** Seconds Interact is held to pry rubble open (Quick hands; never below RESEARCH.minHold either). */
+  get pryHold(): number {
+    return Math.max(RESEARCH.minHold, SALVAGE.pryHoldSeconds * this.holdFactor);
+  }
+  /** E25 (#626): seconds Interact is held to force a vault door with Pry II (Quick hands shortens it too). */
+  get vaultHold(): number {
+    return Math.max(RESEARCH.minHold, MOVE_LEVELS.vaultHoldSeconds * this.holdFactor);
+  }
+  /** Keen eye: how far a pulse's ripple reaches and lights up piles, caches, pages and buried things (tiles). */
+  get rippleRadius(): number {
+    return RIPPLE.radius + this.eff('keenEye');
+  }
+  /** Keen eye: tiles added to how far the piles the fountain still wants glint. */
+  get glintExtra(): number {
+    return this.eff('keenEye');
+  }
+  /** Keen eye at its last level: piles and unopened caches show on the minimap. */
+  get findsOnMap(): boolean {
+    return (this.sim.research?.level('keenEye') ?? 0) >= RESEARCH.keenEyeMapLevel;
+  }
+  /** Sun soak: charge a second, standing still in full sun (Charge scales it by the sun now). */
+  get sunSoak(): number {
+    return this.eff('sunSoak');
+  }
+  /** Lantern: how far Bloombot's own light reaches at night (0: no light of its own). */
+  get lanternReach(): number {
+    return this.eff('lantern');
+  }
+  /** Lucky pulse: the chance a pulse on bare ground turns up a few Seeds or Scrap (0 without it). */
+  get luckyChance(): number {
+    return this.eff('luckyPulse');
+  }
+
   get overchargeEvery() {
     const l = this.level('overcharge');
     return l > 0 ? 7 - l : 0;

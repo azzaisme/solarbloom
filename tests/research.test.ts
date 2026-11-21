@@ -38,6 +38,7 @@ describe('E23.6.2: research in data', () => {
       const g = p.gives;
       if ('upgrade' in g) expect(RESEARCH_UPGRADES.some((u) => u.id === g.upgrade), p.id).toBe(true);
       else if ('recipes' in g) for (const id of g.recipes) expect(RECIPE_IDS.has(id), `${p.id}: ${id}`).toBe(true);
+      else if ('move' in g) expect(['pry', 'hover', 'climb', 'glide'], p.id).toContain(g.move); // E25 #626: a move's second level
       else expect(g.station).toBe(2);
       for (const k of Object.keys(p.cost)) expect(realItem(k), `${p.id}: ${k}`).toBe(true);
       expect(p.days).toBeGreaterThan(0);
@@ -53,6 +54,7 @@ describe('E23.6.2: research in data', () => {
       else if ('tech' in f) expect(CACHES.has(f.tech), p.id).toBe(true);
       else if ('creature' in f) expect(['butterflies', 'birds', 'koi'], p.id).toContain(f.creature);
       else if ('crop' in f) expect(f.crop, p.id).toBe('radish'); // E23.5.2's first crop (data/crops once it lands)
+      else if ('move' in f) expect(['pry', 'hover', 'climb', 'glide'], p.id).toContain(f.move); // E25 #626: a move learned
       else expect(PROJECTS.some((q) => q.id === f.project), p.id).toBe(true);
       // follow the chain back to a find
       let q = p;
@@ -64,10 +66,10 @@ describe('E23.6.2: research in data', () => {
     }
   });
 
-  it('upgrades have one to three levels, each paid in real items, and each is opened by a project', () => {
+  it('upgrades have one to three levels (the Bloombot ones five, #623), each paid in real items, and each is opened by a project', () => {
     for (const u of RESEARCH_UPGRADES) {
       expect(u.levels.length, u.id).toBeGreaterThanOrEqual(1);
-      expect(u.levels.length, u.id).toBeLessThanOrEqual(3);
+      expect(u.levels.length, u.id).toBeLessThanOrEqual(u.branch === 'bloombot' ? 5 : 3);
       for (const l of u.levels) for (const k of Object.keys(l.cost)) expect(realItem(k), `${u.id}: ${k}`).toBe(true);
       expect(PROJECTS.some((p) => 'upgrade' in p.gives && p.gives.upgrade === u.id), u.id).toBe(true);
     }
@@ -150,18 +152,20 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(sim.research.open().map((p) => p.id)).toContain('pw-lines');
   });
 
-  it('upgrades are bought at the table for materials, three levels at most; the backpack one makes stacks bigger', () => {
+  it('upgrades are bought at the table for materials, five levels at most; the backpack one makes stacks bigger', () => {
     const sim = station();
     sim.state.salvage!.research = { analysed: [], done: ['rb-backpack'], running: [], levels: {} };
-    for (const m of ['planks', 'scrap', 'clay', 'gears'] as const) sim.inventory.addToStore(m, 40);
+    for (const m of ['planks', 'scrap', 'clay', 'gears', 'motor', 'sunstone', 'sunCell'] as const) sim.inventory.addToStore(m, 40);
     const base = sim.inventory.stackLimit();
     expect(sim.research.upgrade('backpack')).toBe(1);
     expect(sim.inventory.stackLimit()).toBe(base + 20);
     expect(sim.research.upgrade('backpack')).toBe(2);
     expect(sim.research.upgrade('backpack')).toBe(3);
+    expect(sim.research.upgrade('backpack')).toBe(4);
+    expect(sim.research.upgrade('backpack')).toBe(5);
     expect(sim.research.upgrade('backpack')).toBe(0);
     expect(sim.research.upgradeProblem('backpack')).toBe('As good as it gets');
-    expect(sim.inventory.stackLimit()).toBe(base + 60);
+    expect(sim.inventory.stackLimit()).toBe(base + 100);
     expect(sim.research.upgrade('sprint')).toBe(0);
   });
 

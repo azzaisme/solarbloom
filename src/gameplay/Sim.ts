@@ -31,6 +31,7 @@ import { CultivatorSystem } from './CultivatorSystem';
 import { Inventory, type BotAt } from './Inventory';
 import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
+import { MoveSpots } from './MoveSpots';
 import { FountainSystem } from './FountainSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
@@ -39,6 +40,8 @@ import { LandmarkSystem } from './LandmarkSystem';
 import { WaterSystem } from './WaterSystem';
 import { Crafting } from './Crafting';
 import { Research } from './Research';
+import { ParkGrowth } from './ParkGrowth';
+import { Knacks } from './Knacks';
 import { ChargeSystem } from './Charge';
 import { Automation } from './Automation';
 import { PulseLoad } from './PulseLoad';
@@ -94,6 +97,8 @@ export class Sim {
   readonly salvage: SalvageSystem;
   /** E21.5: gates. */
   readonly gates: GateSystem;
+  /** E25 (#626): the vaults, stashes and trips the level II moves are for. */
+  readonly moves: MoveSpots;
   /** E21.6: the fountain's tiers and deliveries. */
   readonly fountain: FountainSystem;
   /** E21.8: the Keepers and their requests. */
@@ -110,6 +115,10 @@ export class Sim {
   readonly crafting: Crafting;
   /** E23.6.2: the research station (projects, and the upgrades they open). */
   readonly research: Research;
+  /** #622: what greening the park has grown Bloombot into */
+  readonly parkGrowth: ParkGrowth;
+  /** #625: what the Keepers taught Bloombot */
+  readonly knacks: Knacks;
   /** E23.2.1: bloombot's charge, the only meter. */
   readonly charge: ChargeSystem;
   /** E23.6.4 / E23.6.5: supply crates, courier routes and jobs done by hand, the Assembler. */
@@ -192,10 +201,13 @@ export class Sim {
     this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
+    this.moves = new MoveSpots(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
+    this.parkGrowth = new ParkGrowth(this);
+    this.knacks = new Knacks(this);
     this.droneFuel = new DroneFuel(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
@@ -322,6 +334,7 @@ export class Sim {
     this.crafting.tick(dt);
     this.automation.tick(dt);
     this.research.tick(dt);
+    this.parkGrowth.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();

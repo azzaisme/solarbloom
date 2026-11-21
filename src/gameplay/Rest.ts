@@ -117,7 +117,7 @@ export class RestSystem {
     if (s.kind === 'bench') {
       // the bench was taken away (a placed one picked up) while bloombot sat on it: stand
       if (!this.benchAt(s.bench.x, s.bench.z)) return this.stand();
-      this.sim.charge.recharge(CHARGE.benchPerSecond * dt, 'bench');
+      this.sim.charge.recharge(CHARGE.benchPerSecond * dt * this.sim.knacks.rest, 'bench'); // #625 Easy rest (Gable)
       return;
     }
     // meditating: the pad charges bloombot (sim.chargers) while it is docked there; the charger gone, or bloombot

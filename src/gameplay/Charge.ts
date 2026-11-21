@@ -9,7 +9,7 @@ import type { Sim } from './Sim';
 /** What costs charge. */
 export type ChargeUse = 'pulse' | 'sprint' | 'pry' | 'hover' | 'climb' | 'glide';
 /** Where charge comes back from (E23.3's chargers call `recharge(amount, 'charger')`). */
-export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'cat' | 'other';
+export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'cat' | 'sun' | 'other';
 
 /**
  * E23.2.1 (#371): bloombot's charge, the only meter on screen.
@@ -67,7 +67,11 @@ export class ChargeSystem {
     const eff = this.sim.state.charge?.efficiency ?? 0;
     // E23.6.2: "Longer stride" research takes a share off sprinting's charge
     const stride = use === 'sprint' ? 1 - (this.sim.research?.effect('sprint') ?? 0) : 1;
-    return base * Math.pow(1 - CHARGE.efficiencyStep, eff) * stride;
+    // #622: Steady charge, from greening the park, takes a little off everything
+    const park = this.sim.parkGrowth?.chargeFactor ?? 1;
+    // #625: Float along (Sluice) for running, Starlight (Vega) at night
+    const knack = this.sim.knacks?.chargeFactor(use) ?? 1;
+    return base * Math.pow(1 - CHARGE.efficiencyStep, eff) * stride * park * knack;
   }
 
   /** May bloombot do this now? Anything is allowed with charge left, however little (it bottoms out at zero). */
@@ -173,7 +177,19 @@ export class ChargeSystem {
     const moved = !at || !this.lastAt || Math.hypot(at.x - this.lastAt.x, at.z - this.lastAt.z) > 0.02;
     this.still = moved ? 0 : this.still + dt;
     this.lastAt = at ? { x: at.x, z: at.z } : undefined;
-    if (this.resting) this.recharge(CHARGE.home.perSecond * dt, 'home');
+    if (this.resting) this.recharge(CHARGE.home.perSecond * dt * (this.sim.knacks?.rest ?? 1), 'home'); // #625 Easy rest (Gable)
+    else if (this.soaking) this.recharge(this.sunSoakRate() * dt, 'sun');
+  }
+
+  /** #624 Sun soak: charge a second it takes in now, standing still (the research level times the sun's strength). */
+  sunSoakRate(): number {
+    const per = this.sim.upgrades?.sunSoak ?? 0;
+    return per > 0 ? per * (this.sim.clock?.solarFactor() ?? 0) : 0;
+  }
+
+  /** #624 Sun soak: standing still in the sun, charging (never at home, whose rest is quicker already). */
+  get soaking(): boolean {
+    return !!this.sim.bot && this.still >= CHARGE.home.stillSeconds && !this.resting && this.sunSoakRate() > 1e-6 && this.value() < this.max - 1e-6;
   }
 
   /** Bloombot can always walk (at zero, the low-power walk). For the gentle-failure suite (E23.10). */

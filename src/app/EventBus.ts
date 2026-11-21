@@ -52,6 +52,10 @@ export interface GameEvents {
   'research.started': { id: string };
   'research.done': { id: string };
   'research.upgraded': { id: string; level: number };
+  /** #622: the park reached a milestone and Bloombot grew from it */
+  'bloombot.parkGrew': { step: number; id: string };
+  /** #625: a Keeper woke and taught Bloombot its knack */
+  'bloombot.knack': { keeper: string };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
   'biomass.gathered': { tileId: string; x: number; z: number; got: number; by: 'bot' | 'drone' };
   /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
@@ -92,7 +96,8 @@ export interface GameEvents {
   'fountain.delivered': { material: import('../core/types').MaterialId; n: number };
   'fountain.tier': { tier: number };
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
-  'keeper.said': { keeperId: string; lines: string[] };
+  /** `then`: a second bubble once the first has been read (#625: a Keeper's knack and first request, after it wakes) */
+  'keeper.said': { keeperId: string; lines: string[]; then?: string[] };
   'keeper.step': { keeperId: string; step: import('../core/types').KeeperStep };
   /** E23.9.2: a Keeper took a gift it loves, or bloombot grew its garden */
   'keeper.gift': { keeperId: string; /** a material, or 'garden' for a grown Keeper garden (E23.5.4.6) */ item: string; hearts: number };
@@ -141,6 +146,8 @@ export interface GameEvents {
   'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
+  /** #624 Lucky pulse: a pulse on bare ground turned up `n` of a material (already in the backpack) */
+  'pulse.lucky': { tileId: string; material: import('../core/types').MaterialId; n: number };
   'action.failed': { reason: string; tileId?: string };
   /** E23.1.5: an upgrade level was granted (research; nothing is bought). */
   'upgrade.granted': { id: string; level: number; machineId?: string };

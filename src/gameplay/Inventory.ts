@@ -40,7 +40,7 @@ export class Inventory {
   /** The stack limit: 40, then 60, 80 and 120 at fountain tiers 2, 3 and 4; the Pack Frame adds 40. */
   stackLimit(): number {
     const tier = Math.min(PACK.stack.length - 1, this.sv.tier);
-    return PACK.stack[tier] + (this.sv.blueprints.includes('packFrame') ? PACK.packFrame : 0) + (this.sim.research?.effect('backpack') ?? 0);
+    return PACK.stack[tier] + (this.sv.blueprints.includes('packFrame') ? PACK.packFrame : 0) + (this.sim.research?.effect('backpack') ?? 0) + (this.sim.knacks?.carry ?? 0); // #625 Strong back (Atlas)
   }
 
   /** Room left in a material's stack. */

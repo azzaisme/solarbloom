@@ -13,10 +13,11 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
-import { inSurfBand, onJetty, pileById, pondCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
+import { inSurfBand, moveLandAt, onJetty, pileById, pondCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
+import { LOOK } from '../data/look';
 import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
@@ -34,6 +35,7 @@ import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
+import { MOVE_TRIPS } from '../data/moveSpots';
 
 /** Small seeded RNG for decoration placement (looks only). */
 class VRng {
@@ -394,7 +396,14 @@ const PAINTED_DEAD: Record<string, string[]> = PALETTE.ground.painted;
 function paintedDead(t: TileData): string[] | undefined {
   if (t.level === undefined) return undefined;
   const g = groundTexFor(t.feature);
+  if (g === 'sand' && moveLandAt(t.x, t.z)) return PALETTE.ground.wetSand; // #626: the sandbar's wet sand
   return g ? PAINTED_DEAD[g] : undefined;
+}
+/** #626: the vertex tint on a tile's painted ground: the sandbar's sand is wet and darker than the beach's. */
+function paintTint(t: TileData, k: number): [number, number, number] {
+  if (!moveLandAt(t.x, t.z)) return [k, k, k];
+  const c = new pc.Color().fromString(PALETTE.ground.wetSandTint);
+  return [Math.round(c.r * k), Math.round(c.g * k), Math.round(c.b * k)];
 }
 const CORNERS = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
 interface PoolGeo {
@@ -499,6 +508,36 @@ void getOpacity() {
  */
 export const SINK = 0.45;
 const TALL_DROP = 2;
+
+/**
+ * E21.24: the level a retaining wall on cell (x, z)'s edge facing (dx, dz) drops to, or undefined when there's no
+ * wall there (the neighbour is as high or higher, or this cell is a ramp's side). Beside a ramp the wall drops to
+ * the ramp's lowest point.
+ */
+export function wallDrop(x: number, z: number, dx: number, dz: number): number | undefined {
+  const mine = edgeHeight(x, z, dx, dz);
+  if (typeof mine !== 'number') return undefined;
+  const theirs = edgeHeight(x + dx, z + dz, -dx, -dz);
+  const ramp = rampAt(x + dx, z + dz)?.ramp;
+  const low = typeof theirs === 'number' ? theirs : ramp ? Math.min(ramp.from, ramp.to) : mine;
+  return low < mine - 1e-6 ? low : undefined;
+}
+
+/**
+ * #648: whether the wall on cell (x, z)'s edge facing (dx, dz) runs on into the next cell along it, toward -1 and
+ * +1 (the same height, the same drop on the same side, and no weir there). Where it doesn't, the wall ends or turns
+ * a corner, and its stones reach on past the cell to close the corner.
+ */
+export function wallRuns(x: number, z: number, dx: number, dz: number, weir: (x: number, z: number, dx: number, dz: number) => boolean): [boolean, boolean] {
+  const ax = dz ? 1 : 0;
+  const az = dx ? 1 : 0;
+  const runs = (k: number) => {
+    const nx = x + ax * k;
+    const nz = z + az * k;
+    return !rampAt(nx, nz) && levelAt(nx, nz) === levelAt(x, z) && wallDrop(nx, nz, dx, dz) !== undefined && !weir(nx, nz, dx, dz);
+  };
+  return [runs(-1), runs(1)];
+}
 
 /**
  * Renders the endless city ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs + decoration),
@@ -847,6 +886,140 @@ export class ChunkRenderer {
     return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
+  /** A canal dropping a level over this edge: its water falls over it instead of a wall. */
+  private weir = (x: number, z: number, dx: number, dz: number): boolean =>
+    this.sim.grid.peek(GROUND, x, z)?.feature === 'water' && this.sim.grid.peek(GROUND, x + dx, z + dz)?.feature === 'water';
+
+  /**
+   * E25 (#626): the places the level II moves reach, dressed so they read as places, not plinths. The ruins' roofs
+   * are old buildings: their walls (the retaining wall's stone and courses, drawn by terrace) get a dark doorway and
+   * bricked-up windows, the top edge is broken stubs of wall, and a few stones lie fallen on top. The boathouse is
+   * planked, with eaves boards and a wide boat door to the water. The sandbar is wet sand with round stones, shells, a bleached log and tufts of grass.
+   */
+  private moveLand(b: Sink, t: TileData, h: number, th: number) {
+    const ml = moveLandAt(t.x, t.z);
+    if (!ml) return;
+    const P = PALETTE.props;
+    const r = (k: number) => dhash(t.x, t.z, 240 + k);
+    const x = t.x + 0.5;
+    const z = t.z + 0.5;
+    if (ml.ground === 'sand') {
+      // keep the tiles a trip lands on clear, and the stash's own tile
+      if (t.prop || MOVE_TRIPS.some((m) => m.to[0] === t.x && m.to[1] === t.z)) return;
+      const y = th + 0.086; // the painted sand's top
+      // each tile keeps its rocks to one corner and its log to the other, so they never run through each other
+      const flip = r(0) < 0.5 ? 1 : -1;
+      if (r(1) < 0.6) {
+        // a few round stones in a huddle, like the pebbles by the jetty steps
+        const cx = x - 0.2 * flip + (r(2) - 0.5) * 0.12;
+        const cz = z - 0.2 + (r(3) - 0.5) * 0.12;
+        const n = 1 + Math.floor(r(4) * 3);
+        for (let i = 0; i < n; i++) {
+          const sz = 0.17 + r(5 + i) * 0.1;
+          b.add('sphere', i % 2 ? PALETTE.stone.grey : PALETTE.stone.pebble, [cx + (i - 1) * 0.13, y + sz * 0.3, cz + ((i * 7) % 3 - 1) * 0.07], [sz, sz * 0.75, sz * 0.9]);
+        }
+      }
+      if (r(10) < 0.4) {
+        // a bleached log: a row of rounded pieces, thicker at its root end, with a stub of branch
+        const along = r(11) < 0.5;
+        const len = 0.55 + r(12) * 0.25;
+        const lx = x + 0.18 * flip;
+        const lz = z + 0.2;
+        // pieces close enough to run together into one smooth trunk
+        const n = 10;
+        for (let i = 0; i < n; i++) {
+          const k = i / (n - 1) - 0.5;
+          const d = 0.14 - i * 0.005;
+          const piece = (len / (n - 1)) * 2.2;
+          b.add('sphere', i === 0 ? P.driftwoodEnd : P.driftwood, [lx + (along ? k * len : 0), y + d * 0.4, lz + (along ? 0 : k * len)], [along ? piece : d, d * 0.8, along ? d : piece]);
+        }
+        b.add('sphere', P.driftwood, [lx + (along ? len * 0.15 : 0.08), y + 0.06, lz + (along ? 0.08 : len * 0.15)], [0.05, 0.05, 0.05]);
+      }
+      for (let i = 0; i < 3; i++) if (r(20 + i) < 0.5) b.add('sphere', P.shells[i % P.shells.length], [x + (r(23 + i) - 0.5) * 0.8, y + 0.02, z + (r(26 + i) - 0.5) * 0.8], [0.09, 0.045, 0.07]);
+      if (r(30) < 0.4) {
+        // a little tuft of dune grass
+        const gx = x + (r(31) - 0.5) * 0.5;
+        const gz = z + 0.25 * -flip;
+        for (let i = 0; i < 4; i++) b.add('cone', i % 2 ? P.tuftGreen : P.dryGrass, [gx + (i - 1.5) * 0.04, y + 0.07, gz + ((i * 5) % 3 - 1) * 0.035], [0.035, 0.14 + (i % 3) * 0.03, 0.035]);
+      }
+      return;
+    }
+    if (ml.ground !== 'roof') return;
+    const W = LOOK.wall; // the retaining wall terrace draws
+    const boathouse = ml.id === 'boathouseRoof';
+    const top = th + 0.08;
+    // the middle cell of each side gets the door (the side to the water for the boathouse, else the south side)
+    const mid = (a: number, w: number, c: number) => c === a + Math.floor(w / 2);
+    const water = (dx: number, dz: number) => this.sim.grid.peek(GROUND, t.x + dx, t.z + dz)?.feature === 'water';
+    const doorSide = (dx: number, dz: number) => (boathouse ? water(dx, dz) || (dz === 1 && ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, c]) => this.waterBeside(ml, a, c))) : dz === 1);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const low = wallDrop(t.x, t.z, dx, dz);
+      if (low === undefined) continue;
+      const ground = h + levelY(low);
+      const H = top - ground;
+      const fx = x + dx * (0.5 + W.thick / 2 + 0.004);
+      const fz = z + dz * (0.5 + W.thick / 2 + 0.004);
+      const across = (w: number): [number, number, number] => [dx ? 0.02 : w, 0, dz ? 0.02 : w];
+      const isMid = dx ? mid(ml.z, ml.d, t.z) : mid(ml.x, ml.w, t.x);
+      if (isMid && doorSide(dx, dz) && H > 0.9) {
+        // a doorway (the boathouse's is a wide boat door), dark inside, a stone frame and lintel
+        const dw = boathouse ? 0.86 : 0.5;
+        const dh = Math.min(H - 0.25, boathouse ? 1.0 : 0.9);
+        const [sx, , sz] = across(dw);
+        b.add('box', P.doorwayDark, [fx, ground + dh / 2, fz], [sx, dh, sz]);
+        const frame = boathouse ? PALETTE.wood.deep : PALETTE.stone.shadow;
+        const [lx, , lz] = across(dw + 0.16);
+        b.add('box', frame, [fx + dx * 0.01, ground + dh + 0.05, fz + dz * 0.01], [lx, 0.1, lz]);
+        for (const k of [-1, 1]) b.add('box', frame, [fx + dx * 0.01 + (dx ? 0 : k * (dw / 2 + 0.04)), ground + dh / 2, fz + dz * 0.01 + (dz ? 0 : k * (dw / 2 + 0.04))], [dx ? 0.04 : 0.08, dh, dz ? 0.04 : 0.08]);
+      } else if (H > 1 && r(30 + dx + dz * 2) < (boathouse ? 0.35 : 0.7)) {
+        // a window, bricked up long ago, with a stone sill and lintel
+        const ww = 0.34;
+        const wh = 0.4;
+        const wy = top - 0.42 - wh / 2;
+        const [sx, , sz] = across(ww);
+        b.add('box', P.brickedUp, [fx, wy, fz], [sx, wh, sz]);
+        const [lx, , lz] = across(ww + 0.12);
+        for (const k of [-1, 1]) b.add('box', PALETTE.stone.shadow, [fx + dx * 0.01, wy + k * (wh / 2 + 0.03), fz + dz * 0.01], [lx, 0.06, lz]);
+      }
+      if (boathouse) {
+        // timber cladding under the eaves, and eaves boards along the top of the wall
+        b.add('box', PALETTE.wood.dark, [x + dx * (0.5 + W.thick / 2 + W.copingLip + 0.02), top - 0.04, z + dz * (0.5 + W.thick / 2 + W.copingLip + 0.02)], [dx ? 0.04 : 1, 0.12, dz ? 0.04 : 1]);
+        b.add('box', PALETTE.wood.mid, [x + dx * (0.5 + W.thick / 2 + 0.01), top - 0.3, z + dz * (0.5 + W.thick / 2 + 0.01)], [dx ? 0.02 : 1, 0.34, dz ? 0.02 : 1]);
+        continue;
+      }
+      // the broken top of the old wall: a stub or two of masonry along the edge, with gaps between
+      for (let i = 0; i < 2; i++) {
+        if (r(40 + i * 3 + dx + dz * 5) < 0.45) continue;
+        const along = (r(50 + i + dx * 2 + dz * 3) - 0.5) * 0.7;
+        const sh = 0.12 + r(60 + i + dx + dz * 2) * 0.38;
+        const len = 0.2 + r(70 + i + dx * 3 + dz) * 0.25;
+        const cx = x + dx * (0.5 - W.thick / 2) + (dx ? 0 : along);
+        const cz = z + dz * (0.5 - W.thick / 2) + (dz ? 0 : along);
+        b.add('box', PALETTE.retaining.stone[1], [cx, top + 0.05 + sh / 2, cz], [dx ? W.thick : len, sh, dz ? W.thick : len]);
+        b.add('box', PALETTE.retaining.coping[1], [cx, top + 0.06 + sh, cz], [dx ? W.thick + 0.04 : len + 0.04, 0.04, dz ? W.thick + 0.04 : len + 0.04]);
+      }
+    }
+    if (boathouse) {
+      // the roof is planked: boards across it, a little proud of the ground
+      const surf = th + 0.08;
+      for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.light, [x - 0.375 + i * 0.25, surf + 0.01, z], [0.23, 0.02, 1]);
+      // the ridge beam down the middle row, end to end
+      if (t.z === ml.z + Math.floor(ml.d / 2)) b.add('box', PALETTE.wood.deep, [x, surf + 0.07, z], [1, 0.1, 0.12]);
+      return;
+    }
+    // a few stones fallen on top
+    if (!t.prop && r(80) < 0.4) b.add('box', PALETTE.retaining.stone[1], [x + (r(81) - 0.5) * 0.5, th + 0.08 + 0.07, z + (r(82) - 0.5) * 0.5], [0.18 + r(83) * 0.12, 0.14, 0.14 + r(84) * 0.1]);
+    if (!t.prop && r(85) < 0.3) b.add('sphere', PALETTE.stone.grey, [x + (r(86) - 0.5) * 0.6, th + 0.08 + 0.04, z + (r(87) - 0.5) * 0.6], [0.16, 0.09, 0.13]);
+  }
+
+  /** Is there water beside this piece of move land on that side (anywhere along it)? */
+  private waterBeside(ml: { x: number; z: number; w: number; d: number }, dx: number, dz: number): boolean {
+    const cells: [number, number][] = [];
+    if (dx) for (let k = 0; k < ml.d; k++) cells.push([dx > 0 ? ml.x + ml.w : ml.x - 1, ml.z + k]);
+    else for (let k = 0; k < ml.w; k++) cells.push([ml.x + k, dz > 0 ? ml.z + ml.d : ml.z - 1]);
+    return cells.some(([cx, cz]) => this.sim.grid.peek(GROUND, cx, cz)?.feature === 'water');
+  }
+
   /**
    * E21.24: the Old City's terraces. Where a neighbour's edge is lower, an old retaining wall (brick and stone,
    * coping on top) drops to it, with ivy once the ground above is restored. A ramp or stair tile is drawn as
@@ -876,32 +1049,43 @@ export class ChunkRenderer {
       }
       return;
     }
+    const W = LOOK.wall;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const mine = edgeHeight(t.x, t.z, dx, dz);
-      const theirs = edgeHeight(t.x + dx, t.z + dz, -dx, -dz);
-      if (typeof mine !== 'number') continue;
-      // a ramp's side: drop to the ramp's lowest point
-      const lowLv = typeof theirs === 'number' ? theirs : (rampAt(t.x + dx, t.z + dz)?.ramp ? Math.min(rampAt(t.x + dx, t.z + dz)!.ramp.from, rampAt(t.x + dx, t.z + dz)!.ramp.to) : mine);
-      if (lowLv >= mine - 1e-6) continue;
+      const lowLv = wallDrop(t.x, t.z, dx, dz);
+      if (lowLv === undefined) continue;
       const top = th + 0.08;
-      const bottom = h + levelY(lowLv) - 0.1;
+      const ground = h + levelY(lowLv);
+      // #648: the foot goes well under the lower side's water, so its ripples never show a seam along the wall
+      const bottom = ground - W.footSink;
       const H = top - bottom;
       const wx = x + dx * 0.5;
       const wz = z + dz * 0.5;
-      const sx = dx ? 0.12 : 1;
-      const sz = dz ? 0.12 : 1;
       // a weir: where a canal drops a level, its water falls over the edge
-      const below = this.sim.grid.peek(GROUND, t.x + dx, t.z + dz);
-      if (t.feature === 'water' && below?.feature === 'water') {
+      if (this.weir(t.x, t.z, dx, dz)) {
         b.add('box', PALETTE.aqua.foam, [wx + dx * 0.04, bottom + H / 2, wz + dz * 0.04], [dx ? 0.1 : 1, H, dz ? 0.1 : 1], 0.3);
         b.add('box', PALETTE.ground.seaFoam, [wx + dx * 0.25, bottom + 0.06, wz + dz * 0.25], [dx ? 0.4 : 1, 0.05, dz ? 0.4 : 1]);
         continue;
       }
+      // #648: along a run of wall each stone stops flush at the tile edge (no overlaps to notch the coping); where
+      // the wall ends or turns a corner it reaches on to close the corner
+      const ax = dz ? 1 : 0;
+      const az = dx ? 1 : 0;
+      const [on0, on1] = wallRuns(t.x, t.z, dx, dz, this.weir);
+      const end0 = on0 ? 0 : 1;
+      const end1 = on1 ? 0 : 1;
       // stone wall with brick courses, a coping stone on top
-      b.add('box', R.stone[alive], [wx, bottom + H / 2, wz], [sx, H, sz]);
+      const piece = (col: string, reach: number, y: number, height: number, across: number, out: number) => {
+        const len = 1 + reach * (end0 + end1);
+        const shift = (reach * (end1 - end0)) / 2;
+        b.add('box', col, [wx + ax * shift + dx * out, y, wz + az * shift + dz * out], [dx ? across : len, height, dz ? across : len]);
+      };
+      piece(R.stone[alive], W.thick / 2, bottom + H / 2, H, W.thick, 0);
+      // one colour per course along the whole run, standing proud of the face so its top edge never thins to nothing
       const bricks = PALETTE.bricks;
-      for (let c = 0; c < Math.floor(H / 0.45); c++) b.add('box', bricks[(((t.x * 7 + t.z * 3 + c) % bricks.length) + bricks.length) % bricks.length], [wx + dx * 0.01, bottom + 0.25 + c * 0.45, wz + dz * 0.01], [dx ? 0.12 : 0.9, 0.06, dz ? 0.12 : 0.9]);
-      b.add('box', R.coping[alive], [wx, top + 0.02, wz], [dx ? 0.18 : 1.04, 0.06, dz ? 0.18 : 1.04]);
+      const line = dx ? t.x * 2 + dx : t.z * 2 + dz;
+      for (let c = 0, y = ground + W.courseFrom; y + W.courseHeight / 2 < top - 0.1; c++, y += W.courseStep)
+        piece(bricks[(((line * 7 + c) % bricks.length) + bricks.length) % bricks.length], W.thick / 2 + W.courseProud, y, W.courseHeight, W.thick + W.courseProud, W.courseProud / 2);
+      piece(R.coping[alive], W.thick / 2 + W.copingLip, top + 0.02, W.copingHeight, W.thick + W.copingLip * 2, 0);
       // ivy and hanging plants once the ground above is restored
       if (t.ground === 'restored') {
         const n = 2 + (t.variant % 3);
@@ -992,6 +1176,10 @@ export class ChunkRenderer {
       b.add('box', PALETTE.stone.light, [x, y + 0.62, z + 0.05], [0.26, 0.32, 0.02]);
       return true;
     }
+    if (prop.startsWith('vault:') || prop.startsWith('stash:')) {
+      this.moveSpot(b, t, prop, x, y, z);
+      return true;
+    }
     if (prop === 'shed') {
       const sh = PARK_SET.shed;
       if (t.x !== sh.x || t.z !== sh.z) return true;
@@ -1010,6 +1198,75 @@ export class ChunkRenderer {
       return true;
     }
     return false;
+  }
+
+  /**
+   * E25 (#626): a sealed vault and a stash. A vault is a squat stone strongroom with an iron door on the side that
+   * faces open ground: shut, a wheel and rivets; forced, the door stands open against the wall and the inside is dark.
+   * A stash is a small wooden box with iron bands: shut, a gold catch glints; opened, its lid leans back, empty.
+   */
+  private moveSpot(b: Sink, t: TileData, prop: string, x: number, y: number, z: number) {
+    const id = prop.slice(6);
+    const open = !!this.sim.state.salvage?.caches.includes(id);
+    // the side to face: the first neighbour Bloombot could stand on
+    const sides: [number, number][] = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    const [dx, dz] = sides.find(([a, c]) => {
+      const n = this.sim.grid.peek(GROUND, t.x + a, t.z + c);
+      return !!n && !n.blocked && n.level === t.level;
+    }) ?? [0, 1];
+    const along = (k: number) => [dz ? k : 0, dx ? k : 0] as const; // across the door's face
+    if (prop.startsWith('vault:')) {
+      // taller than Bloombot, so it shows over its head from the follow camera
+      const W = 0.98;
+      const H = 1.4;
+      b.add('box', PALETTE.stone.dark, [x, y + H / 2, z], [W, H, W]);
+      b.add('box', PALETTE.stone.shadow, [x, y + H + 0.05, z], [W + 0.08, 0.1, W + 0.08]);
+      for (let c = 0; c < 5; c++) b.add('box', PALETTE.stone.grey, [x, y + 0.16 + c * 0.26, z], [W + 0.01, 0.03, W + 0.01]);
+      const fx = x + dx * (W / 2 + 0.01);
+      const fz = z + dz * (W / 2 + 0.01);
+      const dw = 0.62;
+      const dh = 1.0;
+      // a stone frame round the door, a lintel over it
+      const [lx, lz] = along(dw / 2 + 0.06);
+      for (const k of [-1, 1]) b.add('box', PALETTE.stone.shadow, [fx + dx * 0.02 + lx * k, y + dh / 2 + 0.04, fz + dz * 0.02 + lz * k], [dx ? 0.07 : 0.1, dh + 0.08, dz ? 0.07 : 0.1]);
+      b.add('box', PALETTE.stone.shadow, [fx + dx * 0.02, y + dh + 0.12, fz + dz * 0.02], [dx ? 0.08 : dw + 0.3, 0.12, dz ? 0.08 : dw + 0.3]);
+      if (!open) {
+        b.add('box', PALETTE.metal.iron, [fx, y + dh / 2 + 0.04, fz], [dx ? 0.05 : dw, dh, dz ? 0.05 : dw]);
+        b.add('box', PALETTE.metal.rust, [fx + dx * 0.01, y + dh / 2 + 0.04, fz + dz * 0.01], [dx ? 0.04 : dw * 0.84, dh * 0.88, dz ? 0.04 : dw * 0.84]);
+        // the wheel that once turned the bolts, and its spokes
+        b.add('sphere', PALETTE.trim.brass, [fx + dx * 0.05, y + 0.56, fz + dz * 0.05], [dx ? 0.04 : 0.3, 0.3, dz ? 0.04 : 0.3]);
+        b.add('box', PALETTE.trim.bronzeAged, [fx + dx * 0.07, y + 0.56, fz + dz * 0.07], [dx ? 0.03 : 0.32, 0.04, dz ? 0.03 : 0.32]);
+        b.add('box', PALETTE.trim.bronzeAged, [fx + dx * 0.07, y + 0.56, fz + dz * 0.07], [dx ? 0.03 : 0.04, 0.32, dz ? 0.03 : 0.04]);
+        for (const k of [-1, 1])
+          for (const h of [0.16, 0.95]) {
+            const [ax, az] = along(k * dw * 0.4);
+            b.add('sphere', PALETTE.metal.steel, [fx + dx * 0.03 + ax, y + h, fz + dz * 0.03 + az], [0.04, 0.04, 0.04]);
+          }
+      } else {
+        b.add('box', PALETTE.props.vaultInside, [fx, y + dh / 2 + 0.04, fz], [dx ? 0.03 : dw, dh, dz ? 0.03 : dw]);
+        const [ax, az] = along(dw / 2 + 0.02);
+        b.add('box', PALETTE.metal.iron, [fx + dx * (dw / 2) + ax, y + dh / 2 + 0.04, fz + dz * (dw / 2) + az], [dx ? dw : 0.05, dh, dz ? dw : 0.05]);
+      }
+      return;
+    }
+    // a stash
+    const L = 0.5;
+    const D = 0.34;
+    const bh = 0.24;
+    const sx = dx ? D : L;
+    const sz = dz ? D : L;
+    b.add('box', PALETTE.wood.crate, [x, y + bh / 2, z], [sx, bh, sz]);
+    for (const k of [-1, 1]) {
+      const [ax, az] = along(k * L * 0.3);
+      b.add('box', PALETTE.props.stashBand, [x + ax, y + bh / 2, z + az], [dx ? D + 0.02 : 0.04, bh + 0.01, dz ? D + 0.02 : 0.04]);
+    }
+    if (!open) {
+      b.add('box', PALETTE.wood.dark, [x, y + bh + 0.035, z], [sx + 0.03, 0.07, sz + 0.03]);
+      b.add('box', PALETTE.trim.gold, [x + dx * (D / 2 + 0.02), y + bh, z + dz * (D / 2 + 0.02)], [dx ? 0.02 : 0.07, 0.08, dz ? 0.02 : 0.07]);
+    } else {
+      b.add('box', PALETTE.props.vaultInside, [x, y + bh - 0.01, z], [sx - 0.06, 0.02, sz - 0.06]);
+      b.add('box', PALETTE.wood.dark, [x - dx * (D / 2 + 0.03), y + bh + D / 2, z - dz * (D / 2 + 0.03)], [dx ? 0.05 : L + 0.03, D, dz ? 0.05 : L + 0.03]);
+    }
   }
 
   /**
@@ -1274,10 +1531,13 @@ export class ChunkRenderer {
       // Look 6.18: while an area-clear wave rolls, ground it hasn't reached yet keeps its fogged look.
       const ahead = fog === 'cleared' && tr?.waveAhead(area, t.x, t.z);
       b.grey = fog === 'hidden' ? 0.75 : (fog === 'cleared' && !ahead) || t.ground === 'restored' ? 0 : 0.35;
+      // #626: the sea counts as cleared, but the sandbar out in it is dead ground like the beach it lies off
+      if (fog === 'cleared' && t.ground !== 'restored' && moveLandAt(t.x, t.z)?.ground === 'sand') b.grey = 0.35;
       fb.grey = b.grey;
       // E21.24: an Old City tile stands at its terrace's height; cliff faces drop to lower neighbours
       const th = t.level !== undefined ? h + levelY(t.level) : h;
       if (t.level !== undefined) this.terrace(b, t, h, th);
+      if (!v.far) this.moveLand(b, t, h, th);
       if (t.ramp) {
         yield;
         continue;
@@ -1323,8 +1583,8 @@ export class ChunkRenderer {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
         const cut = this.landCuts(t);
         if (this.raisedPaving(t)) this.pavedTop(b, t, th, gtex, k);
-        else if (cut) addGroundFan(gtex[GROUND_TEXTURES.indexOf(gt)], gt, [t.x + 0.5, t.z + 0.5], this.cutRing(t, cut), th + 0.086, [k, k, k]);
-        else addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);
+        else if (cut) addGroundFan(gtex[GROUND_TEXTURES.indexOf(gt)], gt, [t.x + 0.5, t.z + 0.5], this.cutRing(t, cut), th + 0.086, paintTint(t, k));
+        else addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, paintTint(t, k));
       }
       // E23.8.3.2: a rust stain in the industrial ruins, laid over the ground (and its pavers, when they are raised)
       if (!v.far && !t.blocked && t.prop?.startsWith('ruin:stain')) {

@@ -1,0 +1,129 @@
+{
+ "measures": {
+  "parkStep": 3,
+  "spreadExtra": 1,
+  "salvageHoldNimble": {
+   "secs": 0.45,
+   "acting": "rummage"
+  },
+  "deck150.levels": {
+   "chargeCells": 5,
+   "chargeEfficiency": 2,
+   "sprint": 1,
+   "pulseRadius": 2,
+   "backpack": 3,
+   "quickHands": 3,
+   "keenEye": 3,
+   "sunSoak": 3,
+   "lantern": 2,
+   "luckyPulse": 3
+  },
+  "salvageHoldQuick3": {
+   "secs": 0.43,
+   "acting": "rummage"
+  },
+  "holdSeconds": {
+   "salvage": 0.42,
+   "pry": 1.4,
+   "vault": 2.0999999999999996
+  },
+  "keenEye": {
+   "targets": 44,
+   "reach": 19
+  },
+  "sunSoak": [
+   {
+    "level": 3,
+    "atHome": false,
+    "soaking": true,
+    "sun": 1,
+    "ratePerSec": 0.36,
+    "gained8s": 2.92,
+    "secs": 8,
+    "max": 225,
+    "fullFromEmptyMin": 10.4,
+    "dayFraction": 0.33
+   },
+   {
+    "level": 3,
+    "atHome": false,
+    "soaking": true,
+    "sun": 1,
+    "ratePerSec": 0.36,
+    "gained8s": 2.88,
+    "secs": 8,
+    "max": 225,
+    "fullFromEmptyMin": 10.4,
+    "dayFraction": 0.12
+   },
+   {
+    "level": 3,
+    "atHome": false,
+    "soaking": true,
+    "sun": 1,
+    "ratePerSec": 0.36,
+    "gained8s": 2.88,
+    "secs": 8,
+    "max": 225,
+    "fullFromEmptyMin": 10.4,
+    "dayFraction": 0.55
+   },
+   {
+    "level": 2,
+    "atHome": false,
+    "soaking": true,
+    "sun": 1,
+    "ratePerSec": 0.24,
+    "gained8s": 1.92,
+    "secs": 8,
+    "max": 225,
+    "fullFromEmptyMin": 15.6,
+    "dayFraction": 0.33
+   },
+   {
+    "level": 1,
+    "atHome": false,
+    "soaking": true,
+    "sun": 1,
+    "ratePerSec": 0.12,
+    "gained8s": 0.96,
+    "secs": 8,
+    "max": 225,
+    "fullFromEmptyMin": 31.3,
+    "dayFraction": 0.33
+   }
+  ],
+  "lucky": {
+   "pulses": 60,
+   "events": 8,
+   "seeds": 5,
+   "scrap": 16,
+   "chance": 0.12
+  },
+  "tideWoke": "request1",
+  "vaultHold": {
+   "secs": 2.1,
+   "acting": "pry"
+  },
+  "gatherHold": {
+   "secs": 0.61,
+   "acting": "gather"
+  },
+  "gatherTile": "g:4:0",
+  "deck150.pageRows": 31,
+  "1280x800.levels": {
+   "chargeCells": 5,
+   "chargeEfficiency": 2,
+   "sprint": 1,
+   "pulseRadius": 2,
+   "backpack": 3,
+   "quickHands": 3,
+   "keenEye": 3,
+   "sunSoak": 3,
+   "lantern": 2,
+   "luckyPulse": 3
+  },
+  "1280x800.pageRows": 31
+ },
+ "notes": []
+}

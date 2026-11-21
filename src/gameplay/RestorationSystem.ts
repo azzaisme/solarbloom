@@ -2,6 +2,7 @@ import { distToFootprint } from '../core/Grid';
 import { GROUND } from '../core/GameState';
 import type { PlantKind, RestoreSource, TileData } from '../core/types';
 import { PLANT_LOAD, PULSE_LOAD, type PulseLoadDef } from '../data/pulse';
+import { RESEARCH } from '../data/research';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -115,8 +116,47 @@ export class RestorationSystem {
       this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + Math.min(1.2, 0.12 * d + 0.01 * extra.length)); // ripple outward, done within ~2 s
       extra.push(nb.id);
     }
+    // #622: Spreading pulse, from greening the park: the nearest dry tiles beside it wake too
+    for (const { tile: nb, d } of this.spillTiles(t, extra)) {
+      if (load.plant) this.plant(nb, load.plant);
+      this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + Math.min(1.2, 0.12 * d + 0.01 * extra.length));
+      extra.push(nb.id);
+    }
     this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged });
+    this.lucky(tileId);
     return true;
+  }
+
+  /**
+   * #624 Lucky pulse: now and then a pulse that wakes bare ground turns up a few Seeds or Scrap. Earned only: with
+   * no level it never rolls (so the dice, and everything else seeded from them, run as they always did).
+   */
+  private lucky(tileId: string) {
+    const chance = this.sim.upgrades.luckyChance;
+    if (chance <= 0) return;
+    const rng = this.sim.rng;
+    if (rng.next() >= chance) return;
+    const L = RESEARCH.lucky;
+    const material = L.finds[Math.floor(rng.next() * L.finds.length)];
+    const n = L.min + Math.floor(rng.next() * (L.max - L.min + 1));
+    const got = n - this.sim.inventory.add(material, n);
+    if (got > 0) this.sim.bus.emit('pulse.lucky', { tileId, material, n: got });
+  }
+
+  /**
+   * #622: the tiles a Spreading pulse also wakes: the nearest dry ones touching the pulsed tile (sides first, then
+   * corners) that the pulse's own reach hasn't already taken. None before the park milestone.
+   */
+  spillTiles(t: TileData, taken: readonly string[] = []): { tile: TileData; d: number }[] {
+    const n = this.sim.parkGrowth?.spill ?? 0;
+    if (n <= 0) return [];
+    return this.sim.grid
+      .tilesWithin(t.roofId, t.x, t.z, 2)
+      .map((nb) => ({ tile: nb, d2: (nb.x - t.x) ** 2 + (nb.z - t.z) ** 2 }))
+      .filter(({ tile, d2 }) => d2 >= 1 && d2 <= 2 && !taken.includes(tile.id) && this.isEligible(tile))
+      .sort((a, b) => a.d2 - b.d2 || a.tile.pollution - b.tile.pollution || a.tile.id.localeCompare(b.tile.id))
+      .slice(0, n)
+      .map(({ tile, d2 }) => ({ tile, d: Math.sqrt(d2) }));
   }
 
   /** Whether the next manual pulse on a dead tile will be Overcharged. */
@@ -145,7 +185,9 @@ export class RestorationSystem {
   pulseRadius(overcharged = false, extraReach = 0): number {
     const tiers = TUNING.pulseTiers;
     const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + extraReach + (overcharged ? 1 : 0));
-    return overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    const r = overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    // #623: Wider pulse's late levels add flat tiles; never past the widest a pulse goes
+    return r > 0 ? Math.min(RESEARCH.pulseMaxRadius, r + this.sim.upgrades.broadTiles) : r;
   }
 
   /**
@@ -181,7 +223,7 @@ export class RestorationSystem {
     const p = this.sim.state.progression;
     if (!p.coreActivated) return;
     const was = p.megaCharge ?? 0;
-    p.megaCharge = Math.min(TUNING.mega.charge, was + 1);
+    p.megaCharge = Math.min(TUNING.mega.charge, was + (this.sim.knacks?.mega ?? 1)); // #625 Good timing (Tock)
     if (p.megaCharge >= TUNING.mega.charge && was < TUNING.mega.charge) this.sim.bus.emit('mega.ready', {});
   }
 

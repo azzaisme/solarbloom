@@ -68,6 +68,12 @@ const ground = {
   /** the stone edge of dead paving where it stands above the earth beside it */
   pavingKerb: '#a48a72',
   painted: { sand: ['#e2bf7e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
+  /**
+   * E25 (#626): the sandbar out in the sea is wet sand: the painted sand is tinted by `wetSandTint` and its sides take
+   * `wetSand`: a little darker than the dry beach.
+   */
+  wetSandTint: '#c4b6a4',
+  wetSand: ['#b39c78'],
   seaFoam: '#eaf8fb',
   /** restored ground that isn't lawn ('' = use the stage grass) */
   alive: { lawn: '', paving: '#b4afa5', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d6d0c6', sand: '#e6d3a0' } as Record<string, string>,
@@ -333,6 +339,17 @@ const props = {
   lampToppled: '#8d8a78',
   /** E23.8.3.2: the industrial ruins: deep-rusted girders and the rust run-off staining the ground round them */
   girderRust: '#6b4330',
+  /** E25 (#626): the dark inside of a forced vault, and a stash box's iron bands */
+  vaultInside: '#2a2622',
+  stashBand: '#4a4038',
+  /** E25 (#626): the ruins the level II moves reach: bricked-up windows, a dark doorway; the sandbar's driftwood, shells and tufts of grass */
+  brickedUp: '#7a6a5c',
+  doorwayDark: '#2f2a25',
+  driftwood: '#b9a88e',
+  driftwoodEnd: '#8f7c64',
+  dryGrass: '#9a8c55',
+  shells: ['#efe4d2', '#e8c6b4', '#d9cbb3'],
+  tuftGreen: '#6d7a45',
   rustStain: '#5e3a28',
   stallDead: '#9a8a70',
   stallAlive: '#c9a77a',
@@ -571,6 +588,13 @@ export const PALETTE = {
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
   /** E23.7.2.2: the house's radio (the forecast) */
   radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
+  /** #628: the little tools and things Bloombot holds while it works (BotProps) */
+  botProps: { metal: '#8d949b', metalDark: '#5d646b', wood: '#9a6b3f', cloth: '#b89c72', basket: '#c99a55', can: '#5fa8a0', brass: '#c9a14a', paper: '#f3ead2', stem: '#5c9a4c', petal: '#f39ab4', core: '#ffd25a', shell: '#f2c6b0', fruit: '#e0573f', glow: '#94ff6e' },
+  /** #627: Sun soak's solar panel on Bloombot's pack: dark blue glass */
+  botSolar: { diffuse: '#1d2f5c', specular: '#9fb8ff', emissive: '#2a4a9a' },
+  /** #629: the turntable: the part in focus glows warm, and the next level's ghost is pale mint */
+  botGlowFocus: '#ffd27a',
+  botGhost: '#bff5d8',
   nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a', dewStem: '#d9d2c2', dewCap: '#9fb7c9', dewDrop: '#e8f6ff', glass: '#bfe3ef', moth: '#e9e4d8' },
   // ───── legacy names (pre-Look 2), kept as aliases ─────
   concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],

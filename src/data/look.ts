@@ -114,7 +114,9 @@ export const LOOK = {
    */
   tiers: {
     low: { post: false, samples: 1, shadowRes: 1024, shadowCascades: 1, softShadows: false, bloom: false, ssao: false, dof: false, rim: true },
-    medium: { post: true, samples: 2, shadowRes: 2048, shadowCascades: 2, softShadows: false, bloom: true, ssao: false, dof: false, rim: true },
+    // #648: 4× MSAA on Medium too (and so on the Deck, which draws Medium at 0.75 scale): at 2× the long thin
+    // edges of the retaining walls and their coping stepped visibly
+    medium: { post: true, samples: 4, shadowRes: 2048, shadowCascades: 2, softShadows: false, bloom: true, ssao: false, dof: false, rim: true },
     high: { post: true, samples: 4, shadowRes: 4096, shadowCascades: 3, softShadows: true, bloom: true, ssao: true, dof: false, rim: true },
   } satisfies Record<GfxTier, TierSpec>,
   /**
@@ -122,6 +124,26 @@ export const LOOK = {
    * camera). The skyline and sky are unlit and cast no shadows, so the cascades only cover the playable terrace.
    */
   cascadeDistribution: 0.6,
+  /**
+   * #648: the Old City's retaining walls (ChunkRenderer.terrace), in metres. The coping runs straight along a wall
+   * and only reaches past the tile where the wall ends or turns, so neighbouring stones never overlap in a notch.
+   * Brick courses stand far enough off the face that their top edge is never thinner than a pixel.
+   */
+  wall: {
+    /** the wall's thickness, centred on the tile edge */
+    thick: 0.12,
+    /** how far the coping reaches out over each face */
+    copingLip: 0.03,
+    copingHeight: 0.06,
+    /** brick courses: one every `courseStep` up from `courseFrom` above the lower side's ground */
+    courseFrom: 0.15,
+    courseStep: 0.45,
+    courseHeight: 0.06,
+    /** how far a course stands proud of the face */
+    courseProud: 0.03,
+    /** how far the foot sinks below the lower side's ground or water */
+    footSink: 0.25,
+  },
 };
 
 export interface TierSpec {

@@ -63,6 +63,7 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
       tutorialStep: 0,
       hintsDismissed: false,
       introSeen: false,
+      parkGrowth: 0, // #622: a new game has grown nothing from the park yet
       pulseCharge: 0,
       overflows: 0,
       canopyBursts: 0,

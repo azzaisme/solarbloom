@@ -2,7 +2,7 @@ import type { ItemId } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { blueprintRows, collection, itemCells, journalPages, oneOffItems, pinRequest, requestRows, TABS, type TabId } from './BackpackModel';
 import { materialIcon } from './MaterialIcons';
-import { bloombotRows, pips, stateWords, type BloombotRow } from './BloombotPage';
+import { BLOOMBOT_GROUPS, bloombotRows, howHeading, pips, stateWords, type BloombotRow } from './BloombotPage';
 import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell';
 import { reveal } from './PadFocus';
 import './backpack.css';
@@ -53,6 +53,11 @@ export class Backpack {
   private selPage?: string;
   /** #620: the Bloombot row in focus */
   private selBot?: string;
+  /**
+   * #629: the live look at Bloombot (the game's Turntable): told which canvas to draw into (none: stop) and which row
+   * is in focus, every time the Bloombot page is drawn or its focus moves.
+   */
+  botView?: (canvas: HTMLCanvasElement | undefined, row: BloombotRow | undefined) => void;
 
   constructor(
     parent: HTMLElement,
@@ -100,6 +105,8 @@ export class Backpack {
     this.body.addEventListener('click', (e) => this.click(e.target as HTMLElement));
     // the cell or page in focus is the one shown beside the list (keyboard and pad read by moving)
     this.body.addEventListener('focusin', (e) => {
+      // #629: stepping to a detail's Show me where (or its last lines) brings how to get it out from under the head
+      if ((e.target as HTMLElement).closest('#bpDetail #bb-where, #bpDetail #bb-how')) requestAnimationFrame(() => this.revealHow());
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-mat], [data-page], [data-bb]');
       if (!t) return;
       if (t.dataset.bb && t.dataset.bb !== this.selBot) {
@@ -113,6 +120,22 @@ export class Backpack {
         this.select();
       }
     });
+  }
+
+  /**
+   * #629: the Bloombot detail's "how to get it" heading, scrolled out from under the sticky head (focusing the button
+   * at its foot scrolls only as far as the button), as long as the focused control stays in sight.
+   */
+  private revealHow() {
+    const d = this.body.querySelector<HTMLElement>('#bpDetail');
+    const head = d?.querySelector<HTMLElement>('.bb-head');
+    const h4 = d?.querySelector<HTMLElement>('h4');
+    if (!d || !head || !h4) return;
+    const under = head.getBoundingClientRect().bottom + 6 - h4.getBoundingClientRect().top;
+    if (under <= 0) return;
+    const f = document.activeElement instanceof HTMLElement && d.contains(document.activeElement) ? document.activeElement.getBoundingClientRect() : undefined;
+    const room = f ? d.getBoundingClientRect().bottom - f.bottom : under;
+    d.scrollTop -= Math.min(under, Math.max(0, room));
   }
 
   get isOpen(): boolean {
@@ -145,6 +168,7 @@ export class Backpack {
 
   close() {
     if (!this.isOpen) return;
+    this.botView?.(undefined, undefined);
     this.el.hidden = true;
     this.el.classList.remove('open');
     this.storage = undefined;
@@ -165,7 +189,24 @@ export class Backpack {
     }
     this.body.setAttribute('aria-labelledby', `bptab-${tab}`);
     this.body.innerHTML = this[tab]();
+    this.syncView();
+    this.fitDetail();
     this.bar();
+  }
+
+  /** #629: points the turntable at the Bloombot page's canvas and its row in focus (or stops it). */
+  private bbCanvas?: HTMLCanvasElement;
+  private syncView() {
+    if (!this.botView) return;
+    // one canvas for as long as the page lives, moved into each redrawn detail's view (the turntable keeps drawing)
+    const slot = this.isOpen && this.current === 'bloombot' ? this.body.querySelector<HTMLElement>('#bpDetail .bb-view') : null;
+    let canvas: HTMLCanvasElement | undefined;
+    if (slot) {
+      canvas = this.bbCanvas ??= Object.assign(document.createElement('canvas'), { id: 'bbView', width: 480, height: 300 });
+      if (canvas.parentElement !== slot) slot.appendChild(canvas);
+    }
+    const row = canvas ? bloombotRows(this.host.sim).find((r) => r.id === this.selBot) : undefined;
+    this.botView(canvas, row);
   }
 
   /** Redraws the open tab, keeping the focus on the same control. */
@@ -173,6 +214,8 @@ export class Backpack {
     if (!this.isOpen) return;
     const id = (document.activeElement as HTMLElement | null)?.id;
     this.body.innerHTML = this[this.current]();
+    this.syncView();
+    this.fitDetail();
     if (id) this.body.querySelector<HTMLElement>(`#${CSS.escape(id)}`)?.focus({ focusVisible: true } as FocusOptions);
     this.bar();
   }
@@ -240,6 +283,24 @@ export class Backpack {
     for (const b of this.body.querySelectorAll<HTMLElement>('[data-bb]')) b.setAttribute('aria-selected', String(b.dataset.bb === this.selBot));
     const d = this.body.querySelector<HTMLElement>('#bpDetail');
     if (d) d.innerHTML = this.current === 'journal' ? this.pageText() : this.current === 'bloombot' ? this.botDetail() : this.detail();
+    if (d && this.current === 'bloombot') d.scrollTop = 0; // #629: a new row's detail starts from its top
+    if (this.current === 'bloombot') this.syncView();
+    this.fitDetail();
+  }
+
+  /**
+   * The Bloombot page's detail, when it is taller than its column (a long "how to learn it" at a big interface size)
+   * and has no Show me where at its foot: its last paragraph becomes a stop the focus can reach (Enter or A on the
+   * row, or right from the list), and the pad and keys scroll it into view there, so its end is never out of reach.
+   */
+  private fitDetail() {
+    if (this.current !== 'bloombot') return;
+    const d = this.body.querySelector<HTMLElement>('#bpDetail');
+    const how = d?.querySelector<HTMLElement>('#bb-how');
+    if (!d || !how) return;
+    const stop = !d.querySelector('#bb-where') && d.scrollHeight > d.clientHeight + 1;
+    if (stop) how.tabIndex = 0;
+    else how.removeAttribute('tabindex');
   }
 
   private move(act: string, n: string) {
@@ -272,18 +333,13 @@ export class Backpack {
       `<b class="bb-name">${esc(r.name)}</b>` +
       (r.kind === 'upgrade' ? `<span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>` : '') +
       `<span class="bb-state">${esc(stateWords(r))}</span></button>`;
-    const group = (title: string, id: string, list: BloombotRow[], note: string) =>
-      `<h3 class="pn-label" id="${id}">${title} <span class="bb-count">${esc(note)}</span></h3><div class="bb-rows" role="listbox" aria-labelledby="${id}">${list.map(row).join('')}</div>`;
-    const moves = rows.filter((r) => r.kind === 'move');
-    const ups = rows.filter((r) => r.kind === 'upgrade');
-    const levels = ups.reduce((a, r) => a + (r.level ?? 0), 0);
-    const most = ups.reduce((a, r) => a + (r.max ?? 0), 0);
-    return (
-      `<div class="pn-split bb-split"><div class="pn-main bb-main">` +
-      group('Moves', 'bbMovesH', moves, `${moves.filter((r) => r.state === 'have').length} of ${moves.length} learned`) +
-      group('Upgrades', 'bbUpsH', ups, `${levels} of ${most} levels`) +
-      `</div><aside class="pn-detail bp-detail bb-detail" id="bpDetail">${this.botDetail()}</aside></div>`
-    );
+    const groups = BLOOMBOT_GROUPS.map((g) => {
+      const list = rows.filter((r) => r.kind === g.kind);
+      if (!list.length) return '';
+      const id = `bbH-${g.kind}`;
+      return `<h3 class="pn-label" id="${id}">${esc(g.title)} <span class="bb-count">${esc(g.note(list))}</span></h3><div class="bb-rows" role="listbox" aria-labelledby="${id}">${list.map(row).join('')}</div>`;
+    }).join('');
+    return `<div class="pn-split bb-split"><div class="pn-main bb-main">${groups}</div><aside class="pn-detail bp-detail bb-detail" id="bpDetail">${this.botDetail()}</aside></div>`;
   }
 
   private botDetail(): string {
@@ -291,11 +347,18 @@ export class Backpack {
     if (!r) return '';
     const level = r.kind === 'upgrade' ? `<p class="bb-level"><span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>${esc(stateWords(r))}</p>` : `<p class="bb-level">${esc(stateWords(r))}</p>`;
     const where = r.where ? `<button class="pn-btn primary bb-where" id="bb-where" data-bbwhere="${r.id}">${icon('pin', 's')}Show me where</button>` : '';
+    // #629: a slim head (the name and its level) stays at the top while the rest scrolls under it, so the name is
+    // always in sight. Under it, what it does with the live look at Bloombot beside it, then how to get it and Show me
+    // where: stepping to the button brings the whole of how to get it into view with it.
+    const view = this.botView ? `<div class="bb-view" aria-hidden="true"></div>` : '';
     return (
-      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : 'spark')}</span>${esc(r.name)}</h3>` +
+      `<div class="bb-head">` +
+      `<h3><span class="pn-badge">${icon(r.kind === 'move' || r.kind === 'move2' ? 'sprout' : r.kind === 'park' ? 'star' : r.kind === 'knack' ? 'heart' : 'spark')}</span>${esc(r.name)}</h3>` +
       level +
-      `<p class="bb-does">${esc(r.does)}</p>` +
-      `<h4>${r.state === 'have' ? (r.kind === 'move' ? 'Learned' : 'At its top level') : r.kind === 'move' ? 'How to learn it' : r.level ? 'The next level' : 'How to get it'}</h4><p>${esc(r.how)}</p>` +
+      `</div><div class="bb-about${view ? ' has-view' : ''}"><div class="bb-words"><p class="bb-does">${esc(r.does)}</p>` +
+      (r.now ? `<p class="bb-now">${esc(r.now)}</p>` : '') +
+      `</div>${view}</div>` +
+      `<h4>${esc(howHeading(r))}</h4><p class="bb-how" id="bb-how">${esc(r.how)}</p>` +
       where
     );
   }
@@ -369,8 +432,10 @@ export class Backpack {
     if (bb) {
       this.selBot = bb.dataset.bb;
       this.select();
-      // Enter or A on a row steps to its Show me where
-      this.body.querySelector<HTMLElement>('#bb-where')?.focus({ focusVisible: true } as FocusOptions);
+      // Enter or A on a row steps to its Show me where, or (a detail too tall to show whole) to its last lines
+      const to = this.body.querySelector<HTMLElement>('#bb-where') ?? this.body.querySelector<HTMLElement>('#bb-how[tabindex="0"]');
+      to?.focus({ focusVisible: true } as FocusOptions);
+      to?.scrollIntoView({ block: 'nearest' });
       return;
     }
     const mv = t.closest<HTMLElement>('[data-move]');

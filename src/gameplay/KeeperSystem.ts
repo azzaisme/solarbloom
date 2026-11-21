@@ -127,8 +127,8 @@ export class KeeperSystem {
     this.sim.state.salvage!.keepers[id] = st;
   }
 
-  private say(id: string, lines: string[]) {
-    this.sim.bus.emit('keeper.said', { keeperId: id, lines: lines.slice(0, 4) });
+  private say(id: string, lines: string[], then?: string[]) {
+    this.sim.bus.emit('keeper.said', { keeperId: id, lines: lines.slice(0, 4), ...(then?.length ? { then: then.slice(0, 3) } : {}) });
   }
 
   /** E23.9.2: a Keeper's story (personality, arc, likes, gifts). */
@@ -198,7 +198,10 @@ export class KeeperSystem {
         return 'stirs';
       }
       this.go(id, 'request1');
-      this.say(id, [...d.say.woke, ...this.beat(id, 'taker'), ...d.say.request1]);
+      // #625: it wakes remembering the old way; then, in a second bubble, it teaches Bloombot its knack in its own
+      // words and asks for its first request
+      const knack = this.sim.knacks.of(id)?.taught;
+      this.say(id, [...d.say.woke, ...this.beat(id, 'taker')], [...(knack ? [knack] : []), ...d.say.request1]);
       return 'woke';
     }
     if (st.step === 'request1') {
