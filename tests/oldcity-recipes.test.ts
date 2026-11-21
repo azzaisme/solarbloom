@@ -73,7 +73,7 @@ describe('E21.3: recipes', () => {
     expect(sim.build.isUnlocked('droneHub')).toBe(false);
     ground(sim, 12, 12);
     stock(sim, 'droneHub');
-    expect(sim.build.check('droneHub', GROUND, 12, 12).reason).toMatch(/tier 2/);
+    expect(sim.build.check('droneHub', GROUND, 12, 12).reason).toBe('Reach fountain step 2: The pump turns');
     sim.state.salvage!.tier = 2;
     expect(sim.build.check('droneHub', GROUND, 12, 12).ok).toBe(true);
   });
@@ -83,11 +83,11 @@ describe('E21.3: recipes', () => {
     ground(sim, 12, 12);
     // E23.6.1: a component is named with where it is made; a material with its region once seen
     sim.inventory.add('scrap', 20);
-    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Motor 🌀 — make it at the crafting table');
+    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Motor 🌀: make it at the crafting table');
     sim.inventory.add('motor', 2);
     expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️');
     sim.state.areas.clockPlaza = { fog: 'frontier', revealedAt: 0, sealed: true };
-    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️ — Clock Plaza');
+    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️ from Clock Plaza');
     // E23.3: the power pole is a Bloom Relay, from Pylon in Mast Row
     expect(sim.build.lockLabel('relay')).toBe('🔒 Pylon, Mast Row');
   });
