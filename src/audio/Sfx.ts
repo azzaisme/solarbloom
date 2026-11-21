@@ -277,6 +277,11 @@ export class Sfx {
     void this.startBirds();
   }
 
+  /** #673: after the page was hidden, picks the sound up again if the browser put it to sleep (no new context). */
+  resume() {
+    if (this.ctx?.state === 'suspended') void this.ctx.resume().catch(() => {});
+  }
+
   setMuted(m: boolean) {
     this.muted = m;
     if (this.sfxGain && this.ctx) this.sfxGain.gain.setTargetAtTime(m ? 0 : this.sfxVolume, this.ctx.currentTime, 0.05);

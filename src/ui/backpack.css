@@ -99,6 +99,10 @@ svg.mi-unknown .mi-line { stroke: var(--text-strong); }
      does without a scroll */
   .bb-about.has-view { grid-template-columns: minmax(0, 1fr) 104px; }
 }
+/* while there is more below, the detail's bottom edge fades out over more than a line's height (Backpack.edge), so
+   the line the edge cuts reads as "more below" and is never seen sliced in half */
+.bb-detail.more { -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--bb-fade)), transparent); mask-image: linear-gradient(to bottom, black calc(100% - var(--bb-fade)), transparent); }
+.bb-detail { --bb-fade: 44px; }
 /* a detail too tall to show whole: its last lines are a focus stop (Backpack.fitDetail), ringed when reached */
 .bb-detail .bb-how[tabindex] { border-radius: 10px; padding: 2px 6px; margin: 0 -6px 4px; }
 /* Requests */

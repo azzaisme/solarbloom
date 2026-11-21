@@ -130,3 +130,7 @@ export function applyActPose(rig: pc.GraphNode, facer: pc.GraphNode, p: ActPose,
   }
   return true;
 }
+
+/** E26 (#670): the rig's bone by name (cached), and a bone turned about a world axis, for BotTurn. */
+export const boneOf = bone;
+export const turnBone = turn;

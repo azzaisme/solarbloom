@@ -10,6 +10,8 @@ import { GROUND } from '../core/GameState';
 import type { Action, Bindings } from './Bindings';
 import { RESEARCH } from '../data/research';
 import { CHARGE } from '../data/charge';
+import { TURN } from '../data/botMotion';
+import { Stride, Turner } from '../gameplay/Turner';
 
 /**
  * Bloombot (#234): input, movement and the camera follow (G.2, G.3, G.11, G.12). The game owns what an action
@@ -35,6 +37,8 @@ interface Walk {
   path: { x: number; z: number }[];
   /** the cell bloombot should face on arrival */
   face?: { x: number; z: number };
+  /** #670: arrived, turning to face it: how long so far (it acts once it faces it, or after TURN.faceFirst.wait) */
+  facingFor?: number;
   arrive?: () => void;
   stuckFor: number;
 }
@@ -42,6 +46,16 @@ interface Walk {
 export class BotController {
   readonly walker: Walker;
   readonly pose: BotPose;
+  /** #670: the one thing that turns bloombot (every facing goes through it: no snaps) */
+  readonly turner: Turner;
+  /** #670: its speed, eased up and down, and the stop to pivot before a big change of direction */
+  readonly stride = new Stride();
+  /** the way it last moved (braking carries on along it) */
+  private lastDir = { x: 0, z: 1 };
+  /** #671: its speed last frame (how fast it speeds up or brakes), the ground's height then, how long it has stood */
+  private lastPace = 0;
+  private lastGround?: number;
+  private stillFor = 0;
   private held = new Set<string>();
   private padPrev: boolean[] = [];
   private walk?: Walk;
@@ -94,6 +108,7 @@ export class BotController {
     const saved = sim.state.bot;
     this.pose = saved && sim.grid.layer(saved.roofId) ? { ...saved } : spawnPose(sim, this.walker);
     if (!this.walker.settle(this.pose)) Object.assign(this.pose, spawnPose(sim, this.walker));
+    this.turner = new Turner(this.pose);
     this.save();
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
@@ -149,6 +164,19 @@ export class BotController {
     this.following = true;
   }
 
+  /** #671: some play input (a button, the camera): no idle moment now, and the wait for one starts again. */
+  wake() {
+    this.stillFor = 0;
+  }
+
+  /** #671: nothing moving it this frame (a trip, a lift, a seat): the movement drawn calms down. */
+  private moveQuiet() {
+    this.lastPace = 0;
+    this.lastGround = undefined;
+    this.stillFor = 0;
+    this.visuals.setMove({ pace: 0, accel: 0, walk: BOT.walk, run: BOT.sprint, climb: 0, wading: false, still: 0 });
+  }
+
   get riding(): boolean {
     return !!this.lift || !!this.trip;
   }
@@ -165,7 +193,8 @@ export class BotController {
     const fy = this.world()[1];
     const l = this.sim.grid.layer(p.roofId)!;
     const ty = l.origin[1] + l.height + SLAB_TOP + (this.sim.grid.terraced(p.roofId) ? levelY(heightAt(x + 0.5, z + 0.5)) : 0);
-    p.facing = Math.atan2(x + 0.5 - p.x, z + 0.5 - p.z);
+    this.turner.faceTo(p.x, p.z, x + 0.5, z + 0.5);
+    this.stride.stop();
     this.trip = { fx: p.x, fz: p.z, fy, tx: x + 0.5, tz: z + 0.5, ty, t: 0, dur: this.visuals.reducedMotion ? Math.min(dur, 0.5) : dur, arc, style, done };
     this.following = true;
   }
@@ -173,6 +202,16 @@ export class BotController {
   /** The cell in front, which every tool acts on. */
   front() {
     return this.walker.front(this.pose);
+  }
+
+  /** #670: turn to face an angle (radians, 0 = +z), smoothly. Nothing sets the pose's facing directly. */
+  turnTo(angle: number) {
+    this.turner.face(angle);
+  }
+
+  /** #670: turn to face the point (x, z) on bloombot's layer, smoothly. */
+  faceToward(x: number, z: number) {
+    this.turner.faceTo(this.pose.x, this.pose.z, x, z);
   }
 
   /** Writes the pose into the state (saved with the game; the sim never reads it). */
@@ -258,7 +297,9 @@ export class BotController {
       const was = [p.x, p.z];
       p.x = tr.fx + (tr.tx - tr.fx) * kx;
       p.z = tr.fz + (tr.tz - tr.fz) * kx;
+      this.turner.update(dt);
       const [x, y, z] = this.world();
+      this.moveQuiet();
       this.visuals.place(x, y, z, p.facing);
       // hovering and gliding show the hover pose; a climb stands still while it pulls itself up
       this.visuals.setMotion(tr.style === 'climb' ? 0 : Math.hypot(p.x - was[0], p.z - was[1]) / Math.max(dt, 1e-3), tr.style !== 'climb');
@@ -267,6 +308,7 @@ export class BotController {
       if (k >= 1) {
         this.trip = undefined;
         this.teleport(p.roofId, tr.tx, tr.tz);
+        this.visuals.land(1); // #671: a crouch and a little hop as it lands
         tr.done?.();
       }
       return;
@@ -277,8 +319,11 @@ export class BotController {
         const l = this.lift;
         this.lift = undefined;
         this.teleport(l.roofId, l.x, l.z);
+        this.visuals.land(0.4); // #671: stepping off a lift, a smaller settle
       } else {
+        this.turner.update(dt);
         const [x, y, z] = this.world();
+        this.moveQuiet();
         this.visuals.place(x, y, z, this.pose.facing);
         this.visuals.setMotion(0, false);
         this.visuals.update(dt);
@@ -292,7 +337,13 @@ export class BotController {
       this.walk = undefined;
       this.speed = 0;
       this.sprinting = false;
-      this.visuals.place(st.x, st.y, st.z, st.facing);
+      this.stride.stop();
+      // #670: it turns round onto the seat rather than snapping to face out
+      this.turner.face(st.facing);
+      this.turner.update(dt);
+      this.visuals.setTurn(this.turner.left, this.turner.vel, 0);
+      this.moveQuiet();
+      this.visuals.place(st.x, st.y, st.z, this.pose.facing);
       this.visuals.setMotion(0, false);
       this.visuals.update(dt);
       this.follow(st.x, st.y, st.z);
@@ -336,45 +387,83 @@ export class BotController {
     } else if (!frozen && this.walk) {
       const next = this.walk.path[0];
       if (!next) {
+        // #670: arrived: turn to face what it came for, then act (it doesn't act with its back to it)
         const done = this.walk;
-        this.walk = undefined;
-        if (done.face) p.facing = Math.atan2(done.face.x + 0.5 - p.x, done.face.z + 0.5 - p.z);
-        done.arrive?.();
+        this.stride.stop();
+        if (done.face && done.facingFor === undefined) {
+          this.turner.faceTo(p.x, p.z, done.face.x + 0.5, done.face.z + 0.5);
+          done.facingFor = 0;
+        }
+        if (done.facingFor !== undefined) done.facingFor += dt;
+        if (!done.face || Math.abs(this.turner.left) <= TURN.faceFirst.within || (done.facingFor ?? 0) >= TURN.faceFirst.wait) {
+          this.walk = undefined;
+          done.arrive?.();
+        }
       } else {
         const dx = next.x - p.x;
         const dz = next.z - p.z;
         const d = Math.hypot(dx, dz);
-        if (d < 0.12) this.walk.path.shift();
+        // the last point is reached closely (it stops there); points on the way are passed through
+        if (d < (this.walk.path.length === 1 ? 0.03 : 0.12)) this.walk.path.shift();
         else {
           dirX = dx / d;
           dirZ = dz / d;
-          want = Math.min(top, d / Math.max(dt, 1e-3));
+          // slowing in time to stop at the end of the path
+          let rest = d;
+          for (let i = 1; i < this.walk.path.length; i++) rest += Math.hypot(this.walk.path[i].x - this.walk.path[i - 1].x, this.walk.path[i].z - this.walk.path[i - 1].z);
+          want = Math.min(top, Math.sqrt(2 * TURN.brake * rest));
         }
       }
     }
     let moved = 0;
     const yr = (this.camera.yaw * Math.PI) / 180;
     const strafing = this.strafe && !this.walk && !frozen;
-    if (strafing && want <= 0) {
-      // standing while aiming: turn with the camera
-      const diff = Math.atan2(Math.sin(Math.atan2(-Math.sin(yr), -Math.cos(yr)) - p.facing), Math.cos(Math.atan2(-Math.sin(yr), -Math.cos(yr)) - p.facing));
-      p.facing = Math.atan2(Math.sin(p.facing + diff * Math.min(1, dt * BOT.turn)), Math.cos(p.facing + diff * Math.min(1, dt * BOT.turn)));
-    }
-    if (want > 0) {
-      moved = w.move(p, dirX * want * dt, dirZ * want * dt);
-      const goal = strafing ? Math.atan2(-Math.sin(yr), -Math.cos(yr)) : Math.atan2(dirX, dirZ);
-      let diff = goal - p.facing;
-      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      p.facing += diff * Math.min(1, dt * BOT.turn);
-      p.facing = Math.atan2(Math.sin(p.facing), Math.cos(p.facing)); // keep it in (-π, π] for the save
+    // #670: where it wants to face: the camera's way while aiming, else the way it wants to go
+    const t = this.turner;
+    if (strafing) t.face(Math.atan2(-Math.sin(yr), -Math.cos(yr)));
+    else if (want > 0) t.face(Math.atan2(dirX, dirZ));
+    t.update(dt);
+    // how far it faces off the way it wants to go: a big change stops it to pivot first (aiming, it strafes instead)
+    const off = !strafing && want > 0 ? t.left : 0;
+    const pace = this.stride.step(dt, want, off);
+    if (pace > 0) {
+      let mx = this.lastDir.x;
+      let mz = this.lastDir.z;
+      let dist = pace * dt;
+      if (this.stride.pivoting && !strafing) {
+        // braking to pivot: it carries on along the way it was going, never sliding toward the new way
+      } else if (want > 0 && this.walk) {
+        // along a path: straight at the next point, never past it
+        mx = dirX;
+        mz = dirZ;
+        const next = this.walk.path[0];
+        if (next) dist = Math.min(dist, Math.hypot(next.x - p.x, next.z - p.z));
+      } else if (want > 0 && !strafing) {
+        // steering: it turns into the new way, moving at most TURN.slide off the way it faces (no crabbing sideways)
+        const h = p.facing + Math.max(-TURN.slide, Math.min(TURN.slide, off));
+        mx = Math.sin(h);
+        mz = Math.cos(h);
+      } else if (want > 0) {
+        mx = dirX;
+        mz = dirZ;
+      }
+      moved = w.move(p, mx * dist, mz * dist);
+      this.lastDir = { x: mx, z: mz };
       if (this.walk) {
-        this.walk.stuckFor = moved < want * dt * 0.1 ? this.walk.stuckFor + dt : 0;
+        // stuck: moving slowly although it isn't pivoting or slowing on purpose
+        this.walk.stuckFor = !this.stride.pivoting && pace > 0.5 && moved < pace * dt * 0.1 ? this.walk.stuckFor + dt : 0;
         if (this.walk.stuckFor > 0.6) this.walk = undefined; // something moved into the way
       }
       if (moved > 0.001) this.following = true;
-      // island release: heading into the closed causeway (keys, pad or a path) turns bloombot back
-      if (!back && p.roofId === GROUND && this.turnBack.bump(p.x, p.z, dirX, dirZ)) this.onMainlandClosed?.();
+      if (moved < dist * 0.1 && want <= 0) this.stride.stop(); // braking into a wall: stopped
+      // #671: steering head-on into a wall: a small recoil (once while it holds into it), then it stands there facing
+      // the wall rather than running in place
+      if (want > 0 && !this.walk && !strafing && !this.stride.pivoting && moved < dist * 0.15) {
+        if (pace > 0.8) this.visuals.bump();
+        this.stride.stop();
+      }
     }
+    if (want > 0 && !back && p.roofId === GROUND && this.turnBack.bump(p.x, p.z, dirX, dirZ)) this.onMainlandClosed?.(); // island release: heading into the closed causeway turns bloombot back
     this.speed = dt > 0 ? moved / dt : 0;
     if (this.sprinting && moved > 0.001) {
       // E23.6.7: sprinting along a laid path costs less (e23-craft's sim.paths, once it lands)
@@ -385,9 +474,20 @@ export class BotController {
     // A machine built or a plot turned solid under bloombot: step aside.
     if (!w.fits(p.roofId, p.x, p.z)) w.settle(p);
     const [x, y, z] = this.world();
+    // #671: how it moves, for the movement drawn: speeding up or braking, the slope under it, wading, standing idle
+    const wading = w.wading(p);
+    const ground = y + (wading ? 0.07 : 0);
+    const climb = this.lastGround !== undefined && moved > 0.002 ? (ground - this.lastGround) / moved : 0;
+    this.lastGround = ground;
+    const accel = dt > 0 ? (this.stride.pace - this.lastPace) / dt : 0;
+    this.lastPace = this.stride.pace;
+    this.stillFor = mag > 0.01 || this.walk || this.speed > 0.05 || back ? 0 : this.stillFor + dt;
+    this.visuals.setMove({ pace: this.speed, accel, walk: BOT.walk * wade, run: BOT.sprint * stride * wade, climb, wading, still: this.stillFor });
+    this.visuals.setTurn(t.left, t.vel, this.speed);
     this.visuals.place(x, y, z, p.facing);
     this.visuals.setTired(flat);
-    this.visuals.setMotion(this.speed, this.sprinting);
+    // #671: running blends the run clip in by speed (the visuals), so the loop here is just the walk
+    this.visuals.setMotion(this.speed, false);
     this.visuals.update(dt);
     this.follow(x, y, z);
   }
@@ -406,6 +506,7 @@ export class BotController {
     Object.assign(this.pose, { roofId, x, z });
     this.walker.settle(this.pose);
     this.walk = undefined;
+    this.stride.stop();
     this.following = true;
   }
 }
