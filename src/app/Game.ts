@@ -861,6 +861,7 @@ export class Game {
       this.app.resizeCanvas();
     }
     this.look.setTier(this.gfxTier);
+    this.look.post.setGlow(s.glow ?? 1); // #633
     // E22.11: the paused world dims; it blurs too except on the Low and Deck presets (dim only).
     document.body.classList.toggle('no-blur', this.deck || this.gfxTier === 'low');
     this.hud.gfxTier = this.gfxTier;
@@ -1019,7 +1020,7 @@ export class Game {
     this.settingsUi = new SettingsScreen(this.hud.root, {
       settings: this.settings,
       set: (k, v) => this.changeSetting(k, v),
-      rows: (tab) => settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml() }),
+      rows: (tab) => settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml(), glowOff: !LOOK.tiers[this.gfxTier].bloom }),
       controls: (body) => this.renderControls(body),
       onClose: () => {
         this.cancelListen();
@@ -1061,7 +1062,7 @@ export class Game {
     if (k === 'sfxVolume' || k === 'musicVolume') return this.setVolume(k, Number(v));
     if (k === 'gfx') {
       this.setGraphics(v as GfxSetting);
-      this.settingsUi.refresh();
+      this.settingsUi.refresh(); // the Glow row says when a tier has no glow (#633)
       return;
     }
     this.setSetting(k, v);
@@ -1495,8 +1496,10 @@ export class Game {
 
   /** LB / RB, Q / E: the tabs of the panel on top. */
   private panelTab(dir: number) {
-    if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
-    else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
+    if (this.settingsUi.isOpen) {
+      this.settingsUi.tab(dir);
+      this.settingsUi.focusBody(); // #616: on the new tab's first setting
+    } else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
     else if (this.hud.craft.isOpen) this.hud.craft.tab(dir, true);
     else if (this.hud.trayOpen) this.hud.buildMenu.tab(dir);
   }
@@ -4841,6 +4844,7 @@ export class Game {
     this.sim.drones.focus = view ? { x: (view.x0 + view.x1) / 2, z: (view.z0 + view.z1) / 2, radius: Math.hypot(view.x1 - view.x0, view.z1 - view.z0) / 2 + 24 } : undefined;
     // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
     this.syncPanelPause();
+    this.padFocus?.tick(); // #616: a menu that just opened starts with its first control in focus
     const paused = this.pause.paused;
     // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
     this.hud.craft.update(paused ? this.realDt() : dt, paused);

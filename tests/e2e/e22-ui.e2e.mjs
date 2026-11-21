@@ -126,7 +126,7 @@ try {
       return { label: document.querySelector('#prompt svg')?.getAttribute('aria-label'), r: document.querySelector('#prompt .pr-main')?.getBoundingClientRect().toJSON() };
     });
     check(before.label === 'E key' && after.label === 'A button', `E22.3 the prompt's glyph follows the device (${before.label} → ${after.label})`);
-    check(!!before.r && !!after.r && Math.abs(before.r.width - after.r.width) < 1 && Math.abs(before.r.height - after.r.height) < 1, 'E22.3 no layout shift when the glyph set changes');
+    check(!!before.r && !!after.r && Math.abs(before.r.width - after.r.width) < 1 && Math.abs(before.r.height - after.r.height) < 1, `E22.3 no layout shift when the glyph set changes (${before.r?.width.toFixed(1)}×${before.r?.height.toFixed(1)} → ${after.r?.width.toFixed(1)}×${after.r?.height.toFixed(1)})`);
     check(!errors.length, `E22.3 no page errors ${errors.join(' | ')}`);
     await page.close();
   }
