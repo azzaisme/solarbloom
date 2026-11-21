@@ -19,6 +19,7 @@ import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, MaterialId, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS, tierGives } from '../data/salvage';
+import { actForVerb } from '../data/botActs';
 import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
@@ -561,6 +562,16 @@ export class Game {
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
+      // #628: an act's small effects (dust, soil, bits of leaf, sparkles) where Bloombot works
+      // thrown out to its sides and back toward the camera, so it shows from behind
+      const push = new pc.Vec3();
+      const fan = new pc.Vec3();
+      visuals.onBeat = ({ effect: e, at, side, back }) => {
+        if (e.kind === 'sparkles') return this.vfx.sparkles(at, e.count, true);
+        push.copy(back).mulScalar(e.back ?? 0);
+        fan.copy(side).mulScalar(e.fan ?? 0);
+        this.vfx.burst(at, e.count, { hex: e.hex, speed: e.speed, up: e.up, size: e.size, life: e.life, gravity: e.gravity, glow: 0.15, push, fan });
+      };
       // E22.1: bindings saved before the new map are reset once, with a notice.
       const st = this.settings;
       const mig = migrateBindings(st.keys || st.pad ? { v: st.bindingsV, keys: st.keys, pad: st.pad } : undefined);
@@ -2106,6 +2117,9 @@ export class Game {
       return;
     }
     t.run();
+    // #628: Bloombot acts out what it did (a hold has already started its own act)
+    const act = actForVerb(t.verb);
+    if (act) b.visuals.startAct(act);
   }
 
   /** E22.2: a hold under way (Interact kept down on the same target until `need` seconds pass). */
