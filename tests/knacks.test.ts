@@ -232,7 +232,7 @@ describe('#625: each Keeper teaches Bloombot a knack', () => {
 describe('#625: the second wake bubble is never lost', () => {
   /** A SpeechBubble on a stand-in element (the tests run without a page). */
   async function bubble() {
-    const el = { hidden: true, innerHTML: '', className: '', style: {} as Record<string, string> };
+    const el = { hidden: true, innerHTML: '', className: '', style: {} as Record<string, string>, offsetWidth: 200, offsetHeight: 80, offsetParent: { clientWidth: 1280 } };
     (globalThis as { document?: unknown }).document ??= { createElement: () => el };
     const { SpeechBubble } = await import('../src/ui/OldCityPanel');
     const b = new SpeechBubble({ appendChild: () => {} } as unknown as HTMLElement);

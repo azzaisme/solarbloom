@@ -18,7 +18,7 @@ import { SightPicker } from '../rendering/SightPicker';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, MaterialId, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
-import { MATERIALS, TIERS, tierGives } from '../data/salvage';
+import { MATERIALS, TIERS, fountainStepNews } from '../data/salvage';
 import { actForVerb } from '../data/botActs';
 import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
@@ -77,7 +77,7 @@ import { LightVisuals } from '../rendering/LightVisuals';
 import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
-import { Skyline } from '../rendering/Skyline';
+import { Skyline, skylineVeil } from '../rendering/Skyline';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { heightAt, levelY } from '../core/Height';
@@ -412,9 +412,9 @@ export class Game {
     // City 05.2: the park cheers up in stages as you restore it.
     this.chunks.onParkStage = (stage) => {
       const lines: Record<number, string> = {
-        1: '🧹 The park paths are swept clean.<small>A quarter of the way to waking the fountain.</small>',
-        2: '🪑 The benches are mended.<small>Halfway there: the birds will want to sit here again.</small>',
-        3: '💡 The lamps are lit again!<small>The planter trees leaf out and bunting goes up on the bandstand.</small>',
+        1: '🧹 A quarter of the way there<small>Keep pulsing the ground around the fountain to wake it.</small>',
+        2: '🪑 Halfway there<small>Keep pulsing the ground around the fountain. The birds will want to sit here again.</small>',
+        3: '💡 Three quarters of the way there<small>The lamps are lit again. A little more green around the fountain and it wakes.</small>',
       };
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
       this.vfx.ring(new pc.Vec3(8, 0.3, 8), PALETTE.gold, 6, 1.0);
@@ -1359,7 +1359,7 @@ export class Game {
       return;
     }
     if (r === 'full') this.hud.showFail('Fully charged');
-    else if (r === 'none') this.hud.showFail('Nothing to eat: Greens or Food fills up bloombot\'s charge');
+    else if (r === 'none') this.hud.showFail('Nothing to eat. Gather Greens from flowering ground first, then try again.');
   }
 
   private wireKeys() {
@@ -2051,7 +2051,7 @@ export class Game {
     if (r === 'pulse') {
       v.play('pulse');
       this.drones.companionReact('pulse');
-      // The echo pulse: cyan rings leave the palms and travel to the tile in front (as in the reference image).
+      // The echo pulse: green rings (#631) leave the palms and travel to the tile in front (as in the reference image).
       const f = this.frontPick();
       if (f?.tile) {
         const to = this.tileVec(f.tile, SLAB_TOP + 0.25);
@@ -3642,7 +3642,7 @@ export class Game {
   private checkCozyUnlocks() {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
-    for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
+    for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Grow it in an empty plot on green ground.</small>`, 'gold', 4.5);
     for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
@@ -4038,7 +4038,7 @@ export class Game {
       const info = s.areas.info(areaId);
       // E21.5: an Old City region names itself; its backstreets open quietly
       if (info.region) this.hud.toast(`🔓 ${s.gates.regionById(info.region)!.name} is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>`, 'gold', 4);
-      else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>The fog lifts. Restore it to wake the ${info.landmarkName}.</small>`, 'gold', 4);
+      else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>Pulse its ground green to wake the ${info.landmarkName}.</small>`, 'gold', 4);
       if (!info.noLandmark) this.sfx.fanfare();
       this.save();
     });
@@ -4065,19 +4065,19 @@ export class Game {
     b.on('area.specialty', ({ areaId, met }) => {
       if (!met || s.areas.ready(areaId) || this.specialtyToasted.has(areaId)) return;
       this.specialtyToasted.add(areaId);
-      this.hud.toast(`✓ ${s.areas.info(areaId).landmarkName}: that's the hard part done<small>Restore the rest of its ground to wake it.</small>`, 'gold', 3.5);
+      this.hud.toast(`✓ ${s.areas.info(areaId).landmarkName}: that's the hard part done<small>Pulse the rest of the ground here green to wake it.</small>`, 'gold', 3.5);
     });
     b.on('tile.restoring', ({ tile, source }) => {
       this.grid.refresh(tile, true);
       const p = this.tileVec(tile);
       if (source === 'pulse') {
-        this.vfx.ring(p, PALETTE.eyeCyan, 1.1, 0.55);
+        this.vfx.ring(p, PALETTE.botPulse, 1.1, 0.55);
         this.vfx.burst(p, 6, { up: 1.5, speed: 1.4, size: 0.05 });
         // Look 6.4: the slab fractures under your tap: a short, punchy shake and a burst of grit.
         this.vfx.burst(p, 8, { up: 1.1, speed: 1.6, size: 0.045, life: 0.6, hex: PALETTE.debris });
         if (!this.settings.reducedMotion) this.camera.shake(0.035);
         this.sfx.at(p, (q) => q.pulse());
-      } else if (source === 'broad') this.vfx.ring(p, PALETTE.eyeCyan, 0.8, 0.45);
+      } else if (source === 'broad') this.vfx.ring(p, PALETTE.botPulse, 0.8, 0.45);
       else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
       else if (source === 'overflow') this.vfx.ring(p, '#a8ecff', 0.9, 0.5);
       else if (source === 'drone') this.vfx.ring(p, PALETTE.leafFin, 0.8, 0.5);
@@ -4373,7 +4373,7 @@ export class Game {
       this.celebrateTier(tier);
       if (tier === 1) return this.playCoreSequence();
       const t = TIERS[tier - 1];
-      this.hud.toast(`⛲ ${t.name}!<small>${tierGives(t).join(' · ')}</small>`, 'gold', 6);
+      this.hud.toast(`⛲ ${t.name}!<small>${fountainStepNews(t)}</small>`, 'gold', 6);
       this.sfx.fanfare();
       this.save();
     });
@@ -4802,7 +4802,7 @@ export class Game {
     this.camera.shake(0.06);
     const a = s.areas.info(id);
     const fresh = a.neighbours.filter((n) => s.areas.fog(n) === 'frontier').length;
-    this.hud.toast(`🌫️ The fog lifts from the ${AREA_TYPES[a.type].name.toLowerCase()}!<small>${a.landmarkName} wakes${fresh ? ` · ${fresh} new area${fresh > 1 ? 's' : ''} emerge from the gloom` : ''}.</small>`, 'gold', 4.5);
+    this.hud.toast(`🌫️ The fog lifts from the ${AREA_TYPES[a.type].name.toLowerCase()}!<small>${a.landmarkName} is awake.${fresh ? ' New places have opened nearby: go and look.' : ''}</small>`, 'gold', 4.5);
     this.save();
   }
 
@@ -5085,6 +5085,9 @@ export class Game {
     } else setPoolReflect(false);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.skyline.clarity = this.sky.clarity;
+    // #635: fog and rain fade the skyline into the fog colour (the scene fog's, set in applyHaze)
+    this.skyline.veil = skylineVeil(this.weatherVisuals?.view ?? 1);
+    this.skyline.fog = this.sky.hazeColour();
     this.skyline.reducedMotion = this.settings.reducedMotion;
     this.skyline.update(wdt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();

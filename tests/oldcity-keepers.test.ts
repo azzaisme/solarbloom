@@ -98,7 +98,7 @@ describe('E21.8: Keepers', () => {
     sim.inventory.add('scrap', 5);
     sim.keepers.interact('pylon');
     expect(oldCityObjective(sim).title).toBe("🤖 Pylon's request");
-    expect(oldCityObjective(sim).pct).toBe('Pylon asks for 8 Seeds.');
+    expect(oldCityObjective(sim).pct).toBe('Bring Pylon 8 Seeds.');
     sim.bot = { roofId: GROUND, x: 10.5, z: 20.5 };
     sim.keepers.pulse('tide');
     sim.inventory.add('scrap', 5);

@@ -102,7 +102,7 @@ try {
     const g1 = await page.evaluate(() => window.solarbloom.hud.guide.lastText);
     const start = await page.evaluate(() => ({ pulses: window.solarbloom.sim.state.stats.pulses ?? 0, ideas: [...(window.solarbloom.sim.state.progression.ideas ?? [])] }));
     check(start.pulses === 0 && !start.ideas.includes('pulse') && !start.ideas.includes('park'), `${L}: a new game hasn't pulsed yet, so its pulse line is still to come (${JSON.stringify(start)})`);
-    check(/^Hold .+ beside a junk pile to dig out what the fountain needs\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
+    check(/^Hold .+ beside a glinting pile to dig out what the fountain needs\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
     const arrow = await page.evaluate(() => {
       const g = window.solarbloom;
       // #609: the waymark stands on the goal spot (Game.goal, looked up twice a second); at the start bloombot is
@@ -204,9 +204,9 @@ try {
       g.bot.pose.facing = Math.PI;
       return s.fountain.condition().done;
     });
-    await page.waitForFunction(() => /alive again/.test(window.solarbloom.hud.guide.lastText ?? ''), null, { timeout: 20000 }).catch(() => {});
+    await page.waitForFunction(() => /still needs Scrap/.test(window.solarbloom.hud.guide.lastText ?? ''), null, { timeout: 20000 }).catch(() => {});
     const g5 = await page.evaluate(() => window.solarbloom.hud.guide.lastText);
-    check(done && g5 === 'The ground round the fountain is alive again. It still needs Scrap and Seeds: look for piles that glint.', `${L}: the park part done says so, and where to look ("${g5}")`);
+    check(done && /^The fountain still needs Scrap and Seeds\. Hold .+ by the glinting piles to find them\.$/.test(g5 ?? ''), `${L}: the park part done says so, and where to look ("${g5}")`);
     const glints = await page.evaluate(async () => {
       const g = window.solarbloom;
       const burst = g.vfx.burst.bind(g.vfx);
