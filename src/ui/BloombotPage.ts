@@ -107,16 +107,16 @@ export function moveRows(sim: Sim): BloombotRow[] {
 /** How to open an upgrade that research hasn't opened yet. */
 function openHow(sim: Sim, p: ProjectDef | undefined): string {
   const r = sim.research;
-  if (!p) return 'Research opens it in the workshop.';
+  if (!p) return 'Research at the crafting table in the house opens it.';
   const name = `“${p.name}”`;
-  if (!r.on) return 'The workshop table in the house can work out how to make this. It starts once you wake another robot out in the city.';
-  if (r.running(p.id)) return `The workshop table in the house is working out ${name} now. You can make this once it's done.`;
-  if (r.isOpen(p)) return `Go to the workshop table in the house and start ${name} in its Research tab. Then you can make this.`;
+  if (!r.on) return 'The crafting table in the house can work out how to make this. It starts once you wake another robot out in the city.';
+  if (r.running(p.id)) return `The crafting table in the house is working out ${name} now. You can make this once it's done.`;
+  if (r.isOpen(p)) return `Go to the crafting table in the house and start ${name} in its Research tab. Then you can make this.`;
   if ('project' in p.opens) {
     const before = r.project(p.opens.project);
-    return `The workshop table in the house has to work out “${before?.name ?? p.opens.project}” first, then ${name}.`;
+    return `The crafting table in the house has to work out “${before?.name ?? p.opens.project}” first, then ${name}.`;
   }
-  return `Take a close look at ${r.findName(p.opens)} at the workshop table in the house. That opens ${name} in its Research tab.`;
+  return `Take a close look at ${r.findName(p.opens)} at the crafting table in the house. That opens ${name} in its Research tab.`;
 }
 
 /** The workshop upgrades for Bloombot (#620 and #624), in data order. */
@@ -133,7 +133,7 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
       ? 'As far as it goes.'
       : !isOpen
         ? openHow(sim, project)
-        : `Go to the workshop table in the house and make level ${level + 1} in its Upgrade tab. It takes ${costWords(u.levels[level].cost)}.`;
+        : `Go to the crafting table in the house and make level ${level + 1} in its Upgrade tab. It takes ${costWords(u.levels[level].cost)}.`;
     return {
       id: u.id,
       kind: 'upgrade',

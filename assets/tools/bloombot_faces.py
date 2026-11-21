@@ -1,6 +1,7 @@
 """Bloombot's visor faces (G.1): happy, surprised, wink and blink, as one sprite sheet in a row.
 
-The owner's character sheet: a glossy black visor with soft cyan glowing eyes. The game lays this over the visor
+The owner's character sheet: a glossy black visor with soft glowing eyes, in Bloombot's leaf green (#631; they
+were cyan, PALETTE.botGlow in src/rendering/Palette.ts). The game lays this over the visor
 on a thin panel tied to the head bone and swaps frames (src/rendering/BloombotVisuals.ts, FACES).
 
     python assets/tools/bloombot_faces.py   ->   assets/raw/bloombot/bloombot-faces.png
@@ -12,26 +13,26 @@ from PIL import Image, ImageDraw, ImageFilter
 W, H = 256, 176  # one frame: the visor's proportions (about 0.27 x 0.19 m)
 FRAMES = ['happy', 'surprised', 'wink', 'blink']
 VISOR = (14, 17, 24, 255)
-CYAN = (110, 236, 255, 255)
+EYE = (148, 255, 110, 255)  # PALETTE.botGlow, #94ff6e
 OUT = Path(__file__).resolve().parents[1] / 'raw' / 'bloombot' / 'bloombot-faces.png'
 
 
 def eye_happy(d, cx, cy, s):
-    d.arc([cx - s, cy - s * 0.7, cx + s, cy + s * 1.1], start=200, end=340, fill=CYAN, width=int(s * 0.42))
+    d.arc([cx - s, cy - s * 0.7, cx + s, cy + s * 1.1], start=200, end=340, fill=EYE, width=int(s * 0.42))
 
 
 def eye_open(d, cx, cy, s):
-    d.rounded_rectangle([cx - s * 0.28, cy - s * 0.75, cx + s * 0.28, cy + s * 0.75], radius=int(s * 0.28), fill=CYAN)
+    d.rounded_rectangle([cx - s * 0.28, cy - s * 0.75, cx + s * 0.28, cy + s * 0.75], radius=int(s * 0.28), fill=EYE)
 
 
 def eye_wink(d, cx, cy, s):
     # "<" for the winking eye, as on the sheet
     w = int(s * 0.38)
-    d.line([(cx + s * 0.55, cy - s * 0.55), (cx - s * 0.45, cy), (cx + s * 0.55, cy + s * 0.55)], fill=CYAN, width=w, joint='curve')
+    d.line([(cx + s * 0.55, cy - s * 0.55), (cx - s * 0.45, cy), (cx + s * 0.55, cy + s * 0.55)], fill=EYE, width=w, joint='curve')
 
 
 def eye_closed(d, cx, cy, s):
-    d.rounded_rectangle([cx - s * 0.7, cy - s * 0.12, cx + s * 0.7, cy + s * 0.12], radius=int(s * 0.12), fill=CYAN)
+    d.rounded_rectangle([cx - s * 0.7, cy - s * 0.12, cx + s * 0.7, cy + s * 0.12], radius=int(s * 0.12), fill=EYE)
 
 
 def frame(kind):

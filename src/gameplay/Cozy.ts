@@ -296,7 +296,7 @@ export class Cozy {
     if (!t) return 'Nothing to stand it on here';
     if (t.feature === 'water' && !t.blocked) return 'Not in the water';
     const why = this.sim.build.footprintProblem(roofId, x, z, 1, ['restored']);
-    if (why) return why === 'Needs restored or mossy ground: pulse it first' ? 'Restore the ground here first' : why;
+    if (why) return why === 'Needs green or mossy ground: pulse it first' ? 'Pulse the ground here green first' : why;
     if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
     return undefined;
   }

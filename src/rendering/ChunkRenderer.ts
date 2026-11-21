@@ -17,6 +17,7 @@ import { inSurfBand, onJetty, pileById, pondCell, regionWater, seaCell, setPiece
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
+import { LOOK } from '../data/look';
 import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
@@ -501,6 +502,36 @@ export const SINK = 0.45;
 const TALL_DROP = 2;
 
 /**
+ * E21.24: the level a retaining wall on cell (x, z)'s edge facing (dx, dz) drops to, or undefined when there's no
+ * wall there (the neighbour is as high or higher, or this cell is a ramp's side). Beside a ramp the wall drops to
+ * the ramp's lowest point.
+ */
+export function wallDrop(x: number, z: number, dx: number, dz: number): number | undefined {
+  const mine = edgeHeight(x, z, dx, dz);
+  if (typeof mine !== 'number') return undefined;
+  const theirs = edgeHeight(x + dx, z + dz, -dx, -dz);
+  const ramp = rampAt(x + dx, z + dz)?.ramp;
+  const low = typeof theirs === 'number' ? theirs : ramp ? Math.min(ramp.from, ramp.to) : mine;
+  return low < mine - 1e-6 ? low : undefined;
+}
+
+/**
+ * #648: whether the wall on cell (x, z)'s edge facing (dx, dz) runs on into the next cell along it, toward -1 and
+ * +1 (the same height, the same drop on the same side, and no weir there). Where it doesn't, the wall ends or turns
+ * a corner, and its stones reach on past the cell to close the corner.
+ */
+export function wallRuns(x: number, z: number, dx: number, dz: number, weir: (x: number, z: number, dx: number, dz: number) => boolean): [boolean, boolean] {
+  const ax = dz ? 1 : 0;
+  const az = dx ? 1 : 0;
+  const runs = (k: number) => {
+    const nx = x + ax * k;
+    const nz = z + az * k;
+    return !rampAt(nx, nz) && levelAt(nx, nz) === levelAt(x, z) && wallDrop(nx, nz, dx, dz) !== undefined && !weir(nx, nz, dx, dz);
+  };
+  return [runs(-1), runs(1)];
+}
+
+/**
  * Renders the endless city ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs + decoration),
  * streamed in around the camera and rebuilt within a per-frame budget when its tiles change, plus a per-tile
  * fog mesh that hangs over fogged areas and recedes tile by tile as the player restores.
@@ -847,6 +878,10 @@ export class ChunkRenderer {
     return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
+  /** A canal dropping a level over this edge: its water falls over it instead of a wall. */
+  private weir = (x: number, z: number, dx: number, dz: number): boolean =>
+    this.sim.grid.peek(GROUND, x, z)?.feature === 'water' && this.sim.grid.peek(GROUND, x + dx, z + dz)?.feature === 'water';
+
   /**
    * E21.24: the Old City's terraces. Where a neighbour's edge is lower, an old retaining wall (brick and stone,
    * coping on top) drops to it, with ivy once the ground above is restored. A ramp or stair tile is drawn as
@@ -876,32 +911,43 @@ export class ChunkRenderer {
       }
       return;
     }
+    const W = LOOK.wall;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const mine = edgeHeight(t.x, t.z, dx, dz);
-      const theirs = edgeHeight(t.x + dx, t.z + dz, -dx, -dz);
-      if (typeof mine !== 'number') continue;
-      // a ramp's side: drop to the ramp's lowest point
-      const lowLv = typeof theirs === 'number' ? theirs : (rampAt(t.x + dx, t.z + dz)?.ramp ? Math.min(rampAt(t.x + dx, t.z + dz)!.ramp.from, rampAt(t.x + dx, t.z + dz)!.ramp.to) : mine);
-      if (lowLv >= mine - 1e-6) continue;
+      const lowLv = wallDrop(t.x, t.z, dx, dz);
+      if (lowLv === undefined) continue;
       const top = th + 0.08;
-      const bottom = h + levelY(lowLv) - 0.1;
+      const ground = h + levelY(lowLv);
+      // #648: the foot goes well under the lower side's water, so its ripples never show a seam along the wall
+      const bottom = ground - W.footSink;
       const H = top - bottom;
       const wx = x + dx * 0.5;
       const wz = z + dz * 0.5;
-      const sx = dx ? 0.12 : 1;
-      const sz = dz ? 0.12 : 1;
       // a weir: where a canal drops a level, its water falls over the edge
-      const below = this.sim.grid.peek(GROUND, t.x + dx, t.z + dz);
-      if (t.feature === 'water' && below?.feature === 'water') {
+      if (this.weir(t.x, t.z, dx, dz)) {
         b.add('box', PALETTE.aqua.foam, [wx + dx * 0.04, bottom + H / 2, wz + dz * 0.04], [dx ? 0.1 : 1, H, dz ? 0.1 : 1], 0.3);
         b.add('box', PALETTE.ground.seaFoam, [wx + dx * 0.25, bottom + 0.06, wz + dz * 0.25], [dx ? 0.4 : 1, 0.05, dz ? 0.4 : 1]);
         continue;
       }
+      // #648: along a run of wall each stone stops flush at the tile edge (no overlaps to notch the coping); where
+      // the wall ends or turns a corner it reaches on to close the corner
+      const ax = dz ? 1 : 0;
+      const az = dx ? 1 : 0;
+      const [on0, on1] = wallRuns(t.x, t.z, dx, dz, this.weir);
+      const end0 = on0 ? 0 : 1;
+      const end1 = on1 ? 0 : 1;
       // stone wall with brick courses, a coping stone on top
-      b.add('box', R.stone[alive], [wx, bottom + H / 2, wz], [sx, H, sz]);
+      const piece = (col: string, reach: number, y: number, height: number, across: number, out: number) => {
+        const len = 1 + reach * (end0 + end1);
+        const shift = (reach * (end1 - end0)) / 2;
+        b.add('box', col, [wx + ax * shift + dx * out, y, wz + az * shift + dz * out], [dx ? across : len, height, dz ? across : len]);
+      };
+      piece(R.stone[alive], W.thick / 2, bottom + H / 2, H, W.thick, 0);
+      // one colour per course along the whole run, standing proud of the face so its top edge never thins to nothing
       const bricks = PALETTE.bricks;
-      for (let c = 0; c < Math.floor(H / 0.45); c++) b.add('box', bricks[(((t.x * 7 + t.z * 3 + c) % bricks.length) + bricks.length) % bricks.length], [wx + dx * 0.01, bottom + 0.25 + c * 0.45, wz + dz * 0.01], [dx ? 0.12 : 0.9, 0.06, dz ? 0.12 : 0.9]);
-      b.add('box', R.coping[alive], [wx, top + 0.02, wz], [dx ? 0.18 : 1.04, 0.06, dz ? 0.18 : 1.04]);
+      const line = dx ? t.x * 2 + dx : t.z * 2 + dz;
+      for (let c = 0, y = ground + W.courseFrom; y + W.courseHeight / 2 < top - 0.1; c++, y += W.courseStep)
+        piece(bricks[(((line * 7 + c) % bricks.length) + bricks.length) % bricks.length], W.thick / 2 + W.courseProud, y, W.courseHeight, W.thick + W.courseProud, W.courseProud / 2);
+      piece(R.coping[alive], W.thick / 2 + W.copingLip, top + 0.02, W.copingHeight, W.thick + W.copingLip * 2, 0);
       // ivy and hanging plants once the ground above is restored
       if (t.ground === 'restored') {
         const n = 2 + (t.variant % 3);
