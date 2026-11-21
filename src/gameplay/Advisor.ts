@@ -67,6 +67,64 @@ interface LoopHandles {
   water?: { isLow(areaId: string): boolean };
 }
 
+/** #644: the last flood from bloombot, per sim (worked out again when bloombot moves to another cell or a way opens). */
+const reachCache = new WeakMap<Sim, { key: string; costs: Map<string, number> }>();
+
+/** Where bloombot is (its cell), or the fountain with no bot yet. */
+function botCell(sim: Sim): { x: number; z: number } {
+  const [fx, fz] = sim.areas.info(PARK).landmark;
+  return { x: Math.floor(sim.bot?.x ?? sim.state.bot?.x ?? fx), z: Math.floor(sim.bot?.z ?? sim.state.bot?.z ?? fz) };
+}
+
+/**
+ * #644: how far bloombot would walk to stand beside a footprint (`size` cells from x, z): on one of the cells round
+ * it, or on it when it can be stood on. Undefined when there's no way there on foot (deep water, rubble, a cliff)
+ * within the goal search. Show me where uses this so it never picks a goal across the canal while one on this side
+ * would do.
+ */
+export function walkCost(sim: Sim, x: number, z: number, size = 1): number | undefined {
+  const b = botCell(sim);
+  const roof = sim.bot?.roofId ?? sim.state.bot?.roofId ?? GROUND;
+  if (roof !== GROUND) return undefined;
+  const sv = sim.state.salvage;
+  const key = `${b.x},${b.z}|${sv?.opened.length ?? 0}|${sv?.abilities.length ?? 0}|${Object.values(sim.state.areas).filter((a) => !a.sealed).length}`;
+  let c = reachCache.get(sim);
+  if (!c || c.key !== key) {
+    c = { key, costs: new Walker(sim).costsFrom(GROUND, b.x + 0.5, b.z + 0.5) };
+    reachCache.set(sim, c);
+  }
+  let best: number | undefined;
+  for (let cz = z - 1; cz <= z + size; cz++)
+    for (let cx = x - 1; cx <= x + size; cx++) {
+      const v = c.costs.get(`${cx},${cz}`);
+      if (v !== undefined && (best === undefined || v < best)) best = v;
+    }
+  return best;
+}
+
+/**
+ * #644: of these, the one bloombot can walk to soonest; only when none can be reached, the one nearest in a straight
+ * line (Show me where then leads as far as it can and says why it stops).
+ */
+export function nearestByFoot<T>(sim: Sim, list: readonly T[], at: (t: T) => { x: number; z: number; size?: number }): T | undefined {
+  let best: T | undefined;
+  let bc = Infinity;
+  for (const t of list) {
+    const p = at(t);
+    const c = walkCost(sim, p.x, p.z, p.size ?? 1);
+    if (c !== undefined && c < bc) [best, bc] = [t, c];
+  }
+  if (best !== undefined) return best;
+  const b = botCell(sim);
+  let bd = Infinity;
+  for (const t of list) {
+    const p = at(t);
+    const d = Math.abs(p.x - b.x) + Math.abs(p.z - b.z);
+    if (d < bd) [best, bd] = [t, d];
+  }
+  return best;
+}
+
 /** Machines that rest bloombot (E23.2.3 / E23.3.3): the charge hint points at the nearest. */
 const RESTING = new Set<string>(['charger', 'bench']);
 /** Farm machines (E23.5) whose neighbours the farm hint looks at. */
@@ -203,7 +261,8 @@ export class Advisor {
       const [x, z] = r.gate.cells[0];
       return { topic: 'keeper', text, label: '🤖 Show me the way', action: { kind: 'focus', x, z }, place: { kind: 'gate', name: `the way past ${gateThing(r.gate)}` } };
     };
-    const open = shut.find((q) => !s.gates.problem(q.gate));
+    // #644: of the ways bloombot can open now, the one it can walk up to soonest
+    const open = nearestByFoot(s, shut.filter((q) => !s.gates.problem(q.gate)), (q) => ({ x: q.gate.cells[0][0], z: q.gate.cells[0][1] }));
     if (open) return gate(open, `A robot sleeps past ${gateThing(open.gate)}. You can get through now: walk up to it.`);
     const f = this.fountainStep();
     if (f) return f;
@@ -253,21 +312,15 @@ export class Advisor {
     return undefined;
   }
 
-  /** The nearest pile with something left of one of these materials that bloombot can salvage now. */
+  /**
+   * The nearest pile with something left of one of these materials that bloombot can salvage now. #644: nearest on
+   * foot (a pile across the canal loses to one on this side); one it can't reach only when it can reach none.
+   */
   nearestPile(materials: MaterialId[]): PileDef | undefined {
     if (!materials.length) return undefined;
     const s = this.sim;
-    const [fx, fz] = s.areas.info(PARK).landmark;
-    const bx = s.bot?.x ?? s.state.bot?.x ?? fx;
-    const bz = s.bot?.z ?? s.state.bot?.z ?? fz;
-    let best: PileDef | undefined;
-    let bd = Infinity;
-    for (const p of allPiles()) {
-      if (!materials.includes(p.material) || s.salvage.left(p.id) <= 0 || s.salvage.problem(p.id)) continue;
-      const d = Math.abs(p.x - bx) + Math.abs(p.z - bz);
-      if (d < bd) [best, bd] = [p, d];
-    }
-    return best;
+    const ok = allPiles().filter((p) => materials.includes(p.material) && s.salvage.left(p.id) > 0 && !s.salvage.problem(p.id));
+    return nearestByFoot(s, ok, (p) => ({ x: p.x, z: p.z }));
   }
 
   /** Restoring towards the current goal: a tile at its edge, or in the park. */

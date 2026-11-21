@@ -65,7 +65,7 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'pulse',
-    text: (k) => (k('pulse') === CLICK ? 'Click to turn the bare red ground around Bloombot green.' : `Press ${k('pulse')} to turn the bare red ground around Bloombot green.`),
+    text: (k) => (k('pulse') === CLICK ? 'Click to turn the bare ground around Bloombot green.' : `Press ${k('pulse')} to turn the bare ground around Bloombot green.`),
     comes: salvaged,
     known: (sim) => (sim.state.stats.pulses ?? 0) > 0,
   },
