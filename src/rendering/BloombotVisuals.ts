@@ -227,7 +227,7 @@ export class BloombotVisuals {
 
   private material(name: string): pc.Material | undefined {
     const mi = this.model?.findComponents('render').flatMap((r) => (r as pc.RenderComponent).meshInstances).find((m) => m.material?.name === name);
-    return mi?.material;
+    return mi?.material ?? undefined;
   }
 
   private buildGrowth() {
@@ -242,20 +242,21 @@ export class BloombotVisuals {
       this.root.addChild(e);
       this.pieces.push({ e, bone, at: new pc.Vec3(at[0], at[1], at[2]), turn: new pc.Quat().setFromEulerAngles(euler[0], euler[1], euler[2]) });
     };
-    // a leaf by the sprout for each move: two at the front corners, then two behind, tipped outward
+    // a leaf by the sprout for each move: two at the front corners, then two behind, tipped outward. head_end sits
+    // inside the dome, about 0.1 below its top, so the leaves are lifted clear of it (measured in the browser)
     const leaf = this.material('bloombot_leaf');
     const yaw = [40, -40, 140, -140];
     for (let i = 0; i < Math.min(4, g.moves); i++) {
       const a = (yaw[i] * Math.PI) / 180;
-      piece(`grow-leaf-${i}`, 'sphere', leaf, 'head_end', [Math.sin(a) * 0.05, -0.005, Math.cos(a) * 0.05], [-35, yaw[i], 0], [0.026, 0.008, 0.06]);
+      piece(`grow-leaf-${i}`, 'sphere', leaf, 'head_end', [Math.sin(a) * 0.07, 0.1, Math.cos(a) * 0.07], [-35, yaw[i], 0], [0.05, 0.013, 0.11]);
     }
     // a glowing cell on top of the pack for each level of Bigger charge
     const glow = this.material('bloombot_glow');
-    for (let i = 0; i < Math.min(3, g.cells); i++) piece(`grow-cell-${i}`, 'capsule', glow, 'Spine02', [(i - 1) * 0.045, 0.1, -0.2], [0, 0, 0], [0.024, 0.03, 0.024]);
+    for (let i = 0; i < Math.min(3, g.cells); i++) piece(`grow-cell-${i}`, 'capsule', glow, 'Spine02', [(i - 1) * 0.06, 0.17, -0.25], [0, 0, 0], [0.032, 0.045, 0.032]);
     // a pocket on the pack for each level of Roomier backpack: left side, right side, then the bottom
     const fabric = this.material('bloombot_fabric');
-    const pockets: [number, number, number][] = [[0.11, -0.02, -0.19], [-0.11, -0.02, -0.19], [0, -0.1, -0.23]];
-    for (let i = 0; i < Math.min(3, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i], [0, 0, 0], i < 2 ? [0.035, 0.075, 0.07] : [0.12, 0.04, 0.05]);
+    const pockets: [number, number, number][] = [[0.15, -0.02, -0.2], [-0.15, -0.02, -0.2], [0, -0.12, -0.24]];
+    for (let i = 0; i < Math.min(3, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i], [0, 0, 0], i < 2 ? [0.04, 0.085, 0.08] : [0.13, 0.045, 0.055]);
     this.placeGrowth();
   }
 

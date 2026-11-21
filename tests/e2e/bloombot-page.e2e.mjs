@@ -40,23 +40,44 @@ function pageNow() {
 function growLate() {
   const s = window.solarbloom.sim;
   const sv = s.state.salvage;
-  sv.tier = 4;
   for (const a of ['pry', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
   sv.research ??= { analysed: [], done: [], running: [], levels: {} };
   sv.research.done.push('rb-cells', 'rb-backpack', 'rb-pulse', 'rb-efficiency');
   Object.assign(sv.research.levels, { chargeCells: 3, backpack: 2, pulseRadius: 1 });
 }
 
-/** A close look at Bloombot: facing south, the camera behind it (back) or in front of it (front). */
+/**
+ * A close look at Bloombot: facing south, the camera behind it (back) or in front of it (front). Photo mode, since
+ * the play camera stops well short of a close-up; its bar is hidden for the shot, and the caller leaves it after.
+ */
 async function closeUp(page, side) {
   await page.evaluate((side) => {
     const g = window.solarbloom;
+    if (!g.photo.active) g.photo.enter();
+    if (!g.photo.clean) g.photo.action('backpack'); // its bar hidden (the backpack key's toggle)
     g.bot.pose.facing = 0;
     g.camera.jumpZoom(g.camera.maxZoom);
     g.camera.turnTo(side === 'back' ? 180 + 30 : 0 + 25, true);
     g.camIdle = 0;
   }, side);
   await page.waitForTimeout(900);
+}
+
+/** A shot of the whole screen, and a close crop around Bloombot so its parts can be judged. */
+async function botShots(page, path) {
+  await page.screenshot({ path: `${path}.png` });
+  const c = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const p = g.bot.visuals.root.getPosition().clone();
+    p.y += 0.45;
+    const s = g.camera.toScreen(p);
+    return { x: s.x, y: s.y };
+  });
+  const vw = page.viewportSize();
+  const w = 480, h = 480;
+  const x = Math.max(0, Math.min(vw.width - w, c.x - w / 2));
+  const y = Math.max(0, Math.min(vw.height - h, c.y - h / 2));
+  await page.screenshot({ path: `${path}-close.png`, clip: { x, y, width: w, height: h }, scale: 'css' });
 }
 
 try {
@@ -86,9 +107,10 @@ try {
     await closeUp(page, 'back');
     const early = await page.evaluate(() => window.solarbloom.bot.visuals.growthPieces.map((p) => p.name));
     check(early.length === 0, `${L}: a new Bloombot wears nothing extra (${early.join(', ')})`);
-    await shot('1-bloombot-early-back');
+    await botShots(page, `${out}/1-bloombot-early-back-${label}`);
     await closeUp(page, 'front');
-    await shot('2-bloombot-early-front');
+    await botShots(page, `${out}/2-bloombot-early-front-${label}`);
+    await page.evaluate(() => window.solarbloom.photo.exit());
 
     // the backpack, then E to the next tab: Bloombot's page
     await page.keyboard.press('Tab');
@@ -100,7 +122,7 @@ try {
     check(/Bloombot/.test(p.tab), `${L}: E moves from Items to the Bloombot tab ("${p.tab}")`);
     check(p.rows.length === 9 && p.rows[0] === 'Pry · Next' && p.rows.slice(1, 4).every((r) => / · Later$/.test(r)), `${L}: four moves, Pry next (${p.rows.slice(0, 4).join(' | ')})`);
     check(p.rows.slice(4).every((r) => / · Level 0 of 3$/.test(r)), `${L}: five upgrades, none started (${p.rows.slice(4).join(' | ')})`);
-    check(/Wake the fountain and it teaches this/.test(p.detail) && /Show me where/.test(p.detail), `${L}: Pry says how to learn it, with Show me where ("${p.detail}")`);
+    check(/Bring the fountain what it asks for and it teaches this/.test(p.detail) && /Show me where/.test(p.detail), `${L}: Pry says how to learn it, with Show me where ("${p.detail}")`);
     await shot('3-page-early');
 
     // ── 2. late: every move, some upgrades ──
@@ -110,9 +132,10 @@ try {
     const late = await page.evaluate(() => window.solarbloom.bot.visuals.growthPieces.map((p) => p.name));
     check(late.filter((n) => n.startsWith('grow-leaf')).length === 4 && late.filter((n) => n.startsWith('grow-cell')).length === 3 && late.filter((n) => n.startsWith('grow-pocket')).length === 2, `${L}: grown, it wears four leaves, three cells and two pockets (${late.join(', ')})`);
     await closeUp(page, 'back');
-    await shot('4-bloombot-late-back');
+    await botShots(page, `${out}/4-bloombot-late-back-${label}`);
     await closeUp(page, 'front');
-    await shot('5-bloombot-late-front');
+    await botShots(page, `${out}/5-bloombot-late-front-${label}`);
+    await page.evaluate(() => window.solarbloom.photo.exit());
 
     await page.evaluate(() => {
       const h = window.solarbloom.hud;
@@ -127,9 +150,9 @@ try {
     await page.focus('#bb-backpack');
     await page.waitForTimeout(200);
     p = await page.evaluate(pageNow);
-    check(/Roomier backpack/.test(p.detail) && /Make level 3 in the workshop's Upgrade tab, in the house\. It takes /.test(p.detail), `${L}: the upgrade in focus says how to get its next level ("${p.detail}")`);
+    check(/Roomier backpack/.test(p.detail) && /Go to the workshop table in the house and make level 3 in its Upgrade tab\. It takes /.test(p.detail), `${L}: the upgrade in focus says how to get its next level ("${p.detail}")`);
     await shot('6-page-late');
-    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowUp');
     await page.waitForTimeout(200);
     p = await page.evaluate(pageNow);
     check(p.focus.startsWith('bb-') && p.focus !== 'bb-backpack', `${L}: the arrows move the focus between rows (now ${p.focus})`);
@@ -155,11 +178,11 @@ try {
       if (i >= 0) ideas.splice(i, 1);
     });
     const first = await say(() => window.solarbloom.sim.bus.emit('research.upgraded', { id: 'pulseRadius', level: 2 }));
-    check(/^Wider pulse: level 2 of 3/.test(first) && /See what's next on its page in the backpack \(Tab or I\)\./.test(first), `${L}: the first moment names the upgrade and points to the page ("${first}")`);
+    check(/^Bloombot got better: Wider pulse, level 2 of 3/.test(first) && /See what's next on its page in the backpack \(Tab or I\)\./.test(first), `${L}: the first moment names the upgrade and points to the page ("${first}")`);
     await shot('7-grew');
     await page.waitForTimeout(6500);
     const second = await say(() => window.solarbloom.sim.bus.emit('research.upgraded', { id: 'backpack', level: 3 }));
-    check(second === 'Roomier backpack: level 3 of 3', `${L}: later moments just say what grew ("${second}")`);
+    check(second === 'Bloombot got better: Roomier backpack, level 3 of 3', `${L}: later moments just say what grew ("${second}")`);
 
     check(!errors.length, `${L}: no page errors ${errors.join(' | ')}`);
     await page.close();

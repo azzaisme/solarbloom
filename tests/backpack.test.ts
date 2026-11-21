@@ -20,8 +20,8 @@ function oldCity() {
 }
 
 describe('E22.6: the backpack', () => {
-  it('has the five tabs', () => {
-    expect(TABS.map((t) => t.label)).toEqual(['Items', 'Requests', 'Journal', 'Collection', 'Blueprints']);
+  it('has its tabs (#620 added Bloombot)', () => {
+    expect(TABS.map((t) => t.label)).toEqual(['Items', 'Bloombot', 'Requests', 'Journal', 'Collection', 'Blueprints']);
   });
 
   it('labels a material for screen readers and shows where it comes from and what needs it next', () => {

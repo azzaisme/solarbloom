@@ -23,14 +23,16 @@ describe('#620: Bloombot\'s page', () => {
     const sim = fresh();
     const moves = moveRows(sim);
     expect(moves.map((m) => `${m.name} ${m.state}`)).toEqual(['Pry next', 'Hover later', 'Climb later', 'Glide later']);
-    expect(moves[0].how).toBe('Wake the fountain and it teaches this. The goal card lists what it needs.');
-    expect(moves[1].how).toBe('The fountain teaches this at step 2, The pump turns.');
+    expect(moves[0].how).toBe('Bring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.');
+    expect(moves[1].how).toBe("The fountain teaches this once you've brought it what it asks for twice more.");
     expect(moves[0].where?.name).toBe('the fountain');
     const ups = bloombotUpgradeRows(sim);
     expect(ups.map((u) => u.name)).toEqual(['Bigger charge', 'Gentler on charge', 'Longer stride', 'Wider pulse', 'Roomier backpack']);
+    expect(ups[0].does).toBe('Bloombot holds more charge, so it can keep going longer before it rests.');
+    expect(ups[4].does).toBe('Bloombot can carry 20 more of each thing.');
     expect(ups.every((u) => u.level === 0 && u.max === 3 && u.state === 'later')).toBe(true);
     // before the first Keeper wakes, the workshop doesn't research yet: it says so
-    expect(ups[0].how).toBe('Research “Spare cells” in the workshop in the house. The workshop starts research once you wake the first Keeper.');
+    expect(ups[0].how).toBe('The workshop table in the house can work out how to make this. It starts once you wake another robot out in the city.');
     expect(ups[0].where?.name).toBe('the house');
   });
 
@@ -40,7 +42,8 @@ describe('#620: Bloombot\'s page', () => {
     const moves = moveRows(sim);
     expect(moves.map((m) => m.state)).toEqual(['have', 'next', 'later', 'later']);
     expect(moves[0]).toMatchObject({ how: 'Learned.', where: undefined });
-    expect(moves[1].how).toBe('The fountain teaches this at step 2, The pump turns. The goal card lists what that step needs.');
+    sim.state.salvage!.tier = 1;
+    expect(moveRows(sim)[1].how).toBe('Bring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.');
   });
 
   it('an opened upgrade says what its next level takes, and where; at the top it says so', () => {
@@ -51,7 +54,7 @@ describe('#620: Bloombot\'s page', () => {
     sim.state.salvage!.keepers['k'] = { step: 'request1' } as never;
     const cells = bloombotUpgradeRows(sim).find((u) => u.id === 'chargeCells')!;
     expect(cells).toMatchObject({ state: 'next', level: 1, max: 3 });
-    expect(cells.how).toBe('Make level 2 in the workshop\'s Upgrade tab, in the house. It takes 3 Battery Cell and 4 Gears.');
+    expect(cells.how).toBe('Go to the workshop table in the house and make level 2 in its Upgrade tab. It takes 3 Battery cell and 4 Gears.');
     research(sim).levels.chargeCells = 3;
     const top = bloombotUpgradeRows(sim).find((u) => u.id === 'chargeCells')!;
     expect(top).toMatchObject({ state: 'have', how: 'As far as it goes.', where: undefined });
@@ -86,9 +89,18 @@ describe('#620: Bloombot\'s page', () => {
         expect(line, line).not.toMatch(/—/);
       }
     }
-    for (const t of [WORDS.bloombot.learned('hover'), WORDS.bloombot.upgraded('Bigger charge', 1, 3)]) expect(bannedIn(t), t).toEqual([]);
-    expect(WORDS.bloombot.learned('hover')).toBe('Bloombot can hover now');
-    expect(WORDS.bloombot.upgraded('Bigger charge', 1, 3)).toBe('Bigger charge: level 1 of 3');
+    for (const t of [...Object.values(WORDS.bloombot.learned), WORDS.bloombot.upgraded('Bigger charge', 1, 3)]) expect(bannedIn(t), t).toEqual([]);
+    expect(WORDS.bloombot.learned.hover).toBe('Bloombot can hover over deep water now');
+    expect(WORDS.bloombot.upgraded('Bigger charge', 1, 3)).toBe('Bloombot got better: Bigger charge, level 1 of 3');
+  });
+
+  it('the goal card names the move each fountain step teaches, as the page calls it', async () => {
+    const { objectiveSentence } = await import('../src/ui/ObjectiveCard');
+    const { TIERS } = await import('../src/data/salvage');
+    const sim = fresh();
+    const names = moveRows(sim).map((m) => m.name);
+    expect(objectiveSentence(sim)?.why).toBe('Bloombot learns to pry open rubble');
+    for (const [i, t] of TIERS.filter((x) => x.ability).entries()) expect(WORDS.objective.why[t.ability!]).toContain(`learns to ${names[i].toLowerCase()} `);
   });
 
   it('each row names the part of Bloombot it changes (E25\'s turntable lights it)', () => {

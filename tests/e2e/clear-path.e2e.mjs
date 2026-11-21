@@ -33,7 +33,11 @@ function layout() {
   const hit = (a, b) => a && b && a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
   const inside = (r) => !r || (r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight);
   const mine = { guide: box('#guide'), tally: box('#tally'), card: box('#obj') };
-  const others = { prompt: box('#prompt'), charge: box('#res'), dock: box('#dock'), minimap: box('#minimap') };
+  // the minimap with its N badge, which stands above the disc (#620: the badge was what hid the card's button)
+  const mm = box('#minimap');
+  const nb = box('#minimap .mm-n');
+  const minimap = mm && nb ? new DOMRect(Math.min(mm.left, nb.left), Math.min(mm.top, nb.top), Math.max(mm.right, nb.right) - Math.min(mm.left, nb.left), Math.max(mm.bottom, nb.bottom) - Math.min(mm.top, nb.top)) : mm;
+  const others = { prompt: box('#prompt'), charge: box('#res'), dock: box('#dock'), minimap };
   const bad = [];
   for (const [n, r] of Object.entries(mine)) {
     if (!inside(r)) bad.push(`${n} off screen`);
@@ -93,10 +97,12 @@ try {
     check(c1.title === 'Wake the fountain' && c1.why === 'Bloombot learns to pry open rubble', `${L}: the goal and what it brings ("${c1.title}" · "${c1.why}")`);
     check(c1.parts.length === 3 && /Scrap.*0 of 20/.test(c1.parts[0]) && /Seeds.*0 of 6/.test(c1.parts[1]) && /Park.*of 60/.test(c1.parts[2]), `${L}: every part counted from the start (${c1.parts.join(' | ')})`);
     check(!!c1.next && /Show me where/.test(c1.where), `${L}: the next step under it, with Show me where ("${c1.next}" · "${c1.where}")`);
+    // the owner's test: the card says what to press, with the player's own key (never a {placeholder})
+    check(/hold \S+ beside one/.test(c1.next) && !/[{}]/.test(c1.next), `${L}: the card names the key to press ("${c1.next}")`);
     const g1 = await page.evaluate(() => window.solarbloom.hud.guide.lastText);
     const start = await page.evaluate(() => ({ pulses: window.solarbloom.sim.state.stats.pulses ?? 0, ideas: [...(window.solarbloom.sim.state.progression.ideas ?? [])] }));
     check(start.pulses === 0 && !start.ideas.includes('pulse') && !start.ideas.includes('park'), `${L}: a new game hasn't pulsed yet, so its pulse line is still to come (${JSON.stringify(start)})`);
-    check(/^Old things lie everywhere\. Hold .+ by a pile to salvage it\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
+    check(/^Hold .+ beside a junk pile to dig out what the fountain needs\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
     const arrow = await page.evaluate(() => {
       const g = window.solarbloom;
       const spot = g.beaconSpot();
@@ -197,9 +203,9 @@ try {
       g.bot.pose.facing = Math.PI;
       return s.fountain.condition().done;
     });
-    await page.waitForFunction(() => /park alive/.test(window.solarbloom.hud.guide.text ?? ''), null, { timeout: 20000 }).catch(() => {});
-    const g5 = await page.evaluate(() => window.solarbloom.hud.guide.text);
-    check(done && g5 === "That's the park alive around the fountain. It still needs Scrap and Seeds: look for the piles that glint.", `${L}: the park part done says so, and where to look ("${g5}")`);
+    await page.waitForFunction(() => /alive again/.test(window.solarbloom.hud.guide.lastText ?? ''), null, { timeout: 20000 }).catch(() => {});
+    const g5 = await page.evaluate(() => window.solarbloom.hud.guide.lastText);
+    check(done && g5 === 'The ground round the fountain is alive again. It still needs Scrap and Seeds: look for piles that glint.', `${L}: the park part done says so, and where to look ("${g5}")`);
     const glints = await page.evaluate(async () => {
       const g = window.solarbloom;
       const burst = g.vfx.burst.bind(g.vfx);
@@ -228,7 +234,7 @@ try {
     });
     await page.waitForFunction(() => /^Pry open the rubble/.test(document.querySelector('#objTitle')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
     const c5 = await page.evaluate(cardNow);
-    check(/^Pry open the rubble into /.test(c5.title) && c5.why === 'A Keeper sleeps on the other side' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
+    check(c5.title === 'Pry open the rubble blocking the path' && c5.why === 'Another robot like Bloombot is asleep on the other side' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
     await page.keyboard.press('KeyH');
     await page.waitForTimeout(1600);
     const r5 = await page.evaluate(() => {
@@ -263,7 +269,7 @@ try {
     const g6 = await page.evaluate(() => window.solarbloom.hud.guide.text);
     check(!/park alive/.test(g6 ?? ''), `${L}: the park-done line goes once the fountain moves on ("${g6 ?? ''}")`);
     const c6 = await page.evaluate(cardNow);
-    check(/^Fountain step 2: /.test(c6.title) && !!keeper.pinned && c6.next.includes(keeper.pinned), `${L}: the Keeper's request sits under the fountain goal ("${c6.title}" · "${c6.next}")`);
+    check(c6.title === 'Bring the fountain these' && !!keeper.pinned && c6.next.includes(keeper.pinned), `${L}: the Keeper's request sits under the fountain goal ("${c6.title}" · "${c6.next}")`);
     bad = await page.evaluate(layout);
     check(!bad.length, `${L}: the card sits clear of everything ${bad.join(', ')}`);
     await shot('6-keeper-under-goal');
@@ -278,7 +284,7 @@ try {
     });
     await page.waitForFunction(() => /running low/.test(document.querySelector('#objNext')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
     const c7 = await page.evaluate(cardNow);
-    check(/^Bloombot is running low\. Stand still by the (fountain|house) for a while to charge up\.$/.test(c7.next) && /^Fountain step 2/.test(c7.title), `${L}: running low says where to rest, under the goal ("${c7.next}")`);
+    check(/^Bloombot is running low\. Stand still by the (fountain|house) for a while to charge up\.$/.test(c7.next) && c7.title === 'Bring the fountain these', `${L}: running low says where to rest, under the goal ("${c7.next}")`);
     await page.keyboard.press('KeyH');
     await page.waitForTimeout(400);
     const rest = await page.evaluate(() => {
@@ -294,6 +300,31 @@ try {
     bad = await page.evaluate(layout);
     check(!bad.length, `${L}: the charging chip sits clear of everything ${bad.join(', ')}`);
     await shot('7-charging');
+
+    // ── 8. #620: the card never sits on the minimap, at any fountain step, with the longest line under it ──
+    for (let tier = 0; tier < 5; tier++) {
+      for (const low of [false, true]) {
+        const said = await page.evaluate(
+          ({ tier, low }) => {
+            const g = window.solarbloom;
+            const sv = g.sim.state.salvage;
+            sv.tier = tier;
+            sv.abilities = ['pry', 'hover', 'climb', 'glide'].slice(0, tier);
+            if (low) g.sim.charge.drainForTest();
+            else g.sim.charge.refillForTest();
+            g.hud.objective.adviceAt = -Infinity;
+            return tier;
+          },
+          { tier, low },
+        );
+        await page.waitForTimeout(1300);
+        const c8 = await page.evaluate(cardNow);
+        bad = (await page.evaluate(layout)).filter((b) => b.startsWith('card'));
+        const fit = await page.evaluate(() => ({ card: document.querySelector('#obj').className, map: document.querySelector('#minimap').className }));
+        check(!bad.length, `${L}: fountain step ${said + 1}${low ? ', running low' : ''}: the card clears the minimap and the charge ${bad.join(', ')} ("${c8.title}" · ${c8.parts.length} parts · "${c8.next}" · ${JSON.stringify(fit)})`);
+        if (tier === 3 && low) await shot('8-step-4-low');
+      }
+    }
 
     check(!errors.length, `${L}: no page errors ${errors.join(' | ')}`);
     await page.close();

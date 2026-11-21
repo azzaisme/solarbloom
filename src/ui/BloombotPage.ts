@@ -47,6 +47,15 @@ const MOVES: Record<AbilityId, { name: string; does: string }> = {
   glide: { name: 'Glide', does: 'Glides down from the edge of a roof.' },
 };
 
+/** What each upgrade's levels do for Bloombot, and why that helps (the workshop's own line is shorter). */
+const UPGRADE_DOES: Record<string, string> = {
+  chargeCells: 'Bloombot holds more charge, so it can keep going longer before it rests.',
+  chargeEfficiency: 'Pulses and moves use less charge, so a full charge lasts longer.',
+  sprint: 'Running uses less charge and goes a little faster.',
+  pulseRadius: 'Each pulse brings back more ground at once.',
+  backpack: 'Bloombot can carry 20 more of each thing.',
+};
+
 /** The part each upgrade changes on Bloombot. */
 const UPGRADE_PART: Record<string, BloombotRow['part']> = {
   chargeCells: 'cells',
@@ -73,16 +82,20 @@ export function moveRows(sim: Sim): BloombotRow[] {
   const have = sim.state.salvage?.abilities ?? [];
   const steps = TIERS.filter((t) => t.ability);
   const next = steps.find((t) => !have.includes(t.ability!));
+  const now = sim.state.salvage?.tier ?? 0;
+  const times = ['', 'once more', 'twice more', 'three more times', 'four more times'];
   return steps.map((t) => {
     const a = t.ability!;
     const m = MOVES[a];
     const learned = have.includes(a);
     const isNext = !learned && t === next;
+    // what the player does is bring the fountain what it asks for; the step's name isn't something they know
+    const left = Math.max(1, t.tier - now);
     const how = learned
       ? 'Learned.'
-      : t.tier === 1
-        ? `Wake the fountain and it teaches this.${isNext ? ' The goal card lists what it needs.' : ''}`
-        : `The fountain teaches this at step ${t.tier}, ${t.name}.${isNext ? ' The goal card lists what that step needs.' : ''}`;
+      : left === 1
+        ? 'Bring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.'
+        : `The fountain teaches this once you've brought it what it asks for ${times[left] ?? `${left} more times`}.`;
     return { id: a, kind: 'move', name: m.name, does: m.does, state: learned ? 'have' : isNext ? 'next' : 'later', how, where: learned ? undefined : fountainSpot(sim), part: 'leaves' };
   });
 }
@@ -92,14 +105,14 @@ function openHow(sim: Sim, p: ProjectDef | undefined): string {
   const r = sim.research;
   if (!p) return 'Research opens it in the workshop.';
   const name = `“${p.name}”`;
-  if (!r.on) return `Research ${name} in the workshop in the house. The workshop starts research once you wake the first Keeper.`;
-  if (r.running(p.id)) return `${name} is on the workshop bench now. It opens when that's done.`;
-  if (r.isOpen(p)) return `Research ${name} in the workshop in the house.`;
+  if (!r.on) return 'The workshop table in the house can work out how to make this. It starts once you wake another robot out in the city.';
+  if (r.running(p.id)) return `The workshop table in the house is working out ${name} now. You can make this once it's done.`;
+  if (r.isOpen(p)) return `Go to the workshop table in the house and start ${name} in its Research tab. Then you can make this.`;
   if ('project' in p.opens) {
     const before = r.project(p.opens.project);
-    return `Research ${name} in the workshop. It comes after “${before?.name ?? p.opens.project}”.`;
+    return `The workshop table in the house has to work out “${before?.name ?? p.opens.project}” first, then ${name}.`;
   }
-  return `Research ${name} in the workshop. It opens once you've looked closely at ${r.findName(p.opens)} there.`;
+  return `Take a close look at ${r.findName(p.opens)} at the workshop table in the house. That opens ${name} in its Research tab.`;
 }
 
 /** The five workshop upgrades for Bloombot, in data order. */
@@ -116,12 +129,12 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
       ? 'As far as it goes.'
       : !isOpen
         ? openHow(sim, project)
-        : `Make level ${level + 1} in the workshop's Upgrade tab, in the house. It takes ${costWords(u.levels[level].cost)}.`;
+        : `Go to the workshop table in the house and make level ${level + 1} in its Upgrade tab. It takes ${costWords(u.levels[level].cost)}.`;
     return {
       id: u.id,
       kind: 'upgrade',
       name: u.name,
-      does: u.each,
+      does: UPGRADE_DOES[u.id] ?? u.each,
       state: top ? 'have' : isOpen ? 'next' : 'later',
       level,
       max,

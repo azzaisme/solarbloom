@@ -4316,7 +4316,7 @@ export class Game {
     // #620: Bloombot grows: a move from the fountain, a level from the workshop
     b.on('fountain.tier', ({ tier }) => {
       const a = TIERS[tier - 1]?.ability;
-      if (a) this.grown.push(WORDS.bloombot.learned(a));
+      if (a) this.grown.push(WORDS.bloombot.learned[a] ?? `Bloombot can ${a} now`);
     });
     b.on('research.upgraded', ({ id, level }) => {
       const u = RESEARCH_UPGRADES.find((x) => x.id === id);

@@ -62,12 +62,18 @@ export function plainWords(text: string): string {
 /** The resources' names on screen (biomass is "Greens"). */
 export const RESOURCE_NAME = { energy: 'Energy', water: 'Water', biomass: 'Greens' } as const;
 
+/**
+ * A line that names a control as `{interact}` (an Action in braces), filled with the player's own key or button.
+ * The goal card and the hint line use it, so a card line can say what to press without knowing the device.
+ */
+export const withKeys = (text: string, keyFor: (a: never) => string) => text.replace(/\{(\w+)\}/g, (_, a: string) => keyFor(a as never));
+
 /** Old-city strings: the objective card, the gauges, the prompt's refusals, the menu and the loading tips. */
 export const WORDS = {
   /** #620: Bloombot grows (a short moment when it happens) */
   bloombot: {
-    learned: (a: string) => `Bloombot can ${a} now`,
-    upgraded: (name: string, level: number, max: number) => `${name}: level ${level} of ${max}`,
+    learned: { pry: 'Bloombot can pry rubble out of the way now', hover: 'Bloombot can hover over deep water now', climb: 'Bloombot can climb onto the roofs now', glide: 'Bloombot can glide down from the roofs now' } as Record<string, string>,
+    upgraded: (name: string, level: number, max: number) => `Bloombot got better: ${name}, level ${level} of ${max}`,
   },
   objective: {
     restore: 'Bring the park back to life around the fountain',
@@ -78,22 +84,27 @@ export const WORDS = {
     wake: (landmark: string, region: string) => `Wake the ${landmark} in the ${region}`,
     clear: (region: string) => `Bring the ${region} back to life`,
     explore: 'Walk out into the city and see what wakes next',
-    /** #605: the fountain's next step as the goal: step 1 wakes it, later steps go by the fountain panel's name */
-    fountain: (step: number, name: string) => (step === 1 ? 'Wake the fountain' : `Fountain step ${step}: ${name}`),
+    /**
+     * #605: the fountain's next step as the goal. What the player does, not the step's name (a new player doesn't know
+     * "The pump turns"); the line under it says what the step teaches. The fountain's own panel keeps the names.
+     */
+    fountain: (step: number, _name?: string) => (step === 1 ? 'Wake the fountain' : 'Bring the fountain these'),
     /** #605: the goal when everything it wants is there */
     fountainReady: (step: number) => (step === 1 ? 'The fountain is ready. Go and wake it.' : 'The fountain is ready for its next step. Go and see it.'),
     /** #605: what the step brings, in a few plain words */
+    /** #620: each step names the move it teaches (the verb the Bloombot page names it by) and what it's for */
     why: {
       pry: 'Bloombot learns to pry open rubble',
       hover: 'Bloombot learns to hover over deep water',
       climb: 'Bloombot learns to climb onto the roofs',
-      glide: 'Bloombot learns to glide from the roof edges',
+      glide: 'Bloombot learns to glide down from the roofs',
       bloom: 'The whole city comes back into flower',
     },
     /** #605: after the fountain wakes, until the first pry: the goal is the rubble nearest bloombot */
-    pry: (region: string) => `Pry open the rubble into ${region}`,
-    pryWhy: 'A Keeper sleeps on the other side',
-    pryNext: 'Walk up to the rubble. Bloombot can pry it open now.',
+    /** the region's name isn't known yet: the rubble is what the player can see */
+    pry: 'Pry open the rubble blocking the path',
+    pryWhy: 'Another robot like Bloombot is asleep on the other side',
+    pryNext: 'Hold {interact} beside the rubble to pry it open.',
     /** #605 / #608: the park's part of a fountain step */
     park: 'Park',
     landmarks: 'Landmarks awake',

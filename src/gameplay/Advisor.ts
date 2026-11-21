@@ -227,9 +227,10 @@ export class Advisor {
     const missing = wanted.filter((m) => s.inventory.available(m) < s.fountain.remaining(m));
     const enough = wanted.some((m) => s.inventory.available(m) >= s.fountain.remaining(m));
     const pile = this.nearestPile(missing);
-    const take = (): Suggestion => ({ topic: 'keeper', text: `Take the ${listNames(carried)} to the fountain.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz }, place: { kind: 'fountain', name: 'the fountain' } });
+    const them = carried.length > 1 ? 'them' : 'it';
+    const take = (): Suggestion => ({ topic: 'keeper', text: `Take the ${listNames(carried)} to the fountain and press {interact} to hand ${them} over.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz }, place: { kind: 'fountain', name: 'the fountain' } });
     if (carried.length && (enough || !pile)) return take();
-    if (pile) return { topic: 'keeper', text: `Salvage piles to find ${MATERIALS[pile.material].name}. Show me where leads to one.`, label: `${MATERIALS[pile.material].icon} Show me where`, action: { kind: 'focus', x: pile.x, z: pile.z }, place: { kind: 'pile', name: `a ${MATERIALS[pile.material].name} pile` } };
+    if (pile) return { topic: 'keeper', text: `Dig ${MATERIALS[pile.material].name} out of a junk pile: hold {interact} beside one.`, label: `${MATERIALS[pile.material].icon} Show me where`, action: { kind: 'focus', x: pile.x, z: pile.z }, place: { kind: 'pile', name: `a ${MATERIALS[pile.material].name} pile` } };
     // #609: what it still wants lies only past a way bloombot can open now: open it
     if (missing.length && !pile) {
       const r = REGIONS.find((q) => {
