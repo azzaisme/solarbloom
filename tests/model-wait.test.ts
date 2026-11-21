@@ -64,3 +64,21 @@ describe('the loading screen waits for the models (#567)', () => {
     expect(fresh.lib.waitOver()).toBe(true);
   });
 });
+
+describe('a model asked for before it has loaded', () => {
+  it('gives nothing yet and caches nothing, so it draws once it lands (a dozing Keeper\'s stone block floated)', () => {
+    const { lib, calls, ok } = library();
+    // its far (LOD1) file lands first: the model has an entry, but its near meshes haven't arrived
+    const far = calls.findIndex((c) => /stone-block\.lod1/.test(c.url));
+    expect(far, 'stone-block.lod1 is a startup file').toBeGreaterThanOrEqual(0);
+    ok(far);
+    const models = (lib as unknown as { models: Map<string, { parts: unknown[][]; merged: unknown[] }> }).models;
+    const m = models.get('stone-block');
+    expect(m).toBeDefined();
+    expect(m!.parts[0].length).toBe(0); // not arrived yet
+    expect(lib.batchParts('stone-block')).toEqual([]);
+    expect(lib.batchParts('stone-block', true)).toEqual([]);
+    expect(m!.merged[0]).toBeUndefined(); // nothing kept: the first call after it lands merges the real parts
+    expect(m!.merged[1]).toBeUndefined();
+  });
+});
