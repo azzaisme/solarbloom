@@ -51,6 +51,8 @@ export class DayNight {
   rim = 1;
   /** daylight now, 0 … 1 (for anything that wants to glow at night) */
   light = 1;
+  /** #563: daylight by the time of day alone, 0 (night) … 1 (day), ignoring cloud */
+  daylight = 1;
   /** E23.3.4: the Power view's dim, 0 … 1: the scene lights and the exposure ease down to POWER.view's `light` and
    * `exposure` shares. Glows that should stay bright multiply their emissive by `boost` to make up for the exposure. */
   dim = 0;
@@ -96,6 +98,7 @@ export class DayNight {
     const oc = m.overcast ?? 0;
     const day = daylightAt(f);
     this.light = day * (1 - oc * 0.35);
+    this.daylight = day;
     const h = sunHeightAt(f);
     // The sun's path (low in the east, up to noon, low in the west; under the ground back east by night) and the
     // moon's (across the other side by night, back under by day). The key light blends from one to the other by

@@ -2,7 +2,9 @@ import type { ItemId } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { blueprintRows, collection, itemCells, journalPages, oneOffItems, pinRequest, requestRows, TABS, type TabId } from './BackpackModel';
 import { materialIcon } from './MaterialIcons';
+import { bloombotRows, pips, stateWords, type BloombotRow } from './BloombotPage';
 import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell';
+import { reveal } from './PadFocus';
 import './backpack.css';
 
 /**
@@ -15,6 +17,8 @@ import './backpack.css';
  *   one in focus shows where it comes from, what needs it next and how many are in the store. Opened at a store
  *   (the fountain, a chest, a woken landmark) it is the storage panel: the same grid with both counts and move
  *   1 / 10 / a stack, and "Deposit everything".
+ * - Bloombot (#620): the moves the fountain teaches and the workshop's five upgrades, each with what it does, where
+ *   it stands (learned, level pips) and how to get the next; the one in focus shows it all, with Show me where.
  * - Requests: every open request with its Keeper and region; pressing one pins it to the objective card.
  * - Journal: the pages in book order, gaps for the ones not found. Collection: cats, keepsakes, wildlife,
  *   landmarks, plots and decorations. Blueprints: found and not.
@@ -27,11 +31,13 @@ export interface BackpackHost {
   sim: Sim;
   /** something changed that the rest of the HUD shows (a pin, a move) */
   changed?(): void;
+  /** #620: Show me where from the Bloombot page (the backpack closes and the way is marked) */
+  showWhere?(at: { roofId: string; x: number; z: number; name: string }): void;
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-const TAB_ICON: Record<TabId, string> = { items: 'pack', requests: 'list', journal: 'book', collection: 'star', blueprints: 'hammer' };
+const TAB_ICON: Record<TabId, string> = { items: 'pack', bloombot: 'sprout', requests: 'list', journal: 'book', collection: 'star', blueprints: 'hammer' };
 
 export class Backpack {
   readonly el: HTMLElement;
@@ -45,6 +51,8 @@ export class Backpack {
   private storage?: string;
   private selMat: ItemId = 'scrap';
   private selPage?: string;
+  /** #620: the Bloombot row in focus */
+  private selBot?: string;
 
   constructor(
     parent: HTMLElement,
@@ -92,9 +100,12 @@ export class Backpack {
     this.body.addEventListener('click', (e) => this.click(e.target as HTMLElement));
     // the cell or page in focus is the one shown beside the list (keyboard and pad read by moving)
     this.body.addEventListener('focusin', (e) => {
-      const t = (e.target as HTMLElement).closest<HTMLElement>('[data-mat], [data-page]');
+      const t = (e.target as HTMLElement).closest<HTMLElement>('[data-mat], [data-page], [data-bb]');
       if (!t) return;
-      if (t.dataset.mat && t.dataset.mat !== this.selMat) {
+      if (t.dataset.bb && t.dataset.bb !== this.selBot) {
+        this.selBot = t.dataset.bb;
+        this.select();
+      } else if (t.dataset.mat && t.dataset.mat !== this.selMat) {
         this.selMat = t.dataset.mat as ItemId;
         this.select();
       } else if (t.dataset.page && t.dataset.page !== this.selPage) {
@@ -116,8 +127,14 @@ export class Backpack {
     this.el.hidden = false;
     this.el.classList.add('open');
     this.say('');
-    this.show(storage ? 'items' : tab, true);
-    if (storage) this.body.querySelector<HTMLElement>('.bp-cell')?.focus({ focusVisible: true } as FocusOptions);
+    this.show(storage ? 'items' : tab);
+    // #616: the focus starts on the tab's first cell or row, not on the tab (d-pad up still reaches the tabs)
+    const first = this.body.querySelector<HTMLElement>('.bp-cell, button:not([disabled]), [tabindex="0"]');
+    if (first) {
+      first.focus({ focusVisible: true } as FocusOptions);
+      reveal(first);
+    }
+    else this.el.querySelector<HTMLElement>('[role=tab][aria-selected=true]')?.focus({ focusVisible: true } as FocusOptions);
   }
 
   /** E23.9.1: opens the journal at a page (a page just read from its post). */
@@ -162,7 +179,7 @@ export class Backpack {
 
   /** The action bar: what Enter / A does on this tab, the tab buttons and Back. */
   private bar() {
-    const choose: Partial<Record<TabId, string>> = { items: this.storage ? 'Move' : 'Choose', requests: 'Pin', journal: 'Read' };
+    const choose: Partial<Record<TabId, string>> = { items: this.storage ? 'Move' : 'Choose', bloombot: 'Choose', requests: 'Pin', journal: 'Read' };
     const items: BarItem[] = [];
     if (choose[this.current]) items.push({ press: 'choose', label: choose[this.current]! });
     items.push({ press: 'tabs', label: 'Change tab' });
@@ -220,8 +237,9 @@ export class Backpack {
   private select() {
     for (const b of this.body.querySelectorAll<HTMLElement>('[data-mat]')) b.setAttribute('aria-selected', String(b.dataset.mat === this.selMat));
     for (const b of this.body.querySelectorAll<HTMLElement>('[data-page]')) b.setAttribute('aria-selected', String(b.dataset.page === this.selPage));
+    for (const b of this.body.querySelectorAll<HTMLElement>('[data-bb]')) b.setAttribute('aria-selected', String(b.dataset.bb === this.selBot));
     const d = this.body.querySelector<HTMLElement>('#bpDetail');
-    if (d) d.innerHTML = this.current === 'journal' ? this.pageText() : this.detail();
+    if (d) d.innerHTML = this.current === 'journal' ? this.pageText() : this.current === 'bloombot' ? this.botDetail() : this.detail();
   }
 
   private move(act: string, n: string) {
@@ -242,6 +260,44 @@ export class Backpack {
     }
     this.host.changed?.();
     this.refresh();
+  }
+
+  // ───────── Bloombot (#620) ─────────
+
+  private bloombot(): string {
+    const rows = bloombotRows(this.host.sim);
+    if (!rows.some((r) => r.id === this.selBot)) this.selBot = (rows.find((r) => r.state === 'next') ?? rows[0])?.id;
+    const row = (r: BloombotRow) =>
+      `<button class="bb-row ${r.state}" role="option" id="bb-${r.id}" data-bb="${r.id}" aria-selected="${r.id === this.selBot}" aria-label="${esc(`${r.name}, ${stateWords(r)}`)}">` +
+      `<b class="bb-name">${esc(r.name)}</b>` +
+      (r.kind === 'upgrade' ? `<span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>` : '') +
+      `<span class="bb-state">${esc(stateWords(r))}</span></button>`;
+    const group = (title: string, id: string, list: BloombotRow[], note: string) =>
+      `<h3 class="pn-label" id="${id}">${title} <span class="bb-count">${esc(note)}</span></h3><div class="bb-rows" role="listbox" aria-labelledby="${id}">${list.map(row).join('')}</div>`;
+    const moves = rows.filter((r) => r.kind === 'move');
+    const ups = rows.filter((r) => r.kind === 'upgrade');
+    const levels = ups.reduce((a, r) => a + (r.level ?? 0), 0);
+    const most = ups.reduce((a, r) => a + (r.max ?? 0), 0);
+    return (
+      `<div class="pn-split bb-split"><div class="pn-main bb-main">` +
+      group('Moves', 'bbMovesH', moves, `${moves.filter((r) => r.state === 'have').length} of ${moves.length} learned`) +
+      group('Upgrades', 'bbUpsH', ups, `${levels} of ${most} levels`) +
+      `</div><aside class="pn-detail bp-detail bb-detail" id="bpDetail">${this.botDetail()}</aside></div>`
+    );
+  }
+
+  private botDetail(): string {
+    const r = bloombotRows(this.host.sim).find((x) => x.id === this.selBot);
+    if (!r) return '';
+    const level = r.kind === 'upgrade' ? `<p class="bb-level"><span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>${esc(stateWords(r))}</p>` : `<p class="bb-level">${esc(stateWords(r))}</p>`;
+    const where = r.where ? `<button class="pn-btn primary bb-where" id="bb-where" data-bbwhere="${r.id}">${icon('pin', 's')}Show me where</button>` : '';
+    return (
+      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : 'spark')}</span>${esc(r.name)}</h3>` +
+      level +
+      `<p class="bb-does">${esc(r.does)}</p>` +
+      `<h4>${r.state === 'have' ? (r.kind === 'move' ? 'Learned' : 'At its top level') : r.kind === 'move' ? 'How to learn it' : r.level ? 'The next level' : 'How to get it'}</h4><p>${esc(r.how)}</p>` +
+      where
+    );
   }
 
   // ───────── Requests ─────────
@@ -300,6 +356,23 @@ export class Backpack {
   }
 
   private click(t: HTMLElement) {
+    const go = t.closest<HTMLElement>('[data-bbwhere]');
+    if (go) {
+      const r = bloombotRows(this.host.sim).find((x) => x.id === go.dataset.bbwhere);
+      if (r?.where && this.host.showWhere) {
+        this.close();
+        this.host.showWhere(r.where);
+      }
+      return;
+    }
+    const bb = t.closest<HTMLElement>('[data-bb]');
+    if (bb) {
+      this.selBot = bb.dataset.bb;
+      this.select();
+      // Enter or A on a row steps to its Show me where
+      this.body.querySelector<HTMLElement>('#bb-where')?.focus({ focusVisible: true } as FocusOptions);
+      return;
+    }
     const mv = t.closest<HTMLElement>('[data-move]');
     if (mv) return mv.getAttribute('aria-disabled') ? this.say(this.host.sim.inventory.nearStore() ? 'Nothing to move' : 'Stand by the fountain, a chest or a woken landmark to move things.') : this.move(mv.dataset.move!, mv.dataset.n!);
     const pin = t.closest<HTMLElement>('[data-pin]');

@@ -96,6 +96,9 @@ try {
       for (let x = -2; x < 18; x++) {
         const t = s.grid.get('g', x, z);
         if (!t || t.blocked) continue;
+        // only the park's own pond: Tide's rock pool at (7,16) stays silted, as in a new game (a full pool within
+        // `fadeReach` of the bank would keep it lush: the fullest water in reach decides, E23.4.4)
+        if (t.feature === 'water' && s.areas.map.areaOfCell(x, z) !== 'park') continue;
         t.ground = 'restored';
         t.pollution = 0;
         t.bloom = t.feature === 'water' ? 1 : 3;
@@ -304,6 +307,8 @@ try {
     await page.waitForFunction(() => window.solarbloom.waterOverlay.visible && window.solarbloom.machines.holos.water.parts.size > 0, null, { timeout: 15000 }).catch(() => {});
     await settle(1000);
     check(await run(() => window.solarbloom.waterOverlay.visible), 'the Water view is drawn');
+    // the world dims over `POWER.view.fade` s of game time; slow headless frames take longer: wait for it, up to 10 s
+    await page.waitForFunction(() => window.solarbloom.dayNight.dim > 0.5, null, { timeout: 10000 }).catch(() => {});
     // E23.4.5: the running pump and the line it fills are blue holograms, in a dimmed world
     const holo = await run(() => {
       const g = window.solarbloom;
@@ -336,12 +341,19 @@ try {
     await page.waitForFunction(() => window.solarbloom.machines.holos.power.parts.size === 0, null, { timeout: 10000 }).catch(() => {});
     const back = await run(() => ({ water: window.solarbloom.waterView, power: window.solarbloom.machines.holos.power.parts.size }));
     check(back.water && back.power === 0, `V brings the Water view back and the yellow goes (${JSON.stringify(back)})`);
-    await press(14);
-    await page.waitForTimeout(500);
-    check(!(await run(() => window.solarbloom.waterView)), 'd-pad left turns it off (pad)');
-    await press(14);
-    await page.waitForTimeout(500);
-    check(await run(() => window.solarbloom.waterView), 'd-pad left turns it back on (pad)');
+    // on a pad, d-pad up cycles the views in build mode (off, Power, Water; E23.11); d-pad left walks the hotbar
+    const view = () => run(() => ({ water: window.solarbloom.waterView, hud: window.solarbloom.hud.buildBar.view }));
+    await press(12);
+    await page.waitForFunction(() => !window.solarbloom.waterView, null, { timeout: 5000 }).catch(() => {});
+    const off = await view();
+    check(!off.water && off.hud === 'off', `d-pad up turns it off (pad) (${JSON.stringify(off)})`);
+    const seen = [];
+    for (let i = 0; i < 3 && !(await run(() => window.solarbloom.waterView)); i++) {
+      await press(12);
+      await page.waitForTimeout(500);
+      seen.push((await view()).hud);
+    }
+    check((await run(() => window.solarbloom.waterView)) && seen[seen.length - 1] === 'water', `d-pad up cycles back to the Water view (pad) (${seen.join(' → ')})`);
     // Esc closes the build tray first, then puts the Pipe tool away (out of build mode)
     for (let i = 0; i < 3 && (await run(() => window.solarbloom.hud.currentTool)) !== 'pulse'; i++) {
       await page.keyboard.press('Escape');

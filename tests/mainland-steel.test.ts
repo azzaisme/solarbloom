@@ -166,10 +166,10 @@ describe('E23.8.3.2: steel', () => {
     const sim = bloomed();
     const cell = itemCells(sim).find((c) => c.id === 'steel')!;
     expect(cell.from).toBe('Found in the industrial ruins past the causeway');
-    expect(sim.build.whereFrom('steel')).toBe(' — the industrial ruins past the causeway');
+    expect(sim.build.whereFrom('steel')).toBe(' from the industrial ruins past the causeway');
     sim.state.salvage!.pack.steel = 0;
     sim.state.salvage!.store.steel = 0;
-    expect(sim.build.missingLabel('gridBattery')).toBe('Needs Steel 🔩 — the industrial ruins past the causeway');
+    expect(sim.build.missingLabel('gridBattery')).toBe('Needs Steel 🔩 from the industrial ruins past the causeway');
   });
 });
 

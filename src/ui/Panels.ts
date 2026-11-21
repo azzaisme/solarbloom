@@ -137,7 +137,17 @@ export class Panels extends HudPart {
     );
   }
 
+  /** the last tip shown (screen point and text), to place it again when the UI scale changes */
+  private lastTip?: [number, number, string];
+
+  /** #599: the UI scale changed: the tip finds its place again at once (clear of the prompt and the dock). */
+  replaceTip() {
+    const tip = this.root.querySelector<HTMLElement>('#tip');
+    if (this.lastTip && tip && tip.style.display !== 'none') this.showTip(...this.lastTip);
+  }
+
   showTip(x: number, y: number, html: string) {
+    this.lastTip = [x, y, html];
     html = this.hud.words(html);
     const tip = $(this.root, '#tip');
     this.set('tip', tip, 'html', html);
@@ -145,7 +155,16 @@ export class Panels extends HudPart {
     const w = tip.offsetWidth;
     const h = tip.offsetHeight;
     const px = Math.min(hudWidth() - w - 8, toHud(x) + 18);
-    const py = Math.max(8, Math.min(hudHeight() - h - 90, toHud(y) + 18));
+    let py = Math.max(8, Math.min(hudHeight() - h - 90, toHud(y) + 18));
+    // #599: never over the prompt (and its cost chips), "Stop building" or the build dock: above them instead
+    // (lowest first, and twice round: rising above one can land it on the next)
+    for (const sel of ['#buildbar', '#buildStop', '#prompt', '#buildbar', '#buildStop', '#prompt']) {
+      const e = this.root.querySelector<HTMLElement>(sel);
+      const r = e && !e.hidden && e.getClientRects().length ? e.getBoundingClientRect() : undefined;
+      if (!r || !r.width || !r.height) continue;
+      const [l, t, rt, b] = [toHud(r.left), toHud(r.top), toHud(r.right), toHud(r.bottom)];
+      if (px < rt && px + w > l && py < b && py + h > t) py = Math.max(8, t - h - 8);
+    }
     tip.style.transform = `translate(${px}px, ${py}px)`;
     tip.style.left = '0';
     tip.style.top = '0';

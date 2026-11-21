@@ -1,0 +1,1150 @@
+{
+  "gpu": true,
+  "cardOnly": true,
+  "limit": 900,
+  "times": {
+    "salvage": 1.995,
+    "fountain": 88.196
+  },
+  "gameSeconds": {
+    "salvage": 1.9999999999998863,
+    "fountain": 86.90000000001427
+  },
+  "steps": [
+    {
+      "t": 0.201,
+      "what": "(a toast comes and goes, unread: \"Esc frees the mouse again.\")"
+    },
+    {
+      "t": 0.201,
+      "what": "(a toast comes and goes, unread: \"A quarter of the way to waking the fountain.\")"
+    },
+    {
+      "t": 0.201,
+      "what": "reads the card: \"Bring 20 Scrap and 6 Seeds to the fountain\""
+    },
+    {
+      "t": 0.205,
+      "what": "walks to a pile of scrap at 8, 44",
+      "why": "the card wants 20 more Scrap"
+    },
+    {
+      "t": 0.478,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 1.995,
+      "what": "★ first salvage"
+    },
+    {
+      "t": 2.178,
+      "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
+    },
+    {
+      "t": 2.181,
+      "what": "walks to a pile of scrap at 8, 44",
+      "why": "the card wants 17 more Scrap"
+    },
+    {
+      "t": 3.46,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 4.887,
+      "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
+    },
+    {
+      "t": 4.892,
+      "what": "walks to a pile of scrap at -7, 43",
+      "why": "the card wants 14 more Scrap"
+    },
+    {
+      "t": 4.899,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 20 Scrap and 6 Seeds to the fountain\""
+    },
+    {
+      "t": 5.718,
+      "what": "walks to a pile of scrap at 2, 27",
+      "why": "the card wants 14 more Scrap"
+    },
+    {
+      "t": 13.894,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 15.304,
+      "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
+    },
+    {
+      "t": 15.313,
+      "what": "walks to a pile of scrap at 2, 27",
+      "why": "the card wants 11 more Scrap"
+    },
+    {
+      "t": 16.843,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 18.269,
+      "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
+    },
+    {
+      "t": 18.272,
+      "what": "walks to a pile of scrap at 2, 27",
+      "why": "the card wants 8 more Scrap"
+    },
+    {
+      "t": 19.81,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 21.23,
+      "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
+    },
+    {
+      "t": 21.233,
+      "what": "walks to a pile of scrap at 2, 27",
+      "why": "the card wants 5 more Scrap"
+    },
+    {
+      "t": 22.767,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 24.19,
+      "what": "(a toast comes and goes, unread: \"Halfway there: the birds will want to sit here again.\")"
+    },
+    {
+      "t": 24.19,
+      "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
+    },
+    {
+      "t": 24.19,
+      "what": "(a toast comes and goes, unread: \"An arch of climbing roses over a seat. Look for empty plots in restored ground.\")"
+    },
+    {
+      "t": 24.193,
+      "what": "walks to a pile of scrap at 0, 16",
+      "why": "the card wants 2 more Scrap"
+    },
+    {
+      "t": 30.591,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 32.008,
+      "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
+    },
+    {
+      "t": 32.011,
+      "what": "walks to a pile of seeds at 3, 15",
+      "why": "the card wants 6 more Seeds"
+    },
+    {
+      "t": 34.341,
+      "what": "faces it: the prompt says \"E Hold Salvage Seeds\""
+    },
+    {
+      "t": 35.763,
+      "what": "(a toast comes and goes, unread: \"+3 Seeds\")"
+    },
+    {
+      "t": 35.766,
+      "what": "walks to a pile of seeds at 3, 15",
+      "why": "the card wants 3 more Seeds"
+    },
+    {
+      "t": 37.293,
+      "what": "faces it: the prompt says \"E Hold Salvage Seeds\""
+    },
+    {
+      "t": 38.717,
+      "what": "(a toast comes and goes, unread: \"+3 Seeds\")"
+    },
+    {
+      "t": 38.72,
+      "what": "walks to the fountain with everything it asks for",
+      "why": "the card says \"Bring 20 Scrap and 6 Seeds to the fountain\""
+    },
+    {
+      "t": 44.583,
+      "what": "faces it: the prompt says \"E Bring things to the fountain\""
+    },
+    {
+      "t": 44.603,
+      "what": "the fountain's panel opens: presses \"Give all I have\""
+    },
+    {
+      "t": 45.864,
+      "what": "reads the card: \"Park tiles restored · 32 of 60\""
+    },
+    {
+      "t": 45.87,
+      "what": "walks to dead ground at 6, 9 and pulses",
+      "why": "the card counts \"Park tiles restored · 32 of 60\""
+    },
+    {
+      "t": 47.117,
+      "what": "walks to dead ground at 7, 9 and pulses",
+      "why": "the card counts \"Park tiles restored · 32 of 60\""
+    },
+    {
+      "t": 48.345,
+      "what": "reads the card: \"Park tiles restored · 33 of 60\""
+    },
+    {
+      "t": 48.35,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 33 of 60\""
+    },
+    {
+      "t": 49.313,
+      "what": "reads the card: \"Park tiles restored · 34 of 60\""
+    },
+    {
+      "t": 49.318,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 34 of 60\""
+    },
+    {
+      "t": 50.038,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 34 of 60\""
+    },
+    {
+      "t": 51.012,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 34 of 60\""
+    },
+    {
+      "t": 51.999,
+      "what": "reads the card: \"Park tiles restored · 35 of 60\""
+    },
+    {
+      "t": 52.004,
+      "what": "walks to dead ground at 6, 8 and pulses",
+      "why": "the card counts \"Park tiles restored · 35 of 60\""
+    },
+    {
+      "t": 52.996,
+      "what": "walks to dead ground at 7, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 35 of 60\""
+    },
+    {
+      "t": 53.983,
+      "what": "reads the card: \"Park tiles restored · 37 of 60\""
+    },
+    {
+      "t": 53.988,
+      "what": "walks to dead ground at 5, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 37 of 60\""
+    },
+    {
+      "t": 54.982,
+      "what": "reads the card: \"Park tiles restored · 38 of 60\""
+    },
+    {
+      "t": 54.986,
+      "what": "walks to dead ground at 5, 8 and pulses",
+      "why": "the card counts \"Park tiles restored · 38 of 60\""
+    },
+    {
+      "t": 55.969,
+      "what": "walks to dead ground at 6, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 38 of 60\""
+    },
+    {
+      "t": 57.197,
+      "what": "reads the card: \"Park tiles restored · 39 of 60\""
+    },
+    {
+      "t": 57.201,
+      "what": "walks to dead ground at 7, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 39 of 60\""
+    },
+    {
+      "t": 57.916,
+      "what": "reads the card: \"Park tiles restored · 40 of 60\""
+    },
+    {
+      "t": 57.92,
+      "what": "walks to dead ground at 5, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 40 of 60\""
+    },
+    {
+      "t": 58.885,
+      "what": "reads the card: \"Park tiles restored · 41 of 60\""
+    },
+    {
+      "t": 58.889,
+      "what": "walks to dead ground at 8, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 41 of 60\""
+    },
+    {
+      "t": 60.126,
+      "what": "reads the card: \"Park tiles restored · 42 of 60\""
+    },
+    {
+      "t": 60.13,
+      "what": "walks to dead ground at 8, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 42 of 60\""
+    },
+    {
+      "t": 61.096,
+      "what": "reads the card: \"Park tiles restored · 43 of 60\""
+    },
+    {
+      "t": 61.1,
+      "what": "walks to dead ground at 7, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 43 of 60\""
+    },
+    {
+      "t": 62.332,
+      "what": "(a toast comes and goes, unread: \"The planter trees leaf out and bunting goes up on the bandstand.\")"
+    },
+    {
+      "t": 62.333,
+      "what": "(a toast comes and goes, unread: \"Tables, parasols and a planter of herbs. Look for empty plots in restored ground.\")"
+    },
+    {
+      "t": 62.333,
+      "what": "reads the card: \"Park tiles restored · 45 of 60\""
+    },
+    {
+      "t": 62.339,
+      "what": "walks to dead ground at 6, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 45 of 60\""
+    },
+    {
+      "t": 63.317,
+      "what": "reads the card: \"Park tiles restored · 46 of 60\""
+    },
+    {
+      "t": 63.322,
+      "what": "walks to dead ground at 8, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 46 of 60\""
+    },
+    {
+      "t": 64.289,
+      "what": "reads the card: \"Park tiles restored · 47 of 60\""
+    },
+    {
+      "t": 64.294,
+      "what": "walks to dead ground at 9, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 47 of 60\""
+    },
+    {
+      "t": 65.519,
+      "what": "reads the card: \"Park tiles restored · 48 of 60\""
+    },
+    {
+      "t": 65.526,
+      "what": "walks to dead ground at 9, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 48 of 60\""
+    },
+    {
+      "t": 66.495,
+      "what": "reads the card: \"Park tiles restored · 49 of 60\""
+    },
+    {
+      "t": 66.5,
+      "what": "walks to dead ground at 8, 13 and pulses",
+      "why": "the card counts \"Park tiles restored · 49 of 60\""
+    },
+    {
+      "t": 67.712,
+      "what": "reads the card: \"Park tiles restored · 50 of 60\""
+    },
+    {
+      "t": 67.717,
+      "what": "walks to dead ground at 7, 13 and pulses",
+      "why": "the card counts \"Park tiles restored · 50 of 60\""
+    },
+    {
+      "t": 68.683,
+      "what": "reads the card: \"Park tiles restored · 51 of 60\""
+    },
+    {
+      "t": 68.688,
+      "what": "walks to dead ground at 9, 13 and pulses",
+      "why": "the card counts \"Park tiles restored · 51 of 60\""
+    },
+    {
+      "t": 69.663,
+      "what": "reads the card: \"Park tiles restored · 52 of 60\""
+    },
+    {
+      "t": 69.668,
+      "what": "walks to dead ground at 10, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 52 of 60\""
+    },
+    {
+      "t": 70.882,
+      "what": "reads the card: \"Park tiles restored · 54 of 60\""
+    },
+    {
+      "t": 70.887,
+      "what": "walks to dead ground at 10, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 54 of 60\""
+    },
+    {
+      "t": 71.883,
+      "what": "reads the card: \"Park tiles restored · 56 of 60\""
+    },
+    {
+      "t": 71.892,
+      "what": "walks to dead ground at 10, 13 and pulses",
+      "why": "the card counts \"Park tiles restored · 56 of 60\""
+    },
+    {
+      "t": 72.631,
+      "what": "walks to dead ground at 9, 14 and pulses",
+      "why": "the card counts \"Park tiles restored · 56 of 60\""
+    },
+    {
+      "t": 73.86,
+      "what": "reads the card: \"Park tiles restored · 57 of 60\""
+    },
+    {
+      "t": 73.865,
+      "what": "walks to dead ground at 8, 14 and pulses",
+      "why": "the card counts \"Park tiles restored · 57 of 60\""
+    },
+    {
+      "t": 74.829,
+      "what": "reads the card: \"Park tiles restored · 58 of 60\""
+    },
+    {
+      "t": 74.833,
+      "what": "walks to dead ground at 10, 14 and pulses",
+      "why": "the card counts \"Park tiles restored · 58 of 60\""
+    },
+    {
+      "t": 75.557,
+      "what": "reads the card: \"Park tiles restored · 59 of 60\""
+    },
+    {
+      "t": 75.562,
+      "what": "walks to dead ground at 9, 15 and pulses",
+      "why": "the card counts \"Park tiles restored · 59 of 60\""
+    },
+    {
+      "t": 88.197,
+      "what": "★ the fountain wakes"
+    },
+    {
+      "t": 88.41,
+      "what": "(a toast comes and goes, unread: \"They glide through the clean water.\")"
+    },
+    {
+      "t": 88.41,
+      "what": "(a toast comes and goes, unread: \"Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open.\")"
+    },
+    {
+      "t": 88.41,
+      "what": "reads the card: \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 88.413,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 89.234,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 90.044,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 90.858,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 91.677,
+      "what": "strolls toward 4, 7",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 95.494,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 96.307,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 97.121,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 97.942,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 98.754,
+      "what": "strolls toward -3, 2",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 98.765,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 99.59,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 100.399,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 101.216,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 102.032,
+      "what": "strolls toward 8, 16",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 106.411,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 107.232,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 108.041,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 108.85,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 109.667,
+      "what": "strolls toward 1, 22",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 114.526,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 115.347,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 116.159,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 116.97,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 117.779,
+      "what": "strolls toward 5, 31",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 122.132,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 122.943,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 123.758,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 124.566,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 125.378,
+      "what": "strolls toward -3, 35",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 125.392,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 126.21,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 127.024,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 127.835,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 128.653,
+      "what": "strolls toward 14, 29",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 132.729,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 133.54,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 134.356,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 135.164,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 135.977,
+      "what": "strolls toward 9, 37",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 140.079,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 140.889,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 141.706,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 142.518,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 143.328,
+      "what": "strolls toward 9, 28",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 146.893,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 147.713,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 148.525,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 149.339,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 150.151,
+      "what": "strolls toward 12, 20",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 153.981,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 154.789,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 155.606,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 156.413,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 157.223,
+      "what": "strolls toward 8, 28",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 161.059,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 161.875,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 162.689,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 163.503,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 164.321,
+      "what": "strolls toward 0, 32",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 168.385,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 169.193,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 170.004,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 170.812,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 171.627,
+      "what": "strolls toward 0, 41",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 175.441,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 176.262,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 177.075,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 177.886,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 178.697,
+      "what": "strolls toward 3, 33",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 182.573,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 183.381,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 184.197,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 185.008,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 185.821,
+      "what": "strolls toward 10, 40",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 190.189,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 191.007,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 191.82,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 192.635,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 193.446,
+      "what": "strolls toward 15, 48",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 193.458,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 194.277,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 195.087,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 195.895,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 196.706,
+      "what": "strolls toward 5, 33",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 200.288,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 201.107,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 201.913,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 202.728,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 203.542,
+      "what": "strolls toward 10, 41",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 207.639,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 208.454,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 209.262,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 210.07,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 210.882,
+      "what": "strolls toward 19, 43",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 210.891,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 211.706,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 212.524,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 213.342,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 214.156,
+      "what": "strolls toward 8, 33",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 217.753,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 218.56,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 219.374,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 220.191,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 221.006,
+      "what": "strolls toward 9, 43",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 225.105,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 225.924,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 226.735,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 227.543,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 228.355,
+      "what": "strolls toward 1, 42",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 231.704,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 232.516,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 233.325,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 234.14,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 234.951,
+      "what": "strolls toward 9, 38",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 239.085,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 239.902,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 240.717,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 241.525,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 242.338,
+      "what": "strolls toward 16, 32",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 242.351,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 243.169,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 243.986,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 244.801,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 245.618,
+      "what": "strolls toward 0, 37",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 249.44,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 250.254,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 251.075,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 251.885,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 252.701,
+      "what": "strolls toward 9, 36",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 256.516,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 257.339,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 258.151,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 258.962,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 259.777,
+      "what": "strolls toward 11, 45",
+      "why": "still nothing in sight"
+    },
+    {
+      "t": 263.911,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 264.734,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 265.554,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 266.361,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 267.184,
+      "what": "strolls toward 3, 45",
+      "why": "still nothing in sight"
+    }
+  ],
+  "errors": []
+}

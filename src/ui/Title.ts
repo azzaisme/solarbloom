@@ -494,6 +494,7 @@ export class Title {
           if (b.pressed && !this.padPrev[i]) this.pad(i);
           this.padPrev[i] = b.pressed;
         });
+      if (this.woke) this.focus.tick(); // #616: a menu that just opened starts with its first control in focus
       this.raf = requestAnimationFrame(tick);
     };
     this.raf = requestAnimationFrame(tick);

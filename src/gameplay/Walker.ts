@@ -33,6 +33,12 @@ export const BOT = {
   turn: 16,
   /** A* gives up after expanding this many cells */
   maxSearch: 9000,
+  /**
+   * #644: how far the goal card looks for somewhere bloombot can walk to (Show me where): it floods out from bloombot
+   * over at most this many cells, and no further than this many tiles of walking
+   */
+  goalSearch: 9000,
+  goalCost: 220,
 } as const;
 
 /** The 8 neighbour steps, cardinal first. */
@@ -186,9 +192,57 @@ export class Walker {
    * when no path exists within the search budget.
    */
   path(roofId: string, fx: number, fz: number, goal: (x: number, z: number) => boolean, hint: { x: number; z: number }): { x: number; z: number }[] | undefined {
+    const r = this.search(roofId, fx, fz, goal, hint, BOT.maxSearch);
+    return r.reached ? r.path : undefined;
+  }
+
+  /**
+   * #632: like `path`, but when there is no way to a goal cell (or the budget runs out) it still returns the way to
+   * the cell it reached that lies closest to `hint`, with `reached` false. Show me where's trail leads there.
+   */
+  pathOrNearest(roofId: string, fx: number, fz: number, goal: (x: number, z: number) => boolean, hint: { x: number; z: number }, budget: number = BOT.maxSearch): { path: { x: number; z: number }[]; reached: boolean } {
+    return this.search(roofId, fx, fz, goal, hint, budget);
+  }
+
+  /**
+   * #644: how far bloombot would walk to each cell it can reach from (fx, fz): a flood over walkable cells, with the
+   * same steps as `path` (no corner cutting, no cliff edges). Stops after `budget` cells or past `maxCost` tiles.
+   * Keys are `x,z`.
+   */
+  costsFrom(roofId: string, fx: number, fz: number, budget: number = BOT.goalSearch, maxCost: number = BOT.goalCost): Map<string, number> {
     const sx = Math.floor(fx);
     const sz = Math.floor(fz);
-    if (goal(sx, sz)) return [];
+    const key = (x: number, z: number) => `${x},${z}`;
+    const g = new Map<string, number>([[key(sx, sz), 0]]);
+    const done = new Map<string, number>();
+    const heap = new MinHeap<[number, number, string]>();
+    heap.push(0, [sx, sz, key(sx, sz)]);
+    const terraced = this.sim.grid.terraced(roofId);
+    while (heap.size && done.size < budget) {
+      const [x, z, k] = heap.pop()!;
+      if (done.has(k)) continue;
+      const gk = g.get(k)!;
+      done.set(k, gk);
+      for (const [dx, dz] of STEPS) {
+        const nx = x + dx;
+        const nz = z + dz;
+        if (!this.walkable(roofId, nx, nz)) continue;
+        if (dx && dz && (!this.walkable(roofId, x + dx, z) || !this.walkable(roofId, x, z + dz))) continue;
+        if (terraced && !(dx && dz ? canStep(x, z, x + dx, z) && canStep(x + dx, z, nx, nz) && canStep(x, z, x, z + dz) && canStep(x, z + dz, nx, nz) : canStep(x, z, nx, nz))) continue;
+        const nk = key(nx, nz);
+        const ng = gk + (dx && dz ? Math.SQRT2 : 1);
+        if (ng > maxCost || ng >= (g.get(nk) ?? Infinity)) continue;
+        g.set(nk, ng);
+        heap.push(ng, [nx, nz, nk]);
+      }
+    }
+    return done;
+  }
+
+  private search(roofId: string, fx: number, fz: number, goal: (x: number, z: number) => boolean, hint: { x: number; z: number }, budget: number): { path: { x: number; z: number }[]; reached: boolean } {
+    const sx = Math.floor(fx);
+    const sz = Math.floor(fz);
+    if (goal(sx, sz)) return { path: [], reached: true };
     const key = (x: number, z: number) => `${x},${z}`;
     const h = (x: number, z: number) => {
       const ax = Math.abs(x - hint.x);
@@ -201,22 +255,31 @@ export class Walker {
     heap.push(h(sx, sz), [sx, sz, key(sx, sz)]);
     const closed = new Set<string>();
     const terraced = this.sim.grid.terraced(roofId);
+    const back = (end: string) => {
+      const out: { x: number; z: number }[] = [];
+      let c: string | undefined = end;
+      while (c && c !== key(sx, sz)) {
+        const [px, pz] = c.split(',').map(Number);
+        out.push({ x: px + 0.5, z: pz + 0.5 });
+        c = from.get(c);
+      }
+      return out.reverse();
+    };
+    // the closest cell to the hint seen so far (straight-line distance), for when the goal can't be reached
+    let best = key(sx, sz);
+    let bestD = Math.hypot(sx - hint.x, sz - hint.z);
     let expanded = 0;
     while (heap.size) {
       const [x, z, k] = heap.pop()!;
       if (closed.has(k)) continue;
       closed.add(k);
-      if (goal(x, z)) {
-        const out: { x: number; z: number }[] = [];
-        let c: string | undefined = k;
-        while (c && c !== key(sx, sz)) {
-          const [px, pz] = c.split(',').map(Number);
-          out.push({ x: px + 0.5, z: pz + 0.5 });
-          c = from.get(c);
-        }
-        return out.reverse();
+      if (goal(x, z)) return { path: back(k), reached: true };
+      const d = Math.hypot(x - hint.x, z - hint.z);
+      if (d < bestD) {
+        bestD = d;
+        best = k;
       }
-      if (++expanded > BOT.maxSearch) return undefined;
+      if (++expanded > budget) break;
       const gk = g.get(k)!;
       for (const [dx, dz] of STEPS) {
         const nx = x + dx;
@@ -232,7 +295,7 @@ export class Walker {
         heap.push(ng + h(nx, nz), [nx, nz, nk]);
       }
     }
-    return undefined;
+    return { path: back(best), reached: false };
   }
 }
 

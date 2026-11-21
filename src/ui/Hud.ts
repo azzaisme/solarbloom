@@ -6,6 +6,7 @@ import { ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { Prompt } from './Prompt';
 import { plainWords } from './words';
 import { ObjectiveCard } from './ObjectiveCard';
+import { GuideLine } from './GuideLine';
 import { BuildBar, Hotbar } from './Hotbar';
 import { Toasts } from './Toasts';
 import { Panels } from './Panels';
@@ -50,6 +51,12 @@ export interface HudCallbacks {
   setAreaMode(areaId: string, mode: AreaMode | undefined): void;
   /** Fly the camera to a ground tile and point at it (the objective's suggestion). */
   focusTile(x: number, z: number): void;
+  /** #605: an action's button as a glyph (HTML) from the set in use (the card's Show me where). */
+  glyph(a: Action): string;
+  /** #605: point the way to the objective's next step (its Show me where). */
+  showWhere(): boolean;
+  /** #620: point the way to a place (the Bloombot page's Show me where) */
+  pointTo(at: { roofId: string; x: number; z: number; name: string }): void;
   /** E18.5: open a machine's panel (the advisor's role hint). */
   inspectAt(machineId: string): void;
 }
@@ -77,6 +84,8 @@ export interface Settings {
   uiScale?: number;
   /** Phase 5 E16: fireflies over lush tiles (ambience only). */
   fireflies?: boolean;
+  /** #633: the glow round lamps and lit windows (bloom): 0 Off, 0.5 Soft, 1 Normal (unset), 1.6 Strong. */
+  glow?: number;
   /**
    * E19.4.2 / E20.7 (#261, #290): "Show numbers": rates, net income, time-to-afford and other secondary numbers.
    * Off (or never chosen) is the calm HUD, the default.
@@ -154,6 +163,8 @@ export class Hud {
   /** E22.2: the one prompt at the bottom centre */
   readonly prompt: Prompt;
   readonly objective: ObjectiveCard;
+  /** #607: the guide's line, once per idea, just above the prompt */
+  readonly guide: GuideLine;
   readonly hotbar: Hotbar;
   /** E22.5: the build hotbar (slots 1–9), above the prompt while build mode is open */
   readonly buildBar: BuildBar;
@@ -184,6 +195,7 @@ export class Hud {
     this.root = document.getElementById('hud')!;
     installIconDefs();
     this.objective = new ObjectiveCard(this);
+    this.guide = new GuideLine(this);
     this.hotbar = new Hotbar(this);
     this.buildBar = new BuildBar(this);
     this.toasts = new Toasts(this);
@@ -204,7 +216,7 @@ export class Hud {
     this.dock.wire();
     this.wire();
     this.prompt = new Prompt(this.root);
-    this.backpack = new Backpack(this.root, { sim: this.sim });
+    this.backpack = new Backpack(this.root, { sim: this.sim, showWhere: (at) => this.cb.pointTo(at) });
     this.craft = new CraftTable(this.root, { sim: this.sim });
     this.crate = new CratePanel(this.root, { sim: this.sim });
   }
@@ -215,6 +227,7 @@ export class Hud {
       ${ObjectiveCard.template()}
       ${BuildBar.template()}
       <div id="toasts" role="status" aria-live="polite"></div>
+      ${GuideLine.template()}
       <div id="saveLeaf" role="img" aria-label="Saved">${ICONS.biomass}</div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="tip" class="panel"></div>
@@ -230,6 +243,7 @@ export class Hud {
   private wire() {
     const r = this.root;
     $(r, '#skipBtn').addEventListener('click', () => this.cb.skipCinematic());
+    this.objective.bind();
     // World labels can carry actions (wake a landmark, open an area).
     $(r, '#wlabels').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
@@ -322,6 +336,7 @@ export class Hud {
     this.hotbar.update();
     this.panels.update(dt);
     this.objective.update();
+    this.guide.update();
     this.dock.update(dt);
   }
 
@@ -347,6 +362,8 @@ export class Hud {
     this.root.style.zoom = pct === 100 ? '' : String(ui.scale);
     // viewport units inside a zoomed HUD are zoomed too: panels divide by this to stay on screen
     this.root.style.setProperty('--ui-zoom', String(ui.scale));
+    this.buildBar?.place(); // #565: at once, not on its next check (up to 0.4 s with the dock off screen)
+    this.panels?.replaceTip(); // #599: and the tip, clear of the moved prompt and dock
   }
 
   /** E22.11: the menu or Settings is open (the game sets how it knows). */

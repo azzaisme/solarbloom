@@ -293,7 +293,7 @@ export class BuildMenu extends HudPart {
     if (this.picking) {
       foot =
         `<div class="bm-label" id="bmPickLabel">Pick a slot for the ${esc(it.name)}</div>` +
-        `<div class="bm-pick" role="group" aria-labelledby="bmPickLabel">${slots
+        `<div class="bm-pick" role="group" data-pad-trap aria-labelledby="bmPickLabel">${slots
           .map((t, i) => {
             const there = t ? this.items.find((x) => x.tool === t) : undefined;
             const what = there ? there.name : t ? 'something' : 'empty';

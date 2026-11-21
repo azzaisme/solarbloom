@@ -72,4 +72,13 @@ describe('E22.2: the prompt', () => {
     expect(h).toContain('pr-sub');
     expect(h).toContain('Pulse');
   });
+
+  it('#590: refused, the words sit on their own line with the reason under them (not squeezed beside it)', () => {
+    const why = 'Elder Grove is behind the clouds. Wake the fountain and Bloombot will learn to pry it open.';
+    const h = promptHtml({ glyph: '<kbd>E</kbd>', text: 'Look at the clouds', refused: why });
+    const body = h.match(/<span class="pr-body">(.*?)<\/span><\/div>/)?.[1] ?? '';
+    expect(body).toMatch(/^<span class="pr-text">Look at the clouds<\/span><span class="pr-why">Elder Grove/);
+    // a prompt that isn't refused keeps its plain one-line form
+    expect(promptHtml({ glyph: '<kbd>E</kbd>', text: 'Salvage' })).not.toContain('pr-body');
+  });
 });

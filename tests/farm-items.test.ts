@@ -45,7 +45,7 @@ describe('E23.5.1: farm items', () => {
     expect(price).toBeGreaterThan(0);
     // nothing gathered yet: the refit can't be paid
     expect(sim.roles.check(hub.id, 'gardener').ok).toBe(false);
-    expect(sim.roles.check(hub.id, 'gardener').reason).toBe(`Needs ${price} Biomass`);
+    expect(sim.roles.check(hub.id, 'gardener').reason).toBe(`Needs ${price} Greens`);
     expect(sim.roles.choose(hub.id, 'gardener')).toBe(false);
     // gathered biomass pays: part from the backpack, the rest from the store
     sim.inventory.add('biomass', 30);
@@ -113,7 +113,7 @@ describe('E23.5.1: gathering biomass from restored ground', () => {
     const sim = oldSim();
     const t = restored(sim, 2);
     sim.inventory.add('biomass', 40);
-    expect(sim.gather.problem(t)).toMatch(/full/);
+    expect(sim.gather.problem(t)).toMatch(/Greens stack is full: leave some in the storage at the fountain/); // #606: plain words
     expect(sim.gather.gather(t)).toBe(0);
     expect(sim.gather.canGather(t)).toBe(true);
   });

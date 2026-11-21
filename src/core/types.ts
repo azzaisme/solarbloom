@@ -281,6 +281,8 @@ export interface Progression {
   tutorialStep: number;
   hintsDismissed: boolean;
   introSeen: boolean;
+  /** #607 (E24): the guide's ideas already shown or known (each line shows once); missing in saves from before E24 */
+  ideas?: string[];
   /** manual pulses since the last Overcharge */
   pulseCharge: number;
   /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */
@@ -298,6 +300,8 @@ export interface Stats {
   /** chains of at least TUNING.mega.bigChain, by who started them */
   bigChains?: { player: number; auto: number };
   tilesRestored: number;
+  /** #607 (E24): the player's own pulses that landed (missing in older saves) */
+  pulses?: number;
   maxCombo: number;
   chains: number;
   catsFound: number;

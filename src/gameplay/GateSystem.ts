@@ -1,7 +1,7 @@
 import { GROUND } from '../core/GameState';
 import { regionById, setPieceAt } from '../core/OldCityLayout';
 import type { GateDef, RegionDef } from '../data/oldcity';
-import { REGIONS } from '../data/oldcity';
+import { REGIONS, gateText } from '../data/oldcity';
 import { itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
@@ -47,11 +47,11 @@ export class GateSystem {
   problem(g: GateDef): string | undefined {
     if (this.isOpen(g.id)) return 'Already open';
     const n = g.needs;
-    if (g.kind === 'lockBridge') return n.landmark && this.sim.areas.fog(n.landmark) === 'cleared' ? undefined : this.has('hover') ? undefined : g.blocked;
-    if (n.repair) return this.sim.inventory.canPay(n.repair) ? undefined : `${g.blocked}${this.missing(n.repair)}`;
-    if (n.ability && !this.has(n.ability)) return g.blocked;
+    if (g.kind === 'lockBridge') return n.landmark && this.sim.areas.fog(n.landmark) === 'cleared' ? undefined : this.has('hover') ? undefined : gateText(g);
+    if (n.repair) return this.sim.inventory.canPay(n.repair) ? undefined : `${gateText(g)}${this.missing(n.repair)}`;
+    if (n.ability && !this.has(n.ability)) return gateText(g);
     // E23.2.1: abilities cost charge; at zero bloombot can't use them (it walks on, nothing is lost)
-    if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of charge. Eat something, rest or find a charger';
+    if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of charge. Eat a snack, or stand still by the fountain for a while.';
     return undefined;
   }
 

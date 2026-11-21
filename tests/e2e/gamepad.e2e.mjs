@@ -1,12 +1,14 @@
-// Bloombot (G.7): a new game played to waking the park fountain with only a virtual gamepad: no mouse or
-// keyboard events at all. The scripted player (tests/e2e/gamepad-driver.js) reads the game state to choose
-// where to go and acts through navigator.getGamepads(): the stick to walk and turn, X to pulse, Y and the d-pad
-// to pick a machine from the build menu, A to place it, A (Interact) to wake the fountain, pad 14 to eat.
+// Bloombot (G.7; #572 for E23's island): a new game played to the island's first goal, fountain step 1 ("Water
+// returns", which wakes the park), with only a virtual gamepad: no mouse or keyboard events at all. The scripted
+// player (tests/e2e/gamepad-driver.js) reads the game state to choose where to go and acts through
+// navigator.getGamepads(): the stick to walk and turn, X to pulse, A held to salvage the Scrap and Seeds piles, A at
+// the fountain to open its panel, the d-pad and A to press "Give all I have", B to close panels, pad 14 to eat.
 //
 // To finish in seconds, the page's frames are stepped by the script (30 per simulated second) rather than
 // waiting for real time; every frame still reads the pad exactly as in play.
 //
-// Run with `npm run build && node tests/e2e/gamepad.e2e.mjs`. Requires Playwright + Chromium:
+// Run with `npm run build && node tests/e2e/gamepad.e2e.mjs` (GPU=1 runs on the real GPU, d3d11; without it,
+// SwiftShader). Requires Playwright + Chromium:
 //   npm i -D playwright && npx playwright install chromium
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -23,7 +25,7 @@ try {
 
 const driver = readFileSync(new URL('./gamepad-driver.js', import.meta.url), 'utf8').replace(/^export /gm, '');
 const server = await preview({ preview: { port: 4211, strictPort: true }, logLevel: 'silent' });
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ args: process.env.GPU ? ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failed = false;
 try {
   for (const vp of [
@@ -39,7 +41,6 @@ try {
     });
     await page.addInitScript(driver + '\ninstallVirtualPad(); window.padDriver = padDriver; window.installVirtualPad = installVirtualPad;');
     page.setDefaultTimeout(180000);
-    // the scripted player knows the classic park (E22.9 brings an Old City run)
     await page.goto('http://localhost:4211/?slot=1');
     await page.waitForFunction(() => window.solarbloom?.bot, null, { timeout: 180000 });
     // the player takes the pad once the loading screen has gone (the HUD is hidden until then)
@@ -54,16 +55,29 @@ try {
         g.update(1 / 30);
         if (i % 3000 === 0) await new Promise((r) => setTimeout(r, 0));
       }
-      return { ...d.state, minutes: +(g.sim.state.time / 60).toFixed(1), foreign: window.__foreignInput ?? null, unmet: g.sim.progression.requirements().filter((r) => !r.done).map((r) => r.label) };
+      // what fountain step 1 still wants, if it isn't done
+      const f = g.sim.fountain;
+      const t = g.sim.state.salvage.tier < 1 ? f.next() : undefined;
+      const unmet = [];
+      if (t) {
+        for (const m of Object.keys(t.delivery)) if (m !== 'biomass' && f.remaining(m) > 0) unmet.push(`${m} ${f.given(m)} of ${t.delivery[m]}`);
+        const c = f.condition(t);
+        if (!c.done) unmet.push(`${c.label} ${c.have} of ${c.need}`);
+      }
+      return { ...d.state, minutes: +(g.sim.state.time / 60).toFixed(1), tier: g.sim.state.salvage.tier, foreign: window.__foreignInput ?? null, unmet };
     });
-    // E22.1: the first pulse and the first Interact use the new buttons (X and A).
-    const ok = result.woke && result.pulses > 0 && result.interacts > 0 && !result.foreign && !errors.length;
-    console.log(`${ok ? '✓' : '✗'} ${vp.width}×${vp.height}: fountain ${result.woke ? 'woken' : 'NOT woken'} after ${result.minutes} min, ${result.pulses} pulses, ${result.built ?? 0} machines${result.unmet.length ? `; unmet: ${result.unmet.join(', ')}` : ''}${result.foreign ? `; got a ${result.foreign} event` : ''}${errors.length ? `; errors: ${errors.join(' | ')}` : ''}`);
-    if (!ok) failed = true;
+    // the step done by the pad alone: pulses (X), salvage holds and the fountain's panel (A), things handed in
+    const ok = result.woke && result.tier >= 1 && result.pulses > 0 && result.salvaged > 0 && result.delivered > 0 && !result.foreign && !errors.length;
+    console.log(`${ok ? '✓' : '✗'} ${vp.width}×${vp.height}: fountain step 1 ${result.woke ? 'done, the park awake' : 'NOT done'} after ${result.minutes} min: ${result.pulses} pulses, ${result.salvaged} salvaged, ${result.delivered} handed in${result.unmet.length ? `; unmet: ${result.unmet.join(', ')}` : ''}${result.foreign ? `; got a ${result.foreign} event` : ''}${errors.length ? `; errors: ${errors.join(' | ')}` : ''}`);
+    if (!ok) {
+      failed = true;
+      console.log(['  what it went for:', ...result.trace.map((t) => `    ${t}`)].join('\n'));
+    }
     await page.close();
   }
 } finally {
-  await browser.close();
+  // a clean exit: closing the browser can hang in software GL
+  await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 15000))]).catch(() => {});
   server.httpServer.close();
 }
 process.exit(failed ? 1 : 0);

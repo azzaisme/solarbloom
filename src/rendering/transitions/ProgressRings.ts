@@ -32,6 +32,11 @@ export class ProgressRings {
     private parent: pc.Entity,
   ) {}
 
+  /** #596: the first ring made now, hidden, so the loading screen compiles its shader (not the first pulse). */
+  prepare() {
+    this.ring(0).root.enabled = false;
+  }
+
   private ring(i: number): Ring {
     let r = this.pool[i];
     if (r) return r;

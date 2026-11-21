@@ -6,7 +6,7 @@ import { bindMessage } from '../src/ui/ControlsTable';
 describe('E22.4: rebinding', () => {
   it('binds a key, a mouse button, the wheel and a pad button', () => {
     const b = new Bindings();
-    expect(b.bindKey('eat', 'KeyH')).toEqual({ ok: true, swapped: undefined });
+    expect(b.bindKey('eat', 'KeyJ')).toEqual({ ok: true, swapped: undefined });
     expect(b.bindKey('photo', 'Mouse4').ok).toBe(true);
     expect(b.bindKey('recentre', 'Mouse1').ok).toBe(true);
     expect(b.actionForCode('Mouse4')).toBe('photo');

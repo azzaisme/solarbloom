@@ -440,18 +440,26 @@ const fauna = {
   bumble: ['#f2b630', '#2b2620', '#eef6ff'],
 };
 
-/** Overlays: hover frames, placement tones, the beacon. */
+/** Overlays: hover frames, placement tones, the waymark. */
 const signal = {
   hover: '#ffffff',
   ok: '#7dff9a',
   bad: '#ff6b6b',
   info: '#fff0a0',
   gridLine: '#1d3640',
-  beacon: '#ffc428',
-  beaconGlow: '#ffb000',
-  beaconPool: '#fff3a0',
+  /** E24 (#609): the waymark, a soft shaft of sunlight on the current goal (its ring on the ground, its motes) */
+  waymark: '#ffd88a',
+  waymarkRing: '#fff1bf',
+  /** by day the beam and ring go a deeper amber, or they vanish against pale sky, sand and paving */
+  waymarkDay: '#ffaa2e',
+  waymarkRingDay: '#ffc04f',
+  waymarkMote: '#fff6dc',
+  /** #632: Show me where's trail of glowing dots on the ground */
+  trail: '#ffe6a8',
+  /** by day: a warmer gold, so it reads on pale ground */
+  trailDay: '#ffc24a',
   /** E19: the build hologram bloombot projects */
-  holo: '#5fe8ff',
+  holo: '#a6ff86',
   /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
   power: {
     // the biggest network is pure yellow (the owner's call: 100% yellow, like the machines' outline)
@@ -591,6 +599,13 @@ export const PALETTE = {
   water: aqua.water,
   darkFace: plastic.face,
   eyeCyan: glow.eye,
+  /**
+   * #631: Bloombot's own colour: a light, warm leaf green that glows. Its eyes and trim glow, the pulse's waves and
+   * rings, the reveal ripple and the build hologram it projects. Lighter than any grass, so the pulse still reads
+   * on restored ground. (Machines and drones keep their cyan: it's Bloombot's colour, not every robot's.)
+   */
+  botGlow: '#94ff6e',
+  botPulse: '#e2ffb4',
   leafFin: '#a5d94d',
   leafVein: '#589d32',
   facadeGrey: building.facade,
@@ -682,7 +697,7 @@ export const PALETTE = {
   mothBody: '#9a6a3e',
   mothWing: '#e0a24a',
   /** E23.2.2.3: the reveal ripple's ring, and the warmer ring on a journal page it found */
-  ripple: '#bff3ff',
+  ripple: '#dcffc2',
   ripplePage: '#fff3c4',
   /** E23.2.2.3: a revealed buried find: freshly turned earth */
   turnedEarth: '#7b5134',

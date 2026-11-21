@@ -41,13 +41,29 @@ export interface GateDef {
   cells: [number, number][];
   /** what opens it: an ability, a region's landmark waking, or a repair delivery */
   needs: { ability?: AbilityId; landmark?: RegionId; repair?: MaterialCost };
-  /** what the prompt says while it is shut */
+  /** what the prompt says while it is shut: what is in the way, in a few words */
   blocked: string;
+  /**
+   * #606: what the player does about it, in plain words (no "tier": the fountain's steps by their place, the way the
+   * fountain's panel counts them). The prompt says `blocked` then `how` (gateText); the clouds over the region say
+   * where it is, then `how` (AreaSystem.sealText).
+   */
+  how: string;
   /**
    * Opening it opens its region (the default). False when the region is open from the start and the gate only
    * shuts off part of it (Saltwind Beach: the boat lands there; the barricade blocks the boardwalk to the Sea Lock).
    */
   opensRegion?: boolean;
+}
+
+/** #606: what a shut gate's prompt says: what is in the way, then what to do about it. */
+/** #610: what stands in a way, as the player sees it ("the rubble", "the canal"), never the place's name. */
+export function gateThing(g: GateDef): string {
+  return { barricade: 'the rubble', water: 'the deep water', lockBridge: 'the canal', bridge: 'the broken bridge', climb: 'the climb up to the roofs', cliff: 'the cliff' }[g.kind];
+}
+
+export function gateText(g: GateDef): string {
+  return `${g.blocked} ${g.how}`;
 }
 
 /** A rectangle of cells (x, z, width, depth). */
@@ -152,7 +168,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 9, z: -8, w: 2, d: 3 }],
     seam: { name: 'the Pipeworks', x: 23, z: -8 },
-    gate: { id: 'g-mastRow', kind: 'barricade', cells: [[7, -1], [8, -1]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
+    gate: { id: 'g-mastRow', kind: 'barricade', cells: [[7, -1], [8, -1]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
     patch: { name: 'The tram stop', x: 10, z: -20, w: 5, d: 3 },
     caches: [
       { id: 'c-mastRow-1', x: 2, z: -30 },
@@ -206,7 +222,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 21, z: 9, w: 2, d: 3 }],
     seam: { name: 'the Glassworks', x: 40, z: 24 },
-    gate: { id: 'g-oldMarket', kind: 'barricade', cells: [[16, 7], [16, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
+    gate: { id: 'g-oldMarket', kind: 'barricade', cells: [[16, 7], [16, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
     patch: { name: 'The market square', x: 26, z: 18, w: 6, d: 4 },
     caches: [
       { id: 'c-oldMarket-1', x: 45, z: 2 },
@@ -260,7 +276,7 @@ export const REGIONS: RegionDef[] = [
     seam: { name: 'the Driftline', x: -12, z: 28 },
     // The boat lands here, so the beach is open from the start. The Sea Lock stands across the canal that runs down
     // to the bay; the barricade blocks the boardwalk bridge over it.
-    gate: { id: 'g-saltwind', kind: 'barricade', cells: [[-3, 36], [-2, 36], [-3, 37], [-2, 37]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the boardwalk to the Sea Lock — needs Pry (fountain tier 1)', opensRegion: false },
+    gate: { id: 'g-saltwind', kind: 'barricade', cells: [[-3, 36], [-2, 36], [-3, 37], [-2, 37]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the boardwalk to the Sea Lock.', how: 'Wake the fountain and Bloombot will learn to pry it open.', opensRegion: false },
     patch: { name: 'The boardwalk', x: 0, z: 36, w: 10, d: 2 },
     caches: [
       { id: 'c-saltwind-1', x: -15, z: 18 },
@@ -358,7 +374,7 @@ export const REGIONS: RegionDef[] = [
     landmark: { kind: 'elder', name: 'Elder Tree', x: -20, z: -4 },
     keeper: 'moss',
     seam: { name: 'the Seedbank', x: -28, z: 8 },
-    gate: { id: 'g-elderGrove', kind: 'barricade', cells: [[-1, 7], [-1, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
+    gate: { id: 'g-elderGrove', kind: 'barricade', cells: [[-1, 7], [-1, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
     patch: { name: 'The ring of stumps', x: -14, z: 2, w: 4, d: 4 },
     caches: [
       { id: 'c-elderGrove-1', x: -31, z: -15 },
@@ -413,7 +429,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 36, z: 33, w: 2, d: 3 }],
     seam: { name: 'the Claypits', x: 70, z: 58 },
-    gate: { id: 'g-cistern', kind: 'water', cells: [[40, 32], [41, 32], [40, 33], [41, 33], [40, 34], [41, 34]], needs: { ability: 'hover' }, blocked: 'Deep water — needs Hover (fountain tier 2)' },
+    gate: { id: 'g-cistern', kind: 'water', cells: [[40, 32], [41, 32], [40, 33], [41, 33], [40, 34], [41, 34]], needs: { ability: 'hover' }, blocked: 'The water\'s too deep to wade.', how: 'Bloombot learns to hover over water at fountain step 2. The card at the top left shows what the fountain needs.' },
     patch: { name: 'The spillway', x: 44, z: 52, w: 4, d: 6 },
     caches: [
       { id: 'c-cistern-1', x: 78, z: 33 },
@@ -500,7 +516,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 53, z: 4, w: 2, d: 3 }],
     seam: { name: 'the Escapement', x: 72, z: -12 },
-    gate: { id: 'g-clockPlaza', kind: 'lockBridge', cells: [[48, 7], [49, 7], [48, 8], [49, 8]], needs: { landmark: 'saltwind', ability: 'hover' }, blocked: 'The canal is too deep — the lock bridge rises when the Sea Lock wakes (or Hover)' },
+    gate: { id: 'g-clockPlaza', kind: 'lockBridge', cells: [[48, 7], [49, 7], [48, 8], [49, 8]], needs: { landmark: 'saltwind', ability: 'hover' }, blocked: 'The canal\'s too deep to cross.', how: 'Wake the lock down on the beach and this bridge will rise. Or hover across, once Bloombot learns how.' },
     patch: { name: 'The plaza', x: 60, z: 12, w: 8, d: 4 },
     caches: [
       { id: 'c-clockPlaza-1', x: 78, z: 30 },
@@ -553,7 +569,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 7, z: -40, w: 2, d: 3 }],
     seam: { name: 'the Sunvein', x: -10, z: -60 },
-    gate: { id: 'g-terraces', kind: 'climb', cells: [[8, -33]], needs: { ability: 'climb' }, blocked: 'Only the roofs go on from here — needs Climb (fountain tier 3)' },
+    gate: { id: 'g-terraces', kind: 'climb', cells: [[8, -33]], needs: { ability: 'climb' }, blocked: 'Only the roofs go on from here.', how: 'Bloombot learns to climb at the fountain\'s third step.' },
     patch: { name: 'The roof garden', x: 18, z: -46, w: 4, d: 4 },
     caches: [
       { id: 'c-terraces-1', x: -15, z: -63 },
@@ -606,7 +622,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: -41, z: 2, w: 2, d: 3 }],
     seam: { name: 'the Potting Sheds', x: -60, z: -28 },
-    gate: { id: 'g-glasshouse', kind: 'bridge', cells: [[-36, 0], [-35, 0], [-34, 0], [-33, 0], [-36, 1], [-35, 1], [-34, 1], [-33, 1]], needs: { repair: { timber: 30, copper: 20, gears: 10 } }, blocked: 'The bridge is broken — repair it with 30 Timber, 20 Copper and 10 Gears' },
+    gate: { id: 'g-glasshouse', kind: 'bridge', cells: [[-36, 0], [-35, 0], [-34, 0], [-33, 0], [-36, 1], [-35, 1], [-34, 1], [-33, 1]], needs: { repair: { timber: 30, copper: 20, gears: 10 } }, blocked: 'The bridge is broken.', how: 'Bring 30 Timber, 20 Copper and 10 Gears here to mend it.' },
     patch: { name: 'The nursery beds', x: -46, z: 6, w: 4, d: 4 },
     caches: [
       { id: 'c-glasshouse-1', x: -63, z: 14 },
@@ -676,7 +692,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 33, z: -45, w: 2, d: 3 }],
     seam: { name: 'the Lens Grinders', x: 72, z: -40 },
-    gate: { id: 'g-observatory', kind: 'cliff', cells: [[33, -48]], needs: { ability: 'glide' }, blocked: 'A cliff too high to climb — glide here from the edge of The Terraces (fountain tier 4)' },
+    gate: { id: 'g-observatory', kind: 'cliff', cells: [[33, -48]], needs: { ability: 'glide' }, blocked: 'The cliff\'s too high to climb.', how: 'Bloombot learns to glide at fountain step 4. Then glide over from the edge of the rooftops next door.' },
     patch: { name: 'The hilltop', x: 56, z: -74, w: 6, d: 4 },
     caches: [
       { id: 'c-observatory-1', x: 78, z: -79 },
@@ -748,7 +764,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: -27, z: -40, w: 2, d: 3 }],
     seam: { name: 'the Foundry Vaults', x: -70, z: -50 },
-    gate: { id: 'g-spireHeights', kind: 'climb', cells: [[-24, -33], [-23, -33]], needs: { ability: 'climb' }, blocked: 'A collapsed skybridge blocks the avenue — needs Climb (fountain tier 3)' },
+    gate: { id: 'g-spireHeights', kind: 'climb', cells: [[-24, -33], [-23, -33]], needs: { ability: 'climb' }, blocked: 'A fallen skybridge blocks the avenue.', how: 'Bloombot learns to climb at the fountain\'s third step.' },
     patch: { name: 'Spire Square', x: -54, z: -58, w: 8, d: 4 },
     caches: [
       { id: 'c-spireHeights-1', x: -79, z: -90 },
@@ -808,7 +824,7 @@ export const REGION_STRENGTHS: Record<RegionId, { strengths: Partial<Record<Stre
   mastRow: { strengths: { wind: STRENGTH_BONUS }, text: 'Wind' },
   oldMarket: { strengths: { trade: STRENGTH_BONUS }, text: 'Trade: swap materials, buy seeds' },
   saltwind: { strengths: { wind: 1.75, tide: STRENGTH_BONUS }, text: 'Wind and tide: the strongest wind' },
-  elderGrove: { strengths: { soil: STRENGTH_BONUS }, text: 'Fertile soil: faster crops, more biomass' },
+  elderGrove: { strengths: { soil: STRENGTH_BONUS }, text: 'Fertile soil: faster crops, more Greens' },
   cistern: { strengths: { water: STRENGTH_BONUS }, text: 'Water: springs refill for free' },
   clockPlaza: { strengths: { machinery: STRENGTH_BONUS }, text: 'Machinery' },
   terraces: { strengths: { sun: STRENGTH_BONUS }, text: 'Sun: more solar on the roofs' },
@@ -928,25 +944,25 @@ export const KEEPERS: KeeperDef[] = [
     id: 'pylon', name: 'Pylon', region: 'mastRow', x: 10, z: -4, tint: '#d08a4c', prop: 'copper-pipe',
     request1: { seeds: 8 }, landmark: { copper: 20, scrap: 10 }, reward: 'beacons', rewardText: 'Every landmark beacon shows on the minimap',
     say: {
-      asleep: ['A robot slumped against a lamp post. Its visor is dark.'],
-      stirred: ['…bzzt. Signal? Is someone there?', 'Five of anything would get my circuits going.'],
+      asleep: ['Slumped against a lamp post. Give it a pulse to stir it.'],
+      stirred: ['…bzzt. Signal? Is someone there?', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
       woke: ['Pylon, signal keeper of Mast Row! You woke me!'],
-      request1: ["Could you bring me 8 Seeds from the park? Please? I'd like to plant the verges."],
-      request2: ['The old tram stop was the busiest spot on the street.', 'Could you bring it back to life, every tile?'],
-      landmark: ['The Signal Mast is ready to sing.', 'Bring 20 Copper and 10 Scrap to the mast and wake it.'],
-      settled: ['Every landmark beacon answers now. Look for the lights on your map.'],
+      request1: ["Could you bring me 8 Seeds? The broken pots round the fountain have them. I'd like to plant the verges."],
+      request2: ['The old tram stop just here was the busiest spot on the street.', 'Pulse the ground around it until every bit is green.'],
+      landmark: ['The Signal Mast is ready to sing.', 'Bring 20 Copper and 10 Scrap to the mast to wake it.'],
+      settled: ['Every big landmark shows a light on your map now. Go and find them.'],
     },
   },
   {
     id: 'tally', name: 'Tally', region: 'oldMarket', x: 19, z: 10, tint: '#7fb8c4', prop: 'lantern',
     request1: { timber: 10 }, landmark: { glass: 20, timber: 10 }, reward: 'trade', rewardText: 'Tally trades any 3 of one material for 1 of another',
     say: {
-      asleep: ['A robot behind a broken stall, counting nothing.'],
-      stirred: ['A customer? Five of anything and we can talk.'],
+      asleep: ['Asleep behind a broken stall. Give it a pulse to stir it.'],
+      stirred: ['A customer? Let\'s talk business.', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
       woke: ['Tally, keeper of the Old Market. Everything here had a price.'],
-      request1: ["The stalls need mending. 10 Timber from the beach, please. I'll put it on your account."],
-      request2: ['Restore the market square, so the stalls have somewhere green to stand.'],
-      landmark: ['The Market Hall can open its doors.', 'Bring 20 Glass and 10 Timber to the hall.'],
+      request1: ["The stalls need mending. 10 Timber, please: the driftwood on the beach will do. I'll put it on your account."],
+      request2: ['Pulse the market square green again, so the stalls have somewhere nice to stand.'],
+      landmark: ['The Market Hall can open its doors.', 'Bring 20 Glass and 10 Timber to the hall to wake it.'],
       settled: ["Bring me 3 of anything, and I'll give you 1 of what you need."],
     },
   },
@@ -954,77 +970,77 @@ export const KEEPERS: KeeperDef[] = [
     id: 'tide', name: 'Tide', region: 'saltwind', x: 10, z: 19, tint: '#5f9ec0', prop: 'barrel',
     request1: { copper: 10 }, landmark: { timber: 20, copper: 10 }, reward: 'lockBridge', rewardText: 'The lock bridge to Clock Plaza rises; the canals fill',
     say: {
-      asleep: ['A robot half buried in the sand, facing the sea.'],
-      stirred: ['…the tide? Five of anything, and I will get up.'],
+      asleep: ['Half buried in the sand, facing the sea. Give it a pulse to stir it.'],
+      stirred: ['…the tide? Is it in?', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
       woke: ['Tide, keeper of Saltwind Beach. I kept the Sea Lock.'],
-      request1: ["The lock's hinges are gone. 10 Copper from Mast Row, please."],
-      request2: ['Restore the boardwalk, so the beach can be walked again.'],
-      landmark: ['The Sea Lock is ready. Bring 20 Timber and 10 Copper.'],
-      settled: ['The canals fill, and the bridge to Clock Plaza rises.'],
+      request1: ["The lock's hinges are gone. 10 Copper, please. Try the street with the tall mast."],
+      request2: ['Pulse the ground along the boardwalk green again, so the beach can be walked.'],
+      landmark: ['The Sea Lock is ready to work again.', 'Bring 20 Timber and 10 Copper to the lock gates to wake it.'],
+      settled: ['The canals are full and the bridge is up. Cross it to reach the square with the big clock.'],
     },
   },
   {
     id: 'moss', name: 'Moss', region: 'elderGrove', x: -4, z: 10, tint: '#7aa05a', prop: 'planter-pot',
     request1: { glass: 10 }, landmark: { seeds: 20, biomass: 40 }, reward: 'seedsDouble', rewardText: 'Loose Seeds piles give double',
     say: {
-      asleep: ['A robot curled up among dead leaves.'],
-      stirred: ['Mm. Five of anything, and I will wake properly.'],
+      asleep: ['Curled up in the dead leaves. Give it a pulse to stir it.'],
+      stirred: ['Mm. Five more minutes…', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
       woke: ['Moss, keeper of Elder Grove. Mm. Good morning.'],
-      request1: ['The seedlings need cloches. 10 Glass from the market, if you would.'],
-      request2: ['Restore the ring of stumps where the grove began.'],
-      landmark: ['Wake the Elder Tree with 20 Seeds and 40 Biomass.'],
-      settled: ['The Elder Tree is awake. Seeds come twice as easily now.'],
+      request1: ['The seedlings need cloches. 10 Glass, if you would. The old market stalls have some.'],
+      request2: ['Pulse the ring of stumps green again. That\'s where the grove began.'],
+      landmark: ['Bring 20 Seeds and 40 Greens to the big old tree to wake it.'],
+      settled: ['Seed piles give you twice as many Seeds now.'],
     },
   },
   {
     id: 'sluice', name: 'Sluice', region: 'cistern', x: 38, z: 37, tint: '#6a8fb0', prop: 'dry-drain',
     request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water Condensers fill twice as fast',
     say: {
-      asleep: ['A robot on the rim of a dry basin.'],
-      stirred: ['Water? No… five of anything, then.'],
+      asleep: ['Asleep on the rim of a dry basin. Give it a pulse to stir it.'],
+      stirred: ['Water? No… just you.', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
       woke: ['Sluice, keeper of Cistern Basin. Is it raining? It never rains.'],
-      request1: ['The valves are seized. 12 Gears from Clock Plaza, please. Sorry. Please.'],
-      request2: ['Restore the spillway, so the water has somewhere to go.'],
-      landmark: ['Wake the Old Cistern with 30 Clay and 15 Copper.'],
-      settled: ['The cistern holds water again. Your tanks hold twice as much.'],
+      request1: ['The valves are seized. 12 Gears, please, from the square with the big clock. Sorry. Please.'],
+      request2: ['Pulse the spillway green again, so the water has somewhere to go.'],
+      landmark: ['Bring 30 Clay and 15 Copper to the old cistern to wake it.'],
+      settled: ['Your water tanks hold twice as much now.'],
     },
   },
   {
     id: 'tock', name: 'Tock', region: 'clockPlaza', x: 52, z: 8, tint: '#c4a85a', prop: 'vent',
     request1: { glass: 12 }, landmark: { gears: 30, glass: 15 }, reward: 'helpersFast', rewardText: 'Helpers work 25% faster',
     say: {
-      asleep: ['A robot frozen mid-step at the foot of the stair.'],
-      stirred: ['Tick… tick… five of anything, please. Promptly.'],
+      asleep: ['Frozen mid-step at the foot of the stair. Give it a pulse to stir it.'],
+      stirred: ['Tick… tick… Who\'s there? Promptly, please.', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
       woke: ["Tock, keeper of Clock Plaza. You're late. The clock stopped at twenty past four."],
-      request1: ['The clock face is shattered. 12 Glass, please.'],
-      request2: ['Restore the plaza around the tower.'],
-      landmark: ['Wake the Clock Tower with 30 Gears and 15 Glass.'],
-      settled: ['Every helper keeps better time now.'],
+      request1: ['The clock face is shattered. 12 Glass, please. The old market stalls have it.'],
+      request2: ['Pulse the plaza round the tower green again.'],
+      landmark: ['Bring 30 Gears and 15 Glass to the clock tower to wake it.'],
+      settled: ['Your drones and Cultivators work faster now.'],
     },
   },
   {
     id: 'gable', name: 'Gable', region: 'terraces', x: 10, z: -36, tint: '#b07a8a', prop: 'planter-trough',
     request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Batteries hold twice as much',
     say: {
-      asleep: ['A robot asleep against a chimney.'],
-      stirred: ["Up here? Five of anything and I'll wake."],
+      asleep: ['Asleep against a chimney. Give it a pulse to stir it.'],
+      stirred: ["Up here? Someone climbed all the way up here?", "Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again."],
       woke: ['Gable, keeper of The Terraces! Mind the edge.'],
-      request1: ['The roof beds need clay. 15 Clay from the basin.'],
-      request2: ['Restore the roof garden.'],
-      landmark: ['Wake the Rooftop Core with 30 Sunstone and 15 Gears.'],
-      settled: ['The Core is glowing! Your batteries hold twice as much.'],
+      request1: ['The roof beds need clay. 15 Clay, please, from the dry basin by the water.'],
+      request2: ['Pulse the roof garden green again.'],
+      landmark: ['Bring 30 Sunstone and 15 Gears to the core on the roof to wake it.'],
+      settled: ['Your batteries hold twice as much now.'],
     },
   },
   {
     id: 'fern', name: 'Fern', region: 'glasshouse', x: -38, z: 4, tint: '#5aa07a', prop: 'planter-bed',
     request1: { sunstone: 15 }, landmark: { glass: 40, seeds: 40, clay: 20 }, reward: 'heartSeed', rewardText: 'The Heart Seed',
     say: {
-      asleep: ['A robot among cracked glass panes.'],
-      stirred: ["Oh. Five of anything, and I'll see you properly."],
+      asleep: ['Asleep among cracked glass. Give it a pulse to stir it.'],
+      stirred: ["Oh. Oh! Hello? I can't quite see you.", "Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again."],
       woke: ['Fern, keeper of the Glasshouse Gardens. Hello. Sorry. Hello.'],
-      request1: ['The heaters need light. 15 Sunstone, from the beach or the roofs.'],
-      request2: ['Restore the nursery beds.'],
-      landmark: ['Wake the Great Greenhouse with 40 Glass, 40 Seeds and 20 Clay.'],
+      request1: ['The heaters need light. 15 Sunstone, please. It glints on the beach and up on the roofs.'],
+      request2: ['Pulse the nursery beds green again.'],
+      landmark: ['Bring 40 Glass, 40 Seeds and 20 Clay to the big greenhouse to wake it.'],
       settled: ['Take the Heart Seed to the fountain.'],
     },
   },
@@ -1032,26 +1048,26 @@ export const KEEPERS: KeeperDef[] = [
     id: 'vega', name: 'Vega', region: 'observatory', x: 36, z: -46, tint: '#8a7ac4', prop: 'satellite-dish',
     request1: { glass: 20 }, landmark: { sunstone: 40, copper: 30, gears: 20 }, reward: 'starLens', rewardText: 'The Star Lens; caches show on the map',
     say: {
-      asleep: ['A robot staring at the sky, unmoving.'],
-      stirred: ['Five of anything, and I will look down. For once.'],
+      asleep: ['Staring at the sky, not moving. Give it a pulse to stir it.'],
+      stirred: ['Someone down there? I\'ll look down. For once.', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
       woke: ['Vega, keeper of Observatory Hill.'],
-      request1: ['The telescope needs lenses. 20 Glass, please.'],
-      request2: ['Restore the hilltop.'],
-      landmark: ['Wake the Sky Observatory with 40 Sunstone, 30 Copper and 20 Gears.'],
-      settled: ['Take the Star Lens. The caches show on your map now.'],
+      request1: ['The telescope needs lenses. 20 Glass, please. The old market stalls have it.'],
+      request2: ['Pulse the hilltop green again.'],
+      landmark: ['Bring 40 Sunstone, 30 Copper and 20 Gears to the observatory dome to wake it.'],
+      settled: ['Take the Star Lens. Hidden caches show on your map now: go and dig them up.'],
     },
   },
   {
     id: 'atlas', name: 'Atlas', region: 'spireHeights', x: -24, z: -36, tint: '#9aa6b8', prop: 'lamp-post',
     request1: { clay: 20 }, landmark: { glass: 40, gears: 30, sunstone: 20 }, reward: 'lifts', rewardText: 'Every tower lift runs; the Spire\'s top becomes a travel point',
     say: {
-      asleep: ['A tall robot under a fallen skybridge, holding up nothing.'],
-      stirred: ['Floors… so many floors. Five of anything, please.'],
+      asleep: ['Tall, and asleep under a fallen skybridge. Give it a pulse to stir it.'],
+      stirred: ['Floors… so many floors. Who\'s that?', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
       woke: ['Atlas, keeper of Spire Heights. I ran the lifts.'],
-      request1: ['The planters on the terraces are bare. 20 Clay from the basin.'],
-      request2: ['Restore Spire Square, at the foot of the towers.'],
-      landmark: ['Wake the Solar Spire with 40 Glass, 30 Gears and 20 Sunstone.'],
-      settled: ['Every lift runs again, right to the top.'],
+      request1: ['The planters on the terraces are bare. 20 Clay, please, from the dry basin by the water.'],
+      request2: ['Pulse the square at the foot of the towers green again.'],
+      landmark: ['Bring 40 Glass, 30 Gears and 20 Sunstone to the solar spire to wake it.'],
+      settled: ['Every lift runs again. Step into one to ride right to the top.'],
     },
   },
 ];
@@ -1163,7 +1179,7 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
   // E23.8.3.2: the mainland's steel and its big machines (E23.10.2 makes the real models)
   'salvage-steel': { standIn: 'procedural', what: 'A heap of steel girders from the industrial ruins' },
-  'grid-battery': { standIn: 'storage-chest', what: 'The Grid Battery: a grid-scale battery bank (2 × 2)' },
+  'grid-battery': { standIn: 'storage-chest', what: 'The Grid Battery: a grid-scale battery bank, two tiles square' },
   // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
   'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },
   'salvage-driftwood': { standIn: 'barrel', what: 'A Timber (driftwood) pile' },
