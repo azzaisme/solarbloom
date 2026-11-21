@@ -3,7 +3,7 @@
 //   - the Bloombot tab in the backpack, reached with the keyboard (E moves a tab on), early (nothing learned) and late
 //     (every move, some upgrade levels); its rows read by arrows, Enter steps to Show me where, Enter again closes the
 //     backpack and marks the way;
-//   - Bloombot itself early and late, from behind and from the front: a leaf by the sprout per move, a glowing cell
+//   - Bloombot itself early and late, from behind and from the front: a mark per move (#627; a leaf by the sprout per level of Wider pulse), a glowing cell
 //     per level of Bigger charge, a pocket per level of Roomier backpack;
 //   - the moment when it grows: the first one points to the page, later ones don't.
 // Shots go to docs/review/e25/ (SHOTS_DIR overrides; #620's first set is in docs/review/e24-620/).
@@ -144,8 +144,10 @@ try {
     await page.evaluate(growLate);
     await page.waitForTimeout(500);
     const late = await page.evaluate(() => window.solarbloom.bot.visuals.growthPieces.map((p) => p.name));
-    check(late.filter((n) => n.startsWith('grow-leaf')).length === 4 && late.filter((n) => n.startsWith('grow-cell')).length === 3 && late.filter((n) => n.startsWith('grow-pocket')).length === 2, `${L}: grown, it wears four leaves, three cells and two pockets (${late.join(', ')})`);
-    check(late.includes('grow-bud') && late.includes('grow-collar') && late.filter((n) => n.startsWith('grow-cuff')).length === 2, `${L}: #622: and what the park grew: a bud, a collar and two cuffs (${late.join(', ')})`);
+    // #627: a mark for each move, a leaf for each level of Wider pulse, a cell, a pocket
+    const n = (pre) => late.filter((x) => x.startsWith(pre)).length;
+    check(n('grow-marks-') === 4 && n('grow-leaves-') === 1 && n('grow-cells-') === 3 && n('grow-pockets-') === 2, `${L}: grown, it wears four move marks, a leaf, three cells and two pockets (${late.join(', ')})`);
+    check(late.includes('grow-bud-tip') && late.includes('grow-collar-ring') && n('grow-cuffs-') === 2, `${L}: #622: and what the park grew: a bud, a collar and two cuffs (${late.join(', ')})`);
     await closeUp(page, 'back');
     await botShots(page, `${out}/4-bloombot-late-back-${label}`);
     await closeUp(page, 'front');
