@@ -103,6 +103,11 @@ export class Waymark {
   /** where it stands now (the goal it fades towards may be elsewhere) */
   private at?: { roofId: string; x: number; z: number };
   reducedMotion = false;
+  /** its colours by day and by night (a pale gold vanishes against a bright sky, so by day it goes amber) */
+  private beamDay = new pc.Color().fromString(PALETTE.signal.waymarkDay);
+  private beamNight = new pc.Color().fromString(PALETTE.signal.waymark);
+  private ringDay = new pc.Color().fromString(PALETTE.signal.waymarkRingDay);
+  private ringNight = new pc.Color().fromString(PALETTE.signal.waymarkRing);
 
   constructor(
     private sim: Sim,
@@ -164,10 +169,13 @@ export class Waymark {
     const breath = this.reducedMotion ? 1 : 1 - B.breathDepth * (0.5 + 0.5 * Math.sin((this.time * Math.PI * 2) / B.breath));
     const glow = B.glow + (B.nightGlow - B.glow) * Math.max(0, Math.min(1, night));
     const ease = this.shown * this.shown * (3 - 2 * this.shown);
+    const dark = Math.max(0, Math.min(1, night));
     this.beamMat.opacity = ease * breath;
+    this.beamMat.emissive.lerp(this.beamDay, this.beamNight, dark);
     this.beamMat.emissiveIntensity = glow;
     this.beamMat.update();
     this.ringMat.opacity = ease * (0.75 + 0.25 * breath);
+    this.ringMat.emissive.lerp(this.ringDay, this.ringNight, dark);
     this.ringMat.emissiveIntensity = glow;
     this.ringMat.update();
     // motes rise slowly through the shaft on little spirals, shrinking away near the top

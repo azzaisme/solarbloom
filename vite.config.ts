@@ -43,6 +43,8 @@ const QUICK = [
   'load-wheel-arrows',
   // E24 (#609): the way marked on the map and in the world
   'waymark',
+  // #632: Show me where's trail along a walkable way
+  'trail',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
