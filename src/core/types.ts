@@ -283,6 +283,8 @@ export interface Progression {
   introSeen: boolean;
   /** #607 (E24): the guide's ideas already shown or known (each line shows once); missing in saves from before E24 */
   ideas?: string[];
+  /** #622 (E25): park milestones Bloombot has grown from (0 to 3); missing in older saves */
+  parkGrowth?: number;
   /** manual pulses since the last Overcharge */
   pulseCharge: number;
   /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */

@@ -52,6 +52,8 @@ export interface GameEvents {
   'research.started': { id: string };
   'research.done': { id: string };
   'research.upgraded': { id: string; level: number };
+  /** #622: the park reached a milestone and Bloombot grew from it */
+  'bloombot.parkGrew': { step: number; id: string };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
   'biomass.gathered': { tileId: string; x: number; z: number; got: number; by: 'bot' | 'drone' };
   /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */

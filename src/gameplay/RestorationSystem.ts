@@ -116,8 +116,30 @@ export class RestorationSystem {
       this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + Math.min(1.2, 0.12 * d + 0.01 * extra.length)); // ripple outward, done within ~2 s
       extra.push(nb.id);
     }
+    // #622: Spreading pulse, from greening the park: the nearest dry tiles beside it wake too
+    for (const { tile: nb, d } of this.spillTiles(t, extra)) {
+      if (load.plant) this.plant(nb, load.plant);
+      this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + Math.min(1.2, 0.12 * d + 0.01 * extra.length));
+      extra.push(nb.id);
+    }
     this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged });
     return true;
+  }
+
+  /**
+   * #622: the tiles a Spreading pulse also wakes: the nearest dry ones touching the pulsed tile (sides first, then
+   * corners) that the pulse's own reach hasn't already taken. None before the park milestone.
+   */
+  spillTiles(t: TileData, taken: readonly string[] = []): { tile: TileData; d: number }[] {
+    const n = this.sim.parkGrowth?.spill ?? 0;
+    if (n <= 0) return [];
+    return this.sim.grid
+      .tilesWithin(t.roofId, t.x, t.z, 2)
+      .map((nb) => ({ tile: nb, d2: (nb.x - t.x) ** 2 + (nb.z - t.z) ** 2 }))
+      .filter(({ tile, d2 }) => d2 >= 1 && d2 <= 2 && !taken.includes(tile.id) && this.isEligible(tile))
+      .sort((a, b) => a.d2 - b.d2 || a.tile.pollution - b.tile.pollution || a.tile.id.localeCompare(b.tile.id))
+      .slice(0, n)
+      .map(({ tile, d2 }) => ({ tile, d: Math.sqrt(d2) }));
   }
 
   /** Whether the next manual pulse on a dead tile will be Overcharged. */

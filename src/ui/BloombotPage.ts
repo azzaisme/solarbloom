@@ -1,6 +1,7 @@
 import type { AbilityId } from '../core/types';
 import { GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
+import { PARK_GROWTH } from '../data/bloombot';
 import { itemDef } from '../data/items';
 import { PARK_SET } from '../data/oldcity';
 import { PROJECTS, RESEARCH_UPGRADES, type ProjectDef } from '../data/research';
@@ -16,7 +17,7 @@ import type { Sim } from '../gameplay/Sim';
  * E25 (#629) grows this page: a turntable of Bloombot beside the list, the part each row changes lit up. Each row's
  * `part` names that part (BloombotVisuals' growth pieces) so the view can find it.
  */
-export type BloombotRowKind = 'move' | 'upgrade';
+export type BloombotRowKind = 'move' | 'park' | 'upgrade';
 /** have: learned or at its top level; next: the one to work on now; later: not yet. */
 export type BloombotRowState = 'have' | 'next' | 'later';
 
@@ -37,7 +38,7 @@ export interface BloombotRow {
   /** where Show me where leads (a cell on the ground), when there is somewhere to go */
   where?: { roofId: string; x: number; z: number; name: string };
   /** the part of Bloombot it changes (#629's turntable lights it) */
-  part: 'leaves' | 'cells' | 'pockets' | 'pulse' | 'stride' | 'core';
+  part: 'leaves' | 'cells' | 'pockets' | 'pulse' | 'stride' | 'core' | 'bud' | 'collar' | 'cuffs';
 }
 
 const MOVES: Record<AbilityId, { name: string; does: string }> = {
@@ -146,9 +147,47 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
   });
 }
 
-/** The whole page: moves, then upgrades. */
+/**
+ * #622: what greening the park grows Bloombot into, in the order it comes. The count is the goal card's Park count
+ * (the park's ground brought back to life), so the player can see it climb.
+ */
+export function parkRows(sim: Sim): BloombotRow[] {
+  const g = sim.parkGrowth;
+  const n = g.tiles();
+  const next = g.next();
+  return PARK_GROWTH.map((d) => {
+    const have = g.step >= d.step;
+    const isNext = d === next;
+    const how = have
+      ? 'Grown with the park.'
+      : isNext
+        ? `Keep bringing the park back to life around the fountain. This grows at ${d.tiles} on the goal card's Park count, and it's at ${Math.min(n, d.tiles)} now.`
+        : `Keep bringing the park back to life. This grows at ${d.tiles} on the goal card's Park count.`;
+    return { id: d.id, kind: 'park', name: d.name, does: d.does, state: have ? 'have' : isNext ? 'next' : 'later', level: Math.min(n, d.tiles), max: d.tiles, how, where: have ? undefined : fountainSpot(sim), part: d.part };
+  });
+}
+
+/** The whole page: moves, what the park grew, then upgrades. */
 export function bloombotRows(sim: Sim): BloombotRow[] {
-  return [...moveRows(sim), ...bloombotUpgradeRows(sim)];
+  return [...moveRows(sim), ...parkRows(sim), ...bloombotUpgradeRows(sim)];
+}
+
+/** The page's groups, in order, each with the count beside its title. */
+export const BLOOMBOT_GROUPS: readonly { kind: BloombotRowKind; title: string; note: (rows: BloombotRow[]) => string }[] = [
+  { kind: 'move', title: 'Moves', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length} learned` },
+  { kind: 'park', title: 'Grown with the park', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length}` },
+  {
+    kind: 'upgrade',
+    title: 'Upgrades',
+    note: (rs) => `${rs.reduce((a, r) => a + (r.level ?? 0), 0)} of ${rs.reduce((a, r) => a + (r.max ?? 0), 0)} levels`,
+  },
+];
+
+/** The heading over a row's "how" in the detail. */
+export function howHeading(r: BloombotRow): string {
+  if (r.kind === 'move') return r.state === 'have' ? 'Learned' : 'How to learn it';
+  if (r.kind === 'park') return r.state === 'have' ? 'Grown' : 'How it grows';
+  return r.state === 'have' ? 'At its top level' : r.level ? 'The next level' : 'How to get it';
 }
 
 /** "Level 2 of 3" as pips (filled for each level). */
@@ -157,6 +196,7 @@ export const pips = (level: number, max: number) => '●'.repeat(Math.min(level,
 /** What a row's state reads as, for its chip. */
 export function stateWords(r: BloombotRow): string {
   if (r.kind === 'move') return r.state === 'have' ? 'Learned' : r.state === 'next' ? 'Next' : 'Later';
+  if (r.kind === 'park') return r.state === 'have' ? 'Grown' : r.state === 'next' ? `${r.level} of ${r.max}` : 'Later';
   if (r.state === 'have') return 'Top level';
   return `Level ${r.level} of ${r.max}`;
 }

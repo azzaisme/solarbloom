@@ -45,6 +45,8 @@ export interface BotGrowth {
   moves: number;
   cells: number;
   pockets: number;
+  /** #622: park milestones reached (0 to 3): a glowing bud on the sprout, a gold collar, gold cuffs */
+  park?: number;
 }
 interface GrowthPiece {
   e: pc.Entity;
@@ -55,7 +57,7 @@ interface GrowthPiece {
   turn: pc.Quat;
 }
 /** Bloombot's own frame -> its bones, measured once from the idle pose (see placeGrowth) */
-const GROWTH_BONES = ['head_end', 'Spine02'] as const;
+const GROWTH_BONES = ['head_end', 'Spine02', 'neck', 'LeftHand', 'RightHand'] as const;
 
 export type BotLoop = 'idle' | 'walk' | 'hover' | 'sit' | 'meditate';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
@@ -215,7 +217,7 @@ export class BloombotVisuals {
   /** #620: sets what Bloombot has grown into (cheap to call every frame: it rebuilds only on a change). */
   setGrowth(g: BotGrowth) {
     const c = this.growth;
-    if (c.moves === g.moves && c.cells === g.cells && c.pockets === g.pockets) return;
+    if (c.moves === g.moves && c.cells === g.cells && c.pockets === g.pockets && (c.park ?? 0) === (g.park ?? 0)) return;
     this.growth = { ...g };
     this.buildGrowth();
   }
@@ -235,7 +237,7 @@ export class BloombotVisuals {
     this.pieces = [];
     if (!this.model) return;
     const g = this.growth;
-    const piece = (name: string, type: 'sphere' | 'capsule' | 'box', mat: pc.Material | undefined, bone: string, at: [number, number, number], euler: [number, number, number], scale: [number, number, number]) => {
+    const piece = (name: string, type: 'sphere' | 'capsule' | 'box' | 'torus', mat: pc.Material | undefined, bone: string, at: [number, number, number], euler: [number, number, number], scale: [number, number, number]) => {
       const e = new pc.Entity(name);
       e.addComponent('render', { type, material: mat, castShadows: true });
       e.setLocalScale(scale[0], scale[1], scale[2]);
@@ -272,6 +274,13 @@ export class BloombotVisuals {
       { at: [-0.15, 0.08, -0.2], size: [0.036, 0.05, 0.065] },
     ];
     for (let i = 0; i < Math.min(pockets.length, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i].at, [0, 0, 0], pockets[i].size);
+    // #622: what greening the park grew: a glowing bud at the sprout's tip, a gold collar at the neck, gold cuffs
+    // (placed by eye in the browser; a torus is 0.3 across its ring before scaling)
+    const park = g.park ?? 0;
+    const gold = this.material('bloombot_gold');
+    if (park >= 1) piece('grow-bud', 'sphere', glow, 'head_end', [0, 0.13, 0], [0, 0, 0], [0.04, 0.05, 0.04]);
+    if (park >= 2) piece('grow-collar', 'torus', gold, 'neck', [0, 0.02, 0], [0, 0, 0], [0.3, 0.1, 0.3]);
+    if (park >= 3) for (const side of ['LeftHand', 'RightHand']) piece(`grow-cuff-${side === 'LeftHand' ? 'l' : 'r'}`, 'torus', gold, side, [0, 0, 0], [0, 0, 90], [0.17, 0.1, 0.17]);
     this.placeGrowth();
   }
 
