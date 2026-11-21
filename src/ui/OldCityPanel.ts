@@ -221,13 +221,16 @@ export function fountainHtml(sim: Sim): string {
 export class SpeechBubble {
   readonly el: HTMLElement;
   private until = 0;
+  /** a second bubble from the same speaker, shown once this one has been read */
+  private next?: { name: string; lines: string[] };
   constructor(root: HTMLElement) {
     this.el = document.createElement('div');
     this.el.className = 'oc-bubble';
     this.el.hidden = true;
     root.appendChild(this.el);
   }
-  say(name: string, lines: string[], secs = 3 + lines.length * 1.6) {
+  say(name: string, lines: string[], secs = 3 + lines.length * 1.6, then?: string[]) {
+    this.next = then?.length ? { name, lines: then } : undefined;
     this.el.innerHTML = iconize(`<b>${escHtml(name)}</b>${lines.map((l) => `<p>${escHtml(l)}</p>`).join('')}`);
     this.el.hidden = false;
     this.until = performance.now() + secs * 1000;
@@ -235,8 +238,13 @@ export class SpeechBubble {
   /** Per frame: follow the speaker on screen (undefined: off screen or gone). */
   place(at: { x: number; y: number } | undefined) {
     if (this.el.hidden) return;
+    if (at && performance.now() > this.until && this.next) {
+      const n = this.next;
+      this.say(n.name, n.lines);
+    }
     if (!at || performance.now() > this.until) {
       this.el.hidden = true;
+      this.next = undefined;
       return;
     }
     this.el.style.left = `${at.x}px`;

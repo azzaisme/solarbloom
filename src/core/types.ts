@@ -389,6 +389,8 @@ export interface KeeperState {
  * ticket (E21.1 pack and store, E21.2 piles, E21.5 opened gates, E21.6 tier, E21.8 keepers, …).
  */
 export interface SalvageState {
+  /** #625 Eye for value (Tally): digs at junk piles since the last extra piece */
+  digs?: number;
   /** E21.1: what bloombot carries (whole numbers, a stack limit per material) */
   pack: Partial<Record<ItemId, number>>;
   /** E21.1: the city's shared, unlimited store */

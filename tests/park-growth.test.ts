@@ -138,7 +138,7 @@ describe('#622: greening the park grows Bloombot', () => {
     expect(rows[0].how).toBe(`Keep bringing the park back to life around the fountain. This grows at 20 on the goal card's Park count, and it's at ${n} now.`);
     expect(rows[0].where?.name).toBe('the fountain');
     expect(rows.map((r) => r.part)).toEqual(['bud', 'collar', 'cuffs']);
-    expect(BLOOMBOT_GROUPS.map((g) => g.title)).toEqual(['Moves', 'Grown with the park', 'Upgrades']);
+    expect(BLOOMBOT_GROUPS.map((g) => g.title)).toEqual(['Moves', 'Grown with the park', 'Knacks from the Keepers', 'Upgrades']);
     greenTo(sim, 20);
     sim.parkGrowth.check();
     expect(parkRows(sim)[0]).toMatchObject({ state: 'have', how: 'Grown with the park.', where: undefined });

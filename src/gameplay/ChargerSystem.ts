@@ -49,6 +49,6 @@ export class ChargerSystem {
   tick(dt: number): void {
     const m = this.docked();
     if (!m || this.full() || !this.sim.power.isPowered(m)) return;
-    this.sim.charge.recharge(POWER.charger.rate * dt, 'charger');
+    this.sim.charge.recharge(POWER.charger.rate * dt * this.sim.knacks.charger, 'charger'); // #625 Quick charge (Pylon)
   }
 }

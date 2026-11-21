@@ -287,7 +287,7 @@ export class Backpack {
     const level = r.kind === 'upgrade' ? `<p class="bb-level"><span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>${esc(stateWords(r))}</p>` : `<p class="bb-level">${esc(stateWords(r))}</p>`;
     const where = r.where ? `<button class="pn-btn primary bb-where" id="bb-where" data-bbwhere="${r.id}">${icon('pin', 's')}Show me where</button>` : '';
     return (
-      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : r.kind === 'park' ? 'star' : 'spark')}</span>${esc(r.name)}</h3>` +
+      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : r.kind === 'park' ? 'star' : r.kind === 'knack' ? 'heart' : 'spark')}</span>${esc(r.name)}</h3>` +
       level +
       `<p class="bb-does">${esc(r.does)}</p>` +
       (r.now ? `<p class="bb-now">${esc(r.now)}</p>` : '') +
