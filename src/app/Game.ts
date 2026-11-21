@@ -4359,6 +4359,11 @@ export class Game {
       const d = PARK_GROWTH.find((x) => x.id === id);
       if (d) this.grown.push(WORDS.bloombot.park(d.name, d.does));
     });
+    // #625: a Keeper taught Bloombot its knack
+    b.on('bloombot.knack', ({ keeper }) => {
+      const k = s.knacks.of(keeper);
+      if (k) this.grown.push(WORDS.bloombot.knack(s.keepers.def(keeper).name, k.name, k.does));
+    });
     b.on('research.upgraded', ({ id, level }) => {
       const u = RESEARCH_UPGRADES.find((x) => x.id === id);
       if (u?.branch === 'bloombot') this.grown.push(WORDS.bloombot.upgraded(u.name, level, u.levels.length));
@@ -5012,7 +5017,7 @@ export class Game {
     this.updateGuideLines();
     this.updatePileGlints();
     // #627: every upgrade, move and park growth as a part (data/botParts); rebuilt only when something changes
-    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities ?? [], levels: this.sim.state.salvage?.research?.levels ?? {}, park: this.sim.parkGrowth.step });
+    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities ?? [], levels: this.sim.state.salvage?.research?.levels ?? {}, park: this.sim.parkGrowth.step, knacks: this.sim.knacks.list() });
     // #624 Lantern: Bloombot's own light at night, from its research level (none before it)
     if (this.bot) this.bot.visuals.setLantern(this.sim.upgrades.lanternReach, 1 - this.dayNight.light, this.dayNight.lightShare, RESEARCH.lanternIntensity);
     // #613: resting at home charges bloombot: show it, so the player knows to stand still

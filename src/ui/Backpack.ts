@@ -165,6 +165,7 @@ export class Backpack {
     }
     this.body.setAttribute('aria-labelledby', `bptab-${tab}`);
     this.body.innerHTML = this[tab]();
+    this.fitDetail();
     this.bar();
   }
 
@@ -173,6 +174,7 @@ export class Backpack {
     if (!this.isOpen) return;
     const id = (document.activeElement as HTMLElement | null)?.id;
     this.body.innerHTML = this[this.current]();
+    this.fitDetail();
     if (id) this.body.querySelector<HTMLElement>(`#${CSS.escape(id)}`)?.focus({ focusVisible: true } as FocusOptions);
     this.bar();
   }
@@ -240,6 +242,22 @@ export class Backpack {
     for (const b of this.body.querySelectorAll<HTMLElement>('[data-bb]')) b.setAttribute('aria-selected', String(b.dataset.bb === this.selBot));
     const d = this.body.querySelector<HTMLElement>('#bpDetail');
     if (d) d.innerHTML = this.current === 'journal' ? this.pageText() : this.current === 'bloombot' ? this.botDetail() : this.detail();
+    this.fitDetail();
+  }
+
+  /**
+   * The Bloombot page's detail, when it is taller than its column (a long "how to learn it" at a big interface size)
+   * and has no Show me where at its foot: its last paragraph becomes a stop the focus can reach (Enter or A on the
+   * row, or right from the list), and the pad and keys scroll it into view there, so its end is never out of reach.
+   */
+  private fitDetail() {
+    if (this.current !== 'bloombot') return;
+    const d = this.body.querySelector<HTMLElement>('#bpDetail');
+    const how = d?.querySelector<HTMLElement>('#bb-how');
+    if (!d || !how) return;
+    const stop = !d.querySelector('#bb-where') && d.scrollHeight > d.clientHeight + 1;
+    if (stop) how.tabIndex = 0;
+    else how.removeAttribute('tabindex');
   }
 
   private move(act: string, n: string) {
@@ -287,11 +305,11 @@ export class Backpack {
     const level = r.kind === 'upgrade' ? `<p class="bb-level"><span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>${esc(stateWords(r))}</p>` : `<p class="bb-level">${esc(stateWords(r))}</p>`;
     const where = r.where ? `<button class="pn-btn primary bb-where" id="bb-where" data-bbwhere="${r.id}">${icon('pin', 's')}Show me where</button>` : '';
     return (
-      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : r.kind === 'park' ? 'star' : 'spark')}</span>${esc(r.name)}</h3>` +
+      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : r.kind === 'park' ? 'star' : r.kind === 'knack' ? 'heart' : 'spark')}</span>${esc(r.name)}</h3>` +
       level +
       `<p class="bb-does">${esc(r.does)}</p>` +
       (r.now ? `<p class="bb-now">${esc(r.now)}</p>` : '') +
-      `<h4>${esc(howHeading(r))}</h4><p>${esc(r.how)}</p>` +
+      `<h4>${esc(howHeading(r))}</h4><p class="bb-how" id="bb-how">${esc(r.how)}</p>` +
       where
     );
   }
@@ -365,8 +383,10 @@ export class Backpack {
     if (bb) {
       this.selBot = bb.dataset.bb;
       this.select();
-      // Enter or A on a row steps to its Show me where
-      this.body.querySelector<HTMLElement>('#bb-where')?.focus({ focusVisible: true } as FocusOptions);
+      // Enter or A on a row steps to its Show me where, or (a detail too tall to show whole) to its last lines
+      const to = this.body.querySelector<HTMLElement>('#bb-where') ?? this.body.querySelector<HTMLElement>('#bb-how[tabindex="0"]');
+      to?.focus({ focusVisible: true } as FocusOptions);
+      to?.scrollIntoView({ block: 'nearest' });
       return;
     }
     const mv = t.closest<HTMLElement>('[data-move]');

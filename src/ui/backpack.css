@@ -77,6 +77,8 @@ svg.mi-unknown .mi-line { stroke: var(--text-strong); }
 .bb-detail .bb-does { font: 800 17px/1.45 var(--font-ui); color: var(--ink); }
 .bb-detail .bb-now { margin-top: 6px; font: 700 15px/1.45 var(--font-ui); color: var(--ink-2, var(--ink)); }
 .bb-detail .bb-where { margin-top: 10px; }
+/* a detail too tall to show whole: its last lines are a focus stop (Backpack.fitDetail), ringed when reached */
+.bb-detail .bb-how[tabindex] { border-radius: 10px; padding: 2px 6px; margin: 0 -6px 4px; }
 /* Requests */
 .bp-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .bp-req { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 4px 12px; width: 100%; min-height: 96px; padding: 12px 16px; border-radius: var(--r-tile); border: 1.5px solid transparent; background: var(--paper-2); text-align: left; font: 900 17px var(--font-ui); color: var(--ink); cursor: pointer; }
