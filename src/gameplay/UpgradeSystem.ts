@@ -75,8 +75,12 @@ export class UpgradeSystem {
 
   // ───────────── global effects ─────────────
   get broadExtra() {
-    // E23.6.2: the Wider pulse research upgrade, a tile further a level
-    return this.level('broadPulse') + (this.sim.research?.effect('pulseRadius') ?? 0);
+    // E23.6.2: the Wider pulse research upgrade: its first levels step the pulse up a tier each (#623: up to three)
+    return this.level('broadPulse') + Math.min(RESEARCH.pulseTierLevels, this.sim.research?.level('pulseRadius') ?? 0);
+  }
+  /** #623: Wider pulse's late levels (4 and 5): a flat tile each on the pulse's radius */
+  get broadTiles() {
+    return Math.max(0, (this.sim.research?.level('pulseRadius') ?? 0) - RESEARCH.pulseTierLevels) * RESEARCH.pulseTilesPerLateLevel;
   }
   // ───────────── #624 (E25): Bloombot's research upgrades on systems that were already there ─────────────
   private eff(id: string): number {

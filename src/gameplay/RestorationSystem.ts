@@ -185,7 +185,9 @@ export class RestorationSystem {
   pulseRadius(overcharged = false, extraReach = 0): number {
     const tiers = TUNING.pulseTiers;
     const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + extraReach + (overcharged ? 1 : 0));
-    return overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    const r = overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    // #623: Wider pulse's late levels add flat tiles; never past the widest a pulse goes
+    return r > 0 ? Math.min(RESEARCH.pulseMaxRadius, r + this.sim.upgrades.broadTiles) : r;
   }
 
   /**

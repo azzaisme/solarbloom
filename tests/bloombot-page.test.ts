@@ -30,7 +30,7 @@ describe('#620: Bloombot\'s page', () => {
     expect(ups.map((u) => u.name)).toEqual(['Bigger charge', 'Gentler on charge', 'Longer stride', 'Wider pulse', 'Roomier backpack', 'Quick hands', 'Keen eye', 'Sun soak', 'Lantern', 'Lucky pulse']);
     expect(ups[0].does).toBe('Bloombot holds more charge, so it can keep going longer before it rests.');
     expect(ups[4].does).toBe('Bloombot can carry 20 more of each thing.');
-    expect(ups.every((u) => u.level === 0 && u.max === (u.id === 'lantern' ? 2 : 3) && u.state === 'later')).toBe(true);
+    expect(ups.every((u) => u.level === 0 && u.max === (u.id === 'lantern' ? 2 : ['quickHands', 'keenEye', 'sunSoak', 'luckyPulse'].includes(u.id) ? 3 : 5) && u.state === 'later')).toBe(true);
     // before the first Keeper wakes, the workshop doesn't research yet: it says so
     expect(ups[0].how).toBe('The workshop table in the house can work out how to make this. It starts once you wake another robot out in the city.');
     expect(ups[0].where?.name).toBe('the house');
@@ -53,22 +53,22 @@ describe('#620: Bloombot\'s page', () => {
     // the research station is there once a Keeper wakes
     sim.state.salvage!.keepers['k'] = { step: 'request1' } as never;
     const cells = bloombotUpgradeRows(sim).find((u) => u.id === 'chargeCells')!;
-    expect(cells).toMatchObject({ state: 'next', level: 1, max: 3 });
+    expect(cells).toMatchObject({ state: 'next', level: 1, max: 5 });
     expect(cells.how).toBe('Go to the workshop table in the house and make level 2 in its Upgrade tab. It takes 3 Battery cell and 4 Gears.');
-    research(sim).levels.chargeCells = 3;
+    research(sim).levels.chargeCells = 5; // #623: five levels
     const top = bloombotUpgradeRows(sim).find((u) => u.id === 'chargeCells')!;
     expect(top).toMatchObject({ state: 'have', how: 'As far as it goes.', where: undefined });
     expect(stateWords(top)).toBe('Top level');
   });
 
-  it('reads only: no cost or number changes (the upgrades are the workshop\'s, as they were)', () => {
+  it('reads only: the page changes no cost or number (#623: the Bloombot upgrades go to five levels)', () => {
     const bloom = RESEARCH_UPGRADES.filter((u) => u.branch === 'bloombot');
     expect(bloom.map((u) => [u.id, u.levels.length, u.per])).toEqual([
-      ['chargeCells', 3, 1],
-      ['chargeEfficiency', 3, 1],
-      ['sprint', 3, 0.1],
-      ['pulseRadius', 3, 1],
-      ['backpack', 3, 20],
+      ['chargeCells', 5, 1],
+      ['chargeEfficiency', 5, 1],
+      ['sprint', 5, 0.1],
+      ['pulseRadius', 5, 1],
+      ['backpack', 5, 20],
       // #624
       ['quickHands', 3, 0.1],
       ['keenEye', 3, 4],
