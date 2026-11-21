@@ -179,7 +179,7 @@ export class BuildBar extends HudPart {
       })
       .join('');
     const edge = (a: Action) => (pad ? `<span class="bedge" aria-hidden="true">${this.glyph(a)}</span>` : '');
-    const right = mode('removeMode', ICONS.broom, 'Remove', tool === 'remove', 'remove', `Remove ${tool === 'remove' ? 'on' : 'off'}`) + mode('buildMenu', ICONS.build, 'All', false, 'all', 'All builds: the build menu');
+    const right = mode('removeMode', ICONS.broom, 'Remove', tool === 'remove', 'remove', `Remove ${tool === 'remove' ? 'on' : 'off'}`) + mode('buildMenu', ICONS.build, 'All', false, 'all', 'The build menu: everything you can build');
     const html = `${left}${left ? '<span class="vsep" aria-hidden="true"></span>' : ''}${edge('slotPrev')}${slots}${edge('slotNext')}<span class="vsep" aria-hidden="true"></span>${right}`;
     el.classList.toggle('pad', pad);
     this.set('buildbar', el, 'html', html);

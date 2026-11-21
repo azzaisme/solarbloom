@@ -113,7 +113,7 @@ describe('E23.5.1: gathering biomass from restored ground', () => {
     const sim = oldSim();
     const t = restored(sim, 2);
     sim.inventory.add('biomass', 40);
-    expect(sim.gather.problem(t)).toMatch(/can't carry more Greens/); // #606: plain words
+    expect(sim.gather.problem(t)).toMatch(/Greens stack is full: put some in storage first/); // #606: plain words
     expect(sim.gather.gather(t)).toBe(0);
     expect(sim.gather.canGather(t)).toBe(true);
   });

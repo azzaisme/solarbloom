@@ -71,7 +71,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         { kind: 'check', key: 'invertX', label: 'Invert camera left and right' },
         { kind: 'check', key: 'invertY', label: 'Invert camera up and down' },
         { kind: 'check', key: 'noRecentre', label: 'Keep the view where I turn it' },
-        { kind: 'check', key: 'noVistas', label: 'Skip region vistas' },
+        { kind: 'check', key: 'noVistas', label: 'Skip the view when a new place opens' },
       ];
   }
 }

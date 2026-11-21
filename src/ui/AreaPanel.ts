@@ -10,12 +10,12 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 /** What each area type is good for, in plain language. */
 export const AREA_SPECIALTY: Record<string, string> = {
   park: 'Lawns that flower into Greens to gather. Home.',
-  street: 'Long paved runs: street gardens here pass chains along green corridors.',
-  plaza: 'Open paving that soaks up sun, with room for corridors.',
+  street: 'Long paved runs, where a line of street gardens carries a bloom down the road.',
+  plaza: 'Open paving that soaks up the sun, with room to build.',
   canal: 'Water channels, where Reservoir Gardens grow.',
   market: 'Crowded with stalls and their old wares.',
   reservoir: 'Dry clay basins, where Reservoir Gardens grow.',
-  grove: 'Leaf litter around an Elder Tree: blooms nearby charge its Canopy Burst.',
+  grove: 'Leaf litter around an Elder Tree: blooms nearby charge it up.',
   beach: 'Sand and driftwood where the boat comes in. The Sea Lock across the canal wakes it.',
   downtown: 'Glass towers on a raised plateau around the Solar Spire, the tallest light in the city.',
 };
@@ -75,7 +75,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     checklist = TIERS.map((t) => `<li>${step >= t.tier ? '✅' : '⬜'} Fountain step ${t.tier}: ${esc(t.name)}</li>`).join('');
   } else {
     const steps = [
-      { done: d.fog !== 'hidden', label: 'Revealed next to clear ground' },
+      { done: d.fog !== 'hidden', label: 'Out of the fog, beside ground you cleared' },
       { done: cleared || d.restored >= d.need, label: `Restore ${d.need} tiles (${Math.min(d.restored, d.need)} of ${d.need})` },
       { done: cleared, label: `Wake the ${esc(a.landmarkName)}` },
     ];

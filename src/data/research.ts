@@ -94,7 +94,7 @@ export const RESEARCH = {
 /** Research-opened upgrades. Who reads each level: the sub-epic named beside it, through `sim.research.level(id)`. */
 export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   // Bloombot (E23.2 reads charge, efficiency, sprint and pulse; the backpack is ours)
-  { id: 'chargeCells', branch: 'bloombot', name: 'Bigger charge', each: 'A battery cell more in bloombot', per: 1, needs: 'charge', levels: [{ cost: { batteryCell: 2 } }, { cost: { batteryCell: 3, gears: 4 } }, { cost: { batteryCell: 4, sunstone: 4 } }] },
+  { id: 'chargeCells', branch: 'bloombot', name: 'Bigger charge', each: 'One more battery cell in bloombot', per: 1, needs: 'charge', levels: [{ cost: { batteryCell: 2 } }, { cost: { batteryCell: 3, gears: 4 } }, { cost: { batteryCell: 4, sunstone: 4 } }] },
   { id: 'chargeEfficiency', branch: 'bloombot', name: 'Gentler on charge', each: 'Pulses and abilities use a little less charge', per: 1, needs: 'charge', levels: [{ cost: { wire: 4, copper: 6 } }, { cost: { wire: 6, gears: 6 } }, { cost: { motor: 2, sunstone: 6 } }] },
   { id: 'sprint', branch: 'bloombot', name: 'Longer stride', each: 'Sprinting costs less and goes a little faster', per: 0.1, needs: 'charge', levels: [{ cost: { gears: 4, wire: 2 } }, { cost: { motor: 1, gears: 6 } }, { cost: { motor: 2, sunstone: 4 } }] },
   { id: 'pulseRadius', branch: 'bloombot', name: 'Wider pulse', each: 'The pulse reaches a tile further', per: 1, needs: 'always', levels: [{ cost: { seeds: 10, copper: 6 } }, { cost: { seeds: 16, glassPane: 4 } }, { cost: { seeds: 24, sunCell: 2 } }] },
@@ -121,7 +121,7 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
 /** Every project, by branch. A branch's first project opens from a find; the rest follow on. */
 export const PROJECTS: ProjectDef[] = [
   // Bloombot
-  { id: 'rb-cells', branch: 'bloombot', name: 'Spare cells', about: 'Room in bloombot for a battery cell more.', cost: { scrap: 10, copper: 6 }, days: 0.1, opens: { material: 'copper' }, gives: { upgrade: 'chargeCells' } },
+  { id: 'rb-cells', branch: 'bloombot', name: 'Spare cells', about: 'Room in bloombot for one more battery cell.', cost: { scrap: 10, copper: 6 }, days: 0.1, opens: { material: 'copper' }, gives: { upgrade: 'chargeCells' } },
   { id: 'rb-efficiency', branch: 'bloombot', name: 'A gentler pulse', about: 'The same pulse for less charge.', cost: { copper: 10, seeds: 10 }, days: 0.15, opens: { project: 'rb-cells' }, gives: { upgrade: 'chargeEfficiency' } },
   { id: 'rb-sprint', branch: 'bloombot', name: 'Light feet', about: 'Easier running on old legs.', cost: { gears: 8, scrap: 10 }, days: 0.15, opens: { material: 'gears' }, gives: { upgrade: 'sprint' } },
   { id: 'rb-pulse', branch: 'bloombot', name: 'Ripples', about: 'A pulse that carries a little further.', cost: { seeds: 16, glass: 6 }, days: 0.2, opens: { project: 'rb-efficiency' }, gives: { upgrade: 'pulseRadius' } },

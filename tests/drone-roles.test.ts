@@ -95,7 +95,7 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
     expect(sim.roles.lockedReason('scout')).toMatch(/gate/);
     expect(sim.roles.lockedReason('courier')).toMatch(/Mother Tree|Relay/);
     expect(sim.roles.lockedReason('spark')).toMatch(/3 Pollinator/);
-    expect(sim.roles.lockedReason('harvester')).toMatch(/Gather Greens by hand/);
+    expect(sim.roles.lockedReason('harvester')).toMatch(/Gather some Greens by hand/);
     const c = city();
     put(c, 'condenser', 40, 40);
     put(c, 'motherTree', 44, 40);
