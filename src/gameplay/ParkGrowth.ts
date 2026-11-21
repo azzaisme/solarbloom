@@ -45,7 +45,7 @@ export class ParkGrowth {
 
   /**
    * Nimble hands: what a salvage hold takes, as a share of before (1 before it). The hold itself is worked out in
-   * one place, `UpgradeSystem.salvageHold`, with Quick hands (#624) and a floor.
+   * one place, `UpgradeSystem.salvageHold`, with a floor (Quick hands is for prying only).
    */
   get holdShare(): number {
     return this.has('quick') ? T.holdFactor : 1;

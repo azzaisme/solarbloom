@@ -59,7 +59,7 @@ describe('#624: five new Bloombot upgrades in data', () => {
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     for (const m of ['scrap', 'seeds', 'copper', 'gears', 'wire', 'glassPane', 'batteryCell', 'motor', 'sunCell', 'sunstone'] as const) sim.inventory.addToStore(m, 200);
     const u = sim.upgrades;
-    const read = (id: string) => ({ quickHands: -u.salvageHold, keenEye: u.rippleRadius, sunSoak: u.sunSoak, lantern: u.lanternReach, luckyPulse: u.luckyChance })[id]!;
+    const read = (id: string) => ({ quickHands: -u.pryHold, keenEye: u.rippleRadius, sunSoak: u.sunSoak, lantern: u.lanternReach, luckyPulse: u.luckyChance })[id]!;
     for (const id of NEW) {
       const max = RESEARCH_UPGRADES.find((q) => q.id === id)!.levels.length;
       for (let l = 1; l <= max; l++) {
@@ -85,40 +85,41 @@ describe('#624: what each does', () => {
     expect(u.luckyChance).toBe(0);
   });
 
-  it('Quick hands: digging and prying take 10% less a level', () => {
-    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.pryHold.toFixed(3))).toEqual([2, 1.8, 1.6, 1.4]);
-    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.salvageHold.toFixed(3))).toEqual([0.6, 0.54, 0.48, 0.42]);
+  it('Quick hands: prying rubble and vault doors take a fifth less a level, so each level is felt', () => {
+    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.pryHold.toFixed(3))).toEqual([2, 1.6, 1.2, 0.8]);
+    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.vaultHold.toFixed(3))).toEqual([3, 2.4, 1.8, 1.2]);
   });
 
-  it('Quick hands stacks with Nimble hands from the park, in one place, and never below a third of a second', () => {
-    const stacked = [0, 1, 2, 3].map((l) => {
+  it('Quick hands leaves digging alone: Nimble hands from the park is the digging one (the owner, E25)', () => {
+    expect([0, 1, 2, 3].map((l) => at({ quickHands: l }).upgrades.salvageHold)).toEqual([0.6, 0.6, 0.6, 0.6]);
+    const dig = [0, 1, 2, 3].map((l) => {
       const sim = at({ quickHands: l });
       sim.state.progression.parkGrowth = 3; // Nimble hands: a quarter off digging
       return +sim.upgrades.salvageHold.toFixed(3);
     });
-    // 0.6 × 0.75 × (1, 0.9, 0.8, 0.7): 0.45, 0.405, 0.36, then 0.315 held up at the floor
-    expect(stacked).toEqual([0.45, 0.405, 0.36, RESEARCH.minHold]);
-    expect(RESEARCH.minHold).toBeCloseTo(1 / 3, 1);
-    // every level still does something somewhere: each stacked step is quicker than the last
-    for (let i = 1; i < stacked.length; i++) expect(stacked[i]).toBeLessThan(stacked[i - 1]);
+    expect(dig).toEqual([0.45, 0.45, 0.45, 0.45]);
     // the floor holds whatever the numbers: even with the levels pushed far past what can be bought
+    expect(RESEARCH.minHold).toBeCloseTo(1 / 3, 1);
     const silly = at({ quickHands: 20 });
-    silly.state.progression.parkGrowth = 3;
-    expect(silly.upgrades.salvageHold).toBe(RESEARCH.minHold);
     expect(silly.upgrades.pryHold).toBe(RESEARCH.minHold);
+    expect(silly.upgrades.vaultHold).toBe(RESEARCH.minHold);
   });
 
-  it('the game reads its holds from that one place, and the page shows the combined time', () => {
+  it('the game reads its holds from that one place, and each row shows its own time', () => {
     const sim = at({ quickHands: 3 });
     sim.state.progression.parkGrowth = 3;
     const rows = bloombotRows(sim);
     const quick = rows.find((r) => r.id === 'quickHands')!;
     const nimble = rows.find((r) => r.id === 'quick')!;
-    expect(quick.now).toBe('Right now digging out a pile takes 0.33 seconds, and prying rubble open 1.4 seconds.');
-    expect(nimble.now).toBe(quick.now);
-    expect(bannedIn(quick.now!)).toEqual([]);
-    expect(at({}).upgrades.salvageHold).toBe(SALVAGE.holdSeconds);
-    expect(bloombotRows(at({})).find((r) => r.id === 'quickHands')!.now).toBe('Right now digging out a pile takes 0.6 seconds, and prying rubble open 2 seconds.');
+    expect(quick.now).toBe('Right now prying rubble open takes 0.8 seconds.');
+    expect(nimble.now).toBe('Right now digging out a pile takes 0.45 seconds.');
+    expect(quick.does).toBe('Bloombot pries rubble and old vault doors open faster.');
+    for (const t of [quick.now!, nimble.now!, quick.does]) expect(bannedIn(t)).toEqual([]);
+    // once Bloombot can pry a vault door open (Pry II), the row says how long that takes too
+    sim.state.salvage!.abilities = ['pry'];
+    sim.state.salvage!.research!.done.push(sim.research.moveProject('pry')!.id);
+    expect(bloombotRows(sim).find((r) => r.id === 'quickHands')!.now).toBe('Right now prying rubble open takes 0.8 seconds, and an old vault door 1.2 seconds.');
+    expect(bloombotRows(at({})).find((r) => r.id === 'quickHands')!.now).toBe('Right now prying rubble open takes 2 seconds.');
   });
 
   it('Keen eye: the pulse lights up piles from 4 tiles further a level; at level 3 they show on the map', () => {
