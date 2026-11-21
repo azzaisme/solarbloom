@@ -107,6 +107,8 @@ import { settingsRows } from '../ui/SettingsRows';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { benchBoxes, type WorldBox } from '../rendering/SeatBox';
 import { Minimap } from '../ui/Minimap';
+import { Turntable } from '../rendering/Turntable';
+import { nextGrowth, partsAdded, type BotGrowth } from '../data/botParts';
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
@@ -322,6 +324,8 @@ export class Game {
   readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
   private minimap?: Minimap;
+  /** #629: the Bloombot page's live look at Bloombot */
+  turntable?: Turntable;
   /** E24 (#609): the current goal spot (looked up twice a second) and the light that marks it in the world */
   private goal?: GoalSpot;
   private goalT = 0;
@@ -582,6 +586,16 @@ export class Game {
       }
       const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
       this.bot = bot;
+      // #629: the Bloombot page's live look at Bloombot
+      this.turntable = new Turntable(this.app, () => this.bot?.visuals);
+      this.turntable.reducedMotion = !!this.settings.reducedMotion;
+      this.hud.backpack.botView = (canvas, row) => {
+        const tt = this.turntable!;
+        tt.show(canvas);
+        if (!canvas) return;
+        const now = this.botGrowth();
+        tt.focus(row?.part, row && (row.kind === 'move' || (row.kind as string) === 'knack') ? row.id : undefined /* #625 adds the 'knack' kind */, row ? partsAdded(now, nextGrowth(now, row)) : []);
+      };
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
@@ -1677,6 +1691,11 @@ export class Game {
       v.y += 0.6;
       this.vfx.burst(v, this.settings.reducedMotion ? 3 : 7, { up: 0.9, speed: 0.35, size: 0.06, life: 1.2, gravity: -0.2, hex: PALETTE.gold, glow: 1.4 });
     }
+  }
+
+  /** #627: what Bloombot has grown into, for its parts (and #629's turntable) */
+  private botGrowth(): BotGrowth {
+    return { moves: this.sim.state.salvage?.abilities ?? [], levels: this.sim.state.salvage?.research?.levels ?? {}, park: this.sim.parkGrowth.step };
   }
 
   /** #605: is Show me where's mark still standing (asked for a moment ago, and bloombot not there yet)? */
@@ -5012,7 +5031,8 @@ export class Game {
     this.updateGuideLines();
     this.updatePileGlints();
     // #627: every upgrade, move and park growth as a part (data/botParts); rebuilt only when something changes
-    if (this.bot) this.bot.visuals.setGrowth({ moves: this.sim.state.salvage?.abilities ?? [], levels: this.sim.state.salvage?.research?.levels ?? {}, park: this.sim.parkGrowth.step });
+    if (this.bot) this.bot.visuals.setGrowth(this.botGrowth());
+    this.turntable?.update();
     // #624 Lantern: Bloombot's own light at night, from its research level (none before it)
     if (this.bot) this.bot.visuals.setLantern(this.sim.upgrades.lanternReach, 1 - this.dayNight.light, this.dayNight.lightShare, RESEARCH.lanternIntensity);
     // #613: resting at home charges bloombot: show it, so the player knows to stand still

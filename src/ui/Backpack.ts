@@ -53,6 +53,11 @@ export class Backpack {
   private selPage?: string;
   /** #620: the Bloombot row in focus */
   private selBot?: string;
+  /**
+   * #629: the live look at Bloombot (the game's Turntable): told which canvas to draw into (none: stop) and which row
+   * is in focus, every time the Bloombot page is drawn or its focus moves.
+   */
+  botView?: (canvas: HTMLCanvasElement | undefined, row: BloombotRow | undefined) => void;
 
   constructor(
     parent: HTMLElement,
@@ -145,6 +150,7 @@ export class Backpack {
 
   close() {
     if (!this.isOpen) return;
+    this.botView?.(undefined, undefined);
     this.el.hidden = true;
     this.el.classList.remove('open');
     this.storage = undefined;
@@ -166,6 +172,15 @@ export class Backpack {
     this.body.setAttribute('aria-labelledby', `bptab-${tab}`);
     this.body.innerHTML = this[tab]();
     this.bar();
+    this.syncView();
+  }
+
+  /** #629: points the turntable at the Bloombot page's canvas and its row in focus (or stops it). */
+  private syncView() {
+    if (!this.botView) return;
+    const canvas = this.isOpen && this.current === 'bloombot' ? (this.body.querySelector<HTMLCanvasElement>('#bbView') ?? undefined) : undefined;
+    const row = canvas ? bloombotRows(this.host.sim).find((r) => r.id === this.selBot) : undefined;
+    this.botView(canvas, row);
   }
 
   /** Redraws the open tab, keeping the focus on the same control. */
@@ -175,6 +190,7 @@ export class Backpack {
     this.body.innerHTML = this[this.current]();
     if (id) this.body.querySelector<HTMLElement>(`#${CSS.escape(id)}`)?.focus({ focusVisible: true } as FocusOptions);
     this.bar();
+    this.syncView();
   }
 
   /** The action bar: what Enter / A does on this tab, the tab buttons and Back. */
@@ -240,6 +256,7 @@ export class Backpack {
     for (const b of this.body.querySelectorAll<HTMLElement>('[data-bb]')) b.setAttribute('aria-selected', String(b.dataset.bb === this.selBot));
     const d = this.body.querySelector<HTMLElement>('#bpDetail');
     if (d) d.innerHTML = this.current === 'journal' ? this.pageText() : this.current === 'bloombot' ? this.botDetail() : this.detail();
+    if (this.current === 'bloombot') this.syncView();
   }
 
   private move(act: string, n: string) {
@@ -278,7 +295,9 @@ export class Backpack {
       const id = `bbH-${g.kind}`;
       return `<h3 class="pn-label" id="${id}">${esc(g.title)} <span class="bb-count">${esc(g.note(list))}</span></h3><div class="bb-rows" role="listbox" aria-labelledby="${id}">${list.map(row).join('')}</div>`;
     }).join('');
-    return `<div class="pn-split bb-split"><div class="pn-main bb-main">${groups}</div><aside class="pn-detail bp-detail bb-detail" id="bpDetail">${this.botDetail()}</aside></div>`;
+    // #629: the live look at Bloombot above the detail (the turntable draws into the canvas; the detail redraws apart)
+    const view = this.botView ? `<div class="bb-view" aria-hidden="true"><canvas id="bbView" width="480" height="300"></canvas></div>` : '';
+    return `<div class="pn-split bb-split"><div class="pn-main bb-main">${groups}</div><aside class="pn-detail bp-detail bb-detail${view ? ' has-view' : ''}">${view}<div id="bpDetail">${this.botDetail()}</div></aside></div>`;
   }
 
   private botDetail(): string {

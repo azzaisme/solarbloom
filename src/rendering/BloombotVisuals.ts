@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
-import { botParts, growthKey, type BotGrowth, type BotMat, type PartId } from '../data/botParts';
+import { botParts, growthKey, type BotGrowth, type BotMat, type PartId, type PartPiece } from '../data/botParts';
 import { BOT_CLIPS, REST, seatLift } from '../data/rest';
 import { VISIT_POINTS, type Perch } from '../data/wildlife';
 import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
@@ -284,6 +284,22 @@ export class BloombotVisuals {
   }
 
   private solarMat?: pc.StandardMaterial;
+  private tints = new Map<string, pc.Material>();
+  /** #629: one of Bloombot's materials in another colour (a knack's bead in its Keeper's tint), made once per colour. */
+  private tinted(m: BotMat, hex: string): pc.Material | undefined {
+    const key = `${m}:${hex}`;
+    let t = this.tints.get(key);
+    if (!t) {
+      const base = this.botMat(m) as pc.StandardMaterial | undefined;
+      if (!base) return undefined;
+      const c = base.clone();
+      c.diffuse = color(hex);
+      c.update();
+      this.tints.set(key, (t = c));
+    }
+    return t;
+  }
+
   /** One of Bloombot's own materials by short name (`bloombot_<name>`), or ours: the solar panel's dark blue glass. */
   private botMat(m: BotMat): pc.Material | undefined {
     if (m === 'solar') {
@@ -309,6 +325,85 @@ export class BloombotVisuals {
     return mi?.material ?? undefined;
   }
 
+  // ───────── #629: the page's turntable ─────────
+  /** the turntable's layer while it shows Bloombot (every mesh and part is drawn on it too) */
+  private ttLayer?: number;
+  /** what the turntable has in focus: the part that glows, and its next level as a ghost */
+  private hi?: { part?: PartId; name?: string; ghost: PartPiece[]; layer: number };
+  private hiMats: { mi: pc.MeshInstance; was: pc.Material }[] = [];
+  private ghosts: GrowthPiece[] = [];
+  private ghostMat?: pc.StandardMaterial;
+
+  /** Draws Bloombot (its model and every part) on the turntable's layer too, or stops. */
+  showOnLayer(layer: number, on: boolean) {
+    this.ttLayer = on ? layer : undefined;
+    const set = (e: pc.Entity) => {
+      for (const r of e.findComponents('render') as pc.RenderComponent[]) {
+        const has = r.layers.includes(layer);
+        if (on && !has) r.layers = [...r.layers, layer];
+        if (!on && has) r.layers = r.layers.filter((l) => l !== layer);
+      }
+    };
+    if (this.model) set(this.model);
+    for (const p of this.pieces) set(p.e);
+    if (!on) this.highlight(undefined, undefined, [], layer);
+  }
+
+  /**
+   * The turntable's focus: the pieces of `part` (only the one named `name`, for a move's mark or a knack) glow softly,
+   * and `ghost` (what the next level adds) is drawn see-through on the turntable's layer alone.
+   */
+  highlight(part: PartId | undefined, name: string | undefined, ghost: PartPiece[], layer: number) {
+    this.hi = part || ghost.length ? { part, name, ghost, layer } : undefined;
+    this.applyHighlight();
+  }
+
+  private applyHighlight() {
+    for (const h of this.hiMats) h.mi.material = h.was;
+    this.hiMats = [];
+    for (const g of this.ghosts) g.e.destroy();
+    this.ghosts = [];
+    const hi = this.hi;
+    if (!hi || !this.model) return;
+    for (const p of this.pieces) {
+      if (p.part !== hi.part || (hi.name && !p.e.name.endsWith(`-${hi.name}`) && (hi.part === 'marks' || hi.part === 'knacks'))) continue;
+      const mi = p.e.render?.meshInstances[0];
+      if (!mi?.material) continue;
+      const m = (mi.material as pc.StandardMaterial).clone();
+      m.emissive = color(PALETTE.botGlowFocus);
+      m.emissiveIntensity = 0.6;
+      m.update();
+      this.hiMats.push({ mi, was: mi.material });
+      mi.material = m;
+    }
+    if (hi.ghost.length) {
+      if (!this.ghostMat) {
+        const g = (this.ghostMat = new pc.StandardMaterial());
+        g.name = 'bloombot_ghost';
+        g.diffuse = color(PALETTE.botGhost);
+        g.emissive = color(PALETTE.botGhost);
+        g.emissiveIntensity = 0.5;
+        g.opacity = 0.45;
+        g.blendType = pc.BLEND_NORMAL;
+        g.depthWrite = false;
+        g.update();
+      }
+      for (const d of hi.ghost) {
+        const e = new pc.Entity(`ghost-${d.name}`);
+        e.addComponent('render', { type: d.shape, material: this.ghostMat, castShadows: false, layers: [hi.layer] });
+        e.setLocalScale(d.scale[0], d.scale[1], d.scale[2]);
+        this.root.addChild(e);
+        this.ghosts.push({ e, part: d.part, bone: d.bone, at: new pc.Vec3(...d.at), turn: new pc.Quat().setFromEulerAngles(d.euler[0], d.euler[1], d.euler[2]) });
+      }
+    }
+    this.placeGrowth();
+  }
+
+  /** What the turntable shows in focus now (tests and the shots read it). */
+  get focusView(): { glowing: string[]; ghosts: string[] } {
+    return { glowing: this.hiMats.map((h) => h.mi.node.name), ghosts: this.ghosts.map((g) => g.e.name) };
+  }
+
   /** #627: every part (data/botParts) as a small piece riding its bone, in Bloombot's own materials. */
   private buildGrowth() {
     for (const p of this.pieces) p.e.destroy();
@@ -316,11 +411,14 @@ export class BloombotVisuals {
     if (!this.model) return;
     for (const d of botParts(this.growth)) {
       const e = new pc.Entity(d.name);
-      e.addComponent('render', { type: d.shape, material: this.botMat(d.mat), castShadows: d.scale[0] > 0.02 || d.scale[1] > 0.02 });
+      e.addComponent('render', { type: d.shape, material: d.tint ? this.tinted(d.mat, d.tint) : this.botMat(d.mat), castShadows: d.scale[0] > 0.02 || d.scale[1] > 0.02 });
       e.setLocalScale(d.scale[0], d.scale[1], d.scale[2]);
       this.root.addChild(e);
+      if (this.ttLayer !== undefined) e.render!.layers = [...e.render!.layers, this.ttLayer];
       this.pieces.push({ e, part: d.part, bone: d.bone, at: new pc.Vec3(...d.at), turn: new pc.Quat().setFromEulerAngles(d.euler[0], d.euler[1], d.euler[2]) });
     }
+    this.hiMats = []; // their pieces are gone
+    this.applyHighlight();
     this.placeGrowth();
   }
 
@@ -341,8 +439,8 @@ export class BloombotVisuals {
         this.bones.set(b, bone);
         if (bone) this.boneRest.set(b, new pc.Quat().copy(root).invert().mul(bone.getRotation()));
       }
-    if (!this.pieces.length) return;
-    for (const p of this.pieces) {
+    if (!this.pieces.length && !this.ghosts.length) return;
+    for (const p of this.ghosts.length ? [...this.pieces, ...this.ghosts] : this.pieces) {
       if (!this.bones.has(p.bone)) this.bones.set(p.bone, this.model.findByName(p.bone));
       const bone = this.bones.get(p.bone);
       // the bone's turn now, against the idle pose it had when first seen (both in Bloombot's frame)

@@ -128,7 +128,8 @@ try {
     await shot('3-page-early');
     // the detail's end is above the footer, or the detail scrolls to it (the wheel, and Show me where at its foot)
     const reach = await page.evaluate(() => {
-      const d = document.querySelector('#bpScreen .bb-detail');
+      // #629: with the view of Bloombot at its top, the words under it are what scrolls
+      const d = document.querySelector('#bpScreen .bb-detail > #bpDetail') ?? document.querySelector('#bpScreen .bb-detail');
       const foot = document.querySelector('#bpScreen .sheet-foot');
       const r = d.getBoundingClientRect();
       const f = foot?.getBoundingClientRect();
