@@ -118,7 +118,6 @@ export class Resting {
     h.sim.bot = { roofId: p.roofId, x: p.x, z: p.z };
     // seated on the pad's top, facing out toward the edge it came from
     const facing = Math.atan2(p.x - cx, p.z - cz);
-    p.facing = facing;
     h.bot.seat = { x: cx, y: y + REST.padTop, z: cz, facing };
     h.bot.visuals.setPose('meditate');
     this.calm();
