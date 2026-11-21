@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/core/GameState';
-import { botParts, growthKey, MOVE_ORDER, UPGRADE_PART, type BotGrowth, type PartPiece } from '../src/data/botParts';
+import { botParts, growthKey, MOVE_ORDER, nextGrowth, partsAdded, pieceOf, UPGRADE_PART, type BotGrowth, type PartPiece } from '../src/data/botParts';
+import { KEEPERS } from '../src/data/oldcity';
 import { PARK_GROWTH } from '../src/data/bloombot';
 import { RESEARCH_UPGRADES } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
@@ -81,5 +82,51 @@ describe('#627: one list of Bloombot\'s parts', () => {
     const a = growthKey({ moves: ['pry'], levels: { chargeCells: 1, sprint: 0 }, park: 1 });
     expect(growthKey({ moves: ['pry'], levels: { chargeCells: 1 }, park: 1 })).toBe(a);
     expect(growthKey({ moves: ['pry'], levels: { chargeCells: 2 }, park: 1 })).not.toBe(a);
+  });
+});
+
+describe('#629: what the next level adds (the turntable shows it as a ghost)', () => {
+  const g: BotGrowth = { moves: ['pry'], levels: { chargeCells: 2 }, park: 1 };
+  const added = (row: Parameters<typeof nextGrowth>[1]) => partsAdded(g, nextGrowth(g, row)).map((p) => p.name);
+
+  it('an upgrade: the next level of its part, and nothing at the top level', () => {
+    expect(added({ kind: 'upgrade', id: 'chargeCells', max: 5 })).toEqual(['grow-cells-2']);
+    expect(added({ kind: 'upgrade', id: 'lantern', max: 2 })).toContain('grow-lamp-bulb');
+    expect(added({ kind: 'upgrade', id: 'chargeCells', max: 2 })).toEqual([]);
+  });
+
+  it('a move: its mark, if not learned yet', () => {
+    expect(added({ kind: 'move', id: 'climb' })).toEqual(['grow-marks-climb']);
+    expect(added({ kind: 'move', id: 'pry' })).toEqual([]);
+  });
+
+  it('a park milestone: its part, once the park gets there', () => {
+    expect(PARK_GROWTH.map((d) => d.id)).toEqual(['spill', 'thrift', 'quick']);
+    expect(added({ kind: 'park', id: 'thrift' })).toEqual(['grow-collar-ring']);
+    expect(added({ kind: 'park', id: 'spill' })).toEqual([]);
+    expect(new Set(partsAdded(g, nextGrowth(g, { kind: 'park', id: 'quick' })).map((p) => p.part))).toEqual(new Set(['collar', 'cuffs']));
+  });
+
+  it("a knack (#625): its bead, in its Keeper's colour", () => {
+    const k = KEEPERS[0];
+    const [bead] = partsAdded(g, nextGrowth(g, { kind: 'knack', id: `knack-${k.id}` }));
+    expect(bead.name).toBe(`grow-knacks-${k.id}`);
+    expect(bead.tint).toBe(k.tint);
+    expect(partsAdded({ ...g, knacks: [k.id] }, nextGrowth({ ...g, knacks: [k.id] }, { kind: 'knack', id: `knack-${k.id}` }))).toEqual([]);
+    expect(pieceOf({ kind: 'knack', id: `knack-${k.id}` })).toBe(k.id);
+  });
+
+  it('every row on the page shows its ghost on its own part', () => {
+    const sim = new Sim(createInitialState(7));
+    for (const r of bloombotRows(sim)) {
+      const ps = partsAdded(none, nextGrowth(none, r));
+      if (r.kind === 'upgrade' || r.kind === 'move' || r.kind === 'knack') expect(ps.length, r.id).toBeGreaterThan(0);
+      // a move or knack row glows its own piece: one that is drawn once it has it
+      const own = pieceOf(r);
+      if (own && r.kind !== 'move2') expect(ps.map((p) => p.name), r.id).toEqual([`grow-${r.part}-${own}`]);
+      // a move's second level (#626) lights its move's own mark
+      if (r.kind === 'move2') expect([r.part, own], r.id).toEqual(['marks', r.id.slice(0, -1)]);
+      if (r.kind !== 'park') for (const p of ps) expect(p.part, r.id).toBe(r.part);
+    }
   });
 });

@@ -156,7 +156,7 @@ export function moveTwoRows(sim: Sim): BloombotRow[] {
         ? `Bloombot has to learn ${MOVES[gate].name} at the fountain first. Then the crafting table in the house can work out “${two.name}”.`
         : openHow(sim, p, true);
     const where = have ? moveTwoSpot(sim, a) : !r.moveLevel(gate) ? fountainSpot(sim) : houseSpot();
-    return { id: `${a}2`, kind: 'move2', name: two.name, does: two.does, state: have ? 'have' : ready ? 'next' : 'later', how, where, part: 'leaves' };
+    return { id: `${a}2`, kind: 'move2', name: two.name, does: two.does, state: have ? 'have' : ready ? 'next' : 'later', how, where, part: 'marks' }; // #629: the move's own mark lights up
   });
 }
 

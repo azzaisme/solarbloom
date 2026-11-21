@@ -1,3 +1,4 @@
+import { KEEPERS } from './oldcity';
 // #627 (E25): Bloombot's parts. Every upgrade, move, park growth and (from #625) Keeper knack shows on Bloombot as
 // a part, and every level changes it, so you can tell how far a Bloombot has come at a glance. Data only: the pieces
 // are built from primitive shapes in Bloombot's own materials (rendering/BloombotVisuals draws them). Positions were
@@ -24,6 +25,8 @@ export interface PartPiece {
   /** its turn in Bloombot's frame (degrees) */
   euler: [number, number, number];
   scale: [number, number, number];
+  /** a colour over its material (#629: a knack's bead takes its Keeper's tint) */
+  tint?: string;
 }
 
 /** What Bloombot has grown into: everything its parts are drawn from. */
@@ -82,9 +85,11 @@ export function botParts(g: BotGrowth): PartPiece[] {
     add('marks', m, k.shape, 'bulb', 'Spine02', [-0.075 + i * 0.05, 0.125, BACK], k.euler, k.scale);
   });
 
-  // ── #625 knacks: a small bead each below the moves, two rows of five (one per Keeper) ──
+  // ── #625 knacks: a small bead each below the moves, two rows of five (one per Keeper), in its Keeper's own colour ──
   (g.knacks ?? []).slice(0, 10).forEach((id, i) => {
     add('knacks', id, 'sphere', 'champagne', 'Spine02', [-0.06 + (i % 5) * 0.03, 0.085 - Math.floor(i / 5) * 0.025, BACK], [0, 0, 0], [0.016, 0.016, 0.01]);
+    const tint = KEEPERS.find((k) => k.id === id)?.tint;
+    if (tint) out[out.length - 1].tint = tint;
   });
 
   // ── Gentler on charge: a gauge low on the back of the pack, a glowing bar a level ──
@@ -192,3 +197,38 @@ export function growthKey(g: BotGrowth): string {
 
 /** Where the Lantern's light sits, from Spine02: its bulb. */
 export const LAMP_AT: [number, number, number] = [0.125, 0.3, -0.24];
+
+/**
+ * #629: what a row of Bloombot's page would grow next, as a growth: a move learned, an upgrade's next level, the
+ * next park milestone. Undefined when there's nothing more (the top level, a move had, a milestone reached).
+ */
+export function nextGrowth(g: BotGrowth, row: { kind: string; id: string; level?: number; max?: number }): BotGrowth | undefined {
+  if (row.kind === 'move') return g.moves.includes(row.id) ? undefined : { ...g, moves: [...g.moves, row.id] };
+  if (row.kind === 'upgrade') {
+    const now = g.levels[row.id] ?? 0;
+    if (row.max !== undefined && now >= row.max) return undefined;
+    return { ...g, levels: { ...g.levels, [row.id]: now + 1 } };
+  }
+  if (row.kind === 'park') {
+    const step = PARK_STEPS[row.id];
+    return step && g.park < step ? { ...g, park: step } : undefined;
+  }
+  if (row.kind === 'knack') {
+    const k = pieceOf(row)!;
+    return (g.knacks ?? []).includes(k) ? undefined : { ...g, knacks: [...(g.knacks ?? []), k] };
+  }
+  return undefined;
+}
+/** #629: which of a part's pieces a page row is (a move's mark, also for its second level; a knack's bead, named by its Keeper), if just one */
+export function pieceOf(row: { kind: string; id: string }): string | undefined {
+  if (row.kind === 'move2') return row.id.replace(/2$/, ''); // E25 (#626): a move's second level, on its mark
+  return row.kind === 'move' ? row.id : row.kind === 'knack' ? row.id.replace(/^knack-/, '') : undefined;
+}
+const PARK_STEPS: Record<string, number> = { spill: 1, thrift: 2, quick: 3 };
+
+/** #629: the pieces `next` adds or changes over `now` (the turntable draws them as a see-through ghost). */
+export function partsAdded(now: BotGrowth, next: BotGrowth | undefined): PartPiece[] {
+  if (!next) return [];
+  const have = new Map(botParts(now).map((p) => [p.name, JSON.stringify([p.at, p.scale, p.shape, p.euler])]));
+  return botParts(next).filter((p) => have.get(p.name) !== JSON.stringify([p.at, p.scale, p.shape, p.euler]));
+}

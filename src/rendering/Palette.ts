@@ -592,6 +592,9 @@ export const PALETTE = {
   botProps: { metal: '#8d949b', metalDark: '#5d646b', wood: '#9a6b3f', cloth: '#b89c72', basket: '#c99a55', can: '#5fa8a0', brass: '#c9a14a', paper: '#f3ead2', stem: '#5c9a4c', petal: '#f39ab4', core: '#ffd25a', shell: '#f2c6b0', fruit: '#e0573f', glow: '#94ff6e' },
   /** #627: Sun soak's solar panel on Bloombot's pack: dark blue glass */
   botSolar: { diffuse: '#1d2f5c', specular: '#9fb8ff', emissive: '#2a4a9a' },
+  /** #629: the turntable: the part in focus glows warm, and the next level's ghost is pale mint */
+  botGlowFocus: '#ffd27a',
+  botGhost: '#bff5d8',
   nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a', dewStem: '#d9d2c2', dewCap: '#9fb7c9', dewDrop: '#e8f6ff', glass: '#bfe3ef', moth: '#e9e4d8' },
   // ───── legacy names (pre-Look 2), kept as aliases ─────
   concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],
