@@ -89,5 +89,10 @@ export function hipsAbove(rig: pc.GraphNode, base: pc.GraphNode): number {
   return h ? h.getPosition().y - base.getPosition().y : 0;
 }
 
+/** The hips joint's world position (undefined when the rig has no Hips bone). */
+export function hipsAt(rig: pc.GraphNode): pc.Vec3 | undefined {
+  return bone(rig, 'Hips')?.getPosition();
+}
+
 /** The hips joint's height above the seat (or the ground) once seated, world units. */
 export const SEAT_HIPS = { sit: 0.06, meditate: 0.08 } as const;
