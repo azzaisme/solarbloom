@@ -1,0 +1,474 @@
+{
+  "gpu": true,
+  "cardOnly": false,
+  "limit": 1800,
+  "times": {
+    "salvage": 2.033,
+    "fountain": 89.015,
+    "pry": 96.118
+  },
+  "gameSeconds": {
+    "salvage": 1.9999999999998863,
+    "fountain": 87.7000000000144,
+    "pry": 94.80000000001601
+  },
+  "pryHint": {
+    "at": 89.015,
+    "from": "a toast",
+    "text": "Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open."
+  },
+  "steps": [
+    {
+      "t": 0.186,
+      "what": "reads a toast: \"Esc frees the mouse again.\""
+    },
+    {
+      "t": 0.187,
+      "what": "reads a toast: \"A quarter of the way to waking the fountain.\""
+    },
+    {
+      "t": 0.187,
+      "what": "reads the card: \"Bring 20 Scrap and 6 Seeds to the fountain\""
+    },
+    {
+      "t": 0.192,
+      "what": "walks to a pile of scrap at 8, 44",
+      "why": "the card wants 20 more Scrap"
+    },
+    {
+      "t": 0.452,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 2.034,
+      "what": "★ first salvage"
+    },
+    {
+      "t": 2.22,
+      "what": "reads a toast: \"+3 Scrap\""
+    },
+    {
+      "t": 2.223,
+      "what": "walks to a pile of scrap at 8, 44",
+      "why": "the card wants 17 more Scrap"
+    },
+    {
+      "t": 3.502,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 4.921,
+      "what": "reads a toast: \"+3 Scrap\""
+    },
+    {
+      "t": 4.923,
+      "what": "walks to a pile of scrap at -7, 43",
+      "why": "the card wants 14 more Scrap"
+    },
+    {
+      "t": 4.929,
+      "what": "looks round (turns the camera)",
+      "why": "nothing in sight for \"Bring 20 Scrap and 6 Seeds to the fountain\""
+    },
+    {
+      "t": 5.74,
+      "what": "walks to a pile of scrap at 2, 27",
+      "why": "the card wants 14 more Scrap"
+    },
+    {
+      "t": 13.961,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 15.382,
+      "what": "reads a toast: \"+3 Scrap\""
+    },
+    {
+      "t": 15.386,
+      "what": "walks to a pile of scrap at 2, 27",
+      "why": "the card wants 11 more Scrap"
+    },
+    {
+      "t": 16.903,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 18.32,
+      "what": "reads a toast: \"+3 Scrap\""
+    },
+    {
+      "t": 18.324,
+      "what": "walks to a pile of scrap at 2, 27",
+      "why": "the card wants 8 more Scrap"
+    },
+    {
+      "t": 19.854,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 21.27,
+      "what": "reads a toast: \"+3 Scrap\""
+    },
+    {
+      "t": 21.273,
+      "what": "walks to a pile of scrap at 2, 27",
+      "why": "the card wants 5 more Scrap"
+    },
+    {
+      "t": 22.833,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 24.254,
+      "what": "reads a toast: \"Halfway there: the birds will want to sit here again.\""
+    },
+    {
+      "t": 24.254,
+      "what": "reads a toast: \"+3 Scrap\""
+    },
+    {
+      "t": 24.254,
+      "what": "reads a toast: \"An arch of climbing roses over a seat. Look for empty plots in restored ground.\""
+    },
+    {
+      "t": 24.257,
+      "what": "walks to a pile of scrap at 0, 16",
+      "why": "the card wants 2 more Scrap"
+    },
+    {
+      "t": 30.616,
+      "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
+    },
+    {
+      "t": 32.037,
+      "what": "reads a toast: \"+3 Scrap\""
+    },
+    {
+      "t": 32.04,
+      "what": "walks to a pile of seeds at 3, 15",
+      "why": "the card wants 6 more Seeds"
+    },
+    {
+      "t": 34.35,
+      "what": "faces it: the prompt says \"E Hold Salvage Seeds\""
+    },
+    {
+      "t": 35.772,
+      "what": "reads a toast: \"+3 Seeds\""
+    },
+    {
+      "t": 35.775,
+      "what": "walks to a pile of seeds at 3, 15",
+      "why": "the card wants 3 more Seeds"
+    },
+    {
+      "t": 37.315,
+      "what": "faces it: the prompt says \"E Hold Salvage Seeds\""
+    },
+    {
+      "t": 38.733,
+      "what": "reads a toast: \"+3 Seeds\""
+    },
+    {
+      "t": 38.735,
+      "what": "walks to the fountain with everything it asks for",
+      "why": "the card says \"Bring 20 Scrap and 6 Seeds to the fountain\""
+    },
+    {
+      "t": 44.608,
+      "what": "faces it: the prompt says \"E Bring things to the fountain\""
+    },
+    {
+      "t": 44.631,
+      "what": "the fountain's panel opens: presses \"Give all I have\""
+    },
+    {
+      "t": 45.886,
+      "what": "reads the card: \"Park tiles restored · 32 of 60\""
+    },
+    {
+      "t": 45.892,
+      "what": "walks to dead ground at 6, 9 and pulses",
+      "why": "the card counts \"Park tiles restored · 32 of 60\""
+    },
+    {
+      "t": 47.142,
+      "what": "reads the card: \"Park tiles restored · 33 of 60\""
+    },
+    {
+      "t": 47.149,
+      "what": "walks to dead ground at 7, 9 and pulses",
+      "why": "the card counts \"Park tiles restored · 33 of 60\""
+    },
+    {
+      "t": 48.39,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 33 of 60\""
+    },
+    {
+      "t": 49.357,
+      "what": "reads the card: \"Park tiles restored · 34 of 60\""
+    },
+    {
+      "t": 49.362,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 34 of 60\""
+    },
+    {
+      "t": 50.335,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 34 of 60\""
+    },
+    {
+      "t": 51.306,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 34 of 60\""
+    },
+    {
+      "t": 52.288,
+      "what": "reads the card: \"Park tiles restored · 35 of 60\""
+    },
+    {
+      "t": 52.293,
+      "what": "walks to dead ground at 6, 8 and pulses",
+      "why": "the card counts \"Park tiles restored · 35 of 60\""
+    },
+    {
+      "t": 53.02,
+      "what": "walks to dead ground at 7, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 35 of 60\""
+    },
+    {
+      "t": 53.992,
+      "what": "reads the card: \"Park tiles restored · 36 of 60\""
+    },
+    {
+      "t": 53.997,
+      "what": "walks to dead ground at 5, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 36 of 60\""
+    },
+    {
+      "t": 54.987,
+      "what": "reads the card: \"Park tiles restored · 37 of 60\""
+    },
+    {
+      "t": 54.991,
+      "what": "walks to dead ground at 5, 8 and pulses",
+      "why": "the card counts \"Park tiles restored · 37 of 60\""
+    },
+    {
+      "t": 55.956,
+      "what": "reads the card: \"Park tiles restored · 38 of 60\""
+    },
+    {
+      "t": 55.961,
+      "what": "walks to dead ground at 6, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 38 of 60\""
+    },
+    {
+      "t": 57.188,
+      "what": "reads the card: \"Park tiles restored · 39 of 60\""
+    },
+    {
+      "t": 57.192,
+      "what": "walks to dead ground at 7, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 39 of 60\""
+    },
+    {
+      "t": 58.156,
+      "what": "reads the card: \"Park tiles restored · 40 of 60\""
+    },
+    {
+      "t": 58.16,
+      "what": "walks to dead ground at 5, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 40 of 60\""
+    },
+    {
+      "t": 59.142,
+      "what": "reads the card: \"Park tiles restored · 42 of 60\""
+    },
+    {
+      "t": 59.147,
+      "what": "walks to dead ground at 8, 10 and pulses",
+      "why": "the card counts \"Park tiles restored · 42 of 60\""
+    },
+    {
+      "t": 60.383,
+      "what": "walks to dead ground at 8, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 42 of 60\""
+    },
+    {
+      "t": 61.359,
+      "what": "reads the card: \"Park tiles restored · 43 of 60\""
+    },
+    {
+      "t": 61.37,
+      "what": "walks to dead ground at 7, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 43 of 60\""
+    },
+    {
+      "t": 62.59,
+      "what": "reads a toast: \"The planter trees leaf out and bunting goes up on the bandstand.\""
+    },
+    {
+      "t": 62.59,
+      "what": "reads a toast: \"Tables, parasols and a planter of herbs. Look for empty plots in restored ground.\""
+    },
+    {
+      "t": 62.59,
+      "what": "reads the card: \"Park tiles restored · 45 of 60\""
+    },
+    {
+      "t": 62.597,
+      "what": "walks to dead ground at 6, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 45 of 60\""
+    },
+    {
+      "t": 63.567,
+      "what": "reads the card: \"Park tiles restored · 46 of 60\""
+    },
+    {
+      "t": 63.572,
+      "what": "walks to dead ground at 8, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 46 of 60\""
+    },
+    {
+      "t": 64.55,
+      "what": "reads the card: \"Park tiles restored · 47 of 60\""
+    },
+    {
+      "t": 64.555,
+      "what": "walks to dead ground at 9, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 47 of 60\""
+    },
+    {
+      "t": 65.799,
+      "what": "reads the card: \"Park tiles restored · 48 of 60\""
+    },
+    {
+      "t": 65.804,
+      "what": "walks to dead ground at 9, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 48 of 60\""
+    },
+    {
+      "t": 66.775,
+      "what": "reads the card: \"Park tiles restored · 49 of 60\""
+    },
+    {
+      "t": 66.783,
+      "what": "walks to dead ground at 8, 13 and pulses",
+      "why": "the card counts \"Park tiles restored · 49 of 60\""
+    },
+    {
+      "t": 68.016,
+      "what": "reads the card: \"Park tiles restored · 50 of 60\""
+    },
+    {
+      "t": 68.021,
+      "what": "walks to dead ground at 7, 13 and pulses",
+      "why": "the card counts \"Park tiles restored · 50 of 60\""
+    },
+    {
+      "t": 68.998,
+      "what": "reads the card: \"Park tiles restored · 51 of 60\""
+    },
+    {
+      "t": 69.003,
+      "what": "walks to dead ground at 9, 13 and pulses",
+      "why": "the card counts \"Park tiles restored · 51 of 60\""
+    },
+    {
+      "t": 69.983,
+      "what": "reads the card: \"Park tiles restored · 52 of 60\""
+    },
+    {
+      "t": 69.988,
+      "what": "walks to dead ground at 10, 12 and pulses",
+      "why": "the card counts \"Park tiles restored · 52 of 60\""
+    },
+    {
+      "t": 71.216,
+      "what": "reads the card: \"Park tiles restored · 54 of 60\""
+    },
+    {
+      "t": 71.221,
+      "what": "walks to dead ground at 10, 11 and pulses",
+      "why": "the card counts \"Park tiles restored · 54 of 60\""
+    },
+    {
+      "t": 72.198,
+      "what": "reads the card: \"Park tiles restored · 55 of 60\""
+    },
+    {
+      "t": 72.202,
+      "what": "walks to dead ground at 10, 13 and pulses",
+      "why": "the card counts \"Park tiles restored · 55 of 60\""
+    },
+    {
+      "t": 73.181,
+      "what": "reads the card: \"Park tiles restored · 56 of 60\""
+    },
+    {
+      "t": 73.186,
+      "what": "walks to dead ground at 9, 14 and pulses",
+      "why": "the card counts \"Park tiles restored · 56 of 60\""
+    },
+    {
+      "t": 74.406,
+      "what": "reads the card: \"Park tiles restored · 57 of 60\""
+    },
+    {
+      "t": 74.41,
+      "what": "walks to dead ground at 8, 14 and pulses",
+      "why": "the card counts \"Park tiles restored · 57 of 60\""
+    },
+    {
+      "t": 75.384,
+      "what": "reads the card: \"Park tiles restored · 58 of 60\""
+    },
+    {
+      "t": 75.388,
+      "what": "walks to dead ground at 10, 14 and pulses",
+      "why": "the card counts \"Park tiles restored · 58 of 60\""
+    },
+    {
+      "t": 76.353,
+      "what": "reads the card: \"Park tiles restored · 59 of 60\""
+    },
+    {
+      "t": 76.357,
+      "what": "walks to dead ground at 9, 15 and pulses",
+      "why": "the card counts \"Park tiles restored · 59 of 60\""
+    },
+    {
+      "t": 89.016,
+      "what": "★ the fountain wakes"
+    },
+    {
+      "t": 89.23,
+      "what": "reads a toast: \"They glide through the clean water.\""
+    },
+    {
+      "t": 89.23,
+      "what": "reads a toast: \"Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open.\""
+    },
+    {
+      "t": 89.23,
+      "what": "reads the card: \"Bring 30 Copper, 30 Timber and 20 Glass to the fountain\""
+    },
+    {
+      "t": 89.233,
+      "what": "walks to the barricade at 16, 8",
+      "why": "a toast said to pry one open"
+    },
+    {
+      "t": 93.08,
+      "what": "faces it: the prompt says \"E Hold Pry\""
+    },
+    {
+      "t": 96.119,
+      "what": "★ first barricade pried (g-oldMarket)"
+    }
+  ],
+  "errors": []
+}
