@@ -113,7 +113,10 @@ export async function boot(canvas: HTMLCanvasElement) {
     padStyle,
     settingsOpen: () => !!screen?.isOpen,
     closeSettings: () => screen?.close(),
-    settingsTab: (dir) => screen?.tab(dir, true),
+    settingsTab: (dir) => {
+      screen?.tab(dir);
+      screen?.focusBody(); // #616: on the new tab's first setting
+    },
     settings: (parent, back) => {
       onBack = back;
       const mig = migrateBindings(settings.keys || settings.pad ? { v: settings.bindingsV, keys: settings.keys, pad: settings.pad } : undefined);

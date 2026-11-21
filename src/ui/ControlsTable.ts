@@ -1,6 +1,7 @@
 import { ACTION, ACTIONS, type Action, type Bindings, type BindResult, GROUPS, keyLabel } from '../app/Bindings';
 import { GLYPH_SETTINGS, type GlyphSetting, keyGlyph, padGlyph, padName, type PadStyle } from './Glyphs';
 import { type BarItem, fillGlyphs, glyph, icon, setBar } from './PanelShell';
+import { stepperHtml } from './Stepper';
 
 /**
  * E22.4 (#341): Settings › Controls. Two columns, keyboard and mouse, and gamepad, with every action listed in
@@ -68,7 +69,7 @@ export class ControlsTable {
     this.listening(undefined);
     this.body.innerHTML =
       `<div class="ctl-top"><p class="ctl-help">Choose a key or button, then press the new one. Esc (or Menu on the pad) cancels; Backspace clears a key.</p>` +
-      `<label for="set-glyphs">Button pictures<select id="set-glyphs" data-key="glyphs">${GLYPH_SETTINGS.map(([v, l]) => `<option value="${v}" ${v === gs ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>` +
+      `<div class="ctl-glyphs" data-ring-host><span id="set-glyphs-l">Button pictures</span>${stepperHtml({ id: 'set-glyphs', label: 'Button pictures', options: GLYPH_SETTINGS, value: gs, attrs: 'data-key="glyphs" aria-labelledby="set-glyphs-l"' })}</div></div>` +
       `<p class="ctl-note" role="status" aria-live="polite">${esc(this.note)}</p>${ask}` +
       `<div class="ctl-table" role="table" aria-label="Controls"><div class="ctl-row ctl-headrow" role="row"><span role="columnheader">Action</span><span role="columnheader">Keyboard and mouse</span><span role="columnheader">Gamepad</span></div>` +
       GROUPS.map((g) => {

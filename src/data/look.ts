@@ -143,3 +143,20 @@ export interface TierSpec {
   dof: boolean;
   rim: boolean;
 }
+
+/**
+ * #633: the Glow setting's steps (Settings › Display): a scale on bloom's strength. Normal (1) is the look the game
+ * shipped with; Off turns the halo off but leaves the post stack (and lit windows and lamps themselves) as they are.
+ */
+export const GLOW_STEPS: readonly [value: string, label: string][] = [
+  ['0', 'Off'],
+  ['0.5', 'Soft'],
+  ['1', 'Normal'],
+  ['1.6', 'Strong'],
+];
+
+/** Bloom's strength for the tier (`on`), how far into night it is (0 … 1) and the Glow setting (#633). */
+export function glowIntensity(on: boolean, night: number, glow = 1): number {
+  const B = LOOK.bloom;
+  return on ? B.intensity * (1 + (B.night - 1) * night) * Math.max(0, glow) : 0;
+}

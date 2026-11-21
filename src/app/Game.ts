@@ -65,6 +65,8 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { Waymark } from '../rendering/Waymark';
+import { Trail } from '../rendering/Trail';
+import { trailRoute } from '../gameplay/TrailRoute';
 import { WAYMARK } from '../data/waymark';
 import { PowerLines } from '../rendering/PowerLines';
 import { PowerOverlay } from '../rendering/PowerOverlay';
@@ -321,6 +323,8 @@ export class Game {
   private goal?: GoalSpot;
   private goalT = 0;
   private waymark!: Waymark;
+  /** #632: Show me where's trail on the ground */
+  private trail!: Trail;
   /** E19.4.1 (#260): photo mode and its controls bar */
   private photo!: PhotoMode;
   private photoBar!: PhotoBar;
@@ -470,6 +474,7 @@ export class Game {
     };
     this.overlays = new Overlays(this.sim, this.scene.world);
     this.waymark = new Waymark(this.sim, this.scene.world);
+    this.trail = new Trail(this.sim, this.scene.world);
 
     this.hud = new Hud(
       this.sim,
@@ -861,6 +866,7 @@ export class Game {
       this.app.resizeCanvas();
     }
     this.look.setTier(this.gfxTier);
+    this.look.post.setGlow(s.glow ?? 1); // #633
     // E22.11: the paused world dims; it blurs too except on the Low and Deck presets (dim only).
     document.body.classList.toggle('no-blur', this.deck || this.gfxTier === 'low');
     this.hud.gfxTier = this.gfxTier;
@@ -1019,7 +1025,7 @@ export class Game {
     this.settingsUi = new SettingsScreen(this.hud.root, {
       settings: this.settings,
       set: (k, v) => this.changeSetting(k, v),
-      rows: (tab) => settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml() }),
+      rows: (tab) => settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml(), glowOff: !LOOK.tiers[this.gfxTier].bloom }),
       controls: (body) => this.renderControls(body),
       onClose: () => {
         this.cancelListen();
@@ -1061,7 +1067,7 @@ export class Game {
     if (k === 'sfxVolume' || k === 'musicVolume') return this.setVolume(k, Number(v));
     if (k === 'gfx') {
       this.setGraphics(v as GfxSetting);
-      this.settingsUi.refresh();
+      this.settingsUi.refresh(); // the Glow row says when a tier has no glow (#633)
       return;
     }
     this.setSetting(k, v);
@@ -1295,6 +1301,7 @@ export class Game {
             this.overlays.hideRadius();
             this.overlays.showGrid(false);
             this.waymark.hide();
+            this.trail.clear();
             this.hud.hideTip();
           } else {
             const t = this.hud.currentTool;
@@ -1495,8 +1502,10 @@ export class Game {
 
   /** LB / RB, Q / E: the tabs of the panel on top. */
   private panelTab(dir: number) {
-    if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
-    else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
+    if (this.settingsUi.isOpen) {
+      this.settingsUi.tab(dir);
+      this.settingsUi.focusBody(); // #616: on the new tab's first setting
+    } else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
     else if (this.hud.craft.isOpen) this.hud.craft.tab(dir, true);
     else if (this.hud.trayOpen) this.hud.buildMenu.tab(dir);
   }
@@ -1553,23 +1562,22 @@ export class Game {
   }
 
   /**
-   * #605 (E24): Show me where. The camera turns to look towards the current goal spot (ui/GoalSpot.ts) from behind
-   * bloombot, so the way is in view, where the waymark's light stands on it (#609; for a while it shows even at the
-   * potter-about pace, which otherwise keeps the world unmarked). Sitting keeps its own calm view. False with nowhere
-   * to go.
+   * #605 (E24): Show me where. A trail of glowing dots runs along the ground from bloombot to the current goal spot
+   * (ui/GoalSpot.ts) by a way bloombot can walk (#632), to where the waymark's light stands on it (#609; for a while
+   * it shows even at the potter-about pace, which otherwise keeps the world unmarked). The camera stays with
+   * bloombot. When nothing walkable gets there yet, the trail goes as close as it can and a note says why. False
+   * with nowhere to go. `to`: a spot other than the goal's (the review shots use it).
    */
   private wayMark?: { roofId: string; x: number; z: number; until: number };
-  private showWhere(): boolean {
+  private showWhere(to?: GoalSpot): boolean {
     if (!this.bot || this.cinematic || this.photo.active) return false;
-    const spot = goalSpot(this.sim, this.hud.objective.current);
+    const spot = to ?? goalSpot(this.sim, this.hud.objective.current);
     if (!spot) return false;
     this.wayMark = { roofId: spot.roofId, x: spot.cell.x, z: spot.cell.z, until: performance.now() + WAY_MARK_MS };
-    if (this.resting?.active) return true;
-    const p = this.bot.pose;
-    const dx = spot.x - p.x;
-    const dz = spot.z - p.z;
-    if (Math.hypot(dx, dz) > 1.5) this.camera.turnTo((Math.atan2(dx, dz) * 180) / Math.PI + 180);
-    this.camIdle = 0; // the swing back behind bloombot waits for the player to walk on
+    // #632: a trail on the ground along the walkable way there; the camera stays with bloombot
+    const route = trailRoute(this.sim, this.bot.walker, this.bot.pose, spot);
+    this.trail.show(route);
+    if (!route.reached && route.why) this.hud.toast(`${WORDS.trail.stops}<small>${route.why}</small>`, '', 4);
     return true;
   }
 
@@ -4841,6 +4849,7 @@ export class Game {
     this.sim.drones.focus = view ? { x: (view.x0 + view.x1) / 2, z: (view.z0 + view.z1) / 2, radius: Math.hypot(view.x1 - view.x0, view.z1 - view.z0) / 2 + 24 } : undefined;
     // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
     this.syncPanelPause();
+    this.padFocus?.tick(); // #616: a menu that just opened starts with its first control in focus
     const paused = this.pause.paused;
     // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
     this.hud.craft.update(paused ? this.realDt() : dt, paused);
@@ -4970,6 +4979,8 @@ export class Game {
       const marked = this.wayMarked();
       const shown = !this.cinematic && !this.photo.active && !this.building() && (!this.settings.potter || marked);
       this.waymark.update(dt, this.goal, shown, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
+      this.trail.reducedMotion = !!this.settings.reducedMotion;
+      this.trail.update(dt, !this.cinematic && !this.photo.active && !this.building(), this.bot.pose, 1 - this.dayNight.light, this.camera.entity.getPosition());
       const [cx, cy, cz] = this.bot.world();
       this.drones.companion = { x: cx, y: cy, z: cz, facing: this.bot.pose.facing };
     }

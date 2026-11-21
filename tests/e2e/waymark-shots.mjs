@@ -2,7 +2,7 @@
 // the deck graphics), by day and at night, into docs/review/waymark/ (or argv[2]).
 //   npx vite build && GPU=1 node tests/e2e/waymark-shots.mjs [outDir]
 // Each goal is set up through the game's own state (as a player would reach it), bloombot is put a little way off,
-// and the shot shows the minimap's pin and the light standing on the goal. Close crops of the minimap show the pin
+// and the shot shows the minimap's pin, the light standing on the goal and Show me where's trail (#632). Close crops of the minimap show the pin
 // on the rim (goal off the map), the barricades and the hatched shut regions. Fails on any page error, and when the
 // pin or the light is missing where the goal card has a goal.
 import { createRequire } from 'node:module';
@@ -42,9 +42,11 @@ try {
     await page.evaluate(({ x, z, facing }) => {
       const b = window.solarbloom.bot;
       Object.assign(b.pose, { x, z, facing });
+      // the follow camera, straight behind bloombot (as after walking that way)
+      window.solarbloom.camera.turnTo((facing * 180) / Math.PI + 180, true);
     }, { x, z, facing });
     await page.waitForTimeout(1500);
-    // Show me where (#605): the camera turns to look along the way to the goal, as a player would ask it to
+    // Show me where (#605): the trail runs along the ground to the goal (#632); the camera stays behind bloombot
     await page.keyboard.press('KeyH');
     await page.waitForTimeout(wait);
   };

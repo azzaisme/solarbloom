@@ -82,6 +82,8 @@ export interface Settings {
   uiScale?: number;
   /** Phase 5 E16: fireflies over lush tiles (ambience only). */
   fireflies?: boolean;
+  /** #633: the glow round lamps and lit windows (bloom): 0 Off, 0.5 Soft, 1 Normal (unset), 1.6 Strong. */
+  glow?: number;
   /**
    * E19.4.2 / E20.7 (#261, #290): "Show numbers": rates, net income, time-to-afford and other secondary numbers.
    * Off (or never chosen) is the calm HUD, the default.

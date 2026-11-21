@@ -101,6 +101,16 @@ export const WORDS = {
     /** a count, only for things gathered or restored by hand */
     count: (n: number, of: number) => `${n} of ${of}`,
   },
+  /** #632: Show me where's trail, when it can't go all the way: what stops it, and what to do about it */
+  trail: {
+    stops: 'The path stops here',
+    hidden: "Bloombot can't get any further this way yet. The card at the top says what to do next.",
+    water: "The water's too deep to wade here. Bloombot learns to hover over water at the fountain later on.",
+    level: "That's up on a roof, and Bloombot can't get up there from here yet. The card at the top says what to do next.",
+    blocked: 'Something is in the way. Walk a little closer and press Show me where again.',
+    /** a shut way in that bloombot can open already */
+    openNow: 'Walk up to it. Bloombot can open it now.',
+  },
   gauges: {
     energy: 'Energy',
     water: 'Water',
