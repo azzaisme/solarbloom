@@ -252,11 +252,26 @@ export class BloombotVisuals {
     }
     // a glowing cell on top of the pack for each level of Bigger charge
     const glow = this.material('bloombot_glow');
-    for (let i = 0; i < Math.min(3, g.cells); i++) piece(`grow-cell-${i}`, 'capsule', glow, 'Spine02', [(i - 1) * 0.06, 0.17, -0.25], [0, 0, 0], [0.032, 0.045, 0.032]);
+    // (#623: the fourth and fifth sit a little lower at either end of the row, tipped outward)
+    const cells: { at: [number, number, number]; tilt: number }[] = [
+      { at: [-0.06, 0.17, -0.25], tilt: 0 },
+      { at: [0, 0.17, -0.25], tilt: 0 },
+      { at: [0.06, 0.17, -0.25], tilt: 0 },
+      { at: [0.115, 0.15, -0.25], tilt: -25 },
+      { at: [-0.115, 0.15, -0.25], tilt: 25 },
+    ];
+    for (let i = 0; i < Math.min(cells.length, g.cells); i++) piece(`grow-cell-${i}`, 'capsule', glow, 'Spine02', cells[i].at, [0, 0, cells[i].tilt], [0.032, 0.045, 0.032]);
     // a pocket on the pack for each level of Roomier backpack: left side, right side, then the bottom
     const fabric = this.material('bloombot_fabric');
-    const pockets: [number, number, number][] = [[0.15, -0.02, -0.2], [-0.15, -0.02, -0.2], [0, -0.12, -0.24]];
-    for (let i = 0; i < Math.min(3, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i], [0, 0, 0], i < 2 ? [0.04, 0.085, 0.08] : [0.13, 0.045, 0.055]);
+    // (#623: then a small one high on each side, above the first two)
+    const pockets: { at: [number, number, number]; size: [number, number, number] }[] = [
+      { at: [0.15, -0.02, -0.2], size: [0.04, 0.085, 0.08] },
+      { at: [-0.15, -0.02, -0.2], size: [0.04, 0.085, 0.08] },
+      { at: [0, -0.12, -0.24], size: [0.13, 0.045, 0.055] },
+      { at: [0.15, 0.08, -0.2], size: [0.036, 0.05, 0.065] },
+      { at: [-0.15, 0.08, -0.2], size: [0.036, 0.05, 0.065] },
+    ];
+    for (let i = 0; i < Math.min(pockets.length, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i].at, [0, 0, 0], pockets[i].size);
     this.placeGrowth();
   }
 

@@ -7,6 +7,7 @@ const tier3 = (m: { tier?: number }) => tierOf(m) >= 3;
 const tierOutput = (m: { tier?: number; project?: { stage: number } }, t2: number) =>
   !isBuilt(m) ? 0 : tier3(m) ? TUNING.super.outputMult : tier2(m) ? t2 : 1;
 import { TUNING } from '../data/tuning';
+import { RESEARCH } from '../data/research';
 import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADES } from '../data/upgrades';
 import type { MachineData } from '../core/types';
 import type { Sim } from './Sim';
@@ -72,8 +73,12 @@ export class UpgradeSystem {
 
   // ───────────── global effects ─────────────
   get broadExtra() {
-    // E23.6.2: the Wider pulse research upgrade, a tile further a level
-    return this.level('broadPulse') + (this.sim.research?.effect('pulseRadius') ?? 0);
+    // E23.6.2: the Wider pulse research upgrade: its first levels step the pulse up a tier each (#623: up to three)
+    return this.level('broadPulse') + Math.min(RESEARCH.pulseTierLevels, this.sim.research?.level('pulseRadius') ?? 0);
+  }
+  /** #623: Wider pulse's late levels (4 and 5): a flat tile each on the pulse's radius */
+  get broadTiles() {
+    return Math.max(0, (this.sim.research?.level('pulseRadius') ?? 0) - RESEARCH.pulseTierLevels) * RESEARCH.pulseTilesPerLateLevel;
   }
   get overchargeEvery() {
     const l = this.level('overcharge');

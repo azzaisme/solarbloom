@@ -38,7 +38,8 @@ const QUICK = [
   // E23 polish (#596): shaders warm behind the loading screen
   'shader-warmup',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
-  'clear-path', 'bloombot-page',
+  'clear-path',
+  'bloombot-levels', 'bloombot-page',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
   // E24 (#609): the way marked on the map and in the world
