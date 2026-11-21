@@ -52,6 +52,8 @@ const QUICK = [
   'bot-green',
   // #635: the skyline fades into fog and stays behind the world
   'fog-skyline',
+  // #662: toasts that come together each get read; nothing lands under a Keeper's bubble
+  'toast-queue',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

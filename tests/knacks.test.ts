@@ -102,7 +102,7 @@ describe('#625: each Keeper teaches Bloombot a knack', () => {
     expect(b).toBeCloseTo(POWER.charger.rate * T.charger, 5);
   });
 
-  it('Eye for value (Tally): every fourth dig at a junk pile turns up one extra piece', () => {
+  it('Eye for value (Tally): every fourth dig at a glinting pile turns up one extra piece', () => {
     const pile = PARK_SET.piles.find((p) => fresh().salvage.left(p.id) >= 4 * SALVAGE.perTake)!;
     const digs = (sim: Sim) => {
       const got: number[] = [];

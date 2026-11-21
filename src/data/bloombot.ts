@@ -21,7 +21,7 @@ export interface ParkGrowthDef {
 export const PARK_GROWTH: readonly ParkGrowthDef[] = [
   { step: 1, id: 'spill', tiles: 20, name: 'Spreading pulse', does: 'A pulse on dry ground wakes the patch beside it too.', part: 'bud' },
   { step: 2, id: 'thrift', tiles: 40, name: 'Steady charge', does: 'Pulses, moves and running use a tenth less charge.', part: 'collar' },
-  { step: 3, id: 'quick', tiles: 60, name: 'Nimble hands', does: 'Digging things out of a junk pile takes a quarter less time.', part: 'cuffs' },
+  { step: 3, id: 'quick', tiles: 60, name: 'Nimble hands', does: 'Digging things out of a glinting pile takes a quarter less time.', part: 'cuffs' },
 ];
 
 export const PARK_GROWTH_TUNING = {
@@ -56,8 +56,8 @@ export interface KnackDef {
 /** In map order, the order the page lists them and Bloombot wears them. */
 export const KNACKS: readonly KnackDef[] = [
   { keeper: 'pylon', name: 'Quick charge', does: 'Sitting at a charger fills Bloombot a fifth faster.', taught: "Here's a trick. Sit square on a charger and the power comes in quicker." },
-  { keeper: 'tally', name: 'Eye for value', does: 'Every fourth dig at a junk pile turns up one extra piece.', taught: "Junk is never just junk. Look twice and there's one more good piece in there." },
-  { keeper: 'tide', name: 'Beachcomber', does: 'Junk piles you have dug fill back up a fifth sooner.', taught: 'The sea always brings things back. The piles you dig will fill up again sooner than you think.' },
+  { keeper: 'tally', name: 'Eye for value', does: 'Every fourth dig at a glinting pile turns up one extra piece.', taught: "Junk is never just junk. Look twice and there's one more good piece in there." },
+  { keeper: 'tide', name: 'Beachcomber', does: 'Glinting piles you have dug fill back up a fifth sooner.', taught: 'The sea always brings things back. The piles you dig will fill up again sooner than you think.' },
   { keeper: 'moss', name: 'Green thumb', does: 'Bloombot gathers a quarter more Greens from each patch.', taught: 'Mm. Clip just above the leaf. More comes away that way.' },
   { keeper: 'sluice', name: 'Float along', does: 'Running uses a quarter less charge.', taught: "Float, don't push. The water taught me that. Sorry. You'll go further on the same charge." },
   { keeper: 'tock', name: 'Good timing', does: 'The Mega Pulse is ready a quarter sooner.', taught: 'Pulse on the beat and it adds up. Your big pulse will be ready sooner. Promptly.' },
