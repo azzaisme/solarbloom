@@ -19,7 +19,7 @@ export interface MoveTrip {
 
 /**
  * E25 (#626): the places the level II moves are for. Each move learned at the fountain gets a second level, worked
- * out at the workshop table (Research `moveLevel`), and places out in the city that need it:
+ * out at the crafting table (Research `moveLevel`), and places out in the city that need it:
  * - Pry II forces the sealed vaults (hold Interact, VAULTS) and takes what is inside;
  * - Hover II goes from the jetty's end out to the sandbar;
  * - Climb II climbs straight up a low wall onto the ruins' roofs (any roof in MOVE_LAND, from the cell beside it);
@@ -61,7 +61,7 @@ export class MoveSpots {
     if (this.opened(v.id)) return 'Already open';
     const lv = this.level('pry');
     if (lv === 0) return 'A heavy iron door, shut tight. Bloombot has to learn to pry at the fountain first.';
-    if (lv === 1) return 'This door is too heavy to pry open yet. The workshop table in the house can work out Pry II.';
+    if (lv === 1) return 'This door is too heavy to pry open yet. The crafting table in the house can work out Pry II.';
     return this.outOfCharge('pry');
   }
 
@@ -114,7 +114,7 @@ export class MoveSpots {
     const lv = this.level(t.move);
     const name = ABILITIES[t.move].name;
     const learn = `Bloombot has to learn ${name} at the fountain first.`;
-    const workshop = `The workshop table in the house can work out ${name} II.`;
+    const workshop = `The crafting table in the house can work out ${name} II.`;
     if (t.move === 'hover') {
       if (lv === 0) return `Too far to wade. ${learn}`;
       if (lv === 1) return `Too far to hover yet. ${workshop}`;

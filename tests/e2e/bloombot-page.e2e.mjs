@@ -169,7 +169,7 @@ try {
     await page.focus('#bb-backpack');
     await page.waitForTimeout(200);
     p = await page.evaluate(pageNow);
-    check(/Roomier backpack/.test(p.detail) && /Go to the workshop table in the house and make level 3 in its Upgrade tab\. It takes /.test(p.detail), `${L}: the upgrade in focus says how to get its next level ("${p.detail}")`);
+    check(/Roomier backpack/.test(p.detail) && /Go to the crafting table in the house and make level 3 in its Upgrade tab\. It takes /.test(p.detail), `${L}: the upgrade in focus says how to get its next level ("${p.detail}")`);
     await shot('6-page-late');
     await page.keyboard.press('ArrowUp');
     await page.waitForTimeout(200);

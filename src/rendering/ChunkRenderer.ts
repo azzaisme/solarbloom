@@ -13,7 +13,7 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
-import { inSurfBand, onJetty, pileById, pondCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
+import { inSurfBand, moveLandAt, onJetty, pileById, pondCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
@@ -34,6 +34,7 @@ import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
+import { MOVE_TRIPS } from '../data/moveSpots';
 
 /** Small seeded RNG for decoration placement (looks only). */
 class VRng {
@@ -848,6 +849,112 @@ export class ChunkRenderer {
   }
 
   /**
+   * E25 (#626): the places the level II moves reach, dressed so they read as places, not plinths. The ruins' roofs
+   * are old buildings: their walls (the retaining wall's stone and courses, drawn by terrace) get a dark doorway and
+   * bricked-up windows, the top edge is broken stubs of wall, and a few stones lie fallen on top. The boathouse is
+   * planked, with eaves boards and a wide boat door to the water. The sandbar has rocks, shells, driftwood and weed.
+   */
+  private moveLand(b: Sink, t: TileData, h: number, th: number) {
+    const ml = moveLandAt(t.x, t.z);
+    if (!ml) return;
+    const P = PALETTE.props;
+    const r = (k: number) => dhash(t.x, t.z, 240 + k);
+    const x = t.x + 0.5;
+    const z = t.z + 0.5;
+    if (ml.ground === 'sand') {
+      // keep the tiles a trip lands on clear
+      if (MOVE_TRIPS.some((m) => m.to[0] === t.x && m.to[1] === t.z)) return;
+      const y = th + 0.08; // the sand's top
+      if (r(0) < 0.55) b.add('sphere', P.seaRocks[r(1) < 0.5 ? 0 : 1], [x + (r(2) - 0.5) * 0.5, y + 0.04, z + (r(3) - 0.5) * 0.5], [0.32 + r(4) * 0.22, 0.2, 0.26 + r(5) * 0.2]);
+      if (r(6) < 0.45) {
+        const along = r(7) < 0.5;
+        const len = 0.7 + r(8) * 0.4;
+        b.add('box', P.driftwood, [x + (r(9) - 0.5) * 0.4, y + 0.03, z + (r(10) - 0.5) * 0.4], [along ? len : 0.1, 0.08, along ? 0.1 : len]);
+      }
+      for (let i = 0; i < 3; i++) if (r(11 + i) < 0.5) b.add('sphere', P.shells[i % P.shells.length], [x + (r(14 + i) - 0.5) * 0.8, y + 0.02, z + (r(17 + i) - 0.5) * 0.8], [0.1, 0.05, 0.08]);
+      if (r(20) < 0.45) b.add('box', P.seaweed, [x + (r(21) - 0.5) * 0.5, y + 0.006, z + (r(22) - 0.5) * 0.5], [0.3 + r(23) * 0.2, 0.01, 0.2 + r(24) * 0.2]);
+      return;
+    }
+    if (ml.ground !== 'roof') return;
+    // the retaining wall terrace draws: its thickness and the coping's lip over the face
+    const W = { thick: 0.12, copingLip: 0.03 };
+    const boathouse = ml.id === 'boathouseRoof';
+    const top = th + 0.08;
+    // the middle cell of each side gets the door (the side to the water for the boathouse, else the south side)
+    const mid = (a: number, w: number, c: number) => c === a + Math.floor(w / 2);
+    const water = (dx: number, dz: number) => this.sim.grid.peek(GROUND, t.x + dx, t.z + dz)?.feature === 'water';
+    const doorSide = (dx: number, dz: number) => (boathouse ? water(dx, dz) || (dz === 1 && ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, c]) => this.waterBeside(ml, a, c))) : dz === 1);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      // a wall drops to a lower neighbour on this side (the ruins stand on flat ground, no ramps beside them)
+      const theirs = edgeHeight(t.x + dx, t.z + dz, -dx, -dz);
+      if (typeof theirs !== 'number' || theirs >= ml.level) continue;
+      const low = theirs;
+      const ground = h + levelY(low);
+      const H = top - ground;
+      const fx = x + dx * (0.5 + W.thick / 2 + 0.004);
+      const fz = z + dz * (0.5 + W.thick / 2 + 0.004);
+      const across = (w: number): [number, number, number] => [dx ? 0.02 : w, 0, dz ? 0.02 : w];
+      const isMid = dx ? mid(ml.z, ml.d, t.z) : mid(ml.x, ml.w, t.x);
+      if (isMid && doorSide(dx, dz) && H > 0.9) {
+        // a doorway (the boathouse's is a wide boat door), dark inside, a stone frame and lintel
+        const dw = boathouse ? 0.86 : 0.5;
+        const dh = Math.min(H - 0.25, boathouse ? 1.0 : 0.9);
+        const [sx, , sz] = across(dw);
+        b.add('box', P.doorwayDark, [fx, ground + dh / 2, fz], [sx, dh, sz]);
+        const frame = boathouse ? PALETTE.wood.deep : PALETTE.stone.shadow;
+        const [lx, , lz] = across(dw + 0.16);
+        b.add('box', frame, [fx + dx * 0.01, ground + dh + 0.05, fz + dz * 0.01], [lx, 0.1, lz]);
+        for (const k of [-1, 1]) b.add('box', frame, [fx + dx * 0.01 + (dx ? 0 : k * (dw / 2 + 0.04)), ground + dh / 2, fz + dz * 0.01 + (dz ? 0 : k * (dw / 2 + 0.04))], [dx ? 0.04 : 0.08, dh, dz ? 0.04 : 0.08]);
+      } else if (H > 1 && r(30 + dx + dz * 2) < (boathouse ? 0.35 : 0.7)) {
+        // a window, bricked up long ago, with a stone sill and lintel
+        const ww = 0.34;
+        const wh = 0.4;
+        const wy = top - 0.42 - wh / 2;
+        const [sx, , sz] = across(ww);
+        b.add('box', P.brickedUp, [fx, wy, fz], [sx, wh, sz]);
+        const [lx, , lz] = across(ww + 0.12);
+        for (const k of [-1, 1]) b.add('box', PALETTE.stone.shadow, [fx + dx * 0.01, wy + k * (wh / 2 + 0.03), fz + dz * 0.01], [lx, 0.06, lz]);
+      }
+      if (boathouse) {
+        // timber cladding under the eaves, and eaves boards along the top of the wall
+        b.add('box', PALETTE.wood.dark, [x + dx * (0.5 + W.thick / 2 + W.copingLip + 0.02), top - 0.04, z + dz * (0.5 + W.thick / 2 + W.copingLip + 0.02)], [dx ? 0.04 : 1, 0.12, dz ? 0.04 : 1]);
+        b.add('box', PALETTE.wood.mid, [x + dx * (0.5 + W.thick / 2 + 0.01), top - 0.3, z + dz * (0.5 + W.thick / 2 + 0.01)], [dx ? 0.02 : 1, 0.34, dz ? 0.02 : 1]);
+        continue;
+      }
+      // the broken top of the old wall: a stub or two of masonry along the edge, with gaps between
+      for (let i = 0; i < 2; i++) {
+        if (r(40 + i * 3 + dx + dz * 5) < 0.45) continue;
+        const along = (r(50 + i + dx * 2 + dz * 3) - 0.5) * 0.7;
+        const sh = 0.12 + r(60 + i + dx + dz * 2) * 0.38;
+        const len = 0.2 + r(70 + i + dx * 3 + dz) * 0.25;
+        const cx = x + dx * (0.5 - W.thick / 2) + (dx ? 0 : along);
+        const cz = z + dz * (0.5 - W.thick / 2) + (dz ? 0 : along);
+        b.add('box', PALETTE.retaining.stone[1], [cx, top + 0.05 + sh / 2, cz], [dx ? W.thick : len, sh, dz ? W.thick : len]);
+        b.add('box', PALETTE.retaining.coping[1], [cx, top + 0.06 + sh, cz], [dx ? W.thick + 0.04 : len + 0.04, 0.04, dz ? W.thick + 0.04 : len + 0.04]);
+      }
+    }
+    if (boathouse) {
+      // the roof is planked: boards across it, a little proud of the ground
+      const surf = th + 0.08;
+      for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.light, [x - 0.375 + i * 0.25, surf + 0.01, z], [0.23, 0.02, 1]);
+      // the ridge beam down the middle row, end to end
+      if (t.z === ml.z + Math.floor(ml.d / 2)) b.add('box', PALETTE.wood.deep, [x, surf + 0.07, z], [1, 0.1, 0.12]);
+      return;
+    }
+    // a few stones fallen on top
+    if (!t.prop && r(80) < 0.4) b.add('box', PALETTE.retaining.stone[1], [x + (r(81) - 0.5) * 0.5, th + 0.08 + 0.07, z + (r(82) - 0.5) * 0.5], [0.18 + r(83) * 0.12, 0.14, 0.14 + r(84) * 0.1]);
+    if (!t.prop && r(85) < 0.3) b.add('sphere', PALETTE.stone.grey, [x + (r(86) - 0.5) * 0.6, th + 0.08 + 0.04, z + (r(87) - 0.5) * 0.6], [0.16, 0.09, 0.13]);
+  }
+
+  /** Is there water beside this piece of move land on that side (anywhere along it)? */
+  private waterBeside(ml: { x: number; z: number; w: number; d: number }, dx: number, dz: number): boolean {
+    const cells: [number, number][] = [];
+    if (dx) for (let k = 0; k < ml.d; k++) cells.push([dx > 0 ? ml.x + ml.w : ml.x - 1, ml.z + k]);
+    else for (let k = 0; k < ml.w; k++) cells.push([ml.x + k, dz > 0 ? ml.z + ml.d : ml.z - 1]);
+    return cells.some(([cx, cz]) => this.sim.grid.peek(GROUND, cx, cz)?.feature === 'water');
+  }
+
+  /**
    * E21.24: the Old City's terraces. Where a neighbour's edge is lower, an old retaining wall (brick and stone,
    * coping on top) drops to it, with ivy once the ground above is restored. A ramp or stair tile is drawn as
    * steps from its low end to its high end. `h` is the chunk's base height, `th` this tile's.
@@ -1351,6 +1458,7 @@ export class ChunkRenderer {
       // E21.24: an Old City tile stands at its terrace's height; cliff faces drop to lower neighbours
       const th = t.level !== undefined ? h + levelY(t.level) : h;
       if (t.level !== undefined) this.terrace(b, t, h, th);
+      if (!v.far) this.moveLand(b, t, h, th);
       if (t.ramp) {
         yield;
         continue;

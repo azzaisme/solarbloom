@@ -336,6 +336,13 @@ const props = {
   /** E25 (#626): the dark inside of a forced vault, and a stash box's iron bands */
   vaultInside: '#2a2622',
   stashBand: '#4a4038',
+  /** E25 (#626): the ruins the level II moves reach: bricked-up windows, a dark doorway; the sandbar's driftwood, shells, weed */
+  brickedUp: '#7a6a5c',
+  doorwayDark: '#2f2a25',
+  driftwood: '#b9a88e',
+  shells: ['#efe4d2', '#e8c6b4', '#d9cbb3'],
+  seaweed: '#3c4529',
+  seaRocks: ['#5f5a52', '#4c4842'],
   rustStain: '#5e3a28',
   stallDead: '#9a8a70',
   stallAlive: '#c9a77a',

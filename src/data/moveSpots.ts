@@ -1,4 +1,4 @@
-// E25 (#626): each move Bloombot learns at the fountain gets a second level, worked out later at the workshop table
+// E25 (#626): each move Bloombot learns at the fountain gets a second level, worked out later at the crafting table
 // (research.ts, the rb-*2 projects), and places out in the world that need it. All data: where the new ground is,
 // where each trip starts and lands, what the vaults and stashes hold. MoveSpots (gameplay) reads it.
 

@@ -11,7 +11,7 @@ import { BLOOMBOT_GROUPS, bloombotRows, howHeading, moveTwoRows } from '../src/u
 import { bannedIn, WORDS } from '../src/ui/words';
 
 /**
- * E25 (#626): each move Bloombot learns gets a second level, worked out later at the workshop table, with places in
+ * E25 (#626): each move Bloombot learns gets a second level, worked out later at the crafting table, with places in
  * the world to use it: sealed vaults for Pry II, a sandbar out at sea for Hover II, ruins' roofs for Climb II and an
  * old pier off the cliff for Glide II. Each of those places holds a stash.
  */
@@ -163,7 +163,7 @@ describe('#626: Pry II and the sealed vaults', () => {
     expect(sim.moves.vaultAt(v.x, v.z)).toBe(v);
     expect(sim.moves.vaultProblem(v)).toBe('A heavy iron door, shut tight. Bloombot has to learn to pry at the fountain first.');
     learn(sim, 'pry');
-    expect(sim.moves.vaultProblem(v)).toBe('This door is too heavy to pry open yet. The workshop table in the house can work out Pry II.');
+    expect(sim.moves.vaultProblem(v)).toBe('This door is too heavy to pry open yet. The crafting table in the house can work out Pry II.');
     expect(sim.moves.openVault(v.id)).toBeUndefined();
     levelTwo(sim, 'pry');
     expect(sim.moves.vaultProblem(v)).toBeUndefined();
@@ -200,7 +200,7 @@ describe('#626: the trips', () => {
     expect(t).toMatchObject({ id: 'jetty-sandbar', move: 'hover', verb: 'Hover over to', name: 'the sandbar', to: [8, 54] });
     expect(sim.moves.tripProblem(t)).toBe('Too far to wade. Bloombot has to learn Hover at the fountain first.');
     learn(sim, 'hover');
-    expect(sim.moves.tripProblem(t)).toBe('Too far to hover yet. The workshop table in the house can work out Hover II.');
+    expect(sim.moves.tripProblem(t)).toBe('Too far to hover yet. The crafting table in the house can work out Hover II.');
     expect(sim.moves.takeTrip(t)).toBe(false);
     levelTwo(sim, 'hover');
     expect(sim.moves.tripProblem(t)).toBeUndefined();
@@ -215,7 +215,7 @@ describe('#626: the trips', () => {
     const t = sim.moves.tripFrom([22, 47], [22, 48], free(walk))!;
     expect(t).toMatchObject({ id: 'cliff-pier', move: 'glide', name: 'the old pier' });
     learn(sim, 'glide');
-    expect(sim.moves.tripProblem(t)).toBe('Too far to glide yet. The workshop table in the house can work out Glide II.');
+    expect(sim.moves.tripProblem(t)).toBe('Too far to glide yet. The crafting table in the house can work out Glide II.');
     levelTwo(sim, 'glide');
     expect(sim.moves.tripProblem(t)).toBeUndefined();
   });
@@ -226,7 +226,7 @@ describe('#626: the trips', () => {
     expect(up).toMatchObject({ move: 'climb', verb: 'Climb up onto', name: 'the old roof', to: [30, 21] });
     expect(sim.moves.tripProblem(up)).toBe('Too high to reach. Bloombot has to learn Climb at the fountain first.');
     learn(sim, 'climb');
-    expect(sim.moves.tripProblem(up)).toBe("There's no ladder here. The workshop table in the house can work out Climb II.");
+    expect(sim.moves.tripProblem(up)).toBe("There's no ladder here. The crafting table in the house can work out Climb II.");
     levelTwo(sim, 'climb');
     expect(sim.moves.tripProblem(up)).toBeUndefined();
     expect(sim.moves.tripFrom([32, 21], [33, 21], free(walk))).toMatchObject({ verb: 'Climb up onto', name: 'the top roof' });
@@ -282,7 +282,7 @@ describe('#626: the Bloombot page shows the second levels', () => {
     const rows = moveTwoRows(sim);
     expect(rows.map((r) => r.name)).toEqual(['Pry II', 'Hover II', 'Climb II', 'Glide II']);
     expect(rows.every((r) => r.kind === 'move2' && r.state === 'later')).toBe(true);
-    expect(rows[0].how).toBe('Bloombot has to learn Hover at the fountain first. Then the workshop table in the house can work out “Pry II”.');
+    expect(rows[0].how).toBe('Bloombot has to learn Hover at the fountain first. Then the crafting table in the house can work out “Pry II”.');
     expect(rows[0].where?.name).toBe('the fountain');
     expect(BLOOMBOT_GROUPS.map((g) => g.kind)).toEqual(['move', 'move2', 'park', 'upgrade']);
     expect(bloombotRows(sim).filter((r) => r.kind === 'move2')).toHaveLength(4);
@@ -294,7 +294,7 @@ describe('#626: the Bloombot page shows the second levels', () => {
     learn(sim, 'pry', 'hover');
     let pry = moveTwoRows(sim)[0];
     expect(pry.state).toBe('next');
-    expect(pry.how).toBe('Go to the workshop table in the house and start “Pry II” in its Research tab. Then Bloombot learns it.');
+    expect(pry.how).toBe('Go to the crafting table in the house and start “Pry II” in its Research tab. Then Bloombot learns it.');
     expect(pry.where?.name).toBe('the house');
     levelTwo(sim, 'pry');
     pry = moveTwoRows(sim)[0];

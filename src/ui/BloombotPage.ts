@@ -109,14 +109,14 @@ function openHow(sim: Sim, p: ProjectDef | undefined, move = false): string {
   const r = sim.research;
   if (!p) return 'Research opens it in the workshop.';
   const name = `“${p.name}”`;
-  if (!r.on) return `The workshop table in the house can work out how to ${move ? 'do' : 'make'} this. It starts once you wake another robot out in the city.`;
-  if (r.running(p.id)) return `The workshop table in the house is working out ${name} now. ${move ? 'Bloombot learns it' : 'You can make this'} once it's done.`;
-  if (r.isOpen(p)) return `Go to the workshop table in the house and start ${name} in its Research tab. Then ${move ? 'Bloombot learns it' : 'you can make this'}.`;
+  if (!r.on) return `The crafting table in the house can work out how to ${move ? 'do' : 'make'} this. It starts once you wake another robot out in the city.`;
+  if (r.running(p.id)) return `The crafting table in the house is working out ${name} now. ${move ? 'Bloombot learns it' : 'You can make this'} once it's done.`;
+  if (r.isOpen(p)) return `Go to the crafting table in the house and start ${name} in its Research tab. Then ${move ? 'Bloombot learns it' : 'you can make this'}.`;
   if ('project' in p.opens) {
     const before = r.project(p.opens.project);
-    return `The workshop table in the house has to work out “${before?.name ?? p.opens.project}” first, then ${name}.`;
+    return `The crafting table in the house has to work out “${before?.name ?? p.opens.project}” first, then ${name}.`;
   }
-  return `Take a close look at ${r.findName(p.opens)} at the workshop table in the house. That opens ${name} in its Research tab.`;
+  return `Take a close look at ${r.findName(p.opens)} at the crafting table in the house. That opens ${name} in its Research tab.`;
 }
 
 /** E25 (#626): where each second level is used, while something there is still shut (a cell to stand on). */
@@ -134,7 +134,7 @@ function moveTwoSpot(sim: Sim, a: AbilityId): BloombotRow['where'] {
 }
 
 /**
- * E25 (#626): each move's second level, worked out at the workshop table once the move itself is learned (Glide II
+ * E25 (#626): each move's second level, worked out at the crafting table once the move itself is learned (Glide II
  * after Climb II). Learned, it says where it's used.
  */
 export function moveTwoRows(sim: Sim): BloombotRow[] {
@@ -151,7 +151,7 @@ export function moveTwoRows(sim: Sim): BloombotRow[] {
     const how = have
       ? two.where
       : !r.moveLevel(gate)
-        ? `Bloombot has to learn ${MOVES[gate].name} at the fountain first. Then the workshop table in the house can work out “${two.name}”.`
+        ? `Bloombot has to learn ${MOVES[gate].name} at the fountain first. Then the crafting table in the house can work out “${two.name}”.`
         : openHow(sim, p, true);
     const where = have ? moveTwoSpot(sim, a) : !r.moveLevel(gate) ? fountainSpot(sim) : houseSpot();
     return { id: `${a}2`, kind: 'move2', name: two.name, does: two.does, state: have ? 'have' : ready ? 'next' : 'later', how, where, part: 'leaves' };
@@ -172,7 +172,7 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
       ? 'As far as it goes.'
       : !isOpen
         ? openHow(sim, project)
-        : `Go to the workshop table in the house and make level ${level + 1} in its Upgrade tab. It takes ${costWords(u.levels[level].cost)}.`;
+        : `Go to the crafting table in the house and make level ${level + 1} in its Upgrade tab. It takes ${costWords(u.levels[level].cost)}.`;
     return {
       id: u.id,
       kind: 'upgrade',
@@ -218,7 +218,7 @@ export function bloombotRows(sim: Sim): BloombotRow[] {
 /** The page's groups, in order, each with the count beside its title. */
 export const BLOOMBOT_GROUPS: readonly { kind: BloombotRowKind; title: string; note: (rows: BloombotRow[]) => string }[] = [
   { kind: 'move', title: 'Moves', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length} learned` },
-  { kind: 'move2', title: 'Moves, level II', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length} learned` },
+  { kind: 'move2', title: 'Stronger moves', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length} learned` },
   { kind: 'park', title: 'Grown with the park', note: (rs) => `${rs.filter((r) => r.state === 'have').length} of ${rs.length}` },
   {
     kind: 'upgrade',

@@ -208,6 +208,7 @@ export function actForVerb(verb: string): ActId | undefined {
 export const VERB_ACTS: Record<string, ActId | undefined> = {
   Salvage: 'rummage',
   Pry: 'pry',
+  'Pry open': 'pry', // #626: a vault door (Pry II)
   Gather: 'gather',
   'Dig up': 'dig',
   Harvest: 'harvest',

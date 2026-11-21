@@ -112,7 +112,7 @@ try {
   // ── Hover II: from the jetty's end out to the sandbar ──
   await stand(8.5, 48.5, 0);
   let p = await prompt();
-  check(/Hover over to\s*the sandbar/.test(p) && /Too far to hover yet\. The workshop table in the house can work out Hover II\./.test(p), `hover: before Hover II the prompt says why not ("${p}")`);
+  check(/Hover over to\s*the sandbar/.test(p) && /Too far to hover yet\. The crafting table in the house can work out Hover II\./.test(p), `hover: before Hover II the prompt says why not ("${p}")`);
   await shot('hover-1-before');
   await level2('hover');
   await page.waitForTimeout(400);
@@ -174,15 +174,21 @@ try {
   await go('climb-6-down', [29, 21]);
   await shot('climb-7-down');
 
+  // the two ruins from the square, and the boathouse from the quay: old buildings, not plinths
+  await stand(26.5, 25.5, Math.PI / 2 + 0.6);
+  await shot('climb-8-ruins');
+  await stand(-5.5, 31.5, Math.PI);
+  await shot('climb-9-boathouse');
+
   // ── Pry II: a vault in Mast Row ──
   await stand(24.5, -9.5, Math.PI);
   p = await prompt();
-  check(/Hold\s*Pry\s*the vault door/.test(p) && /too heavy to pry open yet/.test(p), `vault: before Pry II ("${p}")`);
+  check(/Hold\s*Pry open the vault door/.test(p) && /too heavy to pry open yet/.test(p), `vault: before Pry II ("${p}")`);
   await shot('vault-1-before');
   await level2('pry');
   await page.waitForTimeout(400);
   p = await prompt();
-  check(/Hold\s*Pry\s*the vault door/.test(p) && !/too heavy/.test(p), `vault: with Pry II ("${p}")`);
+  check(/Hold\s*Pry open the vault door/.test(p) && !/too heavy/.test(p), `vault: with Pry II ("${p}")`);
   const copper = await page.evaluate(() => window.solarbloom.sim.inventory.count('copper'));
   await page.keyboard.down('KeyE');
   await page.waitForTimeout(1500);

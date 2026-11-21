@@ -2300,7 +2300,7 @@ export class Game {
     if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? s.upgrades.pryHold : undefined, refused: s.gates.problem(gate), run });
     // E25 (#626): a sealed vault (Pry II), a stash, and the trips the level II moves take (over the sea, up a wall)
     const vault = s.moves.vaultAt(f.x, f.z);
-    if (vault) out.push({ kind: 'gate', id: `vault:${vault.id}`, verb: 'Pry', name: 'the vault door', distance: fd, at: front, ocHold: s.upgrades.vaultHold, refused: s.moves.vaultProblem(vault), run });
+    if (vault) out.push({ kind: 'gate', id: `vault:${vault.id}`, verb: 'Pry open', name: 'the vault door', distance: fd, at: front, ocHold: s.upgrades.vaultHold, refused: s.moves.vaultProblem(vault), run });
     const stash = s.moves.stashAt(f.x, f.z);
     if (stash) out.push({ kind: 'cache', id: `stash:${stash.id}`, verb: 'Open', name: 'the stash', distance: fd, at: front, run });
     const trip = oc.tripAhead(f);
