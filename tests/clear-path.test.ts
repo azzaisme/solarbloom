@@ -341,8 +341,8 @@ describe('#607 review: the guide names the input the way a player would', () => 
   it('the left mouse button is "Click"; a key or pad button is its glyph', () => {
     const sim = new Sim(createInitialState(7));
     const pulse = IDEAS.find((i) => i.id === 'pulse')!;
-    expect(pulse.text(() => CLICK, sim)).toBe('Click to turn the bare red ground around Bloombot green.');
-    expect(pulse.text(() => '<svg>RB</svg>', sim)).toBe('Press <svg>RB</svg> to turn the bare red ground around Bloombot green.');
+    expect(pulse.text(() => CLICK, sim)).toBe('Click to turn the bare ground around Bloombot green.');
+    expect(pulse.text(() => '<svg>RB</svg>', sim)).toBe('Press <svg>RB</svg> to turn the bare ground around Bloombot green.');
     const keepers = IDEAS.find((i) => i.id === 'keepers')!;
     expect(keepers.text(() => CLICK, sim)).toBe('A robot sleeps past the rubble. Stand beside it and click to pulse it, then talk to it.');
   });
