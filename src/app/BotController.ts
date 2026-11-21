@@ -52,6 +52,10 @@ export class BotController {
   readonly stride = new Stride();
   /** the way it last moved (braking carries on along it) */
   private lastDir = { x: 0, z: 1 };
+  /** #671: its speed last frame (how fast it speeds up or brakes), the ground's height then, how long it has stood */
+  private lastPace = 0;
+  private lastGround?: number;
+  private stillFor = 0;
   private held = new Set<string>();
   private padPrev: boolean[] = [];
   private walk?: Walk;
@@ -158,6 +162,19 @@ export class BotController {
     const toY = this.surface(roofId);
     this.lift = { roofId, x, z, fromY, toY, t: 0, dur: this.visuals.reducedMotion ? 0.4 : Math.min(2.2, 0.8 + Math.abs(toY - fromY) * 0.18) };
     this.following = true;
+  }
+
+  /** #671: some play input (a button, the camera): no idle moment now, and the wait for one starts again. */
+  wake() {
+    this.stillFor = 0;
+  }
+
+  /** #671: nothing moving it this frame (a trip, a lift, a seat): the movement drawn calms down. */
+  private moveQuiet() {
+    this.lastPace = 0;
+    this.lastGround = undefined;
+    this.stillFor = 0;
+    this.visuals.setMove({ pace: 0, accel: 0, walk: BOT.walk, run: BOT.sprint, climb: 0, wading: false, still: 0 });
   }
 
   get riding(): boolean {
@@ -282,6 +299,7 @@ export class BotController {
       p.z = tr.fz + (tr.tz - tr.fz) * kx;
       this.turner.update(dt);
       const [x, y, z] = this.world();
+      this.moveQuiet();
       this.visuals.place(x, y, z, p.facing);
       // hovering and gliding show the hover pose; a climb stands still while it pulls itself up
       this.visuals.setMotion(tr.style === 'climb' ? 0 : Math.hypot(p.x - was[0], p.z - was[1]) / Math.max(dt, 1e-3), tr.style !== 'climb');
@@ -290,6 +308,7 @@ export class BotController {
       if (k >= 1) {
         this.trip = undefined;
         this.teleport(p.roofId, tr.tx, tr.tz);
+        this.visuals.land(1); // #671: a crouch and a little hop as it lands
         tr.done?.();
       }
       return;
@@ -300,9 +319,11 @@ export class BotController {
         const l = this.lift;
         this.lift = undefined;
         this.teleport(l.roofId, l.x, l.z);
+        this.visuals.land(0.4); // #671: stepping off a lift, a smaller settle
       } else {
         this.turner.update(dt);
         const [x, y, z] = this.world();
+        this.moveQuiet();
         this.visuals.place(x, y, z, this.pose.facing);
         this.visuals.setMotion(0, false);
         this.visuals.update(dt);
@@ -321,6 +342,7 @@ export class BotController {
       this.turner.face(st.facing);
       this.turner.update(dt);
       this.visuals.setTurn(this.turner.left, this.turner.vel, 0);
+      this.moveQuiet();
       this.visuals.place(st.x, st.y, st.z, this.pose.facing);
       this.visuals.setMotion(0, false);
       this.visuals.update(dt);
@@ -434,6 +456,12 @@ export class BotController {
       }
       if (moved > 0.001) this.following = true;
       if (moved < dist * 0.1 && want <= 0) this.stride.stop(); // braking into a wall: stopped
+      // #671: steering head-on into a wall: a small recoil (once while it holds into it), then it stands there facing
+      // the wall rather than running in place
+      if (want > 0 && !this.walk && !strafing && !this.stride.pivoting && moved < dist * 0.15) {
+        if (pace > 0.8) this.visuals.bump();
+        this.stride.stop();
+      }
     }
     if (want > 0 && !back && p.roofId === GROUND && this.turnBack.bump(p.x, p.z, dirX, dirZ)) this.onMainlandClosed?.(); // island release: heading into the closed causeway turns bloombot back
     this.speed = dt > 0 ? moved / dt : 0;
@@ -446,10 +474,20 @@ export class BotController {
     // A machine built or a plot turned solid under bloombot: step aside.
     if (!w.fits(p.roofId, p.x, p.z)) w.settle(p);
     const [x, y, z] = this.world();
+    // #671: how it moves, for the movement drawn: speeding up or braking, the slope under it, wading, standing idle
+    const wading = w.wading(p);
+    const ground = y + (wading ? 0.07 : 0);
+    const climb = this.lastGround !== undefined && moved > 0.002 ? (ground - this.lastGround) / moved : 0;
+    this.lastGround = ground;
+    const accel = dt > 0 ? (this.stride.pace - this.lastPace) / dt : 0;
+    this.lastPace = this.stride.pace;
+    this.stillFor = mag > 0.01 || this.walk || this.speed > 0.05 || back ? 0 : this.stillFor + dt;
+    this.visuals.setMove({ pace: this.speed, accel, walk: BOT.walk * wade, run: BOT.sprint * stride * wade, climb, wading, still: this.stillFor });
     this.visuals.setTurn(t.left, t.vel, this.speed);
     this.visuals.place(x, y, z, p.facing);
     this.visuals.setTired(flat);
-    this.visuals.setMotion(this.speed, this.sprinting);
+    // #671: running blends the run clip in by speed (the visuals), so the loop here is just the walk
+    this.visuals.setMotion(this.speed, false);
     this.visuals.update(dt);
     this.follow(x, y, z);
   }
