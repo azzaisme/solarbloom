@@ -100,6 +100,11 @@
   --mm-grain: #4a3a18;
   --mm-rim-shadow: 0 10px 26px rgba(40, 60, 20, .28), 0 0 0 1px rgba(92, 72, 30, .12), inset 0 -3px 6px rgba(92, 72, 30, .12);
   --mm-disc-edge: inset 0 0 0 1px rgba(40, 60, 20, .15);
+  /* E24 (#609): the shut regions behind the fog (hatched), their barricades, and the goal's pin */
+  --mm-sealed: #ddd2bf;
+  --mm-sealed-line: rgba(120, 88, 50, .38);
+  --mm-gate: #c08a52;
+  --mm-gate-ink: #5a3a1c;
   /* The walking HUD (src/ui/hud.css): card light, low charge, the hold ring */
   --card-lift: 0 10px 28px rgba(70, 50, 10, .2), 0 2px 6px rgba(70, 50, 10, .1), inset 0 1px 0 rgba(255, 255, 255, .9);
   --well: inset 0 1px 2px rgba(70, 50, 10, .15);

@@ -4,6 +4,7 @@ import { blueprintRows, collection, itemCells, journalPages, oneOffItems, pinReq
 import { materialIcon } from './MaterialIcons';
 import { bloombotRows, pips, stateWords, type BloombotRow } from './BloombotPage';
 import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell';
+import { reveal } from './PadFocus';
 import './backpack.css';
 
 /**
@@ -126,8 +127,14 @@ export class Backpack {
     this.el.hidden = false;
     this.el.classList.add('open');
     this.say('');
-    this.show(storage ? 'items' : tab, true);
-    if (storage) this.body.querySelector<HTMLElement>('.bp-cell')?.focus({ focusVisible: true } as FocusOptions);
+    this.show(storage ? 'items' : tab);
+    // #616: the focus starts on the tab's first cell or row, not on the tab (d-pad up still reaches the tabs)
+    const first = this.body.querySelector<HTMLElement>('.bp-cell, button:not([disabled]), [tabindex="0"]');
+    if (first) {
+      first.focus({ focusVisible: true } as FocusOptions);
+      reveal(first);
+    }
+    else this.el.querySelector<HTMLElement>('[role=tab][aria-selected=true]')?.focus({ focusVisible: true } as FocusOptions);
   }
 
   /** E23.9.1: opens the journal at a page (a page just read from its post). */

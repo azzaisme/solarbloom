@@ -132,6 +132,18 @@ body.photo #tally { display: none; }
 #minimap .mm-bot .mm-fill { stroke: var(--mm-ring); }
 #minimap .mm-bot .mm-ink { stroke: var(--mm-arrow-ink); }
 #minimap .mm-shadow { position: absolute; left: 50%; top: 50%; width: 26px; height: 12px; margin: -2px 0 0 -13px; border-radius: 50%; background: var(--mm-shadow); }
+/* E24 (#609): the goal's pin (the goal card's own pin, so the two read as one); on the rim when the goal is off the map */
+#minimap .mm-goal { position: absolute; left: 0; top: 0; width: 24px; height: 24px; margin: -12px 0 0 -12px; display: grid; place-items: center; border-radius: 50%; background: var(--mm-rim); border: 2.5px solid var(--leaf); color: var(--leaf-ink); box-shadow: 0 2px 6px rgba(30, 50, 10, .35); will-change: transform; }
+#minimap .mm-goal[hidden] { display: none; }
+#minimap .mm-goal .sg-ic { width: 14px; height: 14px; }
+#minimap .mm-goal::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--leaf-hi); opacity: 0; animation: mm-goal-ring 2.4s ease-out infinite; }
+#minimap .mm-goal.rest { background: var(--sun-soft); border-color: var(--sun-edge); color: var(--sun-ink); }
+#minimap .mm-goal.rest::after { border-color: var(--sun); }
+#minimap .mm-goal.edge { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
+#minimap .mm-goal.edge .sg-ic { width: 12px; height: 12px; }
+body.reduced #minimap .mm-goal::after { animation: none; }
+@keyframes mm-goal-ring { 0% { transform: scale(.8); opacity: .9; } 70%, 100% { transform: scale(1.7); opacity: 0; } }
+body.contrast #minimap .mm-goal { border-color: var(--ink); color: var(--ink); }
 #minimap .mm-n { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--mm-rim); border: 2.5px solid var(--ink); box-shadow: var(--shadow-sm); font: 900 17px/1 var(--font-ui); color: var(--ink); }
 #minimap .mm-rim { position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--paper); box-shadow: var(--shadow-sm); font: 800 16px var(--font-ui); color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
 #minimap .mm-rim[hidden] { display: none; }

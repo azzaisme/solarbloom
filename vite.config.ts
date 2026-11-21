@@ -12,7 +12,7 @@ const QUICK = [
   'smoke', 'advisor', 'grid', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics',
   'relay-city', 'no-growing-prices', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
-  'bloombot-walk', 'bindings', 'padFocus', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art', 'keeper-seat', 'model-wait', 'visitor-models', 'visitor-sit-shape', 'bloombot-settle',
+  'bloombot-walk', 'bindings', 'padFocus', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glow-setting', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art', 'keeper-seat', 'model-wait', 'visitor-models', 'visitor-sit-shape', 'bloombot-settle',
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world
@@ -41,6 +41,8 @@ const QUICK = [
   'clear-path', 'bloombot-page',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
+  // E24 (#609): the way marked on the map and in the world
+  'waymark',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
