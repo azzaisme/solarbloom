@@ -87,15 +87,15 @@ try {
     const L = `${label}`;
 
     // ── 1. a new game: the goal and all its parts, the first guide line, the arrow on the first pile ──
-    await page.waitForFunction(() => !!window.solarbloom.hud.guide.text, null, { timeout: 30000 }).catch(() => {});
+    await page.waitForFunction(() => !!window.solarbloom.hud.guide.lastText, null, { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(800);
     const c1 = await page.evaluate(cardNow);
     check(c1.title === 'Wake the fountain' && c1.why === 'Bloombot learns to pry open rubble', `${L}: the goal and what it brings ("${c1.title}" · "${c1.why}")`);
     check(c1.parts.length === 3 && /Scrap.*0 of 20/.test(c1.parts[0]) && /Seeds.*0 of 6/.test(c1.parts[1]) && /Park.*of 60/.test(c1.parts[2]), `${L}: every part counted from the start (${c1.parts.join(' | ')})`);
     check(!!c1.next && /Show me where/.test(c1.where), `${L}: the next step under it, with Show me where ("${c1.next}" · "${c1.where}")`);
-    const g1 = await page.evaluate(() => window.solarbloom.hud.guide.text);
+    const g1 = await page.evaluate(() => window.solarbloom.hud.guide.lastText);
     const start = await page.evaluate(() => ({ pulses: window.solarbloom.sim.state.stats.pulses ?? 0, ideas: [...(window.solarbloom.sim.state.progression.ideas ?? [])] }));
-    check(start.pulses === 0 && !start.ideas.includes('pulse'), `${L}: a new game hasn't pulsed yet, so its pulse line is still to come (${JSON.stringify(start)})`);
+    check(start.pulses === 0 && !start.ideas.includes('pulse') && !start.ideas.includes('park'), `${L}: a new game hasn't pulsed yet, so its pulse line is still to come (${JSON.stringify(start)})`);
     check(/^Old things lie everywhere\. Hold .+ by a pile to salvage it\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
     const arrow = await page.evaluate(() => {
       const g = window.solarbloom;

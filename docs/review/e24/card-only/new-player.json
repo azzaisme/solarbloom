@@ -3,462 +3,481 @@
   "cardOnly": true,
   "limit": 1800,
   "times": {
-    "salvage": 2.009,
-    "fountain": 73.383,
-    "pry": 90.473
+    "salvage": 1.975,
+    "fountain": 88.13,
+    "pry": 95.163
   },
   "gameSeconds": {
     "salvage": 1.9999999999998863,
-    "fountain": 72.20000000001076,
-    "pry": 89.20000000001463
+    "fountain": 86.80000000001425,
+    "pry": 93.90000000001586
   },
   "pryHint": {
-    "at": 73.383,
+    "at": 88.13,
     "from": "the goal card",
     "text": "Pry open the rubble into Old Market · Walk up to the rubble. Bloombot can pry it open now."
   },
   "steps": [
     {
-      "t": 0.203,
+      "t": 0.195,
       "what": "(a toast comes and goes, unread: \"\")"
     },
     {
-      "t": 0.204,
+      "t": 0.195,
       "what": "(a toast comes and goes, unread: \"The park paths are swept clean. / A quarter of the way to waking the fountain.\")"
     },
     {
-      "t": 0.204,
-      "what": "reads the card: \"Wake the fountain · The fountain wants Scrap: salvage it here. · 27 of 60\""
+      "t": 0.195,
+      "what": "reads the card: \"Wake the fountain · Salvage piles to find Scrap. Show me where leads to one. · 27 of 60\""
     },
     {
-      "t": 0.21,
+      "t": 0.199,
       "what": "walks to a pile of scrap at 8, 44",
       "why": "the card wants 20 more Scrap"
     },
     {
-      "t": 0.472,
+      "t": 0.46,
       "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
     },
     {
-      "t": 2.01,
+      "t": 1.976,
       "what": "★ first salvage"
     },
     {
-      "t": 2.187,
+      "t": 2.155,
       "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
     },
     {
-      "t": 2.191,
+      "t": 2.161,
       "what": "walks to a pile of scrap at 8, 44",
       "why": "the card wants 17 more Scrap"
     },
     {
-      "t": 3.47,
+      "t": 3.444,
       "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
     },
     {
-      "t": 4.891,
+      "t": 4.861,
       "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
     },
     {
-      "t": 4.893,
+      "t": 4.863,
       "what": "walks to a pile of scrap at -7, 43",
       "why": "the card wants 14 more Scrap"
     },
     {
-      "t": 4.899,
+      "t": 4.868,
       "what": "looks round (turns the camera)",
-      "why": "nothing in sight for \"Wake the fountain · The fountain wants Scrap: salvage it here. · 27 of 60\""
+      "why": "nothing in sight for \"Wake the fountain · Salvage piles to find Scrap. Show me where leads to one. · 27 of 60\""
     },
     {
-      "t": 5.722,
+      "t": 5.68,
+      "what": "reads the card: \"Wake the fountain · Salvage piles to find Scrap. Show me where leads to one. · 28 of 60\""
+    },
+    {
+      "t": 5.683,
       "what": "walks to a pile of scrap at 2, 27",
       "why": "the card wants 14 more Scrap"
     },
     {
-      "t": 13.838,
+      "t": 13.882,
       "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
     },
     {
-      "t": 15.251,
+      "t": 15.295,
       "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
     },
     {
-      "t": 15.252,
-      "what": "reads the card: \"Wake the fountain · The fountain wants Scrap: salvage it here. · 28 of 60\""
+      "t": 15.295,
+      "what": "reads the card: \"Wake the fountain · Salvage piles to find Scrap. Show me where leads to one. · 29 of 60\""
     },
     {
-      "t": 15.254,
+      "t": 15.298,
       "what": "walks to a pile of scrap at 2, 27",
       "why": "the card wants 11 more Scrap"
     },
     {
-      "t": 16.785,
+      "t": 16.833,
       "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
     },
     {
-      "t": 18.193,
+      "t": 18.253,
       "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
     },
     {
-      "t": 18.193,
-      "what": "reads the card: \"Wake the fountain · The fountain wants Scrap: salvage it here. · 29 of 60\""
-    },
-    {
-      "t": 18.196,
+      "t": 18.259,
       "what": "walks to a pile of scrap at 2, 27",
       "why": "the card wants 8 more Scrap"
     },
     {
-      "t": 19.728,
+      "t": 19.81,
       "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
     },
     {
-      "t": 21.14,
+      "t": 21.233,
       "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
     },
     {
-      "t": 21.142,
+      "t": 21.236,
       "what": "walks to a pile of scrap at 2, 27",
       "why": "the card wants 5 more Scrap"
     },
     {
-      "t": 22.677,
+      "t": 22.762,
       "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
     },
     {
-      "t": 24.103,
+      "t": 24.184,
+      "what": "(a toast comes and goes, unread: \"The benches are mended. / Halfway there: the birds will want to sit here again.\")"
+    },
+    {
+      "t": 24.185,
       "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
     },
     {
-      "t": 24.105,
+      "t": 24.185,
+      "what": "(a toast comes and goes, unread: \"New plot option: Rose arbour / An arch of climbing roses over a seat. Look for empty plots in restored ground.\")"
+    },
+    {
+      "t": 24.185,
+      "what": "reads the card: \"Wake the fountain · Salvage piles to find Scrap. Show me where leads to one. · 30 of 60\""
+    },
+    {
+      "t": 24.188,
       "what": "walks to a pile of scrap at 0, 16",
       "why": "the card wants 2 more Scrap"
     },
     {
-      "t": 30.504,
+      "t": 30.584,
       "what": "faces it: the prompt says \"E Hold Salvage Scrap\""
     },
     {
-      "t": 31.936,
-      "what": "(a toast comes and goes, unread: \"The benches are mended. / Halfway there: the birds will want to sit here again.\")"
-    },
-    {
-      "t": 31.937,
-      "what": "(a toast comes and goes, unread: \"New plot option: Rose arbour / An arch of climbing roses over a seat. Look for empty plots in restored ground.\")"
-    },
-    {
-      "t": 31.937,
+      "t": 32.002,
       "what": "(a toast comes and goes, unread: \"+3 Scrap\")"
     },
     {
-      "t": 31.937,
-      "what": "reads the card: \"Wake the fountain · The fountain wants Seeds: salvage it here. · 30 of 60\""
+      "t": 32.002,
+      "what": "reads the card: \"Wake the fountain · Take the Scrap to the fountain. · 31 of 60\""
     },
     {
-      "t": 31.94,
+      "t": 32.009,
       "what": "walks to a pile of seeds at 3, 15",
       "why": "the card wants 6 more Seeds"
     },
     {
-      "t": 34.255,
+      "t": 34.293,
       "what": "faces it: the prompt says \"E Hold Salvage Seeds\""
     },
     {
-      "t": 35.679,
+      "t": 35.719,
       "what": "(a toast comes and goes, unread: \"+3 Seeds\")"
     },
     {
-      "t": 35.68,
-      "what": "reads the card: \"Wake the fountain · The fountain wants Seeds: salvage it here. · 31 of 60\""
+      "t": 35.719,
+      "what": "reads the card: \"Wake the fountain · Take the Scrap and Seeds to the fountain. · 31 of 60\""
     },
     {
-      "t": 35.685,
+      "t": 35.725,
       "what": "walks to a pile of seeds at 3, 15",
       "why": "the card wants 3 more Seeds"
     },
     {
-      "t": 37.22,
+      "t": 37.251,
       "what": "faces it: the prompt says \"E Hold Salvage Seeds\""
     },
     {
-      "t": 38.636,
+      "t": 38.665,
       "what": "(a toast comes and goes, unread: \"+3 Seeds\")"
     },
     {
-      "t": 38.637,
-      "what": "reads the card: \"Wake the fountain · Bring the Scrap and Seeds to the fountain. · 31 of 60\""
-    },
-    {
-      "t": 38.638,
+      "t": 38.666,
       "what": "walks to the fountain with everything it asks for",
-      "why": "the card says \"Wake the fountain · Bring the Scrap and Seeds to the fountain.\""
+      "why": "the card says \"Wake the fountain · Take the Scrap and Seeds to the fountain.\""
     },
     {
-      "t": 44.518,
+      "t": 44.575,
       "what": "faces it: the prompt says \"E Bring things to the fountain\""
     },
     {
-      "t": 44.539,
+      "t": 44.6,
       "what": "the fountain's panel opens: presses \"Give all I have\""
     },
     {
-      "t": 45.801,
+      "t": 45.851,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (32 of 60). · 32 of 60\""
     },
     {
-      "t": 45.807,
+      "t": 45.858,
       "what": "walks to dead ground at 6, 9 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (32 of 60). · 32 of 60\""
     },
     {
-      "t": 47.062,
+      "t": 47.087,
       "what": "walks to dead ground at 7, 9 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (32 of 60). · 32 of 60\""
     },
     {
-      "t": 48.277,
+      "t": 48.315,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (33 of 60). · 33 of 60\""
     },
     {
-      "t": 48.282,
+      "t": 48.32,
       "what": "walks to dead ground at 6, 10 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (33 of 60). · 33 of 60\""
     },
     {
-      "t": 49.259,
+      "t": 49.312,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (34 of 60). · 34 of 60\""
     },
     {
-      "t": 49.263,
+      "t": 49.316,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (34 of 60). · 34 of 60\""
+    },
+    {
+      "t": 50.287,
+      "what": "walks to dead ground at 6, 10 and pulses",
+      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (34 of 60). · 34 of 60\""
+    },
+    {
+      "t": 51.266,
       "what": "walks to dead ground at 6, 8 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (34 of 60). · 34 of 60\""
     },
     {
-      "t": 50.227,
+      "t": 52.246,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (35 of 60). · 35 of 60\""
     },
     {
-      "t": 50.234,
+      "t": 52.25,
       "what": "walks to dead ground at 7, 10 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (35 of 60). · 35 of 60\""
     },
     {
-      "t": 51.228,
+      "t": 52.978,
+      "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (36 of 60). · 36 of 60\""
+    },
+    {
+      "t": 52.981,
+      "what": "walks to dead ground at 5, 10 and pulses",
+      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (36 of 60). · 36 of 60\""
+    },
+    {
+      "t": 53.963,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (37 of 60). · 37 of 60\""
     },
     {
-      "t": 51.233,
+      "t": 53.967,
       "what": "walks to dead ground at 5, 8 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (37 of 60). · 37 of 60\""
     },
     {
-      "t": 52.227,
+      "t": 54.935,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (38 of 60). · 38 of 60\""
     },
     {
-      "t": 52.232,
+      "t": 54.939,
       "what": "walks to dead ground at 6, 11 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (38 of 60). · 38 of 60\""
     },
     {
-      "t": 53.48,
+      "t": 56.153,
+      "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (39 of 60). · 39 of 60\""
+    },
+    {
+      "t": 56.158,
       "what": "walks to dead ground at 7, 11 and pulses",
-      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (38 of 60). · 38 of 60\""
+      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (39 of 60). · 39 of 60\""
     },
     {
-      "t": 54.444,
-      "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (40 of 60). · 40 of 60\""
-    },
-    {
-      "t": 54.449,
-      "what": "walks to dead ground at 8, 10 and pulses",
-      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (40 of 60). · 40 of 60\""
-    },
-    {
-      "t": 55.689,
+      "t": 57.135,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (41 of 60). · 41 of 60\""
     },
     {
-      "t": 55.694,
-      "what": "walks to dead ground at 8, 11 and pulses",
+      "t": 57.141,
+      "what": "walks to dead ground at 5, 11 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (41 of 60). · 41 of 60\""
     },
     {
-      "t": 56.407,
+      "t": 58.134,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (42 of 60). · 42 of 60\""
     },
     {
-      "t": 56.411,
-      "what": "walks to dead ground at 7, 12 and pulses",
+      "t": 58.138,
+      "what": "walks to dead ground at 8, 10 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (42 of 60). · 42 of 60\""
     },
     {
-      "t": 57.65,
+      "t": 59.373,
+      "what": "walks to dead ground at 8, 11 and pulses",
+      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (42 of 60). · 42 of 60\""
+    },
+    {
+      "t": 60.342,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (43 of 60). · 43 of 60\""
     },
     {
-      "t": 57.655,
-      "what": "walks to dead ground at 6, 12 and pulses",
+      "t": 60.347,
+      "what": "walks to dead ground at 7, 12 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (43 of 60). · 43 of 60\""
     },
     {
-      "t": 58.634,
-      "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (44 of 60). · 44 of 60\""
-    },
-    {
-      "t": 58.639,
-      "what": "walks to dead ground at 8, 12 and pulses",
-      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (44 of 60). · 44 of 60\""
-    },
-    {
-      "t": 59.603,
+      "t": 61.586,
       "what": "(a toast comes and goes, unread: \"The lamps are lit again! / The planter trees leaf out and bunting goes up on the bandstand.\")"
     },
     {
-      "t": 59.603,
-      "what": "(a toast comes and goes, unread: \"New plot option: Café terrace / Tables, parasols and a planter of herbs. Look for empty plots in restored ground.\")"
-    },
-    {
-      "t": 59.603,
+      "t": 61.586,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (45 of 60). · 45 of 60\""
     },
     {
-      "t": 59.609,
-      "what": "walks to dead ground at 9, 11 and pulses",
+      "t": 61.596,
+      "what": "walks to dead ground at 6, 12 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (45 of 60). · 45 of 60\""
     },
     {
-      "t": 60.839,
+      "t": 62.576,
+      "what": "(a toast comes and goes, unread: \"New plot option: Café terrace / Tables, parasols and a planter of herbs. Look for empty plots in restored ground.\")"
+    },
+    {
+      "t": 62.576,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (46 of 60). · 46 of 60\""
     },
     {
-      "t": 60.845,
-      "what": "walks to dead ground at 9, 12 and pulses",
+      "t": 62.581,
+      "what": "walks to dead ground at 8, 12 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (46 of 60). · 46 of 60\""
     },
     {
-      "t": 61.56,
+      "t": 63.569,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (47 of 60). · 47 of 60\""
     },
     {
-      "t": 61.565,
-      "what": "walks to dead ground at 8, 13 and pulses",
+      "t": 63.574,
+      "what": "walks to dead ground at 9, 11 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (47 of 60). · 47 of 60\""
     },
     {
-      "t": 62.791,
+      "t": 64.798,
+      "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (48 of 60). · 48 of 60\""
+    },
+    {
+      "t": 64.803,
+      "what": "walks to dead ground at 9, 12 and pulses",
+      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (48 of 60). · 48 of 60\""
+    },
+    {
+      "t": 65.785,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (49 of 60). · 49 of 60\""
     },
     {
-      "t": 62.796,
-      "what": "walks to dead ground at 7, 13 and pulses",
+      "t": 65.789,
+      "what": "walks to dead ground at 8, 13 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (49 of 60). · 49 of 60\""
     },
     {
-      "t": 63.768,
-      "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (50 of 60). · 50 of 60\""
-    },
-    {
-      "t": 63.773,
-      "what": "walks to dead ground at 9, 13 and pulses",
-      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (50 of 60). · 50 of 60\""
-    },
-    {
-      "t": 64.751,
+      "t": 67.033,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (51 of 60). · 51 of 60\""
     },
     {
-      "t": 64.757,
-      "what": "walks to dead ground at 10, 12 and pulses",
+      "t": 67.038,
+      "what": "walks to dead ground at 7, 13 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (51 of 60). · 51 of 60\""
     },
     {
-      "t": 65.984,
+      "t": 68.035,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (52 of 60). · 52 of 60\""
     },
     {
-      "t": 65.989,
-      "what": "walks to dead ground at 10, 11 and pulses",
+      "t": 68.055,
+      "what": "walks to dead ground at 9, 13 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (52 of 60). · 52 of 60\""
     },
     {
-      "t": 66.971,
+      "t": 69.034,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (53 of 60). · 53 of 60\""
     },
     {
-      "t": 66.976,
-      "what": "walks to dead ground at 10, 13 and pulses",
+      "t": 69.039,
+      "what": "walks to dead ground at 10, 12 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (53 of 60). · 53 of 60\""
     },
     {
-      "t": 67.692,
-      "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (54 of 60). · 54 of 60\""
+      "t": 70.288,
+      "what": "walks to dead ground at 10, 11 and pulses",
+      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (53 of 60). · 53 of 60\""
     },
     {
-      "t": 67.697,
-      "what": "walks to dead ground at 9, 14 and pulses",
-      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (54 of 60). · 54 of 60\""
-    },
-    {
-      "t": 68.935,
+      "t": 71.274,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (55 of 60). · 55 of 60\""
     },
     {
-      "t": 68.94,
-      "what": "walks to dead ground at 8, 14 and pulses",
+      "t": 71.281,
+      "what": "walks to dead ground at 10, 13 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (55 of 60). · 55 of 60\""
     },
     {
-      "t": 69.909,
+      "t": 72.261,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (56 of 60). · 56 of 60\""
     },
     {
-      "t": 69.914,
-      "what": "walks to dead ground at 10, 14 and pulses",
+      "t": 72.265,
+      "what": "walks to dead ground at 9, 14 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (56 of 60). · 56 of 60\""
     },
     {
-      "t": 70.902,
+      "t": 73.495,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (57 of 60). · 57 of 60\""
     },
     {
-      "t": 70.907,
-      "what": "walks to dead ground at 9, 15 and pulses",
+      "t": 73.5,
+      "what": "walks to dead ground at 8, 14 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (57 of 60). · 57 of 60\""
     },
     {
-      "t": 72.15,
+      "t": 74.478,
+      "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (58 of 60). · 58 of 60\""
+    },
+    {
+      "t": 74.482,
+      "what": "walks to dead ground at 10, 14 and pulses",
+      "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (58 of 60). · 58 of 60\""
+    },
+    {
+      "t": 75.462,
       "what": "reads the card: \"Wake the fountain · The fountain wants the park alive around it: restore it (59 of 60). · 59 of 60\""
     },
     {
-      "t": 72.155,
-      "what": "walks to dead ground at 8, 15 and pulses",
+      "t": 75.466,
+      "what": "walks to dead ground at 9, 15 and pulses",
       "why": "the card counts \"Wake the fountain · The fountain wants the park alive around it: restore it (59 of 60). · 59 of 60\""
     },
     {
-      "t": 73.383,
+      "t": 88.131,
       "what": "★ the fountain wakes"
     },
     {
-      "t": 73.581,
+      "t": 88.33,
       "what": "(a toast comes and goes, unread: \"Koi have arrived! / They glide through the clean water.\")"
     },
     {
-      "t": 73.581,
+      "t": 88.33,
+      "what": "(a toast comes and goes, unread: \"Water returns! / Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open.\")"
+    },
+    {
+      "t": 88.33,
       "what": "reads the card: \"Pry open the rubble into Old Market · Walk up to the rubble. Bloombot can pry it open now.\""
     },
     {
-      "t": 73.584,
+      "t": 88.332,
       "what": "walks to the barricade at 16, 8",
       "why": "a toast said to pry one open"
     },
     {
-      "t": 87.456,
+      "t": 92.139,
       "what": "faces it: the prompt says \"E Hold Pry\""
     },
     {
-      "t": 90.474,
+      "t": 95.172,
       "what": "★ first barricade pried (g-oldMarket)"
     }
   ],

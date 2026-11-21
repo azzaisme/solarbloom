@@ -78,6 +78,7 @@
 #guide[hidden] { display: none; }
 #guide.out { opacity: 0; }
 #guide p { margin: 0; min-width: 0; font: 800 17px/1.3 var(--font-ui); color: var(--ink); }
+#guide p svg.glyph { display: inline-block; width: 32px; height: 24px; margin: -4px 1px; vertical-align: middle; }
 body.photo #guide { display: none; }
 /* #608: the park's count where the player is looking, for a moment after each tile */
 #tally { position: absolute; left: 50%; bottom: calc(26px + var(--safe-b)); transform: translateX(-50%); z-index: 4; pointer-events: none; display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px; border-radius: 999px; font: 800 16px/1.2 var(--font-ui); color: var(--ink); white-space: nowrap; }

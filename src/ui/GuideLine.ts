@@ -54,10 +54,11 @@ export class GuideLine extends HudPart {
     return el.hidden ? undefined : $(this.root, '#tallyText').textContent ?? undefined;
   }
 
-  /** Shows a line (plain text; the key names in it are the player's own). */
-  show(text: string, secs = SHOW_SECS) {
+  /** Shows a line (HTML: the words, with the player's own key or button as a glyph). */
+  show(html: string, secs = SHOW_SECS) {
     const el = $(this.root, '#guide');
-    $(this.root, '#guideText').innerHTML = esc(text);
+    $(this.root, '#guideText').innerHTML = html;
+    this.lastText = $(this.root, '#guideText').textContent ?? '';
     el.classList.remove('out');
     el.hidden = false;
     this.until = performance.now() + secs * 1000;
@@ -72,6 +73,9 @@ export class GuideLine extends HudPart {
     el.classList.add('out');
     this.fadeAt = performance.now() + FADE_MS;
   }
+
+  /** The last line shown, faded or not (tests read it). */
+  lastText = '';
 
   /** The line showing now, if any (tests and shots read it). */
   get text(): string | undefined {

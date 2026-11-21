@@ -15,9 +15,15 @@ import type { Sim } from '../gameplay/Sim';
  */
 export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'build' | 'pry' | 'keepers';
 
+/** What the key function gives for an action on the mouse's left button: the line says "Click" instead. */
+export const CLICK = 'Click';
+
 export interface Idea {
   id: IdeaId;
-  /** the line, naming the player's own key or button (and, for some, what the game holds now) */
+  /**
+   * the line (HTML), naming the player's own key or button: `key` gives its glyph, or CLICK for the mouse's left
+   * button (and, for some, what the game holds now)
+   */
   text: (key: (a: Action) => string, sim: Sim) => string;
   /** the idea has come up now */
   comes: (sim: Sim) => boolean;
@@ -56,14 +62,15 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'pulse',
-    text: (k) => `Press ${k('pulse')} to pulse dead ground back to life.`,
+    text: (k) => (k('pulse') === CLICK ? 'Click to pulse dead ground back to life.' : `Press ${k('pulse')} to pulse dead ground back to life.`),
     comes: salvaged,
     known: (sim) => (sim.state.stats.pulses ?? 0) > 0,
   },
   {
     id: 'park',
     text: () => 'The fountain wants the park alive around it. Every tile you bring back counts.',
-    comes: (sim) => sim.state.stats.tilesRestored > 0,
+    // after the player's own first pulse (a drone's tile at the start is not the moment)
+    comes: (sim) => (sim.state.stats.pulses ?? 0) > 0,
     known: (sim) => (sv(sim)?.tier ?? 0) >= 1 || sim.areas.counts(PARK).restored >= (sim.fountain.next()?.needs.parkTiles ?? Infinity),
   },
   {
@@ -101,7 +108,7 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'keepers',
-    text: (k) => `A Keeper sleeps past the rubble. Pulse it awake with ${k('pulse')}, then see what it needs.`,
+    text: (k) => (k('pulse') === CLICK ? 'A Keeper sleeps past the rubble. Click to pulse it awake, then see what it needs.' : `A Keeper sleeps past the rubble. Pulse it awake with ${k('pulse')}, then see what it needs.`),
     comes: pried,
     known: keeperAwake,
   },
@@ -114,7 +121,8 @@ export const IDEAS: readonly Idea[] = [
 export function startIdeas(sim: Sim): void {
   const p = sim.state.progression;
   if (p.ideas) return;
-  const played = p.tutorialStep > 0 || sim.state.stats.tilesRestored > 0 || salvaged(sim);
+  // the player's own progress (a drone restores a tile in a brand-new game, so restored tiles alone don't count)
+  const played = p.tutorialStep > 0 || (sim.state.stats.pulses ?? 0) > 0 || salvaged(sim) || (sv(sim)?.tier ?? 0) > 0;
   p.ideas = played ? IDEAS.filter((i) => i.comes(sim) || i.known(sim)).map((i) => i.id) : [];
 }
 

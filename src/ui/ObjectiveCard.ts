@@ -7,7 +7,7 @@ import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import type { ItemId, MaterialId } from '../core/types';
 import { oldCityHint } from './OldCityGuide';
-import { REGIONS, type RegionDef } from '../data/oldcity';
+import { ITEMS, REGIONS, type RegionDef } from '../data/oldcity';
 import { PARK } from '../core/Areas';
 
 /**
@@ -48,7 +48,10 @@ export interface ObjectivePart {
 /** E23.1.5: the advisor's topics that come before any request: a shortage in the loop the player should see now. #605: the farm is never one of them. */
 const URGENT = new Set<Suggestion['topic']>(['charge', 'grid', 'water']);
 
-/** #605: the fountain step's parts: what it still wants handed in, and its own condition (the park, or landmarks). */
+/**
+ * #605: the fountain step's parts: each material (handed in plus carried, so salvaging counts at once), its items,
+ * and its own condition (the park, or landmarks).
+ */
 export function fountainParts(sim: Sim): ObjectivePart[] {
   const f = sim.fountain;
   const t = f.next();
@@ -59,10 +62,15 @@ export function fountainParts(sim: Sim): ObjectivePart[] {
     .map((k) => {
       const m = MATERIALS[k as MaterialId];
       const need = t.delivery[k] ?? 0;
-      return { label: m.name, icon: m.icon, have: Math.min(need, f.given(k as MaterialId)), need };
+      // what is handed in plus what bloombot carries: salvaging counts the moment it lands in the backpack
+      return { label: m.name, icon: m.icon, have: Math.min(need, f.given(k as MaterialId) + sim.inventory.available(k as MaterialId)), need };
     });
   const owned = sim.state.salvage?.items ?? [];
-  for (const i of t.items ?? []) parts.push({ label: itemDef(i as ItemId).name, icon: itemDef(i as ItemId).icon, have: owned.includes(i) ? 1 : 0, need: 1 });
+  // the Great Bloom's one-off finds (the Heart Seed, the Star Lens) are the Old City's own items, not crafted ones
+  for (const i of t.items ?? []) {
+    const d = ITEMS[i] ?? itemDef(i as ItemId);
+    parts.push({ label: d?.name ?? i, icon: '✨', have: owned.includes(i) ? 1 : 0, need: 1 });
+  }
   const c = f.condition(t);
   parts.push({ label: t.needs.parkTiles !== undefined ? W.park : W.landmarks, icon: t.needs.parkTiles !== undefined ? '🌿' : '✨', have: Math.min(c.have, c.need), need: c.need });
   return parts;
@@ -118,7 +126,8 @@ export function firstRubble(sim: Sim): RegionDef | undefined {
   const bx = sim.bot?.x ?? sim.state.bot?.x ?? fx;
   const bz = sim.bot?.z ?? sim.state.bot?.z ?? fz;
   const d = (r: RegionDef) => Math.hypot(r.gate.cells[0][0] + 0.5 - bx, r.gate.cells[0][1] + 0.5 - bz);
-  return pry.filter((r) => !sim.gates.problem(r.gate)).sort((a, b) => d(a) - d(b))[0];
+  // (a pry gate's only other bar is charge: running low never changes the goal, it shows under it)
+  return [...pry].sort((a, b) => d(a) - d(b))[0];
 }
 
 /**

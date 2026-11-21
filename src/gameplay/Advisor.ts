@@ -7,6 +7,13 @@ import { AREA_TYPES } from '../data/city';
 import { machineName } from '../data/machines';
 import { GROUND } from '../core/GameState';
 import type { Sim } from './Sim';
+import { Walker } from './Walker';
+
+/** "Scrap", "Scrap and Seeds", "Scrap, Copper and Seeds" */
+const listNames = (ms: MaterialId[]) => {
+  const n = ms.map((m) => MATERIALS[m].name);
+  return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : (n[0] ?? '');
+};
 
 /** What the suggestion's button does. */
 export type SuggestionAction =
@@ -114,9 +121,22 @@ export class Advisor {
     const dist = (x: number, z: number) => Math.hypot(x + 0.5 - bx, z + 0.5 - bz);
     const f = s.state.machines.find((m) => m.type === 'core' && s.areas.areaOf(m) === PARK);
     const shed = PARK_SET.shed;
+    // a cell bloombot can stand on beside it (benches and props crowd the fountain), nearest bloombot
+    const walker = new Walker(s);
+    const beside = (x0: number, z0: number, size: number) => {
+      let best: { x: number; z: number } | undefined;
+      for (let r = 1; r <= 2 && !best; r++)
+        for (let z = z0 - r; z < z0 + size + r; z++)
+          for (let x = x0 - r; x < x0 + size + r; x++) {
+            if (x >= x0 && x < x0 + size && z >= z0 && z < z0 + size) continue;
+            if (!walker.walkable(GROUND, x, z)) continue;
+            if (!best || dist(x, z) < dist(best.x, best.z)) best = { x, z };
+          }
+      return best ?? { x: x0, z: z0 + size };
+    };
     const homes = [
-      { x: f ? f.x + Math.floor(f.size / 2) : fx, z: f ? f.z + f.size : fz + 2, name: 'the fountain', machine: false },
-      { x: shed.door[0], z: shed.door[1], name: 'the house', machine: false },
+      { ...beside(f?.x ?? fx, f?.z ?? fz, f?.size ?? 2), name: 'the fountain', machine: false },
+      { ...beside(shed.x, shed.z, shed.size), name: 'the house', machine: false },
     ];
     const pads = s.state.machines
       .filter((m) => RESTING.has(m.type) && this.powered(m) && m.roofId === GROUND)
@@ -203,13 +223,13 @@ export class Advisor {
     const [fx, fz] = s.areas.info(PARK).landmark;
     const wanted = (Object.keys(t.delivery) as string[]).filter((k) => k !== 'biomass' && s.fountain.remaining(k as MaterialId) > 0) as MaterialId[];
     const carried = wanted.filter((m) => s.inventory.available(m) > 0);
-    // carrying all of it, or as much as the piles in reach give: hand it in
+    // carrying enough of something (or as much as the piles in reach give): take it to the fountain
     const missing = wanted.filter((m) => s.inventory.available(m) < s.fountain.remaining(m));
+    const enough = wanted.some((m) => s.inventory.available(m) >= s.fountain.remaining(m));
     const pile = this.nearestPile(missing);
-    if (carried.length && (!pile || !missing.length)) {
-      return { topic: 'keeper', text: `Bring the ${carried.map((m) => MATERIALS[m].name).join(' and ')} to the fountain.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz }, place: { kind: 'fountain', name: 'the fountain' } };
-    }
-    if (pile) return { topic: 'keeper', text: `The fountain wants ${MATERIALS[pile.material].name}: salvage it here.`, label: `${MATERIALS[pile.material].icon} Show me where`, action: { kind: 'focus', x: pile.x, z: pile.z }, place: { kind: 'pile', name: `a ${MATERIALS[pile.material].name} pile` } };
+    const take = (): Suggestion => ({ topic: 'keeper', text: `Take the ${listNames(carried)} to the fountain.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz }, place: { kind: 'fountain', name: 'the fountain' } });
+    if (carried.length && (enough || !pile)) return take();
+    if (pile) return { topic: 'keeper', text: `Salvage piles to find ${MATERIALS[pile.material].name}. Show me where leads to one.`, label: `${MATERIALS[pile.material].icon} Show me where`, action: { kind: 'focus', x: pile.x, z: pile.z }, place: { kind: 'pile', name: `a ${MATERIALS[pile.material].name} pile` } };
     // #609: what it still wants lies only past a way bloombot can open now: open it
     if (missing.length && !pile) {
       const r = REGIONS.find((q) => {
@@ -223,7 +243,7 @@ export class Advisor {
         return { topic: 'keeper', text: `The way into ${r.name} is clear. Open it to find more ${what}.`, label: '🤖 Show me the way', action: { kind: 'focus', x, z }, place: { kind: 'gate', name: `the way into ${r.name}` } };
       }
     }
-    if (carried.length) return { topic: 'keeper', text: `Bring the ${carried.map((m) => MATERIALS[m].name).join(' and ')} to the fountain.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz }, place: { kind: 'fountain', name: 'the fountain' } };
+    if (carried.length) return take();
     const c = s.fountain.condition(t);
     if (!c.done && t.needs.parkTiles !== undefined) {
       const tile = this.parkTile();

@@ -2,7 +2,7 @@ import { CHUNK } from '../core/Hash';
 import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { WORDS } from '../ui/words';
-import { dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
+import { CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
 import { goalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
@@ -1571,7 +1571,13 @@ export class Game {
     markShown(this.sim, idea.id);
     this.ideaAt = now;
     this.ideaShowing = idea;
-    this.hud.guide.show(idea.text((a) => this.hudKey(a), this.sim));
+    this.hud.guide.show(idea.text((a) => this.guideKey(a), this.sim));
+  }
+
+  /** #607: an action's key or button in a guide line: its glyph (keys or the pad in hand), or "Click" for the left mouse button. */
+  private guideKey(a: Action): string {
+    if (this.glyphs.style === 'keys' && this.bindings.keys[a][0] === 'Mouse0') return CLICK;
+    return this.glyph(a);
   }
 
   /**
