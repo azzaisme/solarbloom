@@ -47,7 +47,7 @@ const QUICK = [
   // #632: Show me where's trail along a walkable way
   'trail',
   // #628: Bloombot acts out each Interact verb
-  'bot-acts', 'bot-turn',
+  'bot-acts', 'bot-turn', 'bot-moves',
   // #631: Bloombot's colour is green
   'bot-green',
   // #635: the skyline fades into fog and stays behind the world

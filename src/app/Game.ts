@@ -1458,6 +1458,7 @@ export class Game {
 
   /** Bloombot: one action from a key, mouse input or pad button. Movement and sprint are read by BotController. */
   private doAction(a: Action) {
+    this.bot?.wake(); // #671: no idle moment while it plays
     if ((this.photo.active && a !== 'debug') || a === 'photo') {
       if (!this.cinematic || this.photo.active) this.photo.action(a);
       return;
@@ -1769,6 +1770,7 @@ export class Game {
     if (yawDeg) this.camera.orbit(yawDeg * this.camFactor('x'));
     if (pitchDeg) this.camera.pitchBy(pitchDeg * this.camFactor('y'));
     this.camIdle = 0;
+    this.bot?.wake();
   }
 
   // ───────────── Third person: the captured mouse ─────────────
@@ -1811,6 +1813,7 @@ export class Game {
     const k = Game.MOUSE_DEG;
     this.camera.look(-dx * k.yaw * this.camFactor('x'), dy * k.pitch * this.camFactor('y'));
     this.camIdle = 0;
+    this.bot?.wake();
   }
 
   /** Per frame: lets go of the mouse when a panel, the menu, the map or a cinematic needs the pointer. */

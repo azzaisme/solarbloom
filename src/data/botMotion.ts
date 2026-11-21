@@ -45,3 +45,30 @@ export const TURN_LOOK = {
   /** how fast the lean follows (per second, exponential): it settles rather than flicks */
   leanEase: 8,
 } as const;
+
+/**
+ * E26 (#671): Bloombot's movement drawn with more life (rendering/BotMoves), all over the clips on the rig. Degrees,
+ * seconds and cells unless it says otherwise.
+ */
+export const MOVES = {
+  /**
+   * The upper body's lean forward, on a spring: it leans in to set off and, stopping, carries on forward a moment
+   * and rocks back past upright before it settles (`hz` how quick, `damping` under 1 so it overshoots a little).
+   */
+  lean: { hz: 2.2, damping: 0.42, setOff: 7, stop: 11, most: 16 },
+  /** the run: a forward lean, the arms trailing back with the elbows bent, the leaves streaming back */
+  run: { lean: 9, armsBack: 38, elbows: 55, arms: 0.75, leaves: 28, flutter: 5, flutterHz: 9, clipSpeed: 1.25 },
+  /** on a slope: leaning into the climb (per rise of one cell a cell), back a little going down; the swinging foot lifts */
+  slope: { up: 14, down: 8, lift: 18 },
+  /** wading: slower, careful steps lifted high, the arms out for balance, a little sway */
+  wade: { clipSpeed: 0.7, lift: 22, armsOut: 38, armsUp: 12, arms: 0.8, sway: 3, ease: 4 },
+  /** landing from a hover, climb or glide (and stepping off a lift, smaller): a crouch and a little hop back up */
+  land: { dur: 0.55, knee: 26, hop: 0.06 },
+  /** walking into a wall: a small recoil back and a lean back, then it stands rather than running in place */
+  bump: { dur: 0.42, back: 0.07, lean: -9, look: -10, again: 0.9 },
+  /** idle moments: the first after `after` seconds standing with no play input, then one every `every` seconds */
+  idle: { after: 6, every: 6.5, fade: 0.15 },
+  look: { dur: 2.8, yaw: 42, pitch: 6 },
+  stretch: { dur: 2.4, raise: 170, out: 30, elbow: 8, lean: -10, head: -16 },
+  shake: { dur: 1.5, roll: 6, hz: 8, head: 9, arms: 20 },
+} as const;

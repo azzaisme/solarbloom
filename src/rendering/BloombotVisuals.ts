@@ -1,5 +1,6 @@
 import { applyTurnLook, stepPhase, turnLook, type TurnLook } from './BotTurn';
-import { TURN_LOOK } from '../data/botMotion';
+import { MOVES, TURN_LOOK } from '../data/botMotion';
+import { BotMoves, type MoveIn } from './BotMoves';
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
 import { botParts, growthKey, type BotGrowth, type BotMat, type PartId, type PartPiece } from '../data/botParts';
@@ -9,7 +10,7 @@ import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './Sea
 import { surfaceTriangles, skinnedVertices, vertexOnBones } from './SkinSurface';
 import { inBox, type SeatBox } from './SeatBox';
 import { ACT_EASE, ACTS, type ActEffect, type ActId } from '../data/botActs';
-import { actPose, applyActPose, emptyPose } from './BotActs';
+import { actPose, applyActPose, boneOf, emptyPose, turnBone } from './BotActs';
 import { BotProp } from './BotProps';
 
 /**
@@ -155,6 +156,12 @@ export class BloombotVisuals {
   private leanNow = 0;
   private turnLookNow: TurnLook = { headYaw: 0, twist: 0, stepL: 0, stepR: 0, lean: 0 };
   private turnAxes = { right: new pc.Vec3(), up: new pc.Vec3() };
+  /** #671: the movement drawn with more life (BotMoves), what the controller tells it each frame, the run clip's layer */
+  readonly moves = new BotMoves();
+  private moveIn: MoveIn = { pace: 0, accel: 0, walk: 2.6, run: 4.6, climb: 0, wading: false, still: 0, reduced: false };
+  private runLayer?: pc.AnimComponentLayer;
+  /** each foot's place along its front last frame (the clip's), to tell which one swings forward */
+  private footWas = { l: 0, r: 0, ok: false };
 
   constructor(
     private app: pc.AppBase,
@@ -206,6 +213,12 @@ export class BloombotVisuals {
       const looped = LOOPS.includes(track.name);
       anim.assignAnimation(track.name, track, undefined, 1, looped);
       this.clips.set(track.name, track.duration);
+      // #671: the run is the hover clip on a layer of its own over the walk, its weight set by speed (a blend)
+      if (track.name === 'hover') {
+        this.runLayer = anim.addLayer('run', 0);
+        anim.assignAnimation('hover', track, 'run', 1, true);
+        this.runLayer.transition('hover', 0);
+      }
     }
     this.model = e;
     this.buildGrowth();
@@ -489,6 +502,8 @@ export class BloombotVisuals {
         if (bone) this.boneRest.set(b, new pc.Quat().copy(root).invert().mul(bone.getRotation()));
       }
     if (!this.pieces.length && !this.ghosts.length) return;
+    const leaves = this.moves.look.leaves;
+    const trail = leaves > 0.01 ? new pc.Quat().setFromAxisAngle(this.root.right, -leaves) : undefined;
     for (const p of this.ghosts.length ? [...this.pieces, ...this.ghosts] : this.pieces) {
       if (!this.bones.has(p.bone)) this.bones.set(p.bone, this.model.findByName(p.bone));
       const bone = this.bones.get(p.bone);
@@ -502,6 +517,8 @@ export class BloombotVisuals {
       }
       const delta = this.growQ2.copy(turn).mul(rest.clone().invert());
       const q = new pc.Quat().copy(root).mul(delta);
+      // #671: running, the leaves (and a bud) stream back from where they grow
+      if (trail && (p.part === 'leaves' || p.part === 'bud')) q.copy(trail.clone().mul(q));
       q.transformVector(p.at, this.growTmp);
       const base = bone ? bone.getPosition() : this.root.getPosition();
       p.e.setPosition(base.x + this.growTmp.x, base.y + this.growTmp.y, base.z + this.growTmp.z);
@@ -530,6 +547,26 @@ export class BloombotVisuals {
   }
 
   /**
+   * #671: how it moves this frame (BotController): its speed and how fast that changes, the walk and run speeds, the
+   * slope, wading, and how long it has stood with no play input.
+   */
+  setMove(m: Omit<MoveIn, 'reduced'>) {
+    Object.assign(this.moveIn, m);
+  }
+
+  /** #671: landed from a hover, climb or glide (`size` 1), or stepped off a lift (smaller). */
+  land(size = 1) {
+    this.moves.land(size);
+  }
+
+  /** #671: walked into a wall: a small recoil (not again while it holds into it). True when it recoiled. */
+  bump(): boolean {
+    const did = this.moves.bump();
+    if (did && !this.reducedMotion) this.setFace('surprised', 0.45);
+    return did;
+  }
+
+  /**
    * #670: the turn under way: how far it still has to turn (radians, + toward its left), how fast it turns (radians a
    * second) and how fast it moves (cells a second). Drawn in `update`: the head leading, steps on the spot, a lean.
    */
@@ -544,19 +581,71 @@ export class BloombotVisuals {
     return this.turnLookNow;
   }
 
-  /** #670: draws the turn over the clip (after any act; not while seated: the seat poses hold it still). */
-  private drawTurn(dt: number) {
+  /**
+   * #670 / #671: draws the turn and the movement over the clip (after any act, which keeps the bones while it plays;
+   * not while seated: the seat poses hold it still). The whole model leans into a curve and rolls with a wade or a
+   * shake; the bones take the lean, the arms, the steps and the idle moments; then the model sinks so bent knees keep
+   * the feet down, rising for a hop, back for a recoil.
+   */
+  private drawBody(dt: number) {
     const t = this.turnNow;
     this.stepAt = stepPhase(this.stepAt, t.vel * dt);
     const look = turnLook(t.left, t.vel, t.speed, this.stepAt, this.reducedMotion, this.turnLookNow);
     // the lean settles toward its goal rather than flicking with every change of turn
     this.leanNow += (look.lean - this.leanNow) * Math.min(1, dt * TURN_LOOK.leanEase);
+    this.moveIn.reduced = this.reducedMotion;
+    // no idle moments over an act, a one-shot clip or a seat
+    if (this.act || this.action || this.pose) this.moveIn.still = 0;
+    const mv = this.moves.update(dt, this.moveIn);
+    if (this.runLayer) this.runLayer.weight = !this.pose && !this.action && this.loop === 'walk' ? mv.run : 0;
     if (this.pose) return;
     // leaning toward its left is a roll about its front (local +z) by a negative angle
-    this.holder?.setLocalEulerAngles(this.tired ? 9 : 0, 0, -this.leanNow);
-    this.standIn?.setLocalEulerAngles(this.tired ? 9 : 0, 0, -this.leanNow);
-    if (this.model && !this.act) applyTurnLook(this.model, this.root, look, this.turnAxes);
+    const roll = -this.leanNow - mv.roll;
+    this.holder?.setLocalEulerAngles(this.tired ? 9 : 0, 0, roll);
+    this.standIn?.setLocalEulerAngles(this.tired ? 9 : 0, 0, roll);
+    this.standIn?.setLocalPosition(0, 0.4 + mv.up, -mv.back);
+    if (!this.model || this.act) return;
+    const holder = this.holder;
+    holder?.setLocalPosition(0, 0, 0);
+    const before = this.feetHeight();
+    // which foot swings forward (as the clip has it), to lift it higher on a slope or wading
+    const front = this.frontTmp.copy(this.root.forward).mulScalar(-1);
+    const root = this.root.getPosition();
+    const lf = boneOf(this.model, 'LeftFoot');
+    const rf = boneOf(this.model, 'RightFoot');
+    let swingL = 0;
+    let swingR = 0;
+    if (lf && rf && dt > 0) {
+      const zl = this.footTmp.copy(lf.getPosition()).sub(root).dot(front);
+      const zr = this.footTmp.copy(rf.getPosition()).sub(root).dot(front);
+      if (this.footWas.ok) {
+        const d = (zl - this.footWas.l - (zr - this.footWas.r)) / dt;
+        swingL = smooth(d / 0.6);
+        swingR = smooth(-d / 0.6);
+      }
+      this.footWas = { l: zl, r: zr, ok: true };
+    }
+    applyActPose(this.model, this.root, mv.body, 1);
+    if (mv.armW > 0) applyActPose(this.model, this.root, mv.arms, mv.armW);
+    if (mv.swingLift > 0) {
+      const right = this.turnAxes.right.copy(this.root.right);
+      for (const [side, k] of [
+        ['Left', swingL],
+        ['Right', swingR],
+      ] as const) {
+        const lift = mv.swingLift * k;
+        if (lift <= 0) continue;
+        turnBone(boneOf(this.model, `${side}UpLeg`), right, -lift);
+        turnBone(boneOf(this.model, `${side}Leg`), right, lift * 1.6);
+        turnBone(boneOf(this.model, `${side}Foot`), right, -lift * 0.6);
+      }
+    }
+    applyTurnLook(this.model, this.root, look, this.turnAxes);
+    const sink = mv.body.knee > 0 ? this.feetHeight() - before : 0;
+    holder?.setLocalPosition(0, -sink + mv.up, -mv.back);
   }
+  private frontTmp = new pc.Vec3();
+  private footTmp = new pc.Vec3();
 
   /** Places bloombot (feet) and turns it to face `facing` (radians, 0 = +z). */
   place(x: number, y: number, z: number, facing: number) {
@@ -843,7 +932,10 @@ export class BloombotVisuals {
     this.standIn?.setLocalEulerAngles(on ? 9 : 0, 0, 0);
   }
 
-  /** The looping clip, from how fast bloombot moves (world units per second) and whether it hovers (sprint). */
+  /**
+   * The looping clip, from how fast bloombot moves (world units per second) and whether it hovers (a hover or glide
+   * across: running blends the run in by speed instead, see setMove).
+   */
   setMotion(speed: number, hovering: boolean) {
     const want: BotLoop = this.pose && this.clips.has(this.pose) ? this.pose : speed < 0.05 ? 'idle' : hovering ? 'hover' : 'walk';
     const anim = this.model?.anim;
@@ -852,7 +944,10 @@ export class BloombotVisuals {
     if (this.act && !this.act.held && this.act.ending === undefined && speed > 0.3) this.act.ending = this.act.t;
     if (!this.action) {
       if (want !== this.loop) anim.baseLayer?.transition(want, BLEND);
-      anim.speed = want === 'walk' ? pc.math.clamp(speed / WALK_STRIDE, 0.5, 1.8) : 1;
+      // #671: the walk's step matches its speed (slower and careful wading); running, the run clip's own quicker step
+      const look = this.moves.look;
+      const walkStep = pc.math.clamp(speed / WALK_STRIDE, 0.5, 1.8) * (1 + (MOVES.wade.clipSpeed - 1) * look.wade);
+      anim.speed = want === 'walk' ? walkStep + (MOVES.run.clipSpeed - walkStep) * look.run : 1;
     }
     this.loop = want;
   }
@@ -1008,8 +1103,10 @@ export class BloombotVisuals {
 
   /** #628: the lower of its two feet (the ankle joints), above its root. */
   feetHeight(): number {
-    const l = this.model?.findByName('LeftFoot');
-    const r = this.model?.findByName('RightFoot');
+    if (!this.model) return 0;
+    // (cached: #671 reads it every frame)
+    const l = boneOf(this.model, 'LeftFoot');
+    const r = boneOf(this.model, 'RightFoot');
     if (!l || !r) return 0;
     return Math.min(l.getPosition().y, r.getPosition().y) - this.root.getPosition().y;
   }
@@ -1017,7 +1114,7 @@ export class BloombotVisuals {
   update(dt: number) {
     this.clock += dt;
     this.runAct(dt);
-    this.drawTurn(dt);
+    this.drawBody(dt);
     this.placeGrowth();
     if (this.pose) this.posed();
     // Faces: an expression times out back to happy; now and then a blink.
