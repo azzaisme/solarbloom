@@ -31,6 +31,7 @@ import { CultivatorSystem } from './CultivatorSystem';
 import { Inventory, type BotAt } from './Inventory';
 import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
+import { MoveSpots } from './MoveSpots';
 import { FountainSystem } from './FountainSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
@@ -95,6 +96,8 @@ export class Sim {
   readonly salvage: SalvageSystem;
   /** E21.5: gates. */
   readonly gates: GateSystem;
+  /** E25 (#626): the vaults, stashes and trips the level II moves are for. */
+  readonly moves: MoveSpots;
   /** E21.6: the fountain's tiers and deliveries. */
   readonly fountain: FountainSystem;
   /** E21.8: the Keepers and their requests. */
@@ -195,6 +198,7 @@ export class Sim {
     this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
+    this.moves = new MoveSpots(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);

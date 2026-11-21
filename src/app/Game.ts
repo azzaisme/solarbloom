@@ -19,6 +19,7 @@ import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, MaterialId, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS, tierGives } from '../data/salvage';
+import { MOVE_LEVELS } from '../data/moveSpots';
 import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
@@ -2284,6 +2285,13 @@ export class Game {
     if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
     const gate = s.gates.gateAt(f.x, f.z);
     if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? SALVAGE.pryHoldSeconds : undefined, refused: s.gates.problem(gate), run });
+    // E25 (#626): a sealed vault (Pry II), a stash, and the trips the level II moves take (over the sea, up a wall)
+    const vault = s.moves.vaultAt(f.x, f.z);
+    if (vault) out.push({ kind: 'gate', id: `vault:${vault.id}`, verb: 'Pry', name: 'the vault door', distance: fd, at: front, ocHold: MOVE_LEVELS.vaultHoldSeconds, refused: s.moves.vaultProblem(vault), run });
+    const stash = s.moves.stashAt(f.x, f.z);
+    if (stash) out.push({ kind: 'cache', id: `stash:${stash.id}`, verb: 'Open', name: 'the stash', distance: fd, at: front, run });
+    const trip = oc.tripAhead(f);
+    if (trip) out.push({ kind: 'gate', id: `trip:${trip.id}`, verb: trip.verb, name: trip.name, distance: fd, at: front, refused: s.moves.tripProblem(trip), run: () => oc.takeTrip(trip, f) });
     if (occ?.type === 'core' && s.areas.areaOf(occ) === PARK)
       out.push({ kind: 'landmark', id: `fountain:${occ.id}`, verb: 'Bring things to', name: 'the fountain', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     else if (occ?.type === 'core') {
@@ -4334,6 +4342,11 @@ export class Game {
     b.on('bloombot.parkGrew', ({ id }) => {
       const d = PARK_GROWTH.find((x) => x.id === id);
       if (d) this.grown.push(WORDS.bloombot.park(d.name, d.does));
+    });
+    // E25 (#626): the workshop worked out a move's second level
+    b.on('research.done', ({ id }) => {
+      const g = this.sim.research.project(id)?.gives;
+      if (g && 'move' in g) this.grown.push(WORDS.bloombot.levelTwo[g.move]);
     });
     b.on('research.upgraded', ({ id, level }) => {
       const u = RESEARCH_UPGRADES.find((x) => x.id === id);

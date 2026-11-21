@@ -47,6 +47,8 @@ export class BotController {
   private walk?: Walk;
   /** G.13: riding a rooftop lift: rising (or sinking) in place, then stepping off on the other layer */
   private lift?: { roofId: string; x: number; z: number; fromY: number; toY: number; t: number; dur: number };
+  /** E25 (#626): a hover, climb or glide across to another cell (MoveSpots), over water or up a wall */
+  private trip?: { fx: number; fz: number; fy: number; tx: number; tz: number; ty: number; t: number; dur: number; arc: number; style: 'hover' | 'climb' | 'glide'; done?: () => void };
   /** world speed this frame */
   speed = 0;
   sprinting = false;
@@ -114,6 +116,13 @@ export class BotController {
     // E21.24: on the Old City's terraces bloombot stands at the ground's height (sloping on ramps)
     const lift = this.sim.grid.terraced(this.pose.roofId) ? levelY(heightAt(this.pose.x, this.pose.z)) : 0;
     let y = l.origin[1] + l.height + SLAB_TOP - sink + lift;
+    if (this.trip) {
+      const tr = this.trip;
+      const k = Math.min(1, tr.t / tr.dur);
+      // a climb rises first and then steps over; a hover or glide moves along a shallow arch
+      const ky = tr.style === 'climb' ? Math.min(1, k / 0.6) : k;
+      y = tr.fy + (tr.ty - tr.fy) * (ky * ky * (3 - 2 * ky)) + tr.arc * Math.sin(Math.PI * k);
+    }
     if (this.lift) {
       const k = Math.min(1, this.lift.t / this.lift.dur);
       y = this.lift.fromY + (this.lift.toY - this.lift.fromY) * (k * k * (3 - 2 * k));
@@ -141,7 +150,24 @@ export class BotController {
   }
 
   get riding(): boolean {
-    return !!this.lift;
+    return !!this.lift || !!this.trip;
+  }
+
+  /**
+   * E25 (#626): a level II move's trip to the cell (x, z) on the ground: across the water, up or down a wall, over
+   * a gap. Bloombot travels there over `dur` seconds (rising `arc` tiles over the line between), then stands on
+   * the cell; `done` runs when it lands.
+   */
+  travel(x: number, z: number, style: 'hover' | 'climb' | 'glide', dur: number, arc: number, done?: () => void) {
+    if (this.lift || this.trip) return;
+    this.walk = undefined;
+    const p = this.pose;
+    const fy = this.world()[1];
+    const l = this.sim.grid.layer(p.roofId)!;
+    const ty = l.origin[1] + l.height + SLAB_TOP + (this.sim.grid.terraced(p.roofId) ? levelY(heightAt(x + 0.5, z + 0.5)) : 0);
+    p.facing = Math.atan2(x + 0.5 - p.x, z + 0.5 - p.z);
+    this.trip = { fx: p.x, fz: p.z, fy, tx: x + 0.5, tz: z + 0.5, ty, t: 0, dur: this.visuals.reducedMotion ? Math.min(dur, 0.5) : dur, arc, style, done };
+    this.following = true;
   }
 
   /** The cell in front, which every tool acts on. */
@@ -222,6 +248,29 @@ export class BotController {
       iy += pad.y;
     }
     const mag = Math.min(1, Math.hypot(ix, iy));
+    if (this.trip) {
+      const tr = this.trip;
+      tr.t += dt;
+      const k = Math.min(1, tr.t / tr.dur);
+      // a climb goes up before it goes over; the others move evenly
+      const kx = tr.style === 'climb' ? Math.max(0, (k - 0.4) / 0.6) : k * k * (3 - 2 * k);
+      const p = this.pose;
+      const was = [p.x, p.z];
+      p.x = tr.fx + (tr.tx - tr.fx) * kx;
+      p.z = tr.fz + (tr.tz - tr.fz) * kx;
+      const [x, y, z] = this.world();
+      this.visuals.place(x, y, z, p.facing);
+      // hovering and gliding show the hover pose; a climb stands still while it pulls itself up
+      this.visuals.setMotion(tr.style === 'climb' ? 0 : Math.hypot(p.x - was[0], p.z - was[1]) / Math.max(dt, 1e-3), tr.style !== 'climb');
+      this.visuals.update(dt);
+      this.follow(x, y, z);
+      if (k >= 1) {
+        this.trip = undefined;
+        this.teleport(p.roofId, tr.tx, tr.tz);
+        tr.done?.();
+      }
+      return;
+    }
     if (this.lift) {
       this.lift.t += dt;
       if (this.lift.t >= this.lift.dur) {

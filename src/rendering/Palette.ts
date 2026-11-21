@@ -333,6 +333,9 @@ const props = {
   lampToppled: '#8d8a78',
   /** E23.8.3.2: the industrial ruins: deep-rusted girders and the rust run-off staining the ground round them */
   girderRust: '#6b4330',
+  /** E25 (#626): the dark inside of a forced vault, and a stash box's iron bands */
+  vaultInside: '#2a2622',
+  stashBand: '#4a4038',
   rustStain: '#5e3a28',
   stallDead: '#9a8a70',
   stallAlive: '#c9a77a',

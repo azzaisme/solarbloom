@@ -992,6 +992,10 @@ export class ChunkRenderer {
       b.add('box', PALETTE.stone.light, [x, y + 0.62, z + 0.05], [0.26, 0.32, 0.02]);
       return true;
     }
+    if (prop.startsWith('vault:') || prop.startsWith('stash:')) {
+      this.moveSpot(b, t, prop, x, y, z);
+      return true;
+    }
     if (prop === 'shed') {
       const sh = PARK_SET.shed;
       if (t.x !== sh.x || t.z !== sh.z) return true;
@@ -1010,6 +1014,75 @@ export class ChunkRenderer {
       return true;
     }
     return false;
+  }
+
+  /**
+   * E25 (#626): a sealed vault and a stash. A vault is a squat stone strongroom with an iron door on the side that
+   * faces open ground: shut, a wheel and rivets; forced, the door stands open against the wall and the inside is dark.
+   * A stash is a small wooden box with iron bands: shut, a gold catch glints; opened, its lid leans back, empty.
+   */
+  private moveSpot(b: Sink, t: TileData, prop: string, x: number, y: number, z: number) {
+    const id = prop.slice(6);
+    const open = !!this.sim.state.salvage?.caches.includes(id);
+    // the side to face: the first neighbour Bloombot could stand on
+    const sides: [number, number][] = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    const [dx, dz] = sides.find(([a, c]) => {
+      const n = this.sim.grid.peek(GROUND, t.x + a, t.z + c);
+      return !!n && !n.blocked && n.level === t.level;
+    }) ?? [0, 1];
+    const along = (k: number) => [dz ? k : 0, dx ? k : 0] as const; // across the door's face
+    if (prop.startsWith('vault:')) {
+      // taller than Bloombot, so it shows over its head from the follow camera
+      const W = 0.98;
+      const H = 1.4;
+      b.add('box', PALETTE.stone.dark, [x, y + H / 2, z], [W, H, W]);
+      b.add('box', PALETTE.stone.shadow, [x, y + H + 0.05, z], [W + 0.08, 0.1, W + 0.08]);
+      for (let c = 0; c < 5; c++) b.add('box', PALETTE.stone.grey, [x, y + 0.16 + c * 0.26, z], [W + 0.01, 0.03, W + 0.01]);
+      const fx = x + dx * (W / 2 + 0.01);
+      const fz = z + dz * (W / 2 + 0.01);
+      const dw = 0.62;
+      const dh = 1.0;
+      // a stone frame round the door, a lintel over it
+      const [lx, lz] = along(dw / 2 + 0.06);
+      for (const k of [-1, 1]) b.add('box', PALETTE.stone.shadow, [fx + dx * 0.02 + lx * k, y + dh / 2 + 0.04, fz + dz * 0.02 + lz * k], [dx ? 0.07 : 0.1, dh + 0.08, dz ? 0.07 : 0.1]);
+      b.add('box', PALETTE.stone.shadow, [fx + dx * 0.02, y + dh + 0.12, fz + dz * 0.02], [dx ? 0.08 : dw + 0.3, 0.12, dz ? 0.08 : dw + 0.3]);
+      if (!open) {
+        b.add('box', PALETTE.metal.iron, [fx, y + dh / 2 + 0.04, fz], [dx ? 0.05 : dw, dh, dz ? 0.05 : dw]);
+        b.add('box', PALETTE.metal.rust, [fx + dx * 0.01, y + dh / 2 + 0.04, fz + dz * 0.01], [dx ? 0.04 : dw * 0.84, dh * 0.88, dz ? 0.04 : dw * 0.84]);
+        // the wheel that once turned the bolts, and its spokes
+        b.add('sphere', PALETTE.trim.brass, [fx + dx * 0.05, y + 0.56, fz + dz * 0.05], [dx ? 0.04 : 0.3, 0.3, dz ? 0.04 : 0.3]);
+        b.add('box', PALETTE.trim.bronzeAged, [fx + dx * 0.07, y + 0.56, fz + dz * 0.07], [dx ? 0.03 : 0.32, 0.04, dz ? 0.03 : 0.32]);
+        b.add('box', PALETTE.trim.bronzeAged, [fx + dx * 0.07, y + 0.56, fz + dz * 0.07], [dx ? 0.03 : 0.04, 0.32, dz ? 0.03 : 0.04]);
+        for (const k of [-1, 1])
+          for (const h of [0.16, 0.95]) {
+            const [ax, az] = along(k * dw * 0.4);
+            b.add('sphere', PALETTE.metal.steel, [fx + dx * 0.03 + ax, y + h, fz + dz * 0.03 + az], [0.04, 0.04, 0.04]);
+          }
+      } else {
+        b.add('box', PALETTE.props.vaultInside, [fx, y + dh / 2 + 0.04, fz], [dx ? 0.03 : dw, dh, dz ? 0.03 : dw]);
+        const [ax, az] = along(dw / 2 + 0.02);
+        b.add('box', PALETTE.metal.iron, [fx + dx * (dw / 2) + ax, y + dh / 2 + 0.04, fz + dz * (dw / 2) + az], [dx ? dw : 0.05, dh, dz ? dw : 0.05]);
+      }
+      return;
+    }
+    // a stash
+    const L = 0.5;
+    const D = 0.34;
+    const bh = 0.24;
+    const sx = dx ? D : L;
+    const sz = dz ? D : L;
+    b.add('box', PALETTE.wood.crate, [x, y + bh / 2, z], [sx, bh, sz]);
+    for (const k of [-1, 1]) {
+      const [ax, az] = along(k * L * 0.3);
+      b.add('box', PALETTE.props.stashBand, [x + ax, y + bh / 2, z + az], [dx ? D + 0.02 : 0.04, bh + 0.01, dz ? D + 0.02 : 0.04]);
+    }
+    if (!open) {
+      b.add('box', PALETTE.wood.dark, [x, y + bh + 0.035, z], [sx + 0.03, 0.07, sz + 0.03]);
+      b.add('box', PALETTE.trim.gold, [x + dx * (D / 2 + 0.02), y + bh, z + dz * (D / 2 + 0.02)], [dx ? 0.02 : 0.07, 0.08, dz ? 0.02 : 0.07]);
+    } else {
+      b.add('box', PALETTE.props.vaultInside, [x, y + bh - 0.01, z], [sx - 0.06, 0.02, sz - 0.06]);
+      b.add('box', PALETTE.wood.dark, [x - dx * (D / 2 + 0.03), y + bh + D / 2, z - dz * (D / 2 + 0.03)], [dx ? 0.05 : L + 0.03, D, dz ? 0.05 : L + 0.03]);
+    }
   }
 
   /**

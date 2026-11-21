@@ -2,7 +2,7 @@
 // research opens at the crafting table. All data, no rules: the numbers are starting values for tuning.
 // Research replaces E21.10's fixed Workbench list and the exponential upgrade drawer (removed in E23.1.5).
 
-import type { MaterialId } from '../core/types';
+import type { AbilityId, MaterialId } from '../core/types';
 import type { ItemCost } from './crafting';
 import type { RegionId } from './oldcity';
 
@@ -25,6 +25,7 @@ export const BRANCHES: { id: Branch; name: string }[] = [
  * - `keeper`: a Keeper met (woken)
  * - `tech`: old tech in a cache (by cache id)
  * - `project`: a finished project (the next step on a branch)
+ * - `move`: a move Bloombot has learned at the fountain (E25 #626: its second level follows on, like a project)
  */
 export type Find =
   | { material: MaterialId }
@@ -32,7 +33,8 @@ export type Find =
   | { creature: 'butterflies' | 'birds' | 'koi' }
   | { keeper: RegionId }
   | { tech: string }
-  | { project: string };
+  | { project: string }
+  | { move: AbilityId };
 
 /**
  * The system an upgrade works through. An upgrade is offered only once its system is in the game and reads it:
@@ -47,7 +49,9 @@ export type Gift =
   /** an upgrade at the crafting table's Upgrade tab (levels bought there, for materials) */
   | { upgrade: string }
   /** a second station: two projects run at once */
-  | { station: 2 };
+  | { station: 2 }
+  /** E25 (#626): a move's second level (MoveSpots reads it) */
+  | { move: AbilityId };
 
 export interface ProjectDef {
   id: string;
@@ -126,6 +130,11 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'rb-sprint', branch: 'bloombot', name: 'Light feet', about: 'Easier running on old legs.', cost: { gears: 8, scrap: 10 }, days: 0.15, opens: { material: 'gears' }, gives: { upgrade: 'sprint' } },
   { id: 'rb-pulse', branch: 'bloombot', name: 'Ripples', about: 'A pulse that carries a little further.', cost: { seeds: 16, glass: 6 }, days: 0.2, opens: { project: 'rb-efficiency' }, gives: { upgrade: 'pulseRadius' } },
   { id: 'rb-backpack', branch: 'bloombot', name: 'Stitched pockets', about: 'More room in every pocket of the backpack.', cost: { timber: 10, scrap: 10 }, days: 0.1, opens: { material: 'timber' }, gives: { upgrade: 'backpack' } },
+  // E25 (#626): each move's second level, one fountain step after the move itself (Glide II after Climb II)
+  { id: 'rb-pry2', branch: 'bloombot', name: 'Pry II', about: 'A longer bar and firmer feet, for the heavy iron doors of old vaults.', cost: { copper: 20, gears: 12, scrap: 10 }, days: 0.2, opens: { move: 'hover' }, gives: { move: 'pry' } },
+  { id: 'rb-hover2', branch: 'bloombot', name: 'Hover II', about: 'A steadier hover that goes much further over the sea.', cost: { glass: 20, copper: 16, sunstone: 6 }, days: 0.25, opens: { move: 'climb' }, gives: { move: 'hover' } },
+  { id: 'rb-climb2', branch: 'bloombot', name: 'Climb II', about: 'A surer grip, to climb straight up a low wall with no ladder.', cost: { gears: 20, clay: 16, timber: 10 }, days: 0.25, opens: { move: 'glide' }, gives: { move: 'climb' } },
+  { id: 'rb-glide2', branch: 'bloombot', name: 'Glide II', about: 'Wider wings that carry a lot further from a high edge.', cost: { sunstone: 16, glass: 16, gears: 10 }, days: 0.3, opens: { project: 'rb-climb2' }, gives: { move: 'glide' } },
   // Power
   { id: 'pw-lines', branch: 'power', name: 'Long lines', about: 'Copper drawn thinner reaches further.', cost: { copper: 12 }, days: 0.1, opens: { keeper: 'mastRow' }, gives: { upgrade: 'poleReach' } },
   { id: 'pw-solar', branch: 'power', name: 'Clear glass', about: 'Panels that drink more of the sun.', cost: { glass: 12, sunstone: 2 }, days: 0.15, opens: { material: 'glass' }, gives: { upgrade: 'solarYield' } },
