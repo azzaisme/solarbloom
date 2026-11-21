@@ -1,5 +1,6 @@
 import type { Row, SettingsTab } from './SettingsScreen';
 import { canFullScreen, isFullScreen, setFullScreen } from '../app/FullScreen';
+import { GLOW_STEPS } from '../data/look';
 
 /**
  * E22.11: what each Settings tab holds, shared by the title screen and the in-game menu. `inGame` adds what only
@@ -13,6 +14,8 @@ export interface RowContext {
   autoLabel?: string;
   /** the game's stats block (HTML), in game only */
   stats?: string;
+  /** #633: the graphics tier in use draws no glow (Low): the Glow row says so */
+  glowOff?: boolean;
 }
 
 export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
@@ -46,6 +49,8 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
           ],
           fallback: 'auto',
         },
+        // #633: "Glow", not "bloom": in this game a bloom is a flower
+        { kind: 'select', key: 'glow', label: 'Glow', hint: c.glowOff ? "Graphics is set to Low, so lights don't shine. Set Graphics higher, just above, to turn this on" : 'How much lamps and lit windows shine. Turn it down if they look too bright', options: [...GLOW_STEPS], fallback: '1', numeric: true },
         { kind: 'check', key: 'lowVfx', label: 'Fewer particles and softer sparkles' },
         { kind: 'check', key: 'lowFog', label: 'Simple fog (faster on small devices)' },
         { kind: 'check', key: 'fireflies', label: 'Fireflies at night', defaultOn: true },
@@ -71,7 +76,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         { kind: 'check', key: 'invertX', label: 'Invert camera left and right' },
         { kind: 'check', key: 'invertY', label: 'Invert camera up and down' },
         { kind: 'check', key: 'noRecentre', label: 'Keep the view where I turn it' },
-        { kind: 'check', key: 'noVistas', label: 'Skip region vistas' },
+        { kind: 'check', key: 'noVistas', label: 'Skip the view when a new place opens' },
       ];
   }
 }

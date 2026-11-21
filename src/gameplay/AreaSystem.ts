@@ -78,11 +78,14 @@ export class AreaSystem {
   }
 
 
-  /** E21.5: what an Old City area's seal says: its region's gate, or (a backstreet) the region beside it. */
+  /**
+   * E21.5: what an Old City area's seal says: its region's gate, or (a backstreet) the region beside it. #606: where
+   * it is and what to do, in plain words (the gate's own `how`).
+   */
   sealText(id: string): string {
     const r = regionById(id);
-    if (r) return `${r.name} is behind the clouds. ${r.gate.blocked}`;
-    return 'Behind the clouds — open a region beside it first';
+    if (r) return `${r.name} is behind the clouds. ${r.gate.how}`;
+    return 'The clouds hide this street. Open the way into a place beside it first.';
   }
 
   /** E21.5: after GateSystem lifts an Old City seal. */
@@ -122,7 +125,7 @@ export class AreaSystem {
     if (t.roofId !== GROUND || this.canTouch(t)) return undefined;
     const id = this.map.areaOfCell(t.x, t.z);
     if (this.sealed(id)) return this.sealText(id);
-    return this.fog(id) === 'hidden' ? 'Lost in the fog — clear a neighbouring area first' : 'Thick fog — restore a tile next to clear ground first';
+    return this.fog(id) === 'hidden' ? 'The fog is too thick here. Bring the place next to it back to life first.' : 'Thick fog. Pulse the ground next to the living ground to push it back.';
   }
 
   // ───────────── progress ─────────────
@@ -231,7 +234,7 @@ export class AreaSystem {
   clear(id: string, force = false): boolean {
     const s = this.sim;
     if (!force && !this.ready(id)) {
-      s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : 'Restore more of this area first' });
+      s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : 'Pulse more of the ground here green first' });
       return false;
     }
     if (this.fog(id) === 'cleared') return false;

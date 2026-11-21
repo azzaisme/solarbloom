@@ -36,6 +36,27 @@ const EYE = new pc.Vec3(0, 0.66, 0.2);
 /** Where the echo palms are while pulsing (model space, before SCALE): chest height, pushed forward. */
 const PALM = new pc.Vec3(0.06, 0.46, 0.34);
 
+/**
+ * #620: what Bloombot has grown into, drawn on the model in its own materials: a leaf by the sprout for each move
+ * learned (up to 4), a glowing cell on the pack for each level of Bigger charge, a pocket for each level of Roomier
+ * backpack (up to 3 each). Small, and only where it already has those parts.
+ */
+export interface BotGrowth {
+  moves: number;
+  cells: number;
+  pockets: number;
+}
+interface GrowthPiece {
+  e: pc.Entity;
+  bone: string;
+  /** where it sits from the bone, in Bloombot's own frame (x right, y up, z forward; world units) */
+  at: pc.Vec3;
+  /** its turn in Bloombot's frame */
+  turn: pc.Quat;
+}
+/** Bloombot's own frame -> its bones, measured once from the idle pose (see placeGrowth) */
+const GROWTH_BONES = ['head_end', 'Spine02'] as const;
+
 export type BotLoop = 'idle' | 'walk' | 'hover' | 'sit' | 'meditate';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
 /** the one-shot clips into and out of sitting (oneShot) */
@@ -101,6 +122,10 @@ export class BloombotVisuals {
   private pose?: 'sit' | 'meditate';
   /** E23.2.1: out of charge: bloombot droops a little and its walk slows (the low-power walk) */
   private tired = false;
+  /** #620: the growth drawn now, its pieces, and each bone's turn in the idle pose (Bloombot's frame) */
+  private growth: BotGrowth = { moves: 0, cells: 0, pockets: 0 };
+  private pieces: GrowthPiece[] = [];
+  private boneRest = new Map<string, pc.Quat>();
 
   constructor(
     private app: pc.AppBase,
@@ -144,6 +169,7 @@ export class BloombotVisuals {
     holder.addChild(e);
     this.root.addChild(holder);
     this.addFace(holder, e);
+    this.greenGlow(e);
     e.addComponent('anim', { activate: true });
     const anim = e.anim!;
     for (const a of res.animations) {
@@ -153,10 +179,32 @@ export class BloombotVisuals {
       this.clips.set(track.name, track.duration);
     }
     this.model = e;
+    this.buildGrowth();
     this.standIn?.destroy();
     this.standIn = undefined;
     this.loaded = true;
     anim.baseLayer?.transition('idle', 0);
+  }
+
+  /**
+   * #631: Bloombot's glowing trim (material `bloombot_glow`, the chest light, the ear lights, the seams) in its own
+   * green rather than the model's cyan. One shared material for every part that glows.
+   */
+  private greenGlow(rig: pc.Entity) {
+    let green: pc.StandardMaterial | undefined;
+    for (const r of rig.findComponents('render') as pc.RenderComponent[])
+      for (const mi of r.meshInstances) {
+        const old = mi.material as pc.StandardMaterial;
+        if (old?.name !== 'bloombot_glow') continue;
+        if (!green) {
+          green = old.clone();
+          green.name = 'bloombot_glow_green';
+          green.diffuse = color(PALETTE.botGlow);
+          green.emissive = color(PALETTE.botGlow);
+          green.update();
+        }
+        mi.material = green;
+      }
   }
 
   /**
@@ -184,6 +232,92 @@ export class BloombotVisuals {
       m.emissiveMap = t;
       this.setFace(this.face);
     });
+  }
+
+  /** #620: sets what Bloombot has grown into (cheap to call every frame: it rebuilds only on a change). */
+  setGrowth(g: BotGrowth) {
+    const c = this.growth;
+    if (c.moves === g.moves && c.cells === g.cells && c.pockets === g.pockets) return;
+    this.growth = { ...g };
+    this.buildGrowth();
+  }
+
+  /** The growth pieces drawn now (tests and #629's turntable read them). */
+  get growthPieces(): readonly { name: string }[] {
+    return this.pieces.map((p) => ({ name: p.e.name }));
+  }
+
+  private material(name: string): pc.Material | undefined {
+    const mi = this.model?.findComponents('render').flatMap((r) => (r as pc.RenderComponent).meshInstances).find((m) => m.material?.name === name);
+    return mi?.material ?? undefined;
+  }
+
+  private buildGrowth() {
+    for (const p of this.pieces) p.e.destroy();
+    this.pieces = [];
+    if (!this.model) return;
+    const g = this.growth;
+    const piece = (name: string, type: 'sphere' | 'capsule' | 'box', mat: pc.Material | undefined, bone: string, at: [number, number, number], euler: [number, number, number], scale: [number, number, number]) => {
+      const e = new pc.Entity(name);
+      e.addComponent('render', { type, material: mat, castShadows: true });
+      e.setLocalScale(scale[0], scale[1], scale[2]);
+      this.root.addChild(e);
+      this.pieces.push({ e, bone, at: new pc.Vec3(at[0], at[1], at[2]), turn: new pc.Quat().setFromEulerAngles(euler[0], euler[1], euler[2]) });
+    };
+    // a leaf by the sprout for each move: two at the front corners, then two behind, tipped outward. head_end sits
+    // inside the dome, about 0.1 below its top, so the leaves are lifted clear of it (measured in the browser)
+    const leaf = this.material('bloombot_leaf');
+    const yaw = [40, -40, 140, -140];
+    for (let i = 0; i < Math.min(4, g.moves); i++) {
+      const a = (yaw[i] * Math.PI) / 180;
+      piece(`grow-leaf-${i}`, 'sphere', leaf, 'head_end', [Math.sin(a) * 0.07, 0.1, Math.cos(a) * 0.07], [-35, yaw[i], 0], [0.05, 0.013, 0.11]);
+    }
+    // a glowing cell on top of the pack for each level of Bigger charge
+    const glow = this.material('bloombot_glow');
+    for (let i = 0; i < Math.min(3, g.cells); i++) piece(`grow-cell-${i}`, 'capsule', glow, 'Spine02', [(i - 1) * 0.06, 0.17, -0.25], [0, 0, 0], [0.032, 0.045, 0.032]);
+    // a pocket on the pack for each level of Roomier backpack: left side, right side, then the bottom
+    const fabric = this.material('bloombot_fabric');
+    const pockets: [number, number, number][] = [[0.15, -0.02, -0.2], [-0.15, -0.02, -0.2], [0, -0.12, -0.24]];
+    for (let i = 0; i < Math.min(3, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i], [0, 0, 0], i < 2 ? [0.04, 0.085, 0.08] : [0.13, 0.045, 0.055]);
+    this.placeGrowth();
+  }
+
+  private growTmp = new pc.Vec3();
+  private growQ = new pc.Quat();
+  private growQ2 = new pc.Quat();
+  /**
+   * Each piece rides its bone: where the bone is, turned as the bone has turned since the idle pose (so the pack's
+   * cells sway with the pack and the leaves nod with the head), in Bloombot's frame.
+   */
+  private placeGrowth() {
+    if (!this.model) return;
+    const root = this.root.getRotation();
+    // the first frame after loading is the idle pose: measure each bone's turn then, pieces or not
+    if (!this.boneRest.size)
+      for (const b of GROWTH_BONES) {
+        const bone = this.model.findByName(b);
+        this.bones.set(b, bone);
+        if (bone) this.boneRest.set(b, new pc.Quat().copy(root).invert().mul(bone.getRotation()));
+      }
+    if (!this.pieces.length) return;
+    for (const p of this.pieces) {
+      if (!this.bones.has(p.bone)) this.bones.set(p.bone, this.model.findByName(p.bone));
+      const bone = this.bones.get(p.bone);
+      // the bone's turn now, against the idle pose it had when first seen (both in Bloombot's frame)
+      let rest = this.boneRest.get(p.bone);
+      const turn = this.growQ.copy(root).invert();
+      if (bone) turn.mul(bone.getRotation());
+      if (!rest) {
+        rest = turn.clone();
+        this.boneRest.set(p.bone, rest);
+      }
+      const delta = this.growQ2.copy(turn).mul(rest.clone().invert());
+      const q = new pc.Quat().copy(root).mul(delta);
+      q.transformVector(p.at, this.growTmp);
+      const base = bone ? bone.getPosition() : this.root.getPosition();
+      p.e.setPosition(base.x + this.growTmp.x, base.y + this.growTmp.y, base.z + this.growTmp.z);
+      p.e.setRotation(q.mul(p.turn));
+    }
   }
 
   /** Shows a visor face, for `seconds` (then back to happy), or until changed. */
@@ -524,6 +658,7 @@ export class BloombotVisuals {
 
   update(dt: number) {
     this.clock += dt;
+    this.placeGrowth();
     if (this.pose) this.posed();
     // Faces: an expression times out back to happy; now and then a blink.
     if (this.faceUntil && this.clock >= this.faceUntil) this.setFace('happy');

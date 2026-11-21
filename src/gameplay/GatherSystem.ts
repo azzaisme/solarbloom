@@ -40,7 +40,7 @@ export class GatherSystem {
   /** Why gathering here won't work right now (undefined: it will). */
   problem(t: TileData): string | undefined {
     if (!this.canGather(t)) return 'Nothing to gather here';
-    if (this.sim.inventory.room('biomass') <= 0) return 'Your Biomass stack is full — put some in storage first';
+    if (this.sim.inventory.room('biomass') <= 0) return 'Your Greens stack is full: leave some in the storage at the fountain';
     return undefined;
   }
 

@@ -48,6 +48,7 @@ export type Action =
   | 'loadNext'
   | 'loadPrev'
   | 'pinNext'
+  | 'showWhere'
   | 'cancel'
   | 'menu'
   | 'photo'
@@ -96,6 +97,8 @@ export const ACTIONS: readonly ActionDef[] = [
   A('loadNext', 'Pulse load: next', 'act', 'world'),
   A('loadPrev', 'Pulse load: previous', 'act', 'world'),
   A('pinNext', 'Pin the next request', 'act', 'world'),
+  // #605 (E24): the objective card's Show me where
+  A('showWhere', 'Show me where (the goal)', 'act', 'world'),
   A('buildMenu', 'Build menu', 'build', 'world'),
   A('place', 'Place (in build mode)', 'build', 'build'),
   A('rotate', 'Turn the piece', 'build', 'build'),
@@ -185,6 +188,7 @@ export function defaultKeys(): Record<Action, string[]> {
     loadNext: ['KeyV'],
     loadPrev: ['KeyZ'],
     pinNext: ['KeyG'],
+    showWhere: ['KeyH'],
     cancel: [FIXED_KEY],
     menu: [FIXED_KEY],
     photo: ['KeyP'],
@@ -225,6 +229,8 @@ export function defaultPad(): Partial<Record<Action, number>> {
     prevTab: 4,
     nextTab: 5,
     pinNext: 15,
+    // #605: RT while walking (in build mode RT is Remove)
+    showWhere: 7,
   };
   p.eat = 14; // E23.2.1: d-pad left eats
   // E23.2.2: the bumpers turn the load wheel while walking (in build mode they turn the piece)

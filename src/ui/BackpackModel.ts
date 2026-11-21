@@ -20,6 +20,7 @@ import type { Sim } from '../gameplay/Sim';
  */
 export const TABS = [
   { id: 'items', label: 'Items' },
+  { id: 'bloombot', label: 'Bloombot' }, // #620: what Bloombot has learned and can grow into
   { id: 'requests', label: 'Requests' },
   { id: 'journal', label: 'Journal' },
   { id: 'collection', label: 'Collection' },

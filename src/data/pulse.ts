@@ -61,6 +61,8 @@ export const LOAD_WHEEL = {
   showSeconds: 1.6,
   /** the one-time introduction, the first time bloombot carries something to load: the ring and its note stay this long */
   introSeconds: 7,
+  /** While the ring is up, the arrow keys and the d-pad pick the load that way (as the ring is laid out, hud.css) */
+  directions: { up: 'none', right: 'seeds', down: 'rare', left: 'fertiliser' },
 } as const;
 
 /** Each region's rare plants (the look of a rare-seed pulse there); unlisted regions use `default`. */

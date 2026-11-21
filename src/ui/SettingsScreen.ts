@@ -1,13 +1,19 @@
 import type { Settings } from './Hud';
 import type { Bindings } from '../app/Bindings';
 import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell';
+import { firstItem, reveal } from './PadFocus';
+import { stepperHtml, wireSteppers } from './Stepper';
 
 /**
  * E22.11 (#349): Settings as one screen with tabs (Game, Controls, Display, Sound, Accessibility), the same from
  * the title screen and from the in-game menu. It knows nothing of the running game: the host applies and saves
  * each change (`set`), and supplies the bindings and a way to wait for the next key or button (Controls).
  *
- * Every control is a real button, checkbox, slider or list, reachable with the keyboard (Tab, arrows) and the
+ * #616: a setting with a few choices is a ‹ value › stepper (Stepper.ts), not a drop-down a pad can't open. The
+ * focus starts on the first setting when the screen opens and when LB / RB change the tab, and the whole row of
+ * the control in focus wears the ring.
+ *
+ * Every control is a real button, checkbox, slider or stepper, reachable with the keyboard (Tab, arrows) and the
  * pad (the d-pad's focus ring, A to press, LB / RB or Q / E for tabs, B to go back), with a visible focus ring
  * and a label a screen reader reads.
  *
@@ -30,7 +36,7 @@ export type SettingKey = keyof Settings;
 export type Row =
   | { kind: 'check'; key: SettingKey; label: string; defaultOn?: boolean; hint?: string }
   | { kind: 'range'; key: SettingKey; label: string; min: number; max: number; step: number; fallback: number; unit?: string }
-  | { kind: 'select'; key: SettingKey; label: string; options: [string, string][]; fallback: string; numeric?: boolean }
+  | { kind: 'select'; key: SettingKey; label: string; options: [string, string][]; fallback: string; numeric?: boolean; hint?: string }
   | { kind: 'button'; id: string; label: string; danger?: boolean }
   /** a checkbox for something that isn't a saved setting (full screen): it shows `get()` and calls `set` */
   | { kind: 'toggle'; id: string; label: string; hint?: string; get(): boolean; set(on: boolean): void }
@@ -84,7 +90,8 @@ export class SettingsScreen {
     this.el.querySelector('[data-back]')!.addEventListener('click', () => this.close());
     wireBar(this.el, (p) => {
       if (p === 'prev' || p === 'next' || p === 'tabs') {
-        this.tab(p === 'prev' ? -1 : 1, true);
+        this.tab(p === 'prev' ? -1 : 1);
+        this.focusBody();
         return true;
       }
       if (p === 'back' && this.el.querySelector('#ctlListen')?.hasAttribute('hidden')) {
@@ -103,6 +110,7 @@ export class SettingsScreen {
       e.stopPropagation();
       this.tab(e.key === 'ArrowRight' ? 1 : -1, true);
     });
+    wireSteppers(this.body);
     this.body.addEventListener('change', (e) => this.changed(e.target as HTMLElement));
     this.body.addEventListener('input', (e) => {
       const t = e.target as HTMLInputElement;
@@ -122,7 +130,17 @@ export class SettingsScreen {
   open(tab: SettingsTab = this.current) {
     this.el.hidden = false;
     this.el.classList.add('open');
-    this.show(tab, true);
+    this.show(tab);
+    this.focusBody();
+  }
+
+  /** #616: the focus on the open tab's first setting (the first thing a player wants to change). */
+  focusBody() {
+    const items = [...this.body.querySelectorAll<HTMLElement>('button:not([disabled]):not(.st-arrow), input:not([disabled]), [tabindex="0"]')].filter((e) => e.getClientRects().length);
+    const el = firstItem(items);
+    if (!el) return this.tabs.querySelector<HTMLElement>('[aria-selected=true]')?.focus({ focusVisible: true } as FocusOptions);
+    el.focus({ focusVisible: true } as FocusOptions);
+    reveal(el);
   }
 
   close() {
@@ -190,19 +208,20 @@ export class SettingsScreen {
         return `<div class="set-row set-actions"><button id="set-btn-${r.id}" data-btn="${r.id}" class="pn-btn${r.danger ? ' danger' : ''}">${esc(r.label)}</button></div>`;
       case 'toggle': {
         this.toggles.set(r.id, r);
-        return `<label class="set-row" for="set-${r.id}"><span>${esc(r.label)}${r.hint ? `<small>${esc(r.hint)}</small>` : ''}</span><input type="checkbox" id="set-${r.id}" data-toggle="${r.id}" ${r.get() ? 'checked' : ''}></label>`;
+        return `<label class="set-row" data-ring-host for="set-${r.id}"><span>${esc(r.label)}${r.hint ? `<small>${esc(r.hint)}</small>` : ''}</span><input type="checkbox" id="set-${r.id}" data-toggle="${r.id}" ${r.get() ? 'checked' : ''}></label>`;
       }
       case 'check': {
         const on = r.defaultOn ? s[r.key] !== false : !!s[r.key];
-        return `<label class="set-row" for="set-${r.key}"><span>${esc(r.label)}${r.hint ? `<small>${esc(r.hint)}</small>` : ''}</span><input type="checkbox" id="set-${r.key}" data-key="${r.key}" ${on ? 'checked' : ''}></label>`;
+        return `<label class="set-row" data-ring-host for="set-${r.key}"><span>${esc(r.label)}${r.hint ? `<small>${esc(r.hint)}</small>` : ''}</span><input type="checkbox" id="set-${r.key}" data-key="${r.key}" ${on ? 'checked' : ''}></label>`;
       }
       case 'range': {
         const v = Number(s[r.key] ?? r.fallback);
-        return `<label class="set-row" for="set-${r.key}"><span>${esc(r.label)}</span><span class="set-range"><input type="range" id="set-${r.key}" data-key="${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${v}" aria-valuetext="${v}${r.unit ?? ''}"><output for="set-${r.key}" aria-hidden="true">${v}${r.unit === ' percent' ? '%' : ''}</output></span></label>`;
+        return `<label class="set-row" data-ring-host for="set-${r.key}"><span>${esc(r.label)}</span><span class="set-range"><input type="range" id="set-${r.key}" data-key="${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${v}" aria-valuetext="${v}${r.unit ?? ''}"><output for="set-${r.key}" aria-hidden="true">${v}${r.unit === ' percent' ? '%' : ''}</output></span></label>`;
       }
       case 'select': {
         const v = String(s[r.key] ?? r.fallback);
-        return `<label class="set-row" for="set-${r.key}"><span>${esc(r.label)}</span><select id="set-${r.key}" data-key="${r.key}" ${r.numeric ? 'data-num="1"' : ''}>${r.options.map(([val, l]) => `<option value="${val}" ${val === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
+        // #616: a stepper, not a drop-down (a <div>: a <label> would pass every click on to it twice)
+        return `<div class="set-row" data-ring-host><span><span id="set-${r.key}-l">${esc(r.label)}</span>${r.hint ? `<small id="set-${r.key}-h">${esc(r.hint)}</small>` : ''}</span>${stepperHtml({ id: `set-${r.key}`, label: r.label, options: r.options, value: v, attrs: `data-key="${r.key}"${r.numeric ? ' data-num="1"' : ''} aria-labelledby="set-${r.key}-l"${r.hint ? ` aria-describedby="set-${r.key}-h"` : ''}` })}</div>`;
       }
     }
   }
@@ -224,6 +243,7 @@ export class SettingsScreen {
       t.setAttribute('aria-valuetext', t.value);
       const out = t.parentElement?.querySelector('output');
       if (out) out.textContent = `${t.value}${out.textContent?.endsWith('%') ? '%' : ''}`;
-    } else if (t instanceof HTMLSelectElement) this.host.set(key, t.dataset.num ? Number(t.value) : t.value);
+    } else if (t.classList.contains('stepper')) this.host.set(key, t.dataset.num ? Number(t.dataset.value) : t.dataset.value!);
+    else if (t instanceof HTMLSelectElement) this.host.set(key, t.dataset.num ? Number(t.value) : t.value);
   }
 }

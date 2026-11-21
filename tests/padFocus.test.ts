@@ -21,6 +21,29 @@ class El {
     }
     return this;
   }
+  classes = new Set<string>();
+  get classList() {
+    return { contains: (c: string) => this.classes.has(c) };
+  }
+  /** only attribute tests ("[data-pad-first]", "[role=tab]") and classes (".sel") mean anything here */
+  matches(sel: string): boolean {
+    return sel.split(',').some((part) => {
+      const p = part.trim().replace(/:not\([^)]*\)/g, '');
+      const attr = /^\[([\w-]+)(?:=([\w"]+))?\]$/.exec(p);
+      if (attr) return attr[1] in this.attrs && (attr[2] === undefined || this.attrs[attr[1]] === attr[2].replace(/"/g, ''));
+      if (p.startsWith('.')) return this.classes.has(p.slice(1));
+      return false;
+    });
+  }
+  /** a scrolling list: content taller than the box */
+  scrollHeight = 0;
+  clientHeight = 0;
+  get parentElement(): El | undefined {
+    return this.parent;
+  }
+  getAttribute(k: string): string | null {
+    return k in this.attrs ? this.attrs[k] : null;
+  }
   set(k: string, v = '') {
     this.attrs[k] = v;
     return this;
@@ -185,5 +208,144 @@ describe('#573: Up and Down from a Back button reach the menu, not the other Bac
     root.all().find((e) => e.name === 'l1')!.focus();
     focus.button(13);
     expect(doc.activeElement?.name).toBe('l2');
+  });
+
+  it('in a table, left and right stay on the row, and stop at its end', () => {
+    const root = new El('hud');
+    const menu = new El('menu', { x: 0, y: 0, w: 1200, h: 800 });
+    // Interact has both cells; Pulse below has a wider key cell, so its centre sits right of Interact's key
+    const r1 = new El('[role=row]', { x: 0, y: 400, w: 1200, h: 60 }).set('role', 'row').add(btn('interact-key', 780, 410, 64, 46), btn('interact-pad', 980, 410, 64, 46));
+    const r2 = new El('[role=row]', { x: 0, y: 470, w: 1200, h: 60 }).set('role', 'row').add(btn('pulse-key', 780, 470, 106, 46));
+    menu.add(r1, r2);
+    root.add(menu);
+    const focus = new PadFocus(root as unknown as HTMLElement, ['#buildMenu.open']);
+    const by = (n: string) => root.all().find((e) => e.name === n)!;
+    by('interact-key').focus();
+    focus.button(RIGHT);
+    expect(doc.activeElement?.name).toBe('interact-pad');
+    focus.button(RIGHT); // the row's end: stays
+    expect(doc.activeElement?.name).toBe('interact-pad');
+    by('pulse-key').focus();
+    focus.button(RIGHT); // no gamepad cell on this row: stays, never jumps to another row
+    expect(doc.activeElement?.name).toBe('pulse-key');
+  });
+});
+
+/** A stepper as Stepper.ts draws it, on the fake page: its value, its label and its two arrows. */
+function stepperEl(name: string, x: number, y: number, value: string) {
+  const e = new El(name, { x, y, w: 220, h: 44 }, true) as El & { dataset: Record<string, string>; dispatchEvent(ev: Event): boolean };
+  e.classes.add('stepper');
+  e.dataset = { value, options: JSON.stringify([['80', 'Small'], ['100', 'Normal'], ['150', 'Large']]) };
+  const val = { textContent: '' };
+  const arrows = [{ disabled: false }, { disabled: false }];
+  const changes: string[] = [];
+  Object.assign(e, {
+    setAttribute: (k: string, v: string) => (e.attrs[k] = v),
+    querySelector: () => val,
+    querySelectorAll: () => arrows,
+    dispatchEvent: (ev: Event) => (changes.push(`${ev.type}:${e.dataset.value}`), true),
+  });
+  return { e, val, arrows, changes };
+}
+
+describe('#616: steppers and the first focus', () => {
+  const page = () => {
+    const root = new El('hud');
+    const menu = new El('menu', { x: 0, y: 0, w: 800, h: 600 });
+    const back = btn('back', 680, 10, 90, 40).set('data-back');
+    const tab = btn('tab', 20, 60, 90, 40).set('role', 'tab');
+    const s = stepperEl('scale', 400, 140, '100');
+    const below = btn('below', 400, 220, 220, 44);
+    menu.add(back, tab, s.e, below);
+    root.add(menu);
+    return { root, focus: new PadFocus(root as unknown as HTMLElement, ['#buildMenu.open']), s, by: (n: string) => root.all().find((x) => x.name === n)! };
+  };
+
+  it('left and right change a stepper in place; up and down still leave it', () => {
+    const { focus, s, by } = page();
+    s.e.focus();
+    focus.button(RIGHT);
+    expect(s.e.dataset.value).toBe('150');
+    expect(s.val.textContent).toBe('Large');
+    expect(s.changes).toEqual(['change:150']);
+    expect(doc.activeElement).toBe(s.e);
+    focus.button(RIGHT); // at its last choice: stays, no change
+    expect(s.changes).toEqual(['change:150']);
+    expect(s.arrows[1].disabled).toBe(true);
+    focus.button(LEFT);
+    focus.button(LEFT);
+    expect(s.e.dataset.value).toBe('80');
+    expect(s.arrows[0].disabled).toBe(true);
+    focus.button(13);
+    expect(doc.activeElement).toBe(by('below'));
+  });
+
+  it('a menu with nothing in focus starts on its first control in the body: not Back, not a tab', () => {
+    const { focus, s } = page();
+    expect(focus.focusFirst()).toBe(true);
+    expect(doc.activeElement).toBe(s.e);
+  });
+
+  it('a menu can name its first stop, and a selected card beats the first one', () => {
+    const { focus, by } = page();
+    by('below').set('data-pad-first');
+    focus.focusFirst();
+    expect(doc.activeElement).toBe(by('below'));
+    const p2 = page();
+    p2.by('below').classes.add('sel');
+    doc.activeElement = null;
+    p2.focus.focusFirst();
+    expect(doc.activeElement).toBe(p2.by('below'));
+  });
+
+  it('tick gives a menu that just opened its first focus once, and leaves a menu the player has moved in alone', () => {
+    const { focus, by, s } = page();
+    focus.tick();
+    expect(doc.activeElement).toBe(s.e);
+    by('below').focus();
+    focus.tick();
+    expect(doc.activeElement).toBe(by('below'));
+  });
+
+  it('of a row of tabs only the open one is a stop: up from the body lands on it, and left and right change tab', () => {
+    const root = new El('hud');
+    const menu = new El('menu', { x: 0, y: 0, w: 800, h: 600 });
+    const list = new El('[role=tablist]').set('role', 'tablist');
+    const tabs = ['a', 'b', 'c'].map((t, i) => btn(`tab-${t}`, 100 + i * 200, 60, 150, 40).set('role', 'tab').set('aria-selected', String(t === 'c')));
+    list.add(...tabs);
+    // the body's first row sits right under the first tab: without the rule, up would land on that closed tab
+    const row = btn('row', 80, 160, 200, 44);
+    menu.add(list, row);
+    root.add(menu);
+    const focus = new PadFocus(root as unknown as HTMLElement, ['#buildMenu.open']);
+    row.focus();
+    focus.button(UP);
+    expect(doc.activeElement?.name).toBe('tab-c');
+    focus.button(LEFT);
+    expect(clicks).toEqual(['tab-b']);
+    expect(doc.activeElement?.name).toBe('tab-b');
+  });
+
+  it('in a scrolled list, up from the top card goes to the card scrolled out of sight above it, not to the tabs', () => {
+    const root = new El('hud');
+    const menu = new El('menu', { x: 0, y: 0, w: 800, h: 600 });
+    const tab = btn('tab', 300, 60, 150, 40).set('role', 'tab').set('aria-selected', 'true');
+    const list = new El('list', { x: 0, y: 120, w: 800, h: 300 });
+    list.scrollHeight = 1200;
+    list.clientHeight = 300;
+    // scrolled down: card "above" sits at y -300 on screen, behind the header; "top" is the first one in view
+    list.add(btn('above', 20, -300, 760, 140), btn('top', 20, 140, 760, 140));
+    menu.add(tab, list);
+    root.add(menu);
+    const focus = new PadFocus(root as unknown as HTMLElement, ['#buildMenu.open']);
+    root.all().find((e) => e.name === 'top')!.focus();
+    focus.button(UP);
+    expect(doc.activeElement?.name).toBe('above');
+    // the list scrolls it into view (reveal), under the tabs; it is the list's first, so up now leaves the list
+    const above = root.all().find((e) => e.name === 'above')!;
+    above.box = { x: 20, y: 140, w: 760, h: 140 };
+    root.all().find((e) => e.name === 'top')!.box = { x: 20, y: 300, w: 760, h: 140 };
+    focus.button(UP);
+    expect(doc.activeElement?.name).toBe('tab');
   });
 });

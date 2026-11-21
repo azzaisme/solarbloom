@@ -22,14 +22,14 @@ describe('E21.5: gates', () => {
   it('revealed regions are sealed, and their seal says what is in the way (nothing is bought)', () => {
     const sim = tier1();
     expect(sim.areas.sealed('mastRow')).toBe(true);
-    expect(sim.areas.sealText('mastRow')).toMatch(/Pry/);
+    expect(sim.areas.sealText('mastRow')).toBe('Mast Row is behind the clouds. Wake the fountain and Bloombot will learn to pry it open.');
     expect(sim.areas.sealed('saltwind')).toBe(false); // the beach is open from the start
   });
 
   it('a barricade refuses without Pry and opens with it, its region and the backstreets beside it', () => {
     const sim = tier1();
     const g = region('mastRow').gate;
-    expect(sim.gates.problem(g)).toMatch(/needs Pry/);
+    expect(sim.gates.problem(g)).toBe('Rubble blocks the way. Wake the fountain and Bloombot will learn to pry it open.');
     expect(sim.gates.open(g.id)).toBe(false);
     sim.state.salvage!.abilities.push('pry');
     expect(sim.gates.open(g.id)).toBe(true);
@@ -51,12 +51,12 @@ describe('E21.5: gates', () => {
   it('deep water needs Hover; the lock bridge rises when the Sea Lock wakes', () => {
     const sim = tier1();
     const water = region('cistern').gate;
-    expect(sim.gates.problem(water)).toMatch(/Hover/);
+    expect(sim.gates.problem(water)).toMatch(/hover/);
     sim.state.salvage!.abilities.push('hover');
     expect(sim.gates.problem(water)).toBeUndefined();
     const sim2 = tier1();
     const lock = region('clockPlaza').gate;
-    expect(sim2.gates.problem(lock)).toMatch(/Sea Lock/);
+    expect(sim2.gates.problem(lock)).toMatch(/the lock down on the beach/);
     sim2.bus.emit('landmark.woken', { region: 'saltwind' });
     expect(sim2.gates.isOpen(lock.id)).toBe(true);
   });
@@ -64,16 +64,16 @@ describe('E21.5: gates', () => {
   it('the broken bridge is a repair delivery; climb and cliff gates need their abilities', () => {
     const sim = tier1();
     const bridge = region('glasshouse').gate;
-    expect(sim.gates.problem(bridge)).toMatch(/repair/);
+    expect(sim.gates.problem(bridge)).toMatch(/mend it/);
     sim.bot = { roofId: GROUND, x: -30, z: 0 };
     sim.inventory.add('timber', 30);
     sim.inventory.add('copper', 20);
     sim.inventory.add('gears', 10);
     expect(sim.gates.open(bridge.id)).toBe(true);
     expect(sim.inventory.count('timber')).toBe(0);
-    expect(sim.gates.problem(region('terraces').gate)).toMatch(/Climb/);
+    expect(sim.gates.problem(region('terraces').gate)).toMatch(/climb/);
     expect(sim.gates.problem(region('observatory').gate)).toMatch(/glide/i);
-    expect(sim.gates.problem(region('spireHeights').gate)).toMatch(/Climb/);
+    expect(sim.gates.problem(region('spireHeights').gate)).toMatch(/climb/);
   });
 
   it('opened gates stay open after reload, byte for byte', () => {

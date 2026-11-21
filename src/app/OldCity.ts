@@ -60,7 +60,8 @@ export class OldCityController {
     this.bubble = new SpeechBubble(host.hud.root);
     host.sim.bus.on('keeper.said', ({ keeperId, lines }) => {
       this.speaker = keeperId;
-      this.bubble.say(host.sim.keepers.def(keeperId).name, lines);
+      // #610: a Keeper's name is learned when it wakes and says it; until then it's just a sleeping robot
+      this.bubble.say(host.sim.keepers.step(keeperId) === 'asleep' ? 'A sleeping robot' : host.sim.keepers.def(keeperId).name, lines);
     });
     host.sim.bus.on('keeper.step', ({ keeperId, step }) => {
       if (step === 'request1') host.sound('wake');
@@ -119,7 +120,7 @@ export class OldCityController {
     // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
     host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
     host.sim.bus.on('fountain.tier', () => this.panel.close());
-    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${itemDef(e.material).name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
+    host.sim.bus.on('pack.full', (e) => host.hud.toast(`You can't carry more ${itemDef(e.material).name}<small>Put some away at the fountain or in a chest.</small>`, '', 2.6));
   }
 
   get sim(): Sim {
@@ -427,7 +428,7 @@ export class OldCityController {
     this.panel.open(
       () => fountainHtml(this.sim),
       (act) => {
-        if (act === 'storage') return this.openStorage('Storage — at the fountain');
+        if (act === 'storage') return this.openStorage('Storage at the fountain');
         if (act === 'giveAll' && this.sim.fountain.giveAll() > 0) this.host.sound('deliver');
       },
     );

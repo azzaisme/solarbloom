@@ -116,7 +116,7 @@ export class WaterPipes {
   /** Why a pipe can't go here (undefined: it can). */
   layProblem(roofId: string, x: number, z: number): string | undefined {
     if (!this.water.unlocked('pipe')) return this.water.lockReason();
-    if (roofId !== GROUND) return 'Pipes are laid on the ground';
+    if (roofId !== GROUND) return 'Pipes go on the ground';
     const t = this.sim.grid.get(GROUND, x, z);
     if (!t) return 'Nothing here';
     if (this.has(x, z)) return 'A pipe is already here';

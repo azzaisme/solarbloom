@@ -85,8 +85,8 @@ export class OldCityPanel {
     this.act = act;
     this.el.classList.add('open');
     this.refresh();
-    // the pad starts on the first control
-    this.el.querySelector<HTMLElement>('.oc-body button:not([disabled])')?.focus({ focusVisible: false } as FocusOptions);
+    // the pad and the keys start on the first control, and can see it (#616)
+    this.el.querySelector<HTMLElement>('.oc-body button:not([disabled])')?.focus({ focusVisible: true } as FocusOptions);
   }
 
   /** Redraws the panel, keeping the focused control (by its action) where it was. */
@@ -239,8 +239,11 @@ export class SpeechBubble {
       this.el.hidden = true;
       return;
     }
-    this.el.style.left = `${at.x}px`;
-    this.el.style.top = `${at.y}px`;
+    // #610: kept whole on screen (a speaker near an edge used to squeeze it to a word a line, or push it off)
+    const half = this.el.offsetWidth / 2;
+    const room = this.el.offsetParent?.clientWidth ?? innerWidth;
+    this.el.style.left = `${Math.max(half + 16, Math.min(room - half - 16, at.x))}px`;
+    this.el.style.top = `${Math.max(this.el.offsetHeight + 16, at.y)}px`;
   }
 }
 

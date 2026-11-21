@@ -311,6 +311,9 @@ export class ModelLibrary {
     const m = this.models.get(name);
     if (!m) return [];
     const i = far && m.parts[1].length ? 1 : 0;
+    // asked for before its meshes have arrived: nothing yet, and nothing cached (an empty merge kept for good would
+    // leave the model invisible after it loads: a dozing Keeper's stone block)
+    if (!m.parts[i].length) return [];
     const merged = (m.merged[i] ??= mergeParts(this.app.graphicsDevice, m.parts[i]));
     if (!neglected) return merged;
     m.neglected ??= [undefined, undefined];
