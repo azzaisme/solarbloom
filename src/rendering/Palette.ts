@@ -440,16 +440,17 @@ const fauna = {
   bumble: ['#f2b630', '#2b2620', '#eef6ff'],
 };
 
-/** Overlays: hover frames, placement tones, the beacon. */
+/** Overlays: hover frames, placement tones, the waymark. */
 const signal = {
   hover: '#ffffff',
   ok: '#7dff9a',
   bad: '#ff6b6b',
   info: '#fff0a0',
   gridLine: '#1d3640',
-  beacon: '#ffc428',
-  beaconGlow: '#ffb000',
-  beaconPool: '#fff3a0',
+  /** E24 (#609): the waymark, a soft shaft of sunlight on the current goal (its ring on the ground, its motes) */
+  waymark: '#ffd88a',
+  waymarkRing: '#fff1bf',
+  waymarkMote: '#fff6dc',
   /** E19: the build hologram bloombot projects */
   holo: '#5fe8ff',
   /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */

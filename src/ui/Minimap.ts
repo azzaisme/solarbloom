@@ -1,7 +1,9 @@
-import { REGIONS } from '../data/oldcity';
+import { REGIONS, type RegionDef } from '../data/oldcity';
+import { WAYMARK } from '../data/waymark';
 import { GROUND } from '../core/GameState';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
+import type { GoalSpot } from './GoalSpot';
 
 /**
  * Bloombot (G.14) / E23.11: the round map at the bottom left, painted like the Sunlit Glass board
@@ -13,6 +15,10 @@ import type { Sim } from '../gameplay/Sim';
  * It is painted from tile and area state into a small 2D canvas, never by rendering the scene again (no draw
  * calls). The cells repaint when bloombot crosses a cell or after a moment; between repaints the painted map
  * slides under the chevron so walking is smooth. The paper grain is made once and reused.
+ *
+ * E24 (#609): the way is marked. The current goal carries the goal card's own pin (a gold badge; on the rim,
+ * pointing the way, when it is off the map), every way into a shut region is drawn as a little barricade, and the
+ * regions behind them show through the fog, hatched, from the very start: the player sees the locked doors early.
  */
 const CELLS = 56; // cells across the visible disc
 const M = CELLS + 2; // cells painted (one spare each side, so the map can slide by a fraction of a cell)
@@ -22,7 +28,7 @@ const CELL_CSS = VIEW / CELLS;
 const EVERY = 0.5; // seconds between repaints while standing still (state changes: restored ground, machines)
 
 /** The map's paint: CSS tokens (`--mm-*` in styles.css), read once. */
-const TOKENS = ['rim', 'grass', 'grass-hi', 'dead', 'dead-2', 'path', 'path-edge', 'water', 'water-hi', 'bush', 'bush-hi', 'roof', 'wall', 'fog', 'edge', 'flower', 'flower-2', 'flower-3', 'cliff', 'landmark', 'landmark-off', 'cache', 'ring', 'grain'] as const;
+const TOKENS = ['rim', 'grass', 'grass-hi', 'dead', 'dead-2', 'path', 'path-edge', 'water', 'water-hi', 'bush', 'bush-hi', 'roof', 'wall', 'fog', 'edge', 'flower', 'flower-2', 'flower-3', 'cliff', 'landmark', 'landmark-off', 'cache', 'ring', 'grain', 'sealed', 'sealed-line', 'gate', 'gate-ink'] as const;
 type Paint = Record<(typeof TOKENS)[number], string>;
 type RGB = [number, number, number];
 
@@ -44,7 +50,7 @@ function rgb(c: string): RGB {
 const mix = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 /** What a cell is drawn as. */
-const K = { Fog: 0, Frontier: 1, Dead: 2, Growing: 3, Grass: 4, Lush: 5, Bush: 6, Water: 7, Path: 8, Building: 9, Rock: 10, Machine: 11 } as const;
+const K = { Fog: 0, Frontier: 1, Dead: 2, Growing: 3, Grass: 4, Lush: 5, Bush: 6, Water: 7, Path: 8, Building: 9, Rock: 10, Machine: 11, Sealed: 12 } as const;
 type Kind = (typeof K)[keyof typeof K];
 
 export interface MinimapView {
@@ -53,6 +59,31 @@ export interface MinimapView {
   x: number;
   z: number;
   facing: number;
+}
+
+/**
+ * E24 (#609): where the goal's pin sits on the disc (CSS px from its top left), and whether it waits on the rim
+ * (the goal is off the map). Undefined when there is nothing to pin: no goal, another layer, or bloombot is there.
+ */
+export function pinAt(v: MinimapView, goal: GoalSpot | undefined): { x: number; y: number; edge: boolean } | undefined {
+  if (!goal || goal.roofId !== v.roofId || Math.hypot(goal.x - v.x, goal.z - v.z) <= WAYMARK.near) return undefined;
+  const half = VIEW / 2;
+  let dx = (goal.x - v.x) * CELL_CSS;
+  let dy = (goal.z - v.z) * CELL_CSS;
+  const r = Math.hypot(dx, dy);
+  // the N badge (top) and the clock (bottom) sit over the rim: the pin keeps further in there
+  const max = half - WAYMARK.rimInset - WAYMARK.rimBadges * Math.abs(dy / Math.max(r, 1e-6)) ** 6;
+  const edge = r > max;
+  if (edge) {
+    dx *= max / r;
+    dy *= max / r;
+  }
+  return { x: half + dx, y: half + dy, edge };
+}
+
+/** E24 (#609): the regions still shut behind their gates (each gate drawn on the map, the region hatched). */
+export function shutRegions(sim: Sim): RegionDef[] {
+  return REGIONS.filter((r) => !sim.gates.isOpen(r.gate.id));
 }
 
 /** Weather kinds to the rim's little icon. */
@@ -70,7 +101,7 @@ export class Minimap {
   private grain?: HTMLCanvasElement;
   private kinds = new Uint8Array(M * M);
   private paint: Paint;
-  private col: Record<'fog' | 'dead' | 'grass' | 'lush' | 'water' | 'path' | 'wall' | 'rock' | 'frontier' | 'growing', RGB>;
+  private col: Record<'fog' | 'dead' | 'grass' | 'lush' | 'water' | 'path' | 'wall' | 'rock' | 'frontier' | 'growing' | 'sealed', RGB>;
   private bot: SVGElement;
   private wx: HTMLElement;
   private time: HTMLElement;
@@ -79,6 +110,9 @@ export class Minimap {
   private x0 = NaN;
   private z0 = NaN;
   private roof = '';
+  /** E24 (#609): the goal's pin, and what it is called (for the map's label) */
+  private pin: HTMLElement;
+  private pinName = '';
 
   constructor(
     private sim: Sim,
@@ -94,6 +128,7 @@ export class Minimap {
     el.innerHTML =
       `<div class="mm-disc"><canvas class="mm-map" width="${px}" height="${px}" style="width:${(M * CELL_CSS).toFixed(2)}px;height:${(M * CELL_CSS).toFixed(2)}px"></canvas>` +
       `<span class="mm-shadow" aria-hidden="true"></span>` +
+      `<span class="mm-goal" hidden aria-hidden="true"><span class="sg-ic i-pin"></span></span>` +
       `<svg class="mm-bot" viewBox="-17 -17 34 34" aria-hidden="true"><defs><linearGradient id="mmArrow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="mm-a1"/><stop offset="1" class="mm-a2"/></linearGradient></defs>` +
       `<path class="mm-fill" d="M0 -15 L14 12 L0 5 L-14 12 Z" fill="url(#mmArrow)" stroke-width="4" stroke-linejoin="round" paint-order="stroke"/>` +
       `<path class="mm-ink" d="M0 -15 L14 12 L0 5 L-14 12 Z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></div>` +
@@ -110,6 +145,7 @@ export class Minimap {
     this.rimEl = el.querySelector('.mm-rim')!;
     this.wx = el.querySelector('.mm-wx')!;
     this.time = el.querySelector('.mm-time')!;
+    this.pin = el.querySelector('.mm-goal')!;
     this.paint = readPaint();
     const p = this.paint;
     const dead = rgb(p.dead);
@@ -126,12 +162,13 @@ export class Minimap {
       path: rgb(p.path),
       wall: rgb(p.wall),
       rock: rgb(p['dead-2']),
+      sealed: rgb(p.sealed),
     };
     document.body.classList.add('has-minimap');
   }
 
-  private kind(t: TileData | undefined, hidden: boolean, frontier: boolean): Kind {
-    if (hidden || !t) return K.Fog;
+  private kind(t: TileData | undefined, hidden: boolean, frontier: boolean, sealed: boolean): Kind {
+    if (hidden || !t) return sealed ? K.Sealed : K.Fog;
     if (t.occupantId) return K.Machine;
     if (t.feature === 'water') return K.Water;
     if (t.feature === 'building') return K.Building;
@@ -148,6 +185,8 @@ export class Minimap {
     switch (k) {
       case K.Fog:
         return c.fog;
+      case K.Sealed:
+        return c.sealed;
       case K.Frontier:
         return c.frontier;
       case K.Growing:
@@ -171,9 +210,10 @@ export class Minimap {
     }
   }
 
-  update(dt: number, v: MinimapView) {
+  update(dt: number, v: MinimapView, goal?: GoalSpot) {
     // The chevron turns every frame and the painted map slides under it; the cells repaint on a new cell or a timer.
     this.bot.style.transform = `rotate(${180 - (v.facing * 180) / Math.PI}deg)`;
+    this.placePin(v, goal);
     const x0 = Math.floor(v.x) - CELLS / 2 - 1;
     const z0 = Math.floor(v.z) - CELLS / 2 - 1;
     this.canvas.style.transform = `translate(${(VIEW / 2 - (v.x - x0) * CELL_CSS).toFixed(2)}px, ${(VIEW / 2 - (v.z - z0) * CELL_CSS).toFixed(2)}px)`;
@@ -195,6 +235,9 @@ export class Minimap {
     const areas = this.sim.areas;
     const ground = roofId === GROUND;
     const fogOf = new Map<string, string>();
+    // E24 (#609): the regions still shut behind their gates show through the fog from the start
+    const shut = new Set<string>(ground ? shutRegions(this.sim).filter((r) => r.gate.opensRegion !== false).map((r) => r.id) : []);
+    let anySealed = false;
     const kinds = this.kinds;
     const tiles: (TileData | undefined)[] = new Array(M * M);
     this.img ??= bctx.createImageData(M, M);
@@ -205,8 +248,10 @@ export class Minimap {
         const cz = z0 + j;
         let hidden = false;
         let frontier = false;
+        let sealed = false;
         if (ground) {
           const a = areas.map.areaOfCell(cx, cz);
+          sealed = shut.has(a);
           let f = fogOf.get(a);
           if (f === undefined) fogOf.set(a, (f = areas.fog(a)));
           hidden = f === 'hidden';
@@ -214,7 +259,8 @@ export class Minimap {
         } else if (!g.inBounds(roofId, cx, cz)) hidden = true;
         // peek, not get: the map must never generate chunks.
         const t = hidden ? undefined : g.peek(roofId, cx, cz);
-        const k = this.kind(t, hidden, frontier);
+        const k = this.kind(t, hidden, frontier, sealed);
+        if (k === K.Sealed) anySealed = true;
         const n = j * M + i;
         kinds[n] = k;
         tiles[n] = t;
@@ -236,6 +282,22 @@ export class Minimap {
     const p = this.paint;
     const at = (i: number, j: number) => (i < 0 || j < 0 || i >= M || j >= M ? K.Fog : kinds[j * M + i]);
     const cx = (i: number) => (i + 0.5) * RES;
+
+    // E24 (#609): the shut regions, hatched, so they read as "not yet" rather than as more fog. The stripes are laid
+    // by world cell (x + z), so they hold still as the map slides.
+    if (anySealed) {
+      ctx.strokeStyle = p['sealed-line'];
+      ctx.lineWidth = 1.1;
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      for (let j = 0; j < M; j++)
+        for (let i = 0; i < M; i++) {
+          if (kinds[j * M + i] !== K.Sealed || (((x0 + i + z0 + j) % 3) + 3) % 3 !== 0) continue;
+          ctx.moveTo(i * RES, (j + 1) * RES);
+          ctx.lineTo((i + 1) * RES, j * RES);
+        }
+      ctx.stroke();
+    }
 
     // paths: wide sandy lanes with a darker edge (each path cell joins its path neighbours)
     ctx.lineCap = 'round';
@@ -358,6 +420,55 @@ export class Minimap {
     this.marks(ctx, roofId, x0, z0);
   }
 
+  /** A shut way in: a short plank bar across the way, with two dark cross planks. `across`: lying east–west. */
+  private barricade(ctx: CanvasRenderingContext2D, x: number, y: number, across: boolean) {
+    const p = this.paint;
+    const L = 15;
+    const T = 7;
+    const w = across ? L : T;
+    const h = across ? T : L;
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - h / 2, w, h, 2);
+    ctx.fillStyle = p.gate;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = p['gate-ink'];
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.lineWidth = 1.3;
+    const a = across ? L * 0.3 : T * 0.3;
+    const b = across ? T * 0.3 : L * 0.3;
+    ctx.moveTo(x - a, y - b);
+    ctx.lineTo(x + a, y + b);
+    ctx.moveTo(x - a, y + b);
+    ctx.lineTo(x + a, y - b);
+    ctx.stroke();
+  }
+
+  /**
+   * E24 (#609): the goal's pin, every frame (it slides with the map). On the map it stands on the goal; off the map it
+   * waits on the rim in the goal's direction. Under bloombot's chevron (arrived) it hides.
+   */
+  private placePin(v: MinimapView, goal: GoalSpot | undefined) {
+    const pin = this.pin;
+    const at = pinAt(v, goal);
+    if (pin.hidden === !!at) pin.hidden = !at;
+    const name = at ? goal!.name : '';
+    if (name !== this.pinName) {
+      this.pinName = name;
+      this.el.setAttribute('aria-label', name ? `Map around bloombot, north up. The pin marks ${name}.` : 'Map around bloombot, north up');
+    }
+    if (!at) return;
+    pin.classList.toggle('edge', at.edge);
+    // a place to rest wears the goal card's low-charge badge: the sun with a battery
+    const rest = goal!.kind === 'rest';
+    if (pin.classList.contains('rest') !== rest) {
+      pin.classList.toggle('rest', rest);
+      pin.innerHTML = `<span class="sg-ic ${rest ? 'i-cell' : 'i-pin'}"></span>`;
+    }
+    pin.style.transform = `translate(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px)`;
+  }
+
   private dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
     ctx.moveTo(x + r, y);
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -386,11 +497,23 @@ export class Minimap {
     return (this.grain = c);
   }
 
-  /** Landmarks (sun gold when awake, a white ring when ready to wake), the beacons and the caches. */
+  /** Landmarks (sun gold when awake, a white ring when ready to wake), the beacons, the caches and the shut ways in. */
   private marks(ctx: CanvasRenderingContext2D, roofId: string, x0: number, z0: number) {
     const areas = this.sim.areas;
     const p = this.paint;
     const inside = (i: number, j: number) => i >= 0 && j >= 0 && i <= M && j <= M;
+    // E24 (#609): every way into a shut region, from the start, fog or no fog: a little barricade of planks
+    if (roofId === GROUND)
+      for (const r of shutRegions(this.sim)) {
+        const xs = r.gate.cells.map((c) => c[0]);
+        const zs = r.gate.cells.map((c) => c[1]);
+        const gx0 = Math.min(...xs) - x0;
+        const gz0 = Math.min(...zs) - z0;
+        const gw = Math.max(...xs) - Math.min(...xs) + 1;
+        const gd = Math.max(...zs) - Math.min(...zs) + 1;
+        if (!inside(gx0 + gw / 2, gz0 + gd / 2)) continue;
+        this.barricade(ctx, (gx0 + gw / 2) * RES, (gz0 + gd / 2) * RES, gw >= gd);
+      }
     // E21.9: Mast Row's reward shows every Old City landmark beacon (amber), Observatory Hill's every cache
     if (this.sim.landmarks.has('beacons') && roofId === GROUND)
       for (const r of REGIONS) {

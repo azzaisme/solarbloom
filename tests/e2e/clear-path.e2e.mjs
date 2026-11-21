@@ -1,5 +1,5 @@
 // E24 "A clear path" (#605–#608), played in a real game: the goal card (the goal, what it brings, every part
-// counted from the start, the next step and Show me where), the guide's first line and the gold arrow on the first
+// counted from the start, the next step and Show me where), the guide's first line and the waymark's spot on the first
 // pile, Show me where turning the camera, a barricade's plain refusal, the park's count while greening, the park
 // part done (its line and the glinting piles), and a Keeper's request under the fountain goal. At 1280 × 720 (100%)
 // and on the Deck (1280 × 800, ?gfx=deck) at 150% interface size; each check also asks that the new pieces sit on
@@ -99,11 +99,13 @@ try {
     check(/^Old things lie everywhere\. Hold .+ by a pile to salvage it\.$/.test(g1 ?? ''), `${L}: the first guide line ("${g1}")`);
     const arrow = await page.evaluate(() => {
       const g = window.solarbloom;
-      const spot = g.beaconSpot();
+      // #609: the waymark stands on the goal spot (Game.goal, looked up twice a second); at the start bloombot is
+      // right beside the pile, so the light itself has faded and the minimap pin tucks under bloombot
+      const spot = g.goal && g.goal.cell;
       const pile = g.sim.advisor.nearestPile(['scrap', 'seeds']);
       return { spot, pile: pile && { x: pile.x, z: pile.z, material: pile.material } };
     });
-    check(!!arrow.spot && !!arrow.pile && arrow.spot.x === arrow.pile.x && arrow.spot.z === arrow.pile.z, `${L}: the gold arrow stands on the first pile (${JSON.stringify(arrow)})`);
+    check(!!arrow.spot && !!arrow.pile && arrow.spot.x === arrow.pile.x && arrow.spot.z === arrow.pile.z, `${L}: the waymark's spot is the first pile (${JSON.stringify(arrow)})`);
     let bad = await page.evaluate(layout);
     check(!bad.length, `${L}: the card and the guide line sit clear of everything ${bad.join(', ')}`);
     await shot('1-new-game');

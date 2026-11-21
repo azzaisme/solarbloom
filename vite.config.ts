@@ -41,6 +41,8 @@ const QUICK = [
   'clear-path',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
+  // E24 (#609): the way marked on the map and in the world
+  'waymark',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
