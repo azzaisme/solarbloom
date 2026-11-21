@@ -1,3 +1,4 @@
+import { MOVE_LEVELS } from '../data/moveSpots';
 import { machinesStamp } from '../core/GameState';
 import { isBuilt, tierOf } from '../data/machines';
 
@@ -100,6 +101,10 @@ export class UpgradeSystem {
   /** Seconds Interact is held to pry rubble open (Quick hands; never below RESEARCH.minHold either). */
   get pryHold(): number {
     return Math.max(RESEARCH.minHold, SALVAGE.pryHoldSeconds * this.holdFactor);
+  }
+  /** E25 (#626): seconds Interact is held to force a vault door with Pry II (Quick hands shortens it too). */
+  get vaultHold(): number {
+    return Math.max(RESEARCH.minHold, MOVE_LEVELS.vaultHoldSeconds * this.holdFactor);
   }
   /** Keen eye: how far a pulse's ripple reaches and lights up piles, caches, pages and buried things (tiles). */
   get rippleRadius(): number {

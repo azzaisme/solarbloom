@@ -208,6 +208,7 @@ export function actForVerb(verb: string): ActId | undefined {
 export const VERB_ACTS: Record<string, ActId | undefined> = {
   Salvage: 'rummage',
   Pry: 'pry',
+  'Pry open': 'pry', // #626: a vault door (Pry II)
   Gather: 'gather',
   'Dig up': 'dig',
   Harvest: 'harvest',
@@ -236,4 +237,11 @@ export const VERB_ACTS: Record<string, ActId | undefined> = {
   Sleep: undefined,
   'Ride up': undefined,
   'Ride down': undefined,
+  // E25 (#626): the trips the level II moves take are their own motion (Bloombot hovers, climbs or glides there)
+  'Hover over to': undefined,
+  'Hover back to': undefined,
+  'Glide over to': undefined,
+  'Glide down to': undefined,
+  'Climb up onto': undefined,
+  'Climb down': undefined,
 };

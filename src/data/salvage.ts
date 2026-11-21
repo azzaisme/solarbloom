@@ -163,6 +163,21 @@ export const WORKBENCH = {
 /** Lucky Cat rewards: units of the local material by variant. */
 export const CAT_REWARD = { standard: 10, golden: 25, rainbow: 60 };
 
+/**
+ * #610: a fountain step's toast, in sentences rather than a list of names: what's new to build, and how much the
+ * backpack holds. (The move it teaches has its own toast, #620's "Bloombot can hover over deep water now".)
+ */
+export function fountainStepNews(t: TierDef): string {
+  const gives = tierGives(t);
+  const built = gives.filter((g) => Object.values(MACHINES).some((m) => m.name === g));
+  const stack = gives.map((g) => /^Stacks of (\d+)$/.exec(g)?.[1]).find(Boolean);
+  const list = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0]);
+  const out = t.ability ? [] : ['The whole city is in flower.'];
+  if (built.length) out.push(`New to build: ${list(built)}.`);
+  if (stack) out.push(`Your backpack holds ${stack} of each thing.`);
+  return out.join(' ');
+}
+
 /** §3: Tally's trade once the Market Hall is awake. */
 export const TRADE = { give: 3, get: 1 };
 

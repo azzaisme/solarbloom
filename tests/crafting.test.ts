@@ -260,7 +260,7 @@ describe('E23.6.1: the crafting table', () => {
     expect(open('solarlamppost')).toBe(true);
     expect(cozy.canDecorate('solarlamppost', GROUND, 12, 12)).toBeUndefined();
     // a researched light waits for its research, whatever else is done
-    expect(sim.crafting.decorProblem('fairylights')).toBe('🔒 Research it at the workshop');
+    expect(sim.crafting.decorProblem('fairylights')).toBe('🔒 Research it at the crafting table');
   });
 
   it('every machine is built from a crafting-table recipe', () => {

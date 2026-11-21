@@ -1,6 +1,6 @@
 import { OLD_CITY, PARK_SET, REGIONS, type RampDef } from '../data/oldcity';
 import { causewayBroken, causewayRamps, isMainlandCell, mainlandShore, mainlandWater, onCauseway } from './Mainland';
-import { inOldCity, inRect, isSeaChunk, onJetty, regionOfChunk, regionWater, seaCell } from './OldCityLayout';
+import { inOldCity, inRect, isSeaChunk, moveLandAt, onJetty, regionOfChunk, regionWater, seaCell } from './OldCityLayout';
 
 /**
  * E21.24 (§7 "Height"): the Old City's terraces. Every ground tile has a level 0–4 (one level is 1.2 tiles high),
@@ -56,6 +56,9 @@ export function rampAt(x: number, z: number): RampHit | undefined {
 export function levelAt(x: number, z: number): number {
   const cx = Math.floor(x / CHUNK);
   const cz = Math.floor(z / CHUNK);
+  // E25 (#626): the sandbar, the sea stack and the ruins' roofs stand at their own level, with no ramp up
+  const ml = moveLandAt(x, z);
+  if (ml) return ml.level;
   // E23.8.3.1: the Long Causeway and the mainland stand at the island's base level; the causeway's broken middle is a
   // low deck at sea level (flooded until the Great Bloom), with ramps down to it
   if (causewayBroken(x, z) || mainlandWater(x, z)) return OLD_CITY.seaLevel; // and the mainland's canals and ponds

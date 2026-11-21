@@ -123,7 +123,9 @@ describe('#629: what the next level adds (the turntable shows it as a ghost)', (
       if (r.kind === 'upgrade' || r.kind === 'move' || r.kind === 'knack') expect(ps.length, r.id).toBeGreaterThan(0);
       // a move or knack row glows its own piece: one that is drawn once it has it
       const own = pieceOf(r);
-      if (own) expect(ps.map((p) => p.name), r.id).toEqual([`grow-${r.part}-${own}`]);
+      if (own && r.kind !== 'move2') expect(ps.map((p) => p.name), r.id).toEqual([`grow-${r.part}-${own}`]);
+      // a move's second level (#626) lights its move's own mark
+      if (r.kind === 'move2') expect([r.part, own], r.id).toEqual(['marks', r.id.slice(0, -1)]);
       if (r.kind !== 'park') for (const p of ps) expect(p.part, r.id).toBe(r.part);
     }
   });

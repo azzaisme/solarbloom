@@ -333,7 +333,7 @@ export class Backpack {
     const view = this.botView ? `<div class="bb-view" aria-hidden="true"></div>` : '';
     return (
       `<div class="bb-head${view ? ' has-view' : ''}">${view}<div class="bb-title">` +
-      `<h3><span class="pn-badge">${icon(r.kind === 'move' ? 'sprout' : r.kind === 'park' ? 'star' : r.kind === 'knack' ? 'heart' : 'spark')}</span>${esc(r.name)}</h3>` +
+      `<h3><span class="pn-badge">${icon(r.kind === 'move' || r.kind === 'move2' ? 'sprout' : r.kind === 'park' ? 'star' : r.kind === 'knack' ? 'heart' : 'spark')}</span>${esc(r.name)}</h3>` +
       level +
       `<p class="bb-does">${esc(r.does)}</p></div></div>` +
       (r.now ? `<p class="bb-now">${esc(r.now)}</p>` : '') +

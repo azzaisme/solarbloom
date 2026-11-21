@@ -219,8 +219,9 @@ export function nextGrowth(g: BotGrowth, row: { kind: string; id: string; level?
   }
   return undefined;
 }
-/** #629: which of a part's pieces a page row is (a move's mark, a knack's bead, named by its Keeper), if just one */
+/** #629: which of a part's pieces a page row is (a move's mark, also for its second level; a knack's bead, named by its Keeper), if just one */
 export function pieceOf(row: { kind: string; id: string }): string | undefined {
+  if (row.kind === 'move2') return row.id.replace(/2$/, ''); // E25 (#626): a move's second level, on its mark
   return row.kind === 'move' ? row.id : row.kind === 'knack' ? row.id.replace(/^knack-/, '') : undefined;
 }
 const PARK_STEPS: Record<string, number> = { spill: 1, thrift: 2, quick: 3 };

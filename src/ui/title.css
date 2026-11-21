@@ -162,8 +162,8 @@ body.reduced #loading .ld-bar i, #loading.still .ld-bar i { transition: none; }
 .ld-bot .lb-gold-line { fill: none; stroke: var(--sun); stroke-width: 3; }
 .ld-bot .lb-dark { fill: var(--bot-joint); }
 .ld-bot .lb-visor { fill: var(--glyph-ink-dark); }
-.ld-bot .lb-eye { fill: none; stroke: var(--mm-water-hi); stroke-width: 3.2; stroke-linecap: round; }
-.ld-bot .lb-ear { fill: var(--mm-water-hi); }
+.ld-bot .lb-eye { fill: none; stroke: var(--bot-glow); stroke-width: 3.2; stroke-linecap: round; }
+.ld-bot .lb-ear { fill: var(--bot-glow); }
 .ld-bot .lb-leaf { fill: var(--leaf); stroke: var(--leaf-ink); stroke-width: 1; }
 .ld-bot .lb-vein { fill: none; stroke: var(--leaf-hi); stroke-width: 1.4; }
 .ld-bot .lb-antenna { stroke: var(--bot-joint); stroke-width: 3; stroke-linecap: round; }

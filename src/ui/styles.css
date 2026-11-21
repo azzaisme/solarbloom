@@ -79,6 +79,8 @@
   --mm-path-edge: #e3c896;
   --mm-water: #5ab9b8;
   --mm-water-hi: #8fdcd2;
+  /* #631: Bloombot's own glow (PALETTE.botGlow): its eyes and ear lights on the loading screen */
+  --bot-glow: #94ff6e;
   --mm-bush: #5d9d42;
   --mm-bush-hi: #7cc25a;
   --mm-roof: #f28cb8;

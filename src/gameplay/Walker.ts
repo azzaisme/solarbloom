@@ -33,6 +33,12 @@ export const BOT = {
   turn: 16,
   /** A* gives up after expanding this many cells */
   maxSearch: 9000,
+  /**
+   * #644: how far the goal card looks for somewhere bloombot can walk to (Show me where): it floods out from bloombot
+   * over at most this many cells, and no further than this many tiles of walking
+   */
+  goalSearch: 9000,
+  goalCost: 220,
 } as const;
 
 /** The 8 neighbour steps, cardinal first. */
@@ -196,6 +202,41 @@ export class Walker {
    */
   pathOrNearest(roofId: string, fx: number, fz: number, goal: (x: number, z: number) => boolean, hint: { x: number; z: number }, budget: number = BOT.maxSearch): { path: { x: number; z: number }[]; reached: boolean } {
     return this.search(roofId, fx, fz, goal, hint, budget);
+  }
+
+  /**
+   * #644: how far bloombot would walk to each cell it can reach from (fx, fz): a flood over walkable cells, with the
+   * same steps as `path` (no corner cutting, no cliff edges). Stops after `budget` cells or past `maxCost` tiles.
+   * Keys are `x,z`.
+   */
+  costsFrom(roofId: string, fx: number, fz: number, budget: number = BOT.goalSearch, maxCost: number = BOT.goalCost): Map<string, number> {
+    const sx = Math.floor(fx);
+    const sz = Math.floor(fz);
+    const key = (x: number, z: number) => `${x},${z}`;
+    const g = new Map<string, number>([[key(sx, sz), 0]]);
+    const done = new Map<string, number>();
+    const heap = new MinHeap<[number, number, string]>();
+    heap.push(0, [sx, sz, key(sx, sz)]);
+    const terraced = this.sim.grid.terraced(roofId);
+    while (heap.size && done.size < budget) {
+      const [x, z, k] = heap.pop()!;
+      if (done.has(k)) continue;
+      const gk = g.get(k)!;
+      done.set(k, gk);
+      for (const [dx, dz] of STEPS) {
+        const nx = x + dx;
+        const nz = z + dz;
+        if (!this.walkable(roofId, nx, nz)) continue;
+        if (dx && dz && (!this.walkable(roofId, x + dx, z) || !this.walkable(roofId, x, z + dz))) continue;
+        if (terraced && !(dx && dz ? canStep(x, z, x + dx, z) && canStep(x + dx, z, nx, nz) && canStep(x, z, x, z + dz) && canStep(x, z + dz, nx, nz) : canStep(x, z, nx, nz))) continue;
+        const nk = key(nx, nz);
+        const ng = gk + (dx && dz ? Math.SQRT2 : 1);
+        if (ng > maxCost || ng >= (g.get(nk) ?? Infinity)) continue;
+        g.set(nk, ng);
+        heap.push(ng, [nx, nz, nk]);
+      }
+    }
+    return done;
   }
 
   private search(roofId: string, fx: number, fz: number, goal: (x: number, z: number) => boolean, hint: { x: number; z: number }, budget: number): { path: { x: number; z: number }[]; reached: boolean } {

@@ -160,7 +160,7 @@ function panelHint(sim: Sim, keyFor: (a: 'pulse' | 'interact') => string): { tex
     if (home && !sim.gates.isOpen(home.gate.id)) return { text: `The ☀️ Solar Panel needs ${what}, found in ${home.name}: pry open its barricade (hold ${keyFor('interact')})` };
     return { text: `Salvage ${what}${home ? ` in ${home.name}` : ''} for the ☀️ Solar Panel` };
   }
-  if (need.craft.length) return { text: `Make ${need.craft.map((c) => `${itemDef(c).icon} ${itemDef(c).name}`).join(' and ')} at the crafting table in the shed, for the ☀️ Solar Panel` };
+  if (need.craft.length) return { text: `Make ${need.craft.map((c) => `${itemDef(c).icon} ${itemDef(c).name}`).join(' and ')} at the crafting table in the house, for the ☀️ Solar Panel` };
   return { text: 'Build a ☀️ Solar Panel from the build menu' };
 }
 

@@ -220,7 +220,8 @@ export class CraftTable {
   show(tab: CraftTabId, focusTab = false) {
     if (!this.tabsNow().some((t) => t.id === tab)) tab = 'craft';
     this.current = tab;
-    this.el.querySelector('#crTitle')!.textContent = this.host.sim.research.on ? 'Workshop' : 'Crafting table';
+    // #610: one name for it everywhere, the one its prompt uses ("Use the crafting table"), research or not
+    this.el.querySelector('#crTitle')!.textContent = 'Crafting table';
     const many = this.tabsNow().length > 1;
     for (const e of this.el.querySelectorAll<HTMLElement>('.pn-tab-end')) e.hidden = !many;
     for (const b of this.tabs.querySelectorAll<HTMLElement>('[data-tab]')) {

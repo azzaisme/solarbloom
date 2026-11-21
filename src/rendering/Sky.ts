@@ -97,8 +97,18 @@ export class Sky {
     if (!comp.getLayerByName('Sky')) comp.insert(this.layer, 0);
     // An empty layer right after it that only clears depth: the sky and skyline are a backdrop, so the world
     // draws over them wherever it has geometry, and the camera's far plane can stop at the haze.
-    this.clearLayer = comp.getLayerByName('SkyDepthClear') ?? new pc.Layer({ name: 'SkyDepthClear', clearDepthBuffer: true });
+    // #635: the clear is done by hand as the layer comes up. A layer's own clear flags only count on the first
+    // layer a camera draws when CameraFrame (PostFx) runs the camera, so the flag alone never cleared, and in fog
+    // (where the skyline is scaled in close) the towers' depth hid the park.
+    this.clearLayer = comp.getLayerByName('SkyDepthClear') ?? new pc.Layer({ name: 'SkyDepthClear' });
+    this.clearLayer.clearDepthBuffer = false;
     if (!comp.getLayerByName('SkyDepthClear')) comp.insertOpaque(this.clearLayer, comp.getTransparentIndex(this.layer) + 1);
+    const clearLayer = this.clearLayer;
+    // (GraphicsDevice.clear is public on every device but missing from the typings)
+    const device0 = app.graphicsDevice as unknown as { clear(o: { flags: number; depth: number }): void };
+    app.scene.on('prerender:layer', (_cam: pc.CameraComponent, layer: pc.Layer, transparent: boolean) => {
+      if (layer === clearLayer && !transparent) device0.clear({ flags: pc.CLEARFLAG_DEPTH, depth: 1 });
+    });
     const device = app.graphicsDevice;
 
     // The dome: a unit sphere (rings × segments), coloured per vertex.
