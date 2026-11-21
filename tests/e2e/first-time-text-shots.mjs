@@ -46,7 +46,7 @@ try {
   // 1. the first guide line, as a new game shows it
   await page.waitForFunction(() => !!window.solarbloom.hud.guide.lastText, null, { timeout: 15000 }).catch(() => {});
   const g1 = await page.evaluate(() => window.solarbloom.hud.guide.lastText);
-  check(/^Hold .+ by a glinting pile to pick through it\.$/.test(g1), `the first guide line ("${g1}")`);
+  check(/^Hold .+ beside a glinting pile to dig out what the fountain needs\.$/.test(g1), `the first guide line ("${g1}")`);
   check(await whole(page, '#guide'), 'the guide line sits whole on screen');
   await page.screenshot({ path: `${dir}/guide-first.png` });
 
@@ -59,7 +59,7 @@ try {
   });
   await page.waitForTimeout(1500);
   const card = await page.evaluate(() => ({ title: document.querySelector('#objTitle')?.textContent, why: document.querySelector('#objWhy')?.textContent, next: document.querySelector('#objNext')?.textContent }));
-  check(card.title === 'Pry open the rubble at the edge of the park' && card.why === 'A robot sleeps on the other side, and it can help you', `the card leads to the rubble ("${card.title}" / "${card.why}" / "${card.next}")`);
+  check(card.title === 'Pry open the rubble' && card.why === 'Another robot like Bloombot is asleep on the other side', `the card leads to the rubble ("${card.title}" / "${card.why}" / "${card.next}")`);
   check(await whole(page, '#obj'), 'the goal card sits whole on screen');
   await page.screenshot({ path: `${dir}/card-rubble.png` });
 
@@ -102,9 +102,10 @@ try {
   // 4. the fountain's second step, as its own toast
   await clearToasts(page);
   await page.evaluate(() => window.solarbloom.sim.bus.emit('fountain.tier', { tier: 2 }));
-  await page.waitForTimeout(900);
-  const step2 = await page.evaluate(() => [...document.querySelectorAll('#toasts > *')].map((t) => t.innerText.replace(/\n+/g, ' / ')).find((t) => t.includes('The pump turns')) ?? '');
-  check(/You can hover over deep water now, so the canals won't stop you\. New to build: .+\. Your backpack holds 60 of each thing\./.test(step2), `the step 2 toast reads "${step2}"`);
+  await page.waitForFunction(() => [...document.querySelectorAll('#toasts > *')].some((t) => t.innerText.includes('The pump turns')), null, { timeout: 8000 }).catch(() => {});
+  const all = await page.evaluate(() => [...document.querySelectorAll('#toasts > *')].map((t) => t.innerText.replace(/\n+/g, ' / ')));
+  const step2 = all.find((t) => t.includes('The pump turns')) ?? '';
+  check(/New to build: Pollinator Garden and Drone Hub\. Your backpack holds 60 of each thing\./.test(step2), `the step 2 toast reads "${step2}" (toasts: ${all.join(' | ')})`);
   check(await whole(page, '#toasts > *'), 'the step toast sits whole on screen');
   await page.screenshot({ path: `${dir}/toast-step2.png` });
 

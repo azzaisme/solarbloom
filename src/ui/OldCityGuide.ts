@@ -5,6 +5,7 @@ import { isComponent, itemDef } from '../data/items';
 import { REGIONS } from '../data/oldcity';
 import { MATERIALS } from '../data/salvage';
 import type { Sim } from '../gameplay/Sim';
+import { withKeys } from './words';
 
 export interface Objective {
   title: string;
@@ -106,7 +107,7 @@ export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'inter
       return panelHint(sim, keyFor);
     default:
       // E23.1.5: after the first fifteen minutes the hint line carries the advisor's next step in the loop
-      return { text: sim.advisor.suggest().text };
+      return { text: withKeys(sim.advisor.suggest().text, keyFor) };
   }
 }
 
@@ -159,7 +160,7 @@ function panelHint(sim: Sim, keyFor: (a: 'pulse' | 'interact') => string): { tex
     if (home && !sim.gates.isOpen(home.gate.id)) return { text: `The ☀️ Solar Panel needs ${what}, found in ${home.name}: pry open its barricade (hold ${keyFor('interact')})` };
     return { text: `Salvage ${what}${home ? ` in ${home.name}` : ''} for the ☀️ Solar Panel` };
   }
-  if (need.craft.length) return { text: `Make ${need.craft.map((c) => `${itemDef(c).icon} ${itemDef(c).name}`).join(' and ')} at the crafting table in the shed, for the ☀️ Solar Panel` };
+  if (need.craft.length) return { text: `Make ${need.craft.map((c) => `${itemDef(c).icon} ${itemDef(c).name}`).join(' and ')} at the crafting table in the house, for the ☀️ Solar Panel` };
   return { text: 'Build a ☀️ Solar Panel from the build menu' };
 }
 

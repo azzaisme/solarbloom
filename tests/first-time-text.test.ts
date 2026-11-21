@@ -45,9 +45,9 @@ describe('#610: lines for a first-time player', () => {
     expect(sim.keepers.hint(id)).toBe(`Bring ${KEEPERS[0].name} 8 Seeds.`);
   });
 
-  it('a fountain step toast says what the player can do now, in sentences', () => {
-    expect(fountainStepNews(TIERS[1])).toBe("You can hover over deep water now, so the canals won't stop you. New to build: Pollinator Garden and Drone Hub. Your backpack holds 60 of each thing.");
-    expect(fountainStepNews(TIERS[2])).toMatch(/^You can climb onto the roofs now: look for ladders\. New to build: .+\. Your backpack holds 80 of each thing\.$/);
+  it('a fountain step toast says what is new, in sentences (the move it teaches has its own toast)', () => {
+    expect(fountainStepNews(TIERS[1])).toBe('New to build: Pollinator Garden and Drone Hub. Your backpack holds 60 of each thing.');
+    expect(fountainStepNews(TIERS[2])).toMatch(/^New to build: .+\. Your backpack holds 80 of each thing\.$/);
     expect(fountainStepNews(TIERS[4])).toMatch(/^The whole city is in flower\./);
     for (const t of TIERS) expect(fountainStepNews(t)).not.toMatch(/ · |Stacks of/);
   });

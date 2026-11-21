@@ -18,6 +18,9 @@ export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'b
 /** What the key function gives for an action on the mouse's left button: the line says "Click" instead. */
 export const CLICK = 'Click';
 
+/** #620: kept in the same list: the first Bloombot moment has pointed at its page (later ones don't). */
+export const BLOOMBOT_PAGE = 'bloombotPage';
+
 export interface Idea {
   id: IdeaId;
   /**
@@ -56,19 +59,19 @@ const listWords = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', 
 export const IDEAS: readonly Idea[] = [
   {
     id: 'salvage',
-    text: (k) => `Hold ${k('interact')} by a glinting pile to pick through it.`,
+    text: (k) => `Hold ${k('interact')} beside a glinting pile to dig out what the fountain needs.`,
     comes: () => true,
     known: salvaged,
   },
   {
     id: 'pulse',
-    text: (k) => (k('pulse') === CLICK ? 'Click the bare red ground to turn it green.' : `Press ${k('pulse')} by the bare red ground to turn it green.`),
+    text: (k) => (k('pulse') === CLICK ? 'Click to turn the bare red ground around Bloombot green.' : `Press ${k('pulse')} to turn the bare red ground around Bloombot green.`),
     comes: salvaged,
     known: (sim) => (sim.state.stats.pulses ?? 0) > 0,
   },
   {
     id: 'park',
-    text: () => 'Keep pulsing the ground around the fountain. Every green patch helps wake it.',
+    text: () => 'Keep pulsing the ground around the fountain. Every green patch adds to Park on the goal card.',
     // after the player's own first pulse (a drone's tile at the start is not the moment)
     comes: (sim) => (sim.state.stats.pulses ?? 0) > 0,
     known: (sim) => (sv(sim)?.tier ?? 0) >= 1 || sim.areas.counts(PARK).restored >= (sim.fountain.next()?.needs.parkTiles ?? Infinity),
@@ -96,7 +99,7 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'build',
-    text: (k) => `You can build things now. Press ${k('buildMenu')} to see what you can put down.`,
+    text: (k) => `You can build things now. Press ${k('buildMenu')} to see what you can make.`,
     comes: (sim) => (sv(sim)?.tier ?? 0) >= 1,
     known: built,
   },
@@ -108,7 +111,7 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'keepers',
-    text: (k) => (k('pulse') === CLICK ? 'A robot sleeps past the rubble. Click it to pulse it, then talk to it.' : `A robot sleeps past the rubble. Press ${k('pulse')} by it to pulse it, then talk to it.`),
+    text: (k) => (k('pulse') === CLICK ? 'A robot sleeps past the rubble. Stand beside it and click to pulse it, then talk to it.' : `A robot sleeps past the rubble. Stand beside it and press ${k('pulse')} to pulse it, then talk to it.`),
     comes: pried,
     known: keeperAwake,
   },

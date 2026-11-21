@@ -55,6 +55,8 @@ export interface HudCallbacks {
   glyph(a: Action): string;
   /** #605: point the way to the objective's next step (its Show me where). */
   showWhere(): boolean;
+  /** #620: point the way to a place (the Bloombot page's Show me where) */
+  pointTo(at: { roofId: string; x: number; z: number; name: string }): void;
   /** E18.5: open a machine's panel (the advisor's role hint). */
   inspectAt(machineId: string): void;
 }
@@ -214,7 +216,7 @@ export class Hud {
     this.dock.wire();
     this.wire();
     this.prompt = new Prompt(this.root);
-    this.backpack = new Backpack(this.root, { sim: this.sim });
+    this.backpack = new Backpack(this.root, { sim: this.sim, showWhere: (at) => this.cb.pointTo(at) });
     this.craft = new CraftTable(this.root, { sim: this.sim });
     this.crate = new CratePanel(this.root, { sim: this.sim });
   }

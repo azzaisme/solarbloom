@@ -1,7 +1,7 @@
 import { $, esc, HudPart } from './HudPart';
 import type { Sim } from '../gameplay/Sim';
 import type { Place, Suggestion, SuggestionAction } from '../gameplay/Advisor';
-import { WORDS } from './words';
+import { WORDS, withKeys } from './words';
 import { pinnedRequest as pinnedKeeper } from './BackpackModel';
 import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
@@ -21,6 +21,8 @@ export interface Objective {
   text: string;
   /** #605: what the goal brings ("Bloombot learns to pry open rubble") */
   why?: string;
+  /** #620: a few words before `why` that the card drops first when room is short ("The fountain's next step.") */
+  lead?: string;
   /** #605: every part of the goal, each counted ("Scrap 4 of 20", "Park 12 of 60") */
   parts?: ObjectivePart[];
   /** "12 of 20", only for things done by hand (a goal with no parts) */
@@ -94,22 +96,25 @@ export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim
     const [x, z] = rubble.gate.cells[0];
     const urgent = advice && URGENT.has(advice.topic) ? next : undefined;
     return {
-      text: W.pry(rubble.name),
+      text: W.pry,
       why: W.pryWhy,
       next: urgent?.next ?? W.pryNext,
       topic: urgent?.topic ?? 'keeper',
       where: urgent?.where ?? { kind: 'focus', x, z },
-      place: urgent ? urgent.place : { kind: 'gate', name: 'the rubble' },
+      place: urgent ? urgent.place : { kind: 'gate', name: `the rubble into ${rubble.name}` },
     };
   }
   const parts = fountainParts(sim);
   const progress = parts.reduce((a, p) => a + (p.need > 0 ? p.have / p.need : 1), 0) / Math.max(1, parts.length);
   return {
-    text: f.canAdvance() ? W.fountainReady(t.tier) : W.fountain(t.tier, t.name),
+    text: W.fountain(t.tier, t.name),
     why: t.ability ? W.why[t.ability] : W.why.bloom,
+    lead: t.tier > 1 ? W.nextLead : undefined,
     parts,
     progress,
     ...next,
+    // everything is in: say so under the goal (unless something urgent is there)
+    ...(f.canAdvance() && !(advice && URGENT.has(advice.topic)) ? { next: W.fountainReady(t.tier) } : {}),
   };
 }
 
@@ -210,7 +215,7 @@ export class ObjectiveCard extends HudPart {
     // #605: what the goal brings, and every part of it, counted from the start
     const why = $(r, '#objWhy');
     if (why.hidden !== !o.why) why.hidden = !o.why;
-    if (o.why) this.set('objWhy', why, 'text', o.why);
+    if (o.why) this.set('objWhy', why, 'html', `${o.lead ? `<span class="olead">${esc(o.lead)} </span>` : ''}${esc(o.why)}`);
     const parts = $(r, '#objParts');
     if (parts.hidden !== !o.parts?.length) parts.hidden = !o.parts?.length;
     if (o.parts?.length)
@@ -233,7 +238,7 @@ export class ObjectiveCard extends HudPart {
     // #605: the next step under the goal, with "Show me where" when it has a place
     const row = $(r, '#objNextRow');
     if (row.hidden !== !o.next) row.hidden = !o.next;
-    if (o.next) this.set('objNext', $(r, '#objNext'), 'text', o.next);
+    if (o.next) this.set('objNext', $(r, '#objNext'), 'text', withKeys(o.next, (a) => this.cb.keyFor(a)));
     const where = $(r, '#objWhere');
     const canShow = o.where?.kind === 'focus' || o.where?.kind === 'wake';
     if (where.hidden !== !canShow) where.hidden = !canShow;
@@ -253,5 +258,43 @@ export class ObjectiveCard extends HudPart {
       if (target) r.querySelector(target)?.classList.add('nudge');
       this.last.set('nudgeTarget', target);
     }
+    // #620: the card never sits on the minimap. Measured a few times a second (and on any change of what it says),
+    // since a step's parts, a long next step or a bigger interface size can each make it taller.
+    const shape = `${o.text}|${o.why ?? ''}|${o.parts?.length ?? 0}|${o.next ?? ''}|${innerWidth}x${innerHeight}`;
+    if (shape !== this.fitShape || now - this.fitAt > 1000) {
+      this.fitShape = shape;
+      this.fitAt = now;
+      this.fit();
+    }
+  }
+
+  private fitShape = '';
+  private fitAt = -Infinity;
+
+  /**
+   * #620: make room between the card and the minimap below it, in as few steps as it takes:
+   *   1. tight: the line under the title drops its lead-in ("The fountain's next step.") and keeps to one line;
+   *   2. the minimap tucks down, smaller, into its corner.
+   * The card keeps its width: a tall card over the corner beats a wide one over the middle of the scene.
+   * Each step is tried only if the one before still overlaps. The minimap's N badge stands above its disc, so it counts.
+   */
+  fit() {
+    const card = this.root.querySelector<HTMLElement>('#obj');
+    const map = this.root.querySelector<HTMLElement>('#minimap');
+    if (!card) return;
+    card.classList.remove('tight');
+    map?.classList.remove('tuck');
+    if (!map || map.hidden || map.offsetParent === null) return;
+    const clear = () => {
+      const c = card.getBoundingClientRect();
+      const m = map.getBoundingClientRect();
+      const n = map.querySelector<HTMLElement>('.mm-n')?.getBoundingClientRect();
+      const top = Math.min(m.top, n && n.height > 0 ? n.top : m.top);
+      return c.bottom + 6 <= top || c.right <= m.left || c.left >= m.right;
+    };
+    if (clear()) return;
+    card.classList.add('tight');
+    if (clear()) return;
+    map.classList.add('tuck');
   }
 }
