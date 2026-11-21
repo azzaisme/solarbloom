@@ -3,7 +3,7 @@ import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { WORDS } from '../ui/words';
 import { CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
-import { goalSpot } from '../ui/GoalSpot';
+import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { treeSpot, treeStage } from '../rendering/TreePlacement';
@@ -64,6 +64,8 @@ import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
+import { Waymark } from '../rendering/Waymark';
+import { WAYMARK } from '../data/waymark';
 import { PowerLines } from '../rendering/PowerLines';
 import { PowerOverlay } from '../rendering/PowerOverlay';
 import { LightVisuals } from '../rendering/LightVisuals';
@@ -315,6 +317,10 @@ export class Game {
   readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
   private minimap?: Minimap;
+  /** E24 (#609): the current goal spot (looked up twice a second) and the light that marks it in the world */
+  private goal?: GoalSpot;
+  private goalT = 0;
+  private waymark!: Waymark;
   /** E19.4.1 (#260): photo mode and its controls bar */
   private photo!: PhotoMode;
   private photoBar!: PhotoBar;
@@ -463,6 +469,7 @@ export class Game {
       this.sfx.powerUp();
     };
     this.overlays = new Overlays(this.sim, this.scene.world);
+    this.waymark = new Waymark(this.sim, this.scene.world);
 
     this.hud = new Hud(
       this.sim,
@@ -1282,12 +1289,12 @@ export class Game {
         setHudHidden: (hidden) => {
           document.body.classList.toggle('photo', hidden);
           if (hidden) {
-            // Nothing of the game's own pointers in the picture: the hover frame, ghost, reach ring, grid, beacon.
+            // Nothing of the game's own pointers in the picture: the hover frame, ghost, reach ring, grid, waymark.
             this.overlays.hideFrame();
             this.overlays.hideGhost();
             this.overlays.hideRadius();
             this.overlays.showGrid(false);
-            this.overlays.hideBeacon();
+            this.waymark.hide();
             this.hud.hideTip();
           } else {
             const t = this.hud.currentTool;
@@ -1546,9 +1553,10 @@ export class Game {
   }
 
   /**
-   * #605 (E24): Show me where. The gold arrow stands on the current goal spot (ui/GoalSpot.ts, the same spot the beam
-   * and the minimap use) until bloombot gets there or for a while, and the camera turns to look that way from behind
-   * bloombot, so the way is in view. Sitting keeps its own calm view: the arrow still shows. False with nowhere to go.
+   * #605 (E24): Show me where. The camera turns to look towards the current goal spot (ui/GoalSpot.ts) from behind
+   * bloombot, so the way is in view, where the waymark's light stands on it (#609; for a while it shows even at the
+   * potter-about pace, which otherwise keeps the world unmarked). Sitting keeps its own calm view. False with nowhere
+   * to go.
    */
   private wayMark?: { roofId: string; x: number; z: number; until: number };
   private showWhere(): boolean {
@@ -1624,19 +1632,14 @@ export class Game {
     }
   }
 
-  /** #605 / #607: where the gold arrow stands now: Show me where's spot, else the first step's salvage pile. */
-  private beaconSpot(): { roofId: string; x: number; z: number } | undefined {
+  /** #605: is Show me where's mark still standing (asked for a moment ago, and bloombot not there yet)? */
+  private wayMarked(): boolean {
     const w = this.wayMark;
-    if (w) {
-      const p = this.bot?.pose;
-      const there = !!p && p.roofId === w.roofId && Math.hypot(w.x + 0.5 - p.x, w.z + 0.5 - p.z) < 2;
-      if (there || performance.now() > w.until) this.wayMark = undefined;
-      else return w;
-    }
-    if (this.sim.state.progression.tutorialStep !== 0) return undefined;
-    // #607: the guide's first step is the pile in front of bloombot: the goal spot points at it (not a park tile)
-    const spot = goalSpot(this.sim, this.hud.objective.current);
-    return spot ? { roofId: spot.roofId, x: spot.cell.x, z: spot.cell.z } : undefined;
+    if (!w) return false;
+    const p = this.bot?.pose;
+    const there = !!p && p.roofId === w.roofId && Math.hypot(w.x + 0.5 - p.x, w.z + 0.5 - p.z) < 2;
+    if (there || performance.now() > w.until) this.wayMark = undefined;
+    return !!this.wayMark;
   }
 
   /** E22.1: Pin the next request (E21's requests; until they exist there is nothing to pin). */
@@ -4937,10 +4940,7 @@ export class Game {
     if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
     if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(wdt);
-    // #605 / #607: the gold arrow: Show me where's spot, or the first step's salvage pile
-    const spot = !this.cinematic && !this.photo.active ? this.beaconSpot() : undefined;
-    if (spot) this.overlays.showBeacon(spot.roofId, spot.x, spot.z);
-    else this.overlays.hideBeacon();
+    // E24 (#609): the old gold arrow is retired; the waymark (a soft light on the goal spot) took its place
     this.overlays.update(dt);
     this.waterLevels.update();
     this.pipes.update(dt);
@@ -4958,7 +4958,18 @@ export class Game {
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
-      this.minimap?.update(dt, this.bot.pose);
+      // E24 (#609): the way to the goal spot (the one #605's card and Show me where use), on the map and in the world.
+      // The potter-about pace never nudges: the map keeps its pin, and the world stays unmarked unless asked.
+      this.goalT -= dt;
+      if (this.goalT <= 0) {
+        this.goalT = WAYMARK.every;
+        this.goal = goalSpot(this.sim, this.hud.objective.current);
+      }
+      this.minimap?.update(dt, this.bot.pose, this.goal);
+      this.waymark.reducedMotion = !!this.settings.reducedMotion;
+      const marked = this.wayMarked();
+      const shown = !this.cinematic && !this.photo.active && !this.building() && (!this.settings.potter || marked);
+      this.waymark.update(dt, this.goal, shown, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
       const [cx, cy, cz] = this.bot.world();
       this.drones.companion = { x: cx, y: cy, z: cz, facing: this.bot.pose.facing };
     }
