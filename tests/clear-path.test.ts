@@ -113,7 +113,7 @@ describe('#607: the guide\'s lines, once each', () => {
     expect(dueIdea(fresh)).toBeUndefined();
     const first = dueIdea(sim)!;
     expect(first.id).toBe('salvage');
-    expect(first.text(key as never, sim)).toBe('Hold E beside a junk pile to dig out what the fountain needs.');
+    expect(first.text(key as never, sim)).toBe('Hold E beside a glinting pile to dig out what the fountain needs.');
     markShown(sim, 'salvage');
     expect(dueIdea(sim)).toBeUndefined(); // pulsing comes up once something is salvaged
     sim.state.salvage!.piles['p-test'] = 1;
@@ -183,10 +183,10 @@ describe('#608: greening moves you forward', () => {
     expect(sim.fountain.condition().done).toBe(true);
     const idea = dueIdea(sim)!;
     expect(idea.id).toBe('parkDone');
-    expect(idea.text(key as never, sim)).toBe('The ground round the fountain is alive again. It still needs Scrap and Seeds: look for piles that glint.');
+    expect(idea.text(key as never, sim)).toBe('The fountain still needs Scrap and Seeds. Hold E by the glinting piles to find them.');
     // the card's next step names a pile to salvage, with a place to show
     const o = objectiveSentence(sim);
-    expect(o.next).toMatch(/^Dig (Scrap|Seeds) out of a junk pile: hold \{interact\} beside one\.$/);
+    expect(o.next).toMatch(/^Dig (Scrap|Seeds) out of a glinting pile: hold \{interact\} beside one\.$/);
     expect(o.where?.kind).toBe('focus');
   });
 
@@ -196,7 +196,7 @@ describe('#608: greening moves you forward', () => {
     restorePark(sim, 200);
     const idea = IDEAS.find((i) => i.id === 'parkDone')!;
     expect(idea.comes(sim)).toBe(true);
-    expect(idea.text(key as never, sim)).toBe('The ground round the fountain is alive again. Walk up to it and press E to wake it.');
+    expect(idea.text(key as never, sim)).toBe('The fountain has all it needs. Walk up to it and press E to wake it.');
   });
 });
 
@@ -332,7 +332,7 @@ describe('#605 review: salvaging counts at once, and a full backpack goes to the
     const sim = new Sim(createInitialState(7));
     sim.inventory.add('scrap', 3);
     const o = objectiveSentence(sim);
-    expect(o.next).toMatch(/^Dig (Scrap|Seeds) out of a junk pile: hold \{interact\} beside one\.$/);
+    expect(o.next).toMatch(/^Dig (Scrap|Seeds) out of a glinting pile: hold \{interact\} beside one\.$/);
     expect(goalSpot(sim, o)!.kind).toBe('pile');
   });
 });
@@ -341,9 +341,9 @@ describe('#607 review: the guide names the input the way a player would', () => 
   it('the left mouse button is "Click"; a key or pad button is its glyph', () => {
     const sim = new Sim(createInitialState(7));
     const pulse = IDEAS.find((i) => i.id === 'pulse')!;
-    expect(pulse.text(() => CLICK, sim)).toBe('Click to bring the dry ground around Bloombot back to life.');
-    expect(pulse.text(() => '<svg>RB</svg>', sim)).toBe('Press <svg>RB</svg> to bring the dry ground around Bloombot back to life.');
+    expect(pulse.text(() => CLICK, sim)).toBe('Click to turn the bare red ground around Bloombot green.');
+    expect(pulse.text(() => '<svg>RB</svg>', sim)).toBe('Press <svg>RB</svg> to turn the bare red ground around Bloombot green.');
     const keepers = IDEAS.find((i) => i.id === 'keepers')!;
-    expect(keepers.text(() => CLICK, sim)).toBe('Another robot is asleep past the rubble. Click beside it to wake it, then see what it needs.');
+    expect(keepers.text(() => CLICK, sim)).toBe('A robot sleeps past the rubble. Stand beside it and click to pulse it, then talk to it.');
   });
 });

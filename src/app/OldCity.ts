@@ -60,7 +60,8 @@ export class OldCityController {
     this.bubble = new SpeechBubble(host.hud.root);
     host.sim.bus.on('keeper.said', ({ keeperId, lines }) => {
       this.speaker = keeperId;
-      this.bubble.say(host.sim.keepers.def(keeperId).name, lines);
+      // #610: a Keeper's name is learned when it wakes and says it; until then it's just a sleeping robot
+      this.bubble.say(host.sim.keepers.step(keeperId) === 'asleep' ? 'A sleeping robot' : host.sim.keepers.def(keeperId).name, lines);
     });
     host.sim.bus.on('keeper.step', ({ keeperId, step }) => {
       if (step === 'request1') host.sound('wake');
