@@ -76,6 +76,8 @@ export const WORDS = {
     upgraded: (name: string, level: number, max: number) => `Bloombot got better: ${name}, level ${level} of ${max}`,
     /** #622: the park reached a milestone */
     park: (name: string, does: string) => `The park helped Bloombot grow: ${name}<small>${does}</small>`,
+    /** #624 Lucky pulse: what a pulse turned up (already in the backpack) */
+    lucky: (n: number, what: string) => `Lucky! The pulse dug up ${n} ${what}`,
   },
   objective: {
     restore: 'Bring the park back to life around the fountain',

@@ -215,6 +215,37 @@ export class BloombotVisuals {
   }
 
   /** #620: sets what Bloombot has grown into (cheap to call every frame: it rebuilds only on a change). */
+  private lantern?: pc.Entity;
+  /**
+   * #624 Lantern: Bloombot's own light at night. A real warm point light just above its head (no shadows, like the
+   * lamp posts, E23.7.5), so the ground and anything near is lit from Bloombot and the light falls off with distance.
+   * `reach` is how far it shines (tiles; 0: no light of its own), `dark` how dark the scene is (0 day … 1 night) and
+   * `share` the scene's light share (the Power view dims it with everything else). It fades in with the dusk.
+   */
+  setLantern(reach: number, dark: number, share = 1, intensity = 0.55) {
+    const on = reach > 0 && dark > 0.03;
+    if (!on) {
+      if (this.lantern) this.lantern.enabled = false;
+      return;
+    }
+    if (!this.lantern) {
+      const e = (this.lantern = new pc.Entity('bloombot-lantern'));
+      e.addComponent('light', { type: 'omni', castShadows: false, falloffMode: pc.LIGHTFALLOFF_INVERSESQUARED, affectSpecularity: false, color: color(PALETTE.light.lamps.warm) });
+      e.setLocalPosition(0, 1.05, 0.12);
+      this.root.addChild(e);
+    }
+    this.lantern.enabled = true;
+    const l = this.lantern.light!;
+    l.range = reach + 1;
+    l.intensity = intensity * Math.min(1, dark) * share;
+  }
+
+  /** #624: the Lantern's light now, for tests and the shots (undefined: none on). */
+  get lanternLight(): { range: number; intensity: number } | undefined {
+    const l = this.lantern;
+    return l?.enabled && l.light ? { range: l.light.range, intensity: l.light.intensity } : undefined;
+  }
+
   setGrowth(g: BotGrowth) {
     const c = this.growth;
     if (c.moves === g.moves && c.cells === g.cells && c.pockets === g.pockets && (c.park ?? 0) === (g.park ?? 0)) return;

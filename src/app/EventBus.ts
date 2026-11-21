@@ -143,6 +143,8 @@ export interface GameEvents {
   'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
+  /** #624 Lucky pulse: a pulse on bare ground turned up `n` of a material (already in the backpack) */
+  'pulse.lucky': { tileId: string; material: import('../core/types').MaterialId; n: number };
   'action.failed': { reason: string; tileId?: string };
   /** E23.1.5: an upgrade level was granted (research; nothing is bought). */
   'upgrade.granted': { id: string; level: number; machineId?: string };

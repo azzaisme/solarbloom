@@ -1,6 +1,7 @@
 import { REGIONS, type RegionDef } from '../data/oldcity';
 import { WAYMARK } from '../data/waymark';
 import { GROUND } from '../core/GameState';
+import { allPiles } from '../core/OldCityLayout';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import type { GoalSpot } from './GoalSpot';
@@ -28,7 +29,7 @@ const CELL_CSS = VIEW / CELLS;
 const EVERY = 0.5; // seconds between repaints while standing still (state changes: restored ground, machines)
 
 /** The map's paint: CSS tokens (`--mm-*` in styles.css), read once. */
-const TOKENS = ['rim', 'grass', 'grass-hi', 'dead', 'dead-2', 'path', 'path-edge', 'water', 'water-hi', 'bush', 'bush-hi', 'roof', 'wall', 'fog', 'edge', 'flower', 'flower-2', 'flower-3', 'cliff', 'landmark', 'landmark-off', 'cache', 'ring', 'grain', 'sealed', 'sealed-line', 'gate', 'gate-ink'] as const;
+const TOKENS = ['rim', 'grass', 'grass-hi', 'dead', 'dead-2', 'path', 'path-edge', 'water', 'water-hi', 'bush', 'bush-hi', 'roof', 'wall', 'fog', 'edge', 'flower', 'flower-2', 'flower-3', 'cliff', 'landmark', 'landmark-off', 'cache', 'pile', 'ring', 'grain', 'sealed', 'sealed-line', 'gate', 'gate-ink'] as const;
 type Paint = Record<(typeof TOKENS)[number], string>;
 type RGB = [number, number, number];
 
@@ -526,7 +527,23 @@ export class Minimap {
         ctx.fillStyle = p.landmark;
         ctx.fill();
       }
-    if (this.sim.landmarks.has('starLens') && roofId === GROUND)
+    // #624: Keen eye at its last level shows every pile with something left in it (a small gold dot), and the caches
+    const keen = !!this.sim.upgrades?.findsOnMap;
+    if (keen && roofId === GROUND)
+      for (const pile of allPiles()) {
+        if (this.sim.salvage.left(pile.id) <= 0) continue;
+        const i = pile.x + 0.5 - x0;
+        const j = pile.z + 0.5 - z0;
+        if (!inside(i, j)) continue;
+        ctx.beginPath();
+        ctx.arc(i * RES, j * RES, 2.6, 0, Math.PI * 2);
+        ctx.fillStyle = p.pile;
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = p['dead-2'];
+        ctx.stroke();
+      }
+    if ((keen || this.sim.landmarks.has('starLens')) && roofId === GROUND)
       for (const c of REGIONS.flatMap((r) => r.caches)) {
         if (this.sim.state.salvage?.caches.includes(c.id)) continue;
         const i = c.x + 0.5 - x0;

@@ -55,6 +55,12 @@ const UPGRADE_DOES: Record<string, string> = {
   sprint: 'Running uses less charge and goes a little faster.',
   pulseRadius: 'Each pulse brings back more ground at once.',
   backpack: 'Bloombot can carry 20 more of each thing.',
+  // #624
+  quickHands: 'Digging things out of piles and prying rubble open go quicker.',
+  keenEye: 'Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too.',
+  sunSoak: 'Standing still in the sun slowly charges Bloombot, so it can top up anywhere by day.',
+  lantern: 'Bloombot carries its own light at night, so dark streets are easier to see.',
+  luckyPulse: 'Now and then a pulse on bare red ground turns up a few Seeds or Scrap.',
 };
 
 /** The part each upgrade changes on Bloombot. */
@@ -64,6 +70,11 @@ const UPGRADE_PART: Record<string, BloombotRow['part']> = {
   sprint: 'stride',
   pulseRadius: 'pulse',
   backpack: 'pockets',
+  quickHands: 'cuffs',
+  keenEye: 'core',
+  sunSoak: 'cells',
+  lantern: 'core',
+  luckyPulse: 'pulse',
 };
 
 const listWords = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : (xs[0] ?? ''));
@@ -116,7 +127,7 @@ function openHow(sim: Sim, p: ProjectDef | undefined): string {
   return `Take a close look at ${r.findName(p.opens)} at the workshop table in the house. That opens ${name} in its Research tab.`;
 }
 
-/** The five workshop upgrades for Bloombot, in data order. */
+/** The workshop upgrades for Bloombot (#620 and #624), in data order. */
 export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
   const r = sim.research;
   const open = r.upgrades();
