@@ -98,7 +98,7 @@ export function moveRows(sim: Sim): BloombotRow[] {
     // what the player does is bring the fountain what it asks for; the step's name isn't something they know
     const left = Math.max(1, t.tier - now);
     const how = learned
-      ? 'Learned.'
+      ? 'The fountain taught Bloombot this.'
       : left === 1
         ? 'Bring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.'
         : `The fountain teaches this once you've brought it what it asks for ${times[left] ?? `${left} more times`}.`;
@@ -150,10 +150,14 @@ export function moveTwoRows(sim: Sim): BloombotRow[] {
     const ready = level === 1 && !!p && (r.running(p.id) || r.isOpen(p));
     // the move that opens it at the workshop: the next one the fountain teaches (Glide II: Glide, then Climb II)
     const gate = p && 'move' in p.opens ? p.opens.move : a;
+    // #663: Glide II waits on Climb II too, so say both steps
+    const before = p && 'project' in p.opens ? r.project(p.opens.project) : undefined;
     const how = have
       ? two.where
       : !r.moveLevel(gate)
-        ? `Bloombot has to learn ${MOVES[gate].name} at the fountain first. Then the crafting table in the house can work out “${two.name}”.`
+        ? before
+          ? `Bloombot has to learn ${MOVES[gate].name} at the fountain first, and the crafting table in the house has to work out “${before.name}”. Then it can work out “${two.name}”.`
+          : `Bloombot has to learn ${MOVES[gate].name} at the fountain first. Then the crafting table in the house can work out “${two.name}”.`
         : openHow(sim, p, true);
     const where = have ? moveTwoSpot(sim, a) : !r.moveLevel(gate) ? fountainSpot(sim) : houseSpot();
     return { id: `${a}2`, kind: 'move2', name: two.name, does: two.does, state: have ? 'have' : ready ? 'next' : 'later', how, where, part: 'marks' }; // #629: the move's own mark lights up
@@ -204,7 +208,7 @@ export function parkRows(sim: Sim): BloombotRow[] {
     const have = g.step >= d.step;
     const isNext = d === next;
     const how = have
-      ? 'Grown with the park.'
+      ? 'It grew as the park came back to life.'
       : isNext
         ? `Keep bringing the park back to life around the fountain. This grows at ${d.tiles} on the goal card's Park count, and it's at ${Math.min(n, d.tiles)} now.`
         : `Keep bringing the park back to life. This grows at ${d.tiles} on the goal card's Park count.`;

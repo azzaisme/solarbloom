@@ -141,7 +141,7 @@ describe('#622: greening the park grows Bloombot', () => {
     expect(BLOOMBOT_GROUPS.map((g) => g.title)).toEqual(['Moves', 'Stronger moves', 'Grown with the park', 'Knacks from the Keepers', 'Upgrades']); // #626 adds the second levels
     greenTo(sim, 20);
     sim.parkGrowth.check();
-    expect(parkRows(sim)[0]).toMatchObject({ state: 'have', how: 'Grown with the park.', where: undefined });
+    expect(parkRows(sim)[0]).toMatchObject({ state: 'have', how: 'It grew as the park came back to life.', where: undefined });
     expect(stateWords(parkRows(sim)[0])).toBe('Grown');
     for (const r of bloombotRows(sim)) for (const line of [r.does, r.how]) expect(bannedIn(line), line).toEqual([]);
   });
