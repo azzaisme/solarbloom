@@ -45,6 +45,8 @@ const QUICK = [
   'waymark',
   // #632: Show me where's trail along a walkable way
   'trail',
+  // #631: Bloombot's colour is green
+  'bot-green',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

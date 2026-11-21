@@ -151,7 +151,7 @@ export class Vfx {
     const palmMesh = pc.Mesh.fromGeometry(device, new pc.TorusGeometry({ tubeRadius: 0.04, ringRadius: 1, segments: 48, sides: 8 }));
     palmMesh.incRefCount();
     for (let i = 0; i < 15; i++) {
-      const m = uniqueMat(PALETTE.eyeCyan, { opacity: 0.9, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.6 });
+      const m = uniqueMat(PALETTE.botPulse, { opacity: 0.9, emissive: PALETTE.botPulse, emissiveIntensity: 2.6 });
       const e = new pc.Entity('palmRing');
       e.addComponent('render', { meshInstances: [new pc.MeshInstance(palmMesh, m)], castShadows: false });
       this.root.addChild(e);
@@ -246,7 +246,7 @@ export class Vfx {
    * target tile (`to`), with sparkles along the way, then a cyan ring on the ground where they land. Reduced
    * motion: one ring that fades in place at the tile.
    */
-  palmWave(from: pc.Vec3, to: pc.Vec3, hex: string = PALETTE.eyeCyan) {
+  palmWave(from: pc.Vec3, to: pc.Vec3, hex: string = PALETTE.botPulse) {
     if (this.reducedMotion) return this.ring(to, hex, 0.7, 0.4);
     const n = this.density < 0.6 ? 2 : 4;
     for (let i = 0; i < n; i++) {
