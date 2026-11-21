@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { LOOK, type TierSpec } from '../data/look';
+import { glowIntensity, LOOK, type TierSpec } from '../data/look';
 
 export interface GradeValues {
   brightness: number;
@@ -31,6 +31,8 @@ export class PostFx {
   private clearWas?: pc.Color;
   private bloomOn = false;
   private night = 0;
+  /** #633: the Glow setting (1 = Normal) */
+  private glow = 1;
 
   constructor(
     private app: pc.AppBase,
@@ -84,8 +86,24 @@ export class PostFx {
   }
 
   private bloomIntensity(): number {
-    const B = LOOK.bloom;
-    return this.bloomOn ? B.intensity * (1 + (B.night - 1) * this.night) : 0;
+    return glowIntensity(this.bloomOn, this.night, this.glow);
+  }
+
+  /** #633: the Glow setting, at once (0 Off … 1 Normal … 1.6 Strong). */
+  setGlow(g: number) {
+    if (!Number.isFinite(g) || g === this.glow) return;
+    this.glow = g;
+    if (this.frame) this.frame.bloom.intensity = this.bloomIntensity();
+  }
+
+  /** Bloom's strength now (tests and the debug readout). */
+  get bloomNow(): number {
+    return this.frame?.bloom.intensity ?? 0;
+  }
+
+  /** Does this graphics tier draw glow at all? (Low has no post stack: the Glow row says so.) */
+  get bloomAvailable(): boolean {
+    return this.bloomOn && !!this.frame;
   }
 
   /** E23.7.5: how far into night it is (0 … 1): bloom grows toward LOOK.bloom.night by deep night. */

@@ -85,8 +85,8 @@ export class OldCityPanel {
     this.act = act;
     this.el.classList.add('open');
     this.refresh();
-    // the pad starts on the first control
-    this.el.querySelector<HTMLElement>('.oc-body button:not([disabled])')?.focus({ focusVisible: false } as FocusOptions);
+    // the pad and the keys start on the first control, and can see it (#616)
+    this.el.querySelector<HTMLElement>('.oc-body button:not([disabled])')?.focus({ focusVisible: true } as FocusOptions);
   }
 
   /** Redraws the panel, keeping the focused control (by its action) where it was. */
