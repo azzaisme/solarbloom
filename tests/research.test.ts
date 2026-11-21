@@ -38,6 +38,7 @@ describe('E23.6.2: research in data', () => {
       const g = p.gives;
       if ('upgrade' in g) expect(RESEARCH_UPGRADES.some((u) => u.id === g.upgrade), p.id).toBe(true);
       else if ('recipes' in g) for (const id of g.recipes) expect(RECIPE_IDS.has(id), `${p.id}: ${id}`).toBe(true);
+      else if ('move' in g) expect(['pry', 'hover', 'climb', 'glide'], p.id).toContain(g.move); // E25 #626: a move's second level
       else expect(g.station).toBe(2);
       for (const k of Object.keys(p.cost)) expect(realItem(k), `${p.id}: ${k}`).toBe(true);
       expect(p.days).toBeGreaterThan(0);
@@ -53,6 +54,7 @@ describe('E23.6.2: research in data', () => {
       else if ('tech' in f) expect(CACHES.has(f.tech), p.id).toBe(true);
       else if ('creature' in f) expect(['butterflies', 'birds', 'koi'], p.id).toContain(f.creature);
       else if ('crop' in f) expect(f.crop, p.id).toBe('radish'); // E23.5.2's first crop (data/crops once it lands)
+      else if ('move' in f) expect(['pry', 'hover', 'climb', 'glide'], p.id).toContain(f.move); // E25 #626: a move learned
       else expect(PROJECTS.some((q) => q.id === f.project), p.id).toBe(true);
       // follow the chain back to a find
       let q = p;

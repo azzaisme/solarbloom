@@ -5,7 +5,7 @@ import { areaMapFor, genKey, PARK, SEA, type AreaInfo } from './Areas';
 import { canalRow } from './Arterials';
 import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
-import { coastSand, inRect, inSurfBand, onJetty, regionById, regionPond, regionWater, seaCell, setPieceAt } from './OldCityLayout';
+import { coastSand, inRect, inSurfBand, moveLandAt, onJetty, regionById, regionPond, regionWater, seaCell, setPieceAt } from './OldCityLayout';
 import { rampAt, tileLevel } from './Height';
 import { causewayBroken, mainlandWater, onCauseway } from './Mainland';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
@@ -58,6 +58,9 @@ export function stampOldCity(t: TileData): TileData {
     return Object.assign(t, { blocked: solid || t.blocked, feature: solid ? 'obstacle' : t.feature, prop: `ruin:${q.kind}:${q.turn}:${q.part ?? ''}:${q.span ?? 0}` });
   }
   if (p.kind === 'shed') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: 'shed' });
+  // E25 (#626): a sealed vault (a squat strongroom with an iron door) and a stash (a lidded box)
+  if (p.kind === 'vault') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `vault:${p.vault.id}` });
+  if (p.kind === 'stash') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `stash:${p.stash.id}` });
   // E21.24: a lookout: a bench and a telescope on a terrace's edge
   if (p.kind === 'lookout') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `lookout:${p.id}` });
   // E23.9.1: a page of the maker's journal, pinned to a post
@@ -263,7 +266,7 @@ export function oldCityRoad(x: number, z: number, area: AreaInfo): boolean {
 
 /** Cells kept clear of buildings and generated obstacles: set pieces and their neighbours, the patch, the seam, the landmark, terraces. */
 function oldCityKeepClear(x: number, z: number, area: AreaInfo): boolean {
-  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (setPieceAt(x + dx, z + dz)) return true;
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (setPieceAt(x + dx, z + dz) || moveLandAt(x + dx, z + dz)) return true;
   const r = area.region ? regionById(area.region) : undefined;
   if (!r) return false;
   if (distToFootprintRaw(x, z, r.landmark.x, r.landmark.z, 2) <= CITY_GEN.landmarkClearance + 1) return true;
@@ -317,6 +320,14 @@ function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, 
   };
   // E21.26: the Landing's jetty: walkable planks out over the surf and the bay
   if (onJetty(x, z)) return Object.assign(base, { feature: 'paving' as TileFeature, prop: undefined, level: tileLevel(x, z) });
+  // E25 (#626): the sandbar and the sea stack out in the sea, and the ruins' flat roofs: clear ground at their own level
+  const ml = moveLandAt(x, z);
+  if (ml) {
+    const feature: TileFeature = ml.ground === 'sand' ? 'sand' : 'paving';
+    const lo = Math.max(TUNING.restore.pollutionMin, area.pollutionFloor);
+    const pollution = Math.min(100, Math.round(lo + (Math.max(lo, TUNING.restore.pollutionMax) - lo) * tileRandom(seed, lh, x, z, 1)));
+    return stampOldCity(Object.assign(base, { feature, pollution, prop: undefined }));
+  }
   // E23.8.3.1: the Long Causeway to the mainland; its broken middle is rubble across the gap until the Great Bloom
   if (onCauseway(x, z)) {
     const broken = causewayBroken(x, z);

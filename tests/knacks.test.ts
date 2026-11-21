@@ -197,7 +197,7 @@ describe('#625: each Keeper teaches Bloombot a knack', () => {
 
   it('the Bloombot page: its own group, the reachable Keepers next with Show me where, the rest later', () => {
     const sim = fresh();
-    expect(BLOOMBOT_GROUPS.map((g) => g.title)).toEqual(['Moves', 'Grown with the park', 'Knacks from the Keepers', 'Upgrades']);
+    expect(BLOOMBOT_GROUPS.map((g) => g.title)).toEqual(['Moves', 'Stronger moves', 'Grown with the park', 'Knacks from the Keepers', 'Upgrades']);
     let rows = knackRows(sim);
     expect(rows.map((r) => r.name)).toEqual(KNACKS.map((k) => k.name));
     expect(rows.every((r) => r.part === 'knacks')).toBe(true);

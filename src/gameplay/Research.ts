@@ -1,7 +1,8 @@
 import { GROUND } from '../core/GameState';
-import type { ResearchState, SalvageState } from '../core/types';
+import type { AbilityId, ResearchState, SalvageState } from '../core/types';
 import { KEEPERS, PARK_SET, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
+import { ABILITIES } from '../data/salvage';
 import { PROJECTS, RESEARCH, RESEARCH_UPGRADES, type Find, type ProjectDef, type ResearchUpgradeDef, type UpgradeSystemId } from '../data/research';
 import type { Sim } from './Sim';
 import { gameDays } from '../data/time';
@@ -21,6 +22,7 @@ export function findKey(f: Find): string {
   if ('creature' in f) return `creature:${f.creature}`;
   if ('keeper' in f) return `keeper:${f.keeper}`;
   if ('tech' in f) return `tech:${f.tech}`;
+  if ('move' in f) return `move:${f.move}`;
   return `project:${f.project}`;
 }
 
@@ -90,6 +92,7 @@ export class Research {
       return !!st && st.step !== 'asleep';
     }
     if ('tech' in f) return sv.caches.includes(f.tech);
+    if ('move' in f) return sv.abilities.includes(f.move);
     return this.done(f.project);
   }
 
@@ -103,6 +106,7 @@ export class Research {
       const r = REGIONS.find((x) => x.caches.some((c) => c.id === f.tech));
       return `Old tech from ${r?.name ?? 'the city'}`;
     }
+    if ('move' in f) return ABILITIES[f.move].name;
     return PROJECTS.find((p) => p.id === f.project)?.name ?? f.project;
   }
 
@@ -112,7 +116,7 @@ export class Research {
     const seen = new Set<string>();
     const out: Find[] = [];
     for (const p of PROJECTS) {
-      if ('project' in p.opens) continue;
+      if ('project' in p.opens || 'move' in p.opens) continue; // these follow on by themselves
       const k = findKey(p.opens);
       if (seen.has(k)) continue;
       seen.add(k);
@@ -141,7 +145,22 @@ export class Research {
   isOpen(p: ProjectDef): boolean {
     if (!this.on) return false;
     if ('project' in p.opens) return this.done(p.opens.project);
+    if ('move' in p.opens) return this.found(p.opens); // E25 (#626): open once the move itself is learned
     return this.st.analysed.includes(findKey(p.opens));
+  }
+
+  /**
+   * E25 (#626): how far Bloombot has a move: 0 not learned, 1 learned at the fountain, 2 once the workshop has
+   * worked out its second level (only counts with the move itself learned).
+   */
+  moveLevel(a: AbilityId): number {
+    if (!this.sv?.abilities.includes(a)) return 0;
+    return PROJECTS.some((p) => 'move' in p.gives && p.gives.move === a && this.done(p.id)) ? 2 : 1;
+  }
+
+  /** E25 (#626): the project that gives a move's second level. */
+  moveProject(a: AbilityId): ProjectDef | undefined {
+    return PROJECTS.find((p) => 'move' in p.gives && p.gives.move === a);
   }
 
   /** Projects open now, not started and not done. */
@@ -169,7 +188,7 @@ export class Research {
     if (!p || !this.on) return 'Unknown project';
     if (this.done(id)) return 'Already done';
     if (this.running(id)) return 'Already on the bench';
-    if (!this.isOpen(p)) return 'project' in p.opens ? 'Finish the project before it first' : 'Look closely at the find it comes from first';
+    if (!this.isOpen(p)) return 'project' in p.opens ? 'Finish the project before it first' : 'move' in p.opens ? `Learn ${this.findName(p.opens)} at the fountain first` : 'Look closely at the find it comes from first';
     if ((this.sv?.research?.running.length ?? 0) >= this.stations()) return 'The bench is busy';
     const short = this.sim.inventory.shortfall(p.cost);
     if (short) return `Needs ${itemDef(short).name}`;

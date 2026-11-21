@@ -74,6 +74,8 @@ export const WORDS = {
   bloombot: {
     learned: { pry: 'Bloombot can pry rubble out of the way now', hover: 'Bloombot can hover over deep water now', climb: 'Bloombot can climb onto the roofs now', glide: 'Bloombot can glide down from the roofs now' } as Record<string, string>,
     upgraded: (name: string, level: number, max: number) => `Bloombot got better: ${name}, level ${level} of ${max}`,
+    /** E25 (#626): a move's second level, from the workshop */
+    levelTwo: { pry: 'Bloombot can pry open heavy vault doors now', hover: 'Bloombot can hover far out over the sea now', climb: 'Bloombot can climb low walls with no ladder now', glide: 'Bloombot can glide much further now' } as Record<string, string>,
     /** #622: the park reached a milestone */
     park: (name: string, does: string) => `The park helped Bloombot grow: ${name}<small>${does}</small>`,
     /** #625: a Keeper woke and taught Bloombot its knack */

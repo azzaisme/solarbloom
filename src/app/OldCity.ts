@@ -16,6 +16,8 @@ import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
 import { setPieceAt } from '../core/OldCityLayout';
+import { MOVE_LEVELS } from '../data/moveSpots';
+import { MoveSpots, type MoveTrip } from '../gameplay/MoveSpots';
 
 /** What the game lends the Old City controller (kept small, so Game.ts changes little). */
 export interface OldCityHost {
@@ -258,6 +260,39 @@ export class OldCityController {
       }
       return true;
     }
+    // E25 (#626): a sealed vault (Pry II holds Interact to force it), a stash, a trip a level II move takes
+    const vault = onGround ? this.sim.moves.vaultAt(front.x, front.z) : undefined;
+    if (vault) {
+      const why = this.sim.moves.vaultProblem(vault);
+      if (why) {
+        const sc = this.host.screenOf(front.x, front.z);
+        this.host.hud.showFail(why, sc.x, sc.y);
+      } else
+        this.startHold('pry', this.sim.upgrades.vaultHold, () => {
+          const got = this.sim.moves.openVault(vault.id);
+          if (!got) return;
+          this.host.sound('pry');
+          this.host.markTile(vault.x, vault.z);
+          this.host.hud.toast(`The vault door gives<small>Inside: ${MoveSpots.words(got)}</small>`, 'gold', 4);
+        });
+      return true;
+    }
+    const stash = onGround ? this.sim.moves.stashAt(front.x, front.z) : undefined;
+    if (stash) {
+      const got = this.sim.moves.openStash(stash.id);
+      if (got) {
+        this.host.sound('deliver');
+        this.host.markTile(stash.x, stash.z);
+        this.host.bot.visuals.play('interact');
+        this.host.hud.toast(`Someone left these here<small>${MoveSpots.words(got)}</small>`, 'gold', 4);
+      }
+      return true;
+    }
+    const trip = onGround ? this.tripAhead(front) : undefined;
+    if (trip) {
+      this.takeTrip(trip, front);
+      return true;
+    }
     // E21.6: the fountain opens its delivery panel (with a way to the store)
     if (occupant?.type === 'core' && this.sim.areas.areaOf(occupant) === PARK) {
       this.openFountain();
@@ -279,6 +314,29 @@ export class OldCityController {
     }
     void front;
     return false;
+  }
+
+  /** E25 (#626): the trip Bloombot could take from where it stands, facing `front` (MoveSpots). */
+  tripAhead(front: { x: number; z: number }): MoveTrip | undefined {
+    const b = this.host.bot;
+    if (b.pose.roofId !== GROUND) return undefined;
+    return this.sim.moves.tripFrom([Math.floor(b.pose.x), Math.floor(b.pose.z)], [front.x, front.z], (x, z) => b.walker.walkable(GROUND, x, z));
+  }
+
+  /** E25 (#626): hovers, climbs or glides there (or says why not). */
+  takeTrip(t: MoveTrip, front: { x: number; z: number }) {
+    const why = this.sim.moves.tripProblem(t);
+    if (why) {
+      const sc = this.host.screenOf(front.x, front.z);
+      this.host.hud.showFail(why, sc.x, sc.y);
+      return;
+    }
+    if (!this.sim.moves.takeTrip(t)) return;
+    const b = this.host.bot;
+    const style = t.move === 'climb' ? 'climb' : t.move === 'glide' ? 'glide' : 'hover';
+    const tiles = Math.hypot(t.to[0] + 0.5 - b.pose.x, t.to[1] + 0.5 - b.pose.z);
+    this.host.sound('click');
+    b.travel(t.to[0], t.to[1], style, MOVE_LEVELS.tripSeconds + MOVE_LEVELS.tripSecondsPerTile * tiles, MOVE_LEVELS.tripArc[style]);
   }
 
   /**

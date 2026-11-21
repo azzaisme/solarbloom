@@ -123,11 +123,12 @@ try {
     await page.waitForTimeout(400);
     let p = await page.evaluate(pageNow);
     check(/Bloombot/.test(p.tab), `${L}: E moves from Items to the Bloombot tab ("${p.tab}")`);
-    check(p.rows.length === 27 && p.rows[0] === 'Pry · Next' && p.rows.slice(1, 4).every((r) => / · Later$/.test(r)), `${L}: four moves, Pry next (${p.rows.slice(0, 4).join(' | ')})`);
-    check(/^Spreading pulse · \d+ of 20$/.test(p.rows[4]) && p.rows[5] === 'Steady charge · Later' && p.rows[6] === 'Nimble hands · Later', `${L}: #622: three park milestones, the first counting the park (${p.rows.slice(4, 7).join(' | ')})`);
+    check(p.rows.length === 31 && p.rows[0] === 'Pry · Next' && p.rows.slice(1, 4).every((r) => / · Later$/.test(r)), `${L}: four moves, Pry next (${p.rows.slice(0, 4).join(' | ')})`);
+    check(p.rows.slice(4, 8).join(' | ') === 'Pry II · Later | Hover II · Later | Climb II · Later | Glide II · Later', `${L}: #626: and their second levels, all later (${p.rows.slice(4, 8).join(' | ')})`);
+    check(/^Spreading pulse · \d+ of 20$/.test(p.rows[8]) && p.rows[9] === 'Steady charge · Later' && p.rows[10] === 'Nimble hands · Later', `${L}: #622: three park milestones, the first counting the park (${p.rows.slice(8, 11).join(' | ')})`);
     // #625: ten knacks, one per Keeper; only Tide, on the beach beside the park, can be reached yet
-    check(p.rows.slice(7, 17).every((r, i) => (i === 2 ? r === 'Beachcomber · Next' : / · Later$/.test(r))), `${L}: #625: ten knacks, Tide's next (${p.rows.slice(7, 17).join(' | ')})`);
-    check(p.rows.slice(17).every((r) => / · Level 0 of [235]$/.test(r)) && p.rows.length === 27, `${L}: ten upgrades, none started (${p.rows.slice(17).join(' | ')})`);
+    check(p.rows.slice(11, 21).every((r, i) => (i === 2 ? r === 'Beachcomber · Next' : / · Later$/.test(r))), `${L}: #625: ten knacks, Tide's next (${p.rows.slice(11, 21).join(' | ')})`);
+    check(p.rows.slice(21).every((r) => / · Level 0 of [235]$/.test(r)) && p.rows.length === 31, `${L}: ten upgrades, none started (${p.rows.slice(21).join(' | ')})`);
     check(/Bring the fountain what it asks for and it teaches this/.test(p.detail) && /Show me where/.test(p.detail), `${L}: Pry says how to learn it, with Show me where ("${p.detail}")`);
     await shot('3-page-early');
     // the detail's end is above the footer, or the detail scrolls to it (the wheel, and Show me where at its foot)
@@ -167,9 +168,9 @@ try {
     await page.waitForTimeout(300);
     p = await page.evaluate(pageNow);
     check(p.rows.slice(0, 4).every((r) => / · Learned$/.test(r)), `${L}: every move learned (${p.rows.slice(0, 4).join(' | ')})`);
-    check(p.rows.slice(4, 7).every((r) => / · Grown$/.test(r)), `${L}: #622: every park milestone grown (${p.rows.slice(4, 7).join(' | ')})`);
-    check(['Quick charge · Learned', 'Eye for value · Learned', 'Beachcomber · Next', 'Green thumb · Learned'].every((r, i) => p.rows[7 + i] === r) && p.rows[13] === 'Easy rest · Learned', `${L}: #625: the knacks learned (${p.rows.slice(7, 17).join(' | ')})`);
-    check(p.rows.includes('Bigger charge · Level 3 of 5') && p.rows.includes('Roomier backpack · Level 2 of 5') && p.rows.includes('Wider pulse · Level 1 of 5'), `${L}: upgrade levels show (${p.rows.slice(7).join(' | ')})`);
+    check(p.rows.slice(8, 11).every((r) => / · Grown$/.test(r)), `${L}: #622: every park milestone grown (${p.rows.slice(8, 11).join(' | ')})`);
+    check(['Quick charge · Learned', 'Eye for value · Learned', 'Beachcomber · Next', 'Green thumb · Learned'].every((r, i) => p.rows[11 + i] === r) && p.rows[17] === 'Easy rest · Learned', `${L}: #625: the knacks learned (${p.rows.slice(11, 21).join(' | ')})`);
+    check(p.rows.includes('Bigger charge · Level 3 of 5') && p.rows.includes('Roomier backpack · Level 2 of 5') && p.rows.includes('Wider pulse · Level 1 of 5'), `${L}: upgrade levels show (${p.rows.slice(11).join(' | ')})`);
     // the arrows move through the rows; the one in focus fills the detail
     await page.focus('#bb-backpack');
     await page.waitForTimeout(200);
