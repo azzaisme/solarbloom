@@ -7,6 +7,7 @@ import { GROUND } from '../core/GameState';
 import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
+import { HOLD_ACTS } from '../data/botActs';
 import { crossName, CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
 import { compostHtml, digesterHtml } from '../ui/CompostPanel';
@@ -149,7 +150,10 @@ export class OldCityController {
 
   startHold(kind: string, need: number, done: () => void, viaClick = false) {
     this.hold = { kind, t: 0, need, done, padHeld: !viaClick && this.holdToAct };
-    this.host.bot.visuals.play('assemble');
+    // #628: Bloombot acts it out while it lasts (rummaging, heaving, picking)
+    const act = HOLD_ACTS[kind];
+    if (act) this.host.bot.visuals.startAct(act, true);
+    else this.host.bot.visuals.play('assemble');
   }
 
   /** Per frame: tells the sim where bloombot is, runs a hold. */
@@ -161,11 +165,13 @@ export class OldCityController {
     if (!h) return;
     if (h.padHeld && !this.interactHeld() && h.t > 0.12) {
       this.hold = undefined;
+      this.host.bot.visuals.endAct(false);
       return;
     }
     h.t += dt;
     if (h.t >= h.need) {
       this.hold = undefined;
+      this.host.bot.visuals.endAct(true);
       h.done();
     }
   }
@@ -179,6 +185,7 @@ export class OldCityController {
   escape(): boolean {
     if (this.hold) {
       this.hold = undefined;
+      this.host.bot.visuals.endAct(false);
       return true;
     }
     if (!this.panel.isOpen) return false;
@@ -306,7 +313,7 @@ export class OldCityController {
     const f = this.sim.farm;
     if (f.look(m).ripe) {
       f.harvest(m);
-      this.host.bot.visuals.play('interact');
+      this.host.bot.visuals.startAct('harvest');
       return;
     }
     this.host.sound('click');
@@ -318,10 +325,15 @@ export class OldCityController {
         if (act === 'plant' && f.plant(m, crop, cross)) {
           this.host.sound('salvage', 'seeds');
           this.panel.close();
+          this.host.bot.visuals.startAct('plant');
         } else if (act === 'harvest') {
           f.harvest(m);
           this.panel.close();
-        } else if (act === 'feed' && f.feed(m)) this.host.sound('deliver');
+          this.host.bot.visuals.startAct('harvest');
+        } else if (act === 'feed' && f.feed(m)) {
+          this.host.sound('deliver');
+          this.host.bot.visuals.startAct('tend');
+        }
         else if (act === 'extra' && f.addExtra(m, arg as 'trellis' | 'flooded')) this.host.sound('deliver');
       },
     );
@@ -346,7 +358,10 @@ export class OldCityController {
     this.panel.open(
       () => digesterHtml(this.sim, m),
       (act) => {
-        if (act === 'feed' && this.sim.compost.feed(m) > 0) this.host.sound('deliver');
+        if (act === 'feed' && this.sim.compost.feed(m) > 0) {
+          this.host.sound('deliver');
+          this.host.bot.visuals.startAct('tend');
+        }
       },
     );
   }
@@ -360,7 +375,11 @@ export class OldCityController {
       (act) => {
         const n =
           act === 'honey' ? x.takeHoney(m) : act === 'pick' ? x.pick(m) : act === 'prune' ? x.prune(m) : act === 'mushrooms' ? x.pickMushrooms(m) : act === 'inoculate' ? +x.inoculate(m) : act === 'worms' ? +x.feedWorms(m) : 0;
-        if (n > 0) this.host.sound(act === 'inoculate' || act === 'worms' ? 'deliver' : 'salvage', 'seeds');
+        if (n > 0) {
+          this.host.sound(act === 'inoculate' || act === 'worms' ? 'deliver' : 'salvage', 'seeds');
+          // #628: picking and taking honey is a harvest; pruning, inoculating and feeding worms is tending
+          this.host.bot.visuals.startAct(act === 'honey' || act === 'pick' || act === 'mushrooms' ? 'harvest' : 'tend');
+        }
       },
     );
   }

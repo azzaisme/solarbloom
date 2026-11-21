@@ -45,6 +45,8 @@ const QUICK = [
   'waymark',
   // #632: Show me where's trail along a walkable way
   'trail',
+  // #628: Bloombot acts out each Interact verb
+  'bot-acts',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
