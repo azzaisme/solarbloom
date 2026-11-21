@@ -75,7 +75,7 @@ import { LightVisuals } from '../rendering/LightVisuals';
 import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
-import { Skyline } from '../rendering/Skyline';
+import { Skyline, skylineVeil } from '../rendering/Skyline';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { heightAt, levelY } from '../core/Height';
@@ -5048,6 +5048,9 @@ export class Game {
     } else setPoolReflect(false);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.skyline.clarity = this.sky.clarity;
+    // #635: fog and rain fade the skyline into the fog colour (the scene fog's, set in applyHaze)
+    this.skyline.veil = skylineVeil(this.weatherVisuals?.view ?? 1);
+    this.skyline.fog = this.sky.hazeColour();
     this.skyline.reducedMotion = this.settings.reducedMotion;
     this.skyline.update(wdt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();

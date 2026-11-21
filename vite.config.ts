@@ -45,6 +45,8 @@ const QUICK = [
   'waymark',
   // #632: Show me where's trail along a walkable way
   'trail',
+  // #635: the skyline fades into fog and stays behind the world
+  'fog-skyline',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
