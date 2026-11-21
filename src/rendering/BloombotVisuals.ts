@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
+import { botParts, growthKey, type BotGrowth, type BotMat, type PartId } from '../data/botParts';
 import { BOT_CLIPS, REST, seatLift } from '../data/rest';
 import { VISIT_POINTS, type Perch } from '../data/wildlife';
 import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
@@ -39,20 +40,10 @@ const EYE = new pc.Vec3(0, 0.66, 0.2);
 /** Where the echo palms are while pulsing (model space, before SCALE): chest height, pushed forward. */
 const PALM = new pc.Vec3(0.06, 0.46, 0.34);
 
-/**
- * #620: what Bloombot has grown into, drawn on the model in its own materials: a leaf by the sprout for each move
- * learned (up to 4), a glowing cell on the pack for each level of Bigger charge, a pocket for each level of Roomier
- * backpack (up to 3 each). Small, and only where it already has those parts.
- */
-export interface BotGrowth {
-  moves: number;
-  cells: number;
-  pockets: number;
-  /** #622: park milestones reached (0 to 3): a glowing bud on the sprout, a gold collar, gold cuffs */
-  park?: number;
-}
+export type { BotGrowth } from '../data/botParts';
 interface GrowthPiece {
   e: pc.Entity;
+  part: PartId;
   bone: string;
   /** where it sits from the bone, in Bloombot's own frame (x right, y up, z forward; world units) */
   at: pc.Vec3;
@@ -60,7 +51,7 @@ interface GrowthPiece {
   turn: pc.Quat;
 }
 /** Bloombot's own frame -> its bones, measured once from the idle pose (see placeGrowth) */
-const GROWTH_BONES = ['head_end', 'Spine02', 'neck', 'LeftHand', 'RightHand'] as const;
+const GROWTH_BONES = ['head_end', 'Head', 'headfront', 'Spine02', 'neck', 'LeftHand', 'RightHand', 'LeftFoot', 'RightFoot'] as const;
 
 export type BotLoop = 'idle' | 'walk' | 'hover' | 'sit' | 'meditate';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
@@ -139,7 +130,8 @@ export class BloombotVisuals {
   /** E23.2.1: out of charge: bloombot droops a little and its walk slows (the low-power walk) */
   private tired = false;
   /** #620: the growth drawn now, its pieces, and each bone's turn in the idle pose (Bloombot's frame) */
-  private growth: BotGrowth = { moves: 0, cells: 0, pockets: 0 };
+  private growth: BotGrowth = { moves: [], levels: {}, park: 0 };
+  private growthStamp = growthKey(this.growth);
   private pieces: GrowthPiece[] = [];
   private boneRest = new Map<string, pc.Quat>();
   /**
@@ -259,6 +251,10 @@ export class BloombotVisuals {
       this.root.addChild(e);
     }
     this.lantern.enabled = true;
+    // #627: it shines from the lamp's bulb on Bloombot's pack (else just above its head)
+    const bulb = this.pieces.find((p) => p.e.name === 'grow-lamp-bulb');
+    if (bulb) this.lantern.setPosition(bulb.e.getPosition());
+    else this.lantern.setLocalPosition(0, 1.05, 0.12);
     const l = this.lantern.light!;
     l.range = reach + 1;
     l.intensity = intensity * Math.min(1, dark) * share;
@@ -270,16 +266,42 @@ export class BloombotVisuals {
     return l?.enabled && l.light ? { range: l.light.range, intensity: l.light.intensity } : undefined;
   }
 
+  /** #627: the parts a growth lists (data/botParts), for the shots to check against what is drawn. */
+  readonly partsFor = botParts;
+
+  /** #627: what Bloombot has grown into (data/botParts); the parts are rebuilt only when it changes. */
   setGrowth(g: BotGrowth) {
-    const c = this.growth;
-    if (c.moves === g.moves && c.cells === g.cells && c.pockets === g.pockets && (c.park ?? 0) === (g.park ?? 0)) return;
-    this.growth = { ...g };
+    const k = growthKey(g);
+    if (k === this.growthStamp) return;
+    this.growthStamp = k;
+    this.growth = { moves: [...g.moves], levels: { ...g.levels }, park: g.park, knacks: [...(g.knacks ?? [])] };
     this.buildGrowth();
   }
 
-  /** The growth pieces drawn now (tests and #629's turntable read them). */
-  get growthPieces(): readonly { name: string }[] {
-    return this.pieces.map((p) => ({ name: p.e.name }));
+  /** The growth pieces drawn now, with the part each belongs to (tests and #629's turntable read them). */
+  get growthPieces(): readonly { name: string; part: PartId }[] {
+    return this.pieces.map((p) => ({ name: p.e.name, part: p.part }));
+  }
+
+  private solarMat?: pc.StandardMaterial;
+  /** One of Bloombot's own materials by short name (`bloombot_<name>`), or ours: the solar panel's dark blue glass. */
+  private botMat(m: BotMat): pc.Material | undefined {
+    if (m === 'solar') {
+      if (!this.solarMat) {
+        const s = (this.solarMat = new pc.StandardMaterial());
+        s.name = 'bloombot_solar';
+        s.diffuse = color(PALETTE.botSolar.diffuse);
+        s.specular = color(PALETTE.botSolar.specular);
+        s.gloss = 0.85;
+        s.metalness = 0.3;
+        s.useMetalness = true;
+        s.emissive = color(PALETTE.botSolar.emissive);
+        s.emissiveIntensity = 0.25;
+        s.update();
+      }
+      return this.solarMat;
+    }
+    return this.material(`bloombot_${m}`);
   }
 
   private material(name: string): pc.Material | undefined {
@@ -287,55 +309,18 @@ export class BloombotVisuals {
     return mi?.material ?? undefined;
   }
 
+  /** #627: every part (data/botParts) as a small piece riding its bone, in Bloombot's own materials. */
   private buildGrowth() {
     for (const p of this.pieces) p.e.destroy();
     this.pieces = [];
     if (!this.model) return;
-    const g = this.growth;
-    const piece = (name: string, type: 'sphere' | 'capsule' | 'box' | 'torus', mat: pc.Material | undefined, bone: string, at: [number, number, number], euler: [number, number, number], scale: [number, number, number]) => {
-      const e = new pc.Entity(name);
-      e.addComponent('render', { type, material: mat, castShadows: true });
-      e.setLocalScale(scale[0], scale[1], scale[2]);
+    for (const d of botParts(this.growth)) {
+      const e = new pc.Entity(d.name);
+      e.addComponent('render', { type: d.shape, material: this.botMat(d.mat), castShadows: d.scale[0] > 0.02 || d.scale[1] > 0.02 });
+      e.setLocalScale(d.scale[0], d.scale[1], d.scale[2]);
       this.root.addChild(e);
-      this.pieces.push({ e, bone, at: new pc.Vec3(at[0], at[1], at[2]), turn: new pc.Quat().setFromEulerAngles(euler[0], euler[1], euler[2]) });
-    };
-    // a leaf by the sprout for each move: two at the front corners, then two behind, tipped outward. head_end sits
-    // inside the dome, about 0.1 below its top, so the leaves are lifted clear of it (measured in the browser)
-    const leaf = this.material('bloombot_leaf');
-    const yaw = [40, -40, 140, -140];
-    for (let i = 0; i < Math.min(4, g.moves); i++) {
-      const a = (yaw[i] * Math.PI) / 180;
-      piece(`grow-leaf-${i}`, 'sphere', leaf, 'head_end', [Math.sin(a) * 0.07, 0.1, Math.cos(a) * 0.07], [-35, yaw[i], 0], [0.05, 0.013, 0.11]);
+      this.pieces.push({ e, part: d.part, bone: d.bone, at: new pc.Vec3(...d.at), turn: new pc.Quat().setFromEulerAngles(d.euler[0], d.euler[1], d.euler[2]) });
     }
-    // a glowing cell on top of the pack for each level of Bigger charge
-    const glow = this.material('bloombot_glow');
-    // (#623: the fourth and fifth sit a little lower at either end of the row, tipped outward)
-    const cells: { at: [number, number, number]; tilt: number }[] = [
-      { at: [-0.06, 0.17, -0.25], tilt: 0 },
-      { at: [0, 0.17, -0.25], tilt: 0 },
-      { at: [0.06, 0.17, -0.25], tilt: 0 },
-      { at: [0.115, 0.15, -0.25], tilt: -25 },
-      { at: [-0.115, 0.15, -0.25], tilt: 25 },
-    ];
-    for (let i = 0; i < Math.min(cells.length, g.cells); i++) piece(`grow-cell-${i}`, 'capsule', glow, 'Spine02', cells[i].at, [0, 0, cells[i].tilt], [0.032, 0.045, 0.032]);
-    // a pocket on the pack for each level of Roomier backpack: left side, right side, then the bottom
-    const fabric = this.material('bloombot_fabric');
-    // (#623: then a small one high on each side, above the first two)
-    const pockets: { at: [number, number, number]; size: [number, number, number] }[] = [
-      { at: [0.15, -0.02, -0.2], size: [0.04, 0.085, 0.08] },
-      { at: [-0.15, -0.02, -0.2], size: [0.04, 0.085, 0.08] },
-      { at: [0, -0.12, -0.24], size: [0.13, 0.045, 0.055] },
-      { at: [0.15, 0.08, -0.2], size: [0.036, 0.05, 0.065] },
-      { at: [-0.15, 0.08, -0.2], size: [0.036, 0.05, 0.065] },
-    ];
-    for (let i = 0; i < Math.min(pockets.length, g.pockets); i++) piece(`grow-pocket-${i}`, 'box', fabric, 'Spine02', pockets[i].at, [0, 0, 0], pockets[i].size);
-    // #622: what greening the park grew: a glowing bud at the sprout's tip, a gold collar at the neck, gold cuffs
-    // (placed by eye in the browser; a torus is 0.3 across its ring before scaling)
-    const park = g.park ?? 0;
-    const gold = this.material('bloombot_gold');
-    if (park >= 1) piece('grow-bud', 'sphere', glow, 'head_end', [0, 0.13, 0], [0, 0, 0], [0.04, 0.05, 0.04]);
-    if (park >= 2) piece('grow-collar', 'torus', gold, 'neck', [0, 0.02, 0], [0, 0, 0], [0.3, 0.1, 0.3]);
-    if (park >= 3) for (const side of ['LeftHand', 'RightHand']) piece(`grow-cuff-${side === 'LeftHand' ? 'l' : 'r'}`, 'torus', gold, side, [0, 0, 0], [0, 0, 90], [0.17, 0.1, 0.17]);
     this.placeGrowth();
   }
 

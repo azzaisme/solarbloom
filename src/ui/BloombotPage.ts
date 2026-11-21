@@ -1,4 +1,5 @@
 import type { AbilityId } from '../core/types';
+import { UPGRADE_PART, type PartId } from '../data/botParts';
 import { GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
 import { PARK_GROWTH } from '../data/bloombot';
@@ -42,7 +43,7 @@ export interface BloombotRow {
   /** where Show me where leads (a cell on the ground), when there is somewhere to go */
   where?: { roofId: string; x: number; z: number; name: string };
   /** the part of Bloombot it changes (#629's turntable lights it) */
-  part: 'leaves' | 'cells' | 'pockets' | 'pulse' | 'stride' | 'core' | 'bud' | 'collar' | 'cuffs';
+  part: PartId;
 }
 
 const MOVES: Record<AbilityId, { name: string; does: string }> = {
@@ -67,19 +68,6 @@ const UPGRADE_DOES: Record<string, string> = {
   luckyPulse: 'Now and then a pulse on bare red ground turns up a few Seeds or Scrap.',
 };
 
-/** The part each upgrade changes on Bloombot. */
-const UPGRADE_PART: Record<string, BloombotRow['part']> = {
-  chargeCells: 'cells',
-  chargeEfficiency: 'core',
-  sprint: 'stride',
-  pulseRadius: 'pulse',
-  backpack: 'pockets',
-  quickHands: 'cuffs',
-  keenEye: 'core',
-  sunSoak: 'cells',
-  lantern: 'core',
-  luckyPulse: 'pulse',
-};
 
 const listWords = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : (xs[0] ?? ''));
 const costWords = (cost: ItemCost) => listWords(Object.entries(cost).map(([id, n]) => `${n} ${itemDef(id as never)?.name ?? id}`));
@@ -112,7 +100,7 @@ export function moveRows(sim: Sim): BloombotRow[] {
       : left === 1
         ? 'Bring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.'
         : `The fountain teaches this once you've brought it what it asks for ${times[left] ?? `${left} more times`}.`;
-    return { id: a, kind: 'move', name: m.name, does: m.does, state: learned ? 'have' : isNext ? 'next' : 'later', how, where: learned ? undefined : fountainSpot(sim), part: 'leaves' };
+    return { id: a, kind: 'move', name: m.name, does: m.does, state: learned ? 'have' : isNext ? 'next' : 'later', how, where: learned ? undefined : fountainSpot(sim), part: 'marks' };
   });
 }
 
