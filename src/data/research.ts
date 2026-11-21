@@ -101,7 +101,7 @@ export const RESEARCH = {
   pulseTilesPerLateLevel: 1,
   /** #623: the widest a pulse ever reaches, every bonus counted (Radiant's 7.1 and a tile) */
   pulseMaxRadius: 8.1,
-  /** #624: the shortest a salvage or pry hold ever gets (seconds), however Nimble hands and Quick hands stack */
+  /** #624: the shortest a salvage or pry hold ever gets (seconds), whatever shortens it */
   minHold: 0.33,
   /** #624 "Keen eye": at this level the piles and caches show on the minimap too */
   keenEyeMapLevel: 3,
@@ -121,7 +121,7 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   { id: 'backpack', branch: 'bloombot', name: 'Roomier backpack', each: 'Bloombot carries 20 more of each thing', per: 20, needs: 'always', levels: [{ cost: { planks: 6, scrap: 10 } }, { cost: { planks: 10, clay: 10 } }, { cost: { planks: 14, gears: 10 } }, { cost: { motor: 2, sunstone: 8 } }, { cost: { motor: 3, sunCell: 3 } }] },
   // #624 (E25): five more for Bloombot, each on a system that was already there
   /** a share off how long Interact is held to dig out a pile or pry rubble (UpgradeSystem.salvageHold / pryHold) */
-  { id: 'quickHands', branch: 'bloombot', name: 'Quick hands', each: 'Digging out a pile and prying rubble take less time', per: 0.1, needs: 'always', levels: [{ cost: { gears: 4, scrap: 8 } }, { cost: { gears: 6, wire: 4 } }, { cost: { motor: 1, copper: 10 } }] },
+  { id: 'quickHands', branch: 'bloombot', name: 'Quick hands', each: 'Prying rubble and old vault doors open takes less time', per: 0.2, needs: 'always', levels: [{ cost: { gears: 4, scrap: 8 } }, { cost: { gears: 6, wire: 4 } }, { cost: { motor: 1, copper: 10 } }] },
   /** tiles added to the pulse's ripple (what it lights up) and to how far the piles the fountain wants glint */
   { id: 'keenEye', branch: 'bloombot', name: 'Keen eye', each: 'Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too', per: 4, needs: 'always', levels: [{ cost: { glassPane: 2, copper: 4 } }, { cost: { glassPane: 4, wire: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }] },
   /** charge a second back in full sun, standing still (times the sun's strength now) */
@@ -158,7 +158,7 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'rb-pulse', branch: 'bloombot', name: 'Ripples', about: 'A pulse that carries a little further.', cost: { seeds: 16, glass: 6 }, days: 0.2, opens: { project: 'rb-efficiency' }, gives: { upgrade: 'pulseRadius' } },
   { id: 'rb-backpack', branch: 'bloombot', name: 'Stitched pockets', about: 'More room in every pocket of the backpack.', cost: { timber: 10, scrap: 10 }, days: 0.1, opens: { material: 'timber' }, gives: { upgrade: 'backpack' } },
   // #624 (E25)
-  { id: 'rb-hands', branch: 'bloombot', name: 'Oiled fingers', about: 'Hands that dig and pry without a fuss.', cost: { gears: 6, scrap: 8 }, days: 0.1, opens: { project: 'rb-sprint' }, gives: { upgrade: 'quickHands' } },
+  { id: 'rb-hands', branch: 'bloombot', name: 'Oiled fingers', about: 'Hands that pry things open without a fuss.', cost: { gears: 6, scrap: 8 }, days: 0.1, opens: { project: 'rb-sprint' }, gives: { upgrade: 'quickHands' } },
   { id: 'rb-eye', branch: 'bloombot', name: 'Polished lenses', about: 'Eyes that catch a glint from further off.', cost: { glass: 8, copper: 4 }, days: 0.15, opens: { material: 'glass' }, gives: { upgrade: 'keenEye' } },
   { id: 'rb-soak', branch: 'bloombot', name: 'Sun skin', about: 'A shell that drinks a little sunlight.', cost: { sunstone: 4, glass: 6 }, days: 0.2, opens: { material: 'sunstone' }, gives: { upgrade: 'sunSoak' } },
   { id: 'rb-lantern', branch: 'bloombot', name: 'A little lamp', about: 'A light of its own for dark streets.', cost: { glass: 6, copper: 6 }, days: 0.15, opens: { project: 'rb-eye' }, gives: { upgrade: 'lantern' } },

@@ -87,16 +87,17 @@ export class UpgradeSystem {
   private eff(id: string): number {
     return this.sim.research?.effect(id) ?? 0;
   }
-  /** Quick hands: what a salvage or pry hold takes, as a share of before (1 without it). */
+  /** Quick hands: what a pry hold (rubble, a vault door) takes, as a share of before (1 without it). Digging is Nimble hands'. */
   get holdFactor(): number {
     return 1 - this.eff('quickHands');
   }
   /**
    * The one place a hold's length is worked out (#624): seconds Interact is held to dig out a pile once. Nimble
-   * hands from the park (#622) and Quick hands from research multiply, and it never drops below RESEARCH.minHold.
+   * hands from the park (#622) shortens it; Quick hands is for prying only (the owner's call, E25), so the two never
+   * pile up on digging. It never drops below RESEARCH.minHold.
    */
   get salvageHold(): number {
-    return Math.max(RESEARCH.minHold, SALVAGE.holdSeconds * (this.sim.parkGrowth?.holdShare ?? 1) * this.holdFactor);
+    return Math.max(RESEARCH.minHold, SALVAGE.holdSeconds * (this.sim.parkGrowth?.holdShare ?? 1));
   }
   /** Seconds Interact is held to pry rubble open (Quick hands; never below RESEARCH.minHold either). */
   get pryHold(): number {

@@ -63,7 +63,7 @@ const UPGRADE_DOES: Record<string, string> = {
   pulseRadius: 'Each pulse brings back more ground at once.',
   backpack: 'Bloombot can carry 20 more of each thing.',
   // #624
-  quickHands: 'Digging things out of piles and prying rubble open go quicker.',
+  quickHands: 'Bloombot pries rubble and old vault doors open faster.',
   keenEye: 'Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too.',
   sunSoak: 'Standing still in the sun slowly charges Bloombot, so it can top up anywhere by day.',
   lantern: 'Bloombot carries its own light at night, so dark streets are easier to see.',
@@ -188,7 +188,7 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
       level,
       max,
       next: top ? undefined : u.each,
-      now: u.id === 'quickHands' ? holdNow(sim) : undefined,
+      now: u.id === 'quickHands' ? pryNow(sim) : undefined,
       how,
       where: top ? undefined : houseSpot(),
       part: UPGRADE_PART[u.id] ?? 'core',
@@ -212,7 +212,7 @@ export function parkRows(sim: Sim): BloombotRow[] {
       : isNext
         ? `Keep bringing the park back to life around the fountain. This grows at ${d.tiles} on the goal card's Park count, and it's at ${Math.min(n, d.tiles)} now.`
         : `Keep bringing the park back to life. This grows at ${d.tiles} on the goal card's Park count.`;
-    return { id: d.id, kind: 'park', name: d.name, does: d.does, state: have ? 'have' : isNext ? 'next' : 'later', level: Math.min(n, d.tiles), max: d.tiles, now: d.id === 'quick' ? holdNow(sim) : undefined, how, where: have ? undefined : fountainSpot(sim), part: d.part };
+    return { id: d.id, kind: 'park', name: d.name, does: d.does, state: have ? 'have' : isNext ? 'next' : 'later', level: Math.min(n, d.tiles), max: d.tiles, now: d.id === 'quick' ? digNow(sim) : undefined, how, where: have ? undefined : fountainSpot(sim), part: d.part };
   });
 }
 
@@ -281,10 +281,13 @@ export function stateWords(r: BloombotRow): string {
 /** Seconds, as the page says them: "0.42 seconds", "1.4 seconds", "2 seconds". */
 const secs = (n: number) => `${+n.toFixed(2)} second${n === 1 ? '' : 's'}`;
 
-/**
- * #624: how long digging and prying take now, with Nimble hands and Quick hands together (and the floor), for the
- * two rows that change it.
- */
-export function holdNow(sim: Sim): string {
-  return `Right now digging out a pile takes ${secs(sim.upgrades.salvageHold)}, and prying rubble open ${secs(sim.upgrades.pryHold)}.`;
+/** Nimble hands (the park): how long digging out a pile takes now. */
+export function digNow(sim: Sim): string {
+  return `Right now digging out a pile takes ${secs(sim.upgrades.salvageHold)}.`;
+}
+
+/** Quick hands: how long prying takes now (and a vault door, once Bloombot can pry one open). */
+export function pryNow(sim: Sim): string {
+  const vault = sim.research.moveLevel('pry') >= 2 ? `, and an old vault door ${secs(sim.upgrades.vaultHold)}` : '';
+  return `Right now prying rubble open takes ${secs(sim.upgrades.pryHold)}${vault}.`;
 }

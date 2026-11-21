@@ -96,7 +96,7 @@ try {
   const detail = await page.evaluate(() => document.querySelector('#bpScreen .bb-detail')?.textContent?.replace(/\s+/g, ' ').trim() ?? '');
   check(/own light at night/.test(detail) && /make level 1/.test(detail), `Lantern says what it does and what level 1 takes ("${detail}")`);
   await page.screenshot({ path: `${out}/2-page-lantern.png` });
-  // Quick hands on top of Nimble hands (the park's third milestone): the page shows the hold they come to together
+  // Quick hands with Nimble hands (the park's third milestone) grown: Quick hands shows its prying time only
   await levels({ quickHands: 2 });
   await page.evaluate(() => {
     window.solarbloom.sim.state.progression.parkGrowth = 3;
@@ -110,7 +110,7 @@ try {
   });
   await page.waitForTimeout(400);
   const now = await page.evaluate(() => document.querySelector('#bpScreen .bb-detail .bb-now')?.textContent ?? '');
-  check(now === 'Right now digging out a pile takes 0.36 seconds, and prying rubble open 1.6 seconds.', `Quick hands shows the hold with Nimble hands ("${now}")`);
+  check(now === 'Right now prying rubble open takes 1.2 seconds.', `Quick hands shows how long prying takes at level 2 ("${now}")`);
   await page.evaluate(() => {
     for (const e of document.querySelectorAll('#bpScreen .bb-detail, #bpScreen .bb-detail *')) e.scrollTop = 0;
     let e = document.querySelector('#bpScreen .bb-detail');
