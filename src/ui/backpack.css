@@ -78,25 +78,23 @@ svg.mi-unknown .mi-line { stroke: var(--text-strong); }
 .bb-detail .bb-does { font: 800 17px/1.45 var(--font-ui); color: var(--ink); }
 .bb-detail .bb-now { margin-top: 6px; font: 700 15px/1.45 var(--font-ui); color: var(--ink-2, var(--ink)); }
 .bb-detail .bb-where { margin-top: 10px; }
-/* #629: the detail's head (the live look at Bloombot, the name, the level, what it does) stays at the top of the
-   detail while the rest scrolls under it: choosing a row, or stepping to Show me where, never scrolls away what you
-   are looking at. The view sits above the words, or beside them when the column is short. */
-.bb-head { position: sticky; top: 0; z-index: 3; margin: -18px -18px 0; padding: 18px 18px 8px; background: var(--paper-2); box-shadow: 0 1px 0 var(--line); display: grid; gap: 10px; }
-.bb-title { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.bb-view { position: relative; border-radius: var(--r-tile); background: radial-gradient(ellipse at 50% 72%, var(--paper) 0%, var(--paper-2) 70%); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; aspect-ratio: 8 / 5; max-height: 180px; }
+/* #629: a slim head (the name and its level) stays at the top of the detail while the rest scrolls under it. Under
+   it, what it does with the live look at Bloombot beside it; then how to get it and Show me where, so stepping to the
+   button brings how to get it into view whole, with the name still above. */
+.bb-head { position: sticky; top: -18px; z-index: 3; margin: -18px -18px 0; padding: 18px 18px 8px; background: var(--paper-2); box-shadow: 0 1px 0 var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.bb-head .bb-level { margin: 0; }
+.bb-about { display: grid; gap: 12px; align-items: start; }
+.bb-about.has-view { grid-template-columns: minmax(0, 1fr) clamp(110px, 40%, 170px); }
+.bb-words { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bb-view { position: relative; aspect-ratio: 1; border-radius: var(--r-tile); background: radial-gradient(ellipse at 50% 72%, var(--paper) 0%, var(--paper-2) 70%); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
 /* the canvas fills its box and never sizes it (the turntable matches its pixels to the box) */
 .bb-view canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 @container bbsplit (max-height: 420px) {
-  /* wider, so the words beside the view keep a readable line (the rows take the narrower side) */
-  .bb-split > .bb-detail { width: min(460px, 58%); }
-  .bb-head.has-view { grid-template-columns: minmax(0, 1fr) 120px; align-items: stretch; }
-  .bb-head .bb-view { grid-column: 2; grid-row: 1; aspect-ratio: auto; max-height: none; min-height: 120px; }
-  /* short: the name and its level share a line, so what it does still shows over the rest */
-  .bb-head { padding-top: 12px; margin-top: -12px; }
-  .bb-head .bb-title { grid-column: 1; grid-row: 1; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
-  .bb-head .bb-title .pn-badge { display: none; }
-  .bb-head .bb-title .bb-level { margin: 0; }
-  .bb-head .bb-title .bb-does { flex-basis: 100%; }
+  /* short (the Deck at 150%): a wider detail, so its lines hold more words (the rows take the narrower side), and a
+     slimmer head */
+  .bb-split > .bb-detail { width: min(460px, 58%); padding-top: 12px; }
+  .bb-head { top: -12px; margin-top: -12px; padding-top: 12px; }
+  .bb-head .pn-badge { display: none; }
 }
 /* a detail too tall to show whole: its last lines are a focus stop (Backpack.fitDetail), ringed when reached */
 .bb-detail .bb-how[tabindex] { border-radius: 10px; padding: 2px 6px; margin: 0 -6px 4px; }

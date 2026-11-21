@@ -105,6 +105,8 @@ export class Backpack {
     this.body.addEventListener('click', (e) => this.click(e.target as HTMLElement));
     // the cell or page in focus is the one shown beside the list (keyboard and pad read by moving)
     this.body.addEventListener('focusin', (e) => {
+      // #629: stepping to a detail's Show me where (or its last lines) brings how to get it out from under the head
+      if ((e.target as HTMLElement).closest('#bpDetail #bb-where, #bpDetail #bb-how')) requestAnimationFrame(() => this.revealHow());
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-mat], [data-page], [data-bb]');
       if (!t) return;
       if (t.dataset.bb && t.dataset.bb !== this.selBot) {
@@ -118,6 +120,22 @@ export class Backpack {
         this.select();
       }
     });
+  }
+
+  /**
+   * #629: the Bloombot detail's "how to get it" heading, scrolled out from under the sticky head (focusing the button
+   * at its foot scrolls only as far as the button), as long as the focused control stays in sight.
+   */
+  private revealHow() {
+    const d = this.body.querySelector<HTMLElement>('#bpDetail');
+    const head = d?.querySelector<HTMLElement>('.bb-head');
+    const h4 = d?.querySelector<HTMLElement>('h4');
+    if (!d || !head || !h4) return;
+    const under = head.getBoundingClientRect().bottom + 6 - h4.getBoundingClientRect().top;
+    if (under <= 0) return;
+    const f = document.activeElement instanceof HTMLElement && d.contains(document.activeElement) ? document.activeElement.getBoundingClientRect() : undefined;
+    const room = f ? d.getBoundingClientRect().bottom - f.bottom : under;
+    d.scrollTop -= Math.min(under, Math.max(0, room));
   }
 
   get isOpen(): boolean {
@@ -265,6 +283,7 @@ export class Backpack {
     for (const b of this.body.querySelectorAll<HTMLElement>('[data-bb]')) b.setAttribute('aria-selected', String(b.dataset.bb === this.selBot));
     const d = this.body.querySelector<HTMLElement>('#bpDetail');
     if (d) d.innerHTML = this.current === 'journal' ? this.pageText() : this.current === 'bloombot' ? this.botDetail() : this.detail();
+    if (d && this.current === 'bloombot') d.scrollTop = 0; // #629: a new row's detail starts from its top
     if (this.current === 'bloombot') this.syncView();
     this.fitDetail();
   }
@@ -328,15 +347,17 @@ export class Backpack {
     if (!r) return '';
     const level = r.kind === 'upgrade' ? `<p class="bb-level"><span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>${esc(stateWords(r))}</p>` : `<p class="bb-level">${esc(stateWords(r))}</p>`;
     const where = r.where ? `<button class="pn-btn primary bb-where" id="bb-where" data-bbwhere="${r.id}">${icon('pin', 's')}Show me where</button>` : '';
-    // #629: the head (the live look at Bloombot, the name, the level and what it does) stays in view while the rest
-    // scrolls under it, so choosing a row never scrolls away what you are looking at
+    // #629: a slim head (the name and its level) stays at the top while the rest scrolls under it, so the name is
+    // always in sight. Under it, what it does with the live look at Bloombot beside it, then how to get it and Show me
+    // where: stepping to the button brings the whole of how to get it into view with it.
     const view = this.botView ? `<div class="bb-view" aria-hidden="true"></div>` : '';
     return (
-      `<div class="bb-head${view ? ' has-view' : ''}">${view}<div class="bb-title">` +
+      `<div class="bb-head">` +
       `<h3><span class="pn-badge">${icon(r.kind === 'move' || r.kind === 'move2' ? 'sprout' : r.kind === 'park' ? 'star' : r.kind === 'knack' ? 'heart' : 'spark')}</span>${esc(r.name)}</h3>` +
       level +
-      `<p class="bb-does">${esc(r.does)}</p></div></div>` +
+      `</div><div class="bb-about${view ? ' has-view' : ''}"><div class="bb-words"><p class="bb-does">${esc(r.does)}</p>` +
       (r.now ? `<p class="bb-now">${esc(r.now)}</p>` : '') +
+      `</div>${view}</div>` +
       `<h4>${esc(howHeading(r))}</h4><p class="bb-how" id="bb-how">${esc(r.how)}</p>` +
       where
     );

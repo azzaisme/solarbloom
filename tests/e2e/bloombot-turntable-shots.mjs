@@ -27,6 +27,7 @@ const check = (ok, what) => {
 const SIZES = [
   { label: 'deck-150', w: 1280, h: 800, ui: 150 },
   { label: '1280x720', w: 1280, h: 720, ui: 100 },
+  { label: '1280x800', w: 1280, h: 800, ui: 100 },
 ];
 
 /** what the view shows now: Bloombot's share of the canvas, what glows, the ghost, where the camera is going */
@@ -40,16 +41,34 @@ const view = (page) =>
     const g = window.solarbloom;
     return { drawn: drawn / (c.width * c.height), ...g.bot.visuals.focusView, target: g.turntable.target, showing: g.turntable.showing, focus: g.turntable.focusPart };
   });
-/** the detail's head (name, what it does) and the view are in sight, whatever the detail scrolled to */
+/**
+ * What of the detail is in sight now: its name (in the head), what it does, the view, and how to get it whole (its
+ * heading and lines below the head and above the bottom, and above Show me where).
+ */
 const headSeen = (page) =>
   page.evaluate(() => {
-    const d = document.querySelector('#bpDetail').getBoundingClientRect();
+    const D = document.querySelector('#bpDetail');
+    const d = D.getBoundingClientRect();
+    const head = D.querySelector('.bb-head').getBoundingClientRect();
     const seen = (sel) => {
-      const r = document.querySelector(sel)?.getBoundingClientRect();
-      return !!r && r.height > 0 && r.top >= d.top - 1 && r.bottom <= d.bottom + 1;
+      const r = D.querySelector(sel)?.getBoundingClientRect();
+      return !!r && r.height > 0 && r.top >= head.bottom - 1 && r.bottom <= d.bottom + 1;
     };
+    const name = D.querySelector('h3').getBoundingClientRect();
+    const h4 = D.querySelector('h4').getBoundingClientRect();
+    const how = D.querySelector('#bb-how').getBoundingClientRect();
+    const btn = D.querySelector('#bb-where')?.getBoundingClientRect();
     const v = document.querySelector('#bbView')?.getBoundingClientRect();
-    return { name: seen('#bpDetail h3'), does: seen('#bpDetail .bb-does'), view: seen('#bpDetail .bb-view'), viewSize: v ? [Math.round(v.width), Math.round(v.height)] : null, focus: document.activeElement?.id };
+    return {
+      name: name.top >= d.top - 1 && name.bottom <= head.bottom + 1,
+      does: seen('.bb-does'),
+      view: seen('.bb-view'),
+      how: h4.top >= head.bottom - 1 && how.bottom <= (btn ? btn.top : d.bottom) + 1 && how.bottom <= d.bottom + 1,
+      button: !btn || (btn.top >= head.bottom - 1 && btn.bottom <= d.bottom + 1),
+      viewSize: v ? [Math.round(v.width), Math.round(v.height)] : null,
+      focus: document.activeElement?.id,
+      at: { top: Math.round(d.top), does: Math.round(D.querySelector('.bb-does').getBoundingClientRect().top), scroll: Math.round(D.scrollTop), head: Math.round(head.bottom), h4: Math.round(h4.top), how: Math.round(how.bottom), btn: btn && Math.round(btn.top), bottom: Math.round(d.bottom) },
+    };
   });
 /** chooses a row by clicking it, like the mouse */
 const click = (page, id) => page.click(`#bb-${id}`);
@@ -111,7 +130,7 @@ for (const S of SIZES) {
     v = await view(page);
     check(v.focus === 'lamp' && !v.glowing.length && v.ghosts.includes('ghost-grow-lamp-bulb'), `${L}: Lantern: its lamp to come shows as a ghost (${v.ghosts.join(', ')})`);
     let h = await headSeen(page);
-    check(h.focus === 'bb-where' && h.name && h.does && h.view && h.viewSize[1] >= 100, `${L}: chosen, the focus steps to Show me where and the name, what it does and Bloombot stay in sight (${JSON.stringify(h)})`);
+    check(h.focus === 'bb-where' && h.name && h.how && h.button, `${L}: Lantern chosen: the focus steps to Show me where, with the name and the whole of how to get it in sight (${JSON.stringify(h)})`);
     await page.screenshot({ path: `${out}/2-lantern-ghost-${L}.png` });
 
     // the keys: Enter on a row steps to its Show me where, the head still in sight; right from the list reaches it too
@@ -119,7 +138,30 @@ for (const S of SIZES) {
     await page.keyboard.press('Enter');
     await page.waitForTimeout(400);
     h = await headSeen(page);
-    check(h.focus === 'bb-where' && h.name && h.does, `${L}: Enter on Longer stride steps to Show me where, its name and what it does in sight (${JSON.stringify(h)})`);
+    check(h.focus === 'bb-where' && h.name && h.how && h.button, `${L}: Enter on Longer stride steps to Show me where, its name and how to get it in sight (${JSON.stringify(h)})`);
+    // every row with a Show me where, chosen: how to get it is never under the head, the longest included
+    const rowIds = await page.evaluate(() => [...document.querySelectorAll('#bpScreen [data-bb]')].map((b) => b.dataset.bb));
+    const hidden = [];
+    let longest = { id: '', n: 0 };
+    for (const id of rowIds) {
+      await click(page, id);
+      await page.waitForTimeout(150);
+      const hs = await headSeen(page);
+      const n = await page.evaluate(() => document.querySelector('#bb-how').textContent.length);
+      if (hs.focus === 'bb-where' && n > longest.n) longest = { id, n };
+      if (hs.focus === 'bb-where' && !(hs.name && hs.how && hs.button)) hidden.push(`${id} ${JSON.stringify(hs.at)}`);
+    }
+    check(!hidden.length && longest.id, `${L}: all ${rowIds.length} rows: with Show me where focused, how to get it is whole and in sight (longest: ${longest.id}, ${longest.n} letters) ${hidden.join(' | ')}`);
+    await click(page, longest.id);
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: `${out}/8-longest-how-${L}.png` });
+    // chosen by the arrows (the focus stays on the row), the detail shows from its top: name, what it does, Bloombot
+    await page.focus('#bb-chargeCells');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowUp');
+    await page.waitForTimeout(500);
+    h = await headSeen(page);
+    check(h.focus === 'bb-chargeCells' && h.name && h.does && h.view && h.viewSize[1] >= 90, `${L}: on a row, the detail shows what it does and Bloombot (${JSON.stringify(h)})`);
     await page.focus('#bb-luckyPulse');
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(400);
