@@ -88,6 +88,12 @@ export const LOOK = {
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
     /** Seconds for the mood to follow a change in restoration. */
     follow: 2.5,
+    /**
+     * E28.W06 (#699): the soft floor under the grade (linear light). Contrast pivots on 0.5, so it pushes the darkest
+     * channels below zero; they used to clip flat, which drew a hard line across the night sea where its green ran
+     * out. Now they bend smoothly to black over about this much.
+     */
+    toe: 0.006,
   },
   /**
    * Look 1.8: depth of field (High tier). Focus is on the camera's goal point; the far blur starts `blurFrom` world
@@ -268,10 +274,12 @@ export const LOOK = {
       sparkle: 2,
       colour: '#c6d4ff',
       /**
-       * the path is broken into drifting bands across it (wave crests catching it): noise scaled `along` the path and
-       * `across` it (per tile), drifting at `drift`; `break` of the light goes where the bands are dark
+       * the path is broken into drifting bands across it (wave crests catching it): three crest trains summed, `along`
+       * crests a tile down the path and `across` a tile sideways (so they lie slanted, never in rows), drifting at
+       * `drift` cycles a second; `break` of the light goes where the bands are dark. Smooth everywhere in world space:
+       * no lattice, so no straight seams (the first cut used value noise, whose grid showed through)
        */
-      bands: { along: 3.2, across: 0.9, drift: 0.35, break: 0.75 },
+      bands: { along: 1.6, across: 0.45, drift: 0.2, break: 0.75 },
     },
     specular: 0.18,
     /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */

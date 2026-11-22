@@ -8,7 +8,7 @@ import { DAY_LIGHT, SKY, SKY_BANDS, SKY_BANDS_NIGHT } from '../src/data/sky';
 import { DAY } from '../src/data/time';
 import { DayNight } from '../src/rendering/DayNight';
 import { PALETTE } from '../src/rendering/Palette';
-import { fogMatchingSky, horizonHaze } from '../src/rendering/LookShaders';
+import { GRADING_GLSL, fogMatchingSky, gradeFloor, horizonHaze } from '../src/rendering/LookShaders';
 import { SEA_LIFT, seaTintAt } from '../src/rendering/Water';
 import { Sky } from '../src/rendering/Sky';
 
@@ -228,5 +228,44 @@ describe('E27.1 a sunny sky, not an overcast one', () => {
     }
     // restoring the city still clears the sky toward a deeper blue
     expect(lin(SKY.zenith[1]).b / lin(SKY.zenith[1]).r).toBeGreaterThan(lin(SKY.zenith[0]).b / lin(SKY.zenith[0]).r);
+  });
+});
+
+describe('E28.W06 (#699): the grade bends dark channels to black instead of clipping them', () => {
+  const toe = LOOK.grade.toe;
+  const W = LOOK.grade.warm;
+  // the engine's grade on one channel (no tint): contrast pivots on 0.5 in linear light
+  const graded = (c: number) => 0.5 + W.contrast * (c - 0.5);
+
+  it('a small toe, in LOOK', () => {
+    expect(toe).toBeGreaterThan(0);
+    expect(toe).toBeLessThanOrEqual(0.01);
+  });
+
+  it('the night sea that used to clip now bends smoothly: no kink where a channel runs out', () => {
+    // the old grade: max(0, g). Its slope jumps from 1.06 to 0 where g crosses zero (the night overview's straight
+    // line). The floor's slope changes gradually: sampled across that crossing, no two neighbours differ by much
+    const h = 1e-4;
+    let worst = 0;
+    for (let c = 0; c < 0.06; c += h) {
+      const s0 = (gradeFloor(graded(c + h), toe) - gradeFloor(graded(c), toe)) / h;
+      const s1 = (gradeFloor(graded(c + 2 * h), toe) - gradeFloor(graded(c + h), toe)) / h;
+      worst = Math.max(worst, Math.abs(s1 - s0));
+    }
+    expect(worst).toBeLessThan(0.05);
+    // and the clipped grade fails the same check
+    let clipped = 0;
+    for (let c = 0; c < 0.06; c += h) clipped = Math.max(clipped, Math.abs((Math.max(0, graded(c + 2 * h)) - Math.max(0, graded(c + h))) / h - (Math.max(0, graded(c + h)) - Math.max(0, graded(c))) / h));
+    expect(clipped).toBeGreaterThan(0.5);
+  });
+
+  it("leaves everything but the darkest channels as the engine grades them, and black stays black", () => {
+    for (const g of [5 * toe, 0.05, 0.18, 1, 4]) expect(Math.abs(gradeFloor(g, toe) - g)).toBeLessThan(1e-4);
+    expect(gradeFloor(graded(0), toe)).toBeLessThan(1e-3);
+    for (let g = -0.05; g < 0.05; g += 0.001) expect(gradeFloor(g, toe)).toBeGreaterThan(0);
+  });
+
+  it('the compose shader carries the engine grade with the floor in place of the clip', () => {
+    for (const k of ['color *= tint;', 'mix(vec3(grey), color, sat)', 'mix(vec3(0.5), color, con)', 'uniform float look_gradeToe;', 'log(1.0 + exp(-abs(g) / s))']) expect(GRADING_GLSL).toContain(k);
   });
 });

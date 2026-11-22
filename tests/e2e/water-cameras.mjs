@@ -14,6 +14,8 @@
 // Zoomed-out view (the furthest zoom, looking down):
 //   overview  over the start, the island and the bay
 //   opensea   a middle zoom over the bay past the sandbar, the water filling the frame (repeating patterns, tiling)
+// Each shot is also checked for straight lines on the water (LINES): no seam across the moon path at night, and no
+// hard band across the open sea from the zoomed-out view at any time.
 // PERF=1 measures instead: frame time (median, mean, p95 over 8 s, vsync off) and draw calls on High at `start` and
 // `overview` by day, printed as `perf …`. Alternate base and branch builds.
 //   ONLY=day,night just these times;   SPOTS=light,opensea just these spots;   STRIP=1 also 6 frames 0.25 s apart
@@ -45,6 +47,60 @@ const FOLLOW = {
 };
 /** Zoomed-out spots: what the camera looks at, its turn and zoom (undefined: the furthest) */
 const ABOVE = { overview: { at: [6, 42], yaw: 200 }, opensea: { at: [14, 60], yaw: 200, zoom: 0.7 } };
+/**
+ * Straight lines on the water, measured in the shots (rect: x0, y0, x1, y1 in the 1920 × 1080 frame):
+ *   seam  the moon path at night, sampled across where the first cut's value-noise lattice drew a hard vertical step
+ *         (x 975): for each column, its mean step to the next, against the mean of the steps 3 columns either side.
+ *         A seam is a spike there (17.8 on the first cut); the soft edges of the path and its slanted crests aren't.
+ *   band  the open sea from the zoomed-out view, where the night's green ran out and clipped flat (y 370): each row's
+ *         median colour, and how sharply that bends (second step, 6 rows apart, worst channel). A clip is a kink
+ *         (16–17 at night before the grade's soft floor); fog and depth fade smoothly (7 or under at any time).
+ */
+const LINES = [
+  { what: 'no seam across the moon path', kind: 'seam', spots: ['light'], times: ['night'], rect: [900, 430, 1080, 552], max: 5 },
+  { what: 'no hard band across the sea', kind: 'band', spots: ['overview', 'opensea'], times: ['day', 'golden', 'night'], rect: [1150, 150, 1450, 420], max: 10 },
+];
+/** One straight-line measure (LINES) on a screenshot, decoded in the page. */
+const straightLine = (page, png, c) =>
+  page.evaluate(
+    async ({ b64, kind, rect }) => {
+      const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+      const cv = new OffscreenCanvas(bmp.width, bmp.height);
+      const cx = cv.getContext('2d');
+      cx.drawImage(bmp, 0, 0);
+      const [x0, y0, x1, y1] = rect;
+      const w = x1 - x0;
+      const h = y1 - y0;
+      const px = cx.getImageData(x0, y0, w, h).data;
+      const at = (x, y, ch) => px[(y * w + x) * 4 + ch];
+      if (kind === 'seam') {
+        const d = [];
+        for (let x = 0; x < w - 1; x++) {
+          let s = 0;
+          for (let y = 0; y < h; y++) for (let ch = 0; ch < 3; ch++) s += at(x + 1, y, ch) - at(x, y, ch);
+          d.push(s / h);
+        }
+        let worst = 0;
+        for (let i = 3; i < d.length - 3; i++) worst = Math.max(worst, Math.abs(d[i] - (d[i - 3] + d[i + 3]) / 2));
+        return worst;
+      }
+      const med = [];
+      for (let y = 0; y < h; y++) {
+        const row = [];
+        for (let ch = 0; ch < 3; ch++) {
+          const v = [];
+          for (let x = 0; x < w; x++) v.push(at(x, y, ch));
+          v.sort((a, b) => a - b);
+          row.push(v[w >> 1]);
+        }
+        med.push(row);
+      }
+      let worst = 0;
+      for (let y = 6; y < h - 6; y++) for (let ch = 0; ch < 3; ch++) worst = Math.max(worst, Math.abs(med[y + 6][ch] - 2 * med[y][ch] + med[y - 6][ch]));
+      return worst;
+    },
+    { b64: png.toString('base64'), kind: c.kind, rect: c.rect },
+  );
 const port = 4248;
 const server = await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
 const gpu = ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--disable-frame-rate-limit'];
@@ -184,9 +240,26 @@ try {
         await page.waitForTimeout(1500);
         await page.evaluate(() => window.solarbloom.look.snapMood());
         await page.waitForTimeout(2500);
+        if (process.env.PRE)
+          console.log(
+            '  pre:',
+            JSON.stringify(
+              await page.evaluate((src) => {
+                const g = window.solarbloom;
+                const water = g.app.root.find((e) => e.render?.meshInstances?.[0]?.material?.name === "water")[0]?.render.meshInstances[0].material;
+                return new Function('g', 'water', src)(g, water);
+              }, process.env.PRE),
+            ),
+          );
         const file = `${dir}/${TAG}-${name}-${spot}.png`;
-        await page.screenshot({ path: file });
+        const shot = await page.screenshot({ path: file });
         console.log(`  ${file}  (pitch ${cam.pitch.toFixed(1)}°, fov ${cam.fov.toFixed(0)}°${cam.explore ? '' : ', zoomed out'})`);
+        for (const c of LINES.filter((c) => c.spots.includes(spot) && c.times.includes(name))) {
+          const v = await straightLine(page, shot, c);
+          const ok = v <= c.max;
+          console.log(`    ${ok ? '✓' : '✗'} ${c.what}: ${v.toFixed(1)} (at most ${c.max})`);
+          if (!ok) failed = true;
+        }
         if (STRIP)
           for (let i = 0; i < 6; i++) {
             await page.waitForTimeout(250);

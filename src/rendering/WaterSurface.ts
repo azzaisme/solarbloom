@@ -395,9 +395,17 @@ void sbWaterSetup() {
 		float glow = smoothstep(1.0 - uWaterMoonK.x, 1.0, head);
 		float spark = smoothstep(1.0 - uWaterMoonK.y - 0.5 * fwidth(head), 1.0, head);
 		// broken into drifting bands across the path, like wave crests catching it (where the ripples are too fine to
-		// draw, far off, this is what breaks the column up)
+		// draw, far off, this is what breaks the column up). Three crest trains in world space, none on a lattice: value
+		// noise here, stretched along the path and cut by the threshold below, showed its grid as straight seams
+		// (moonCrest is the same sum, for the tests); far off, once a crest is a few pixels long, they settle to even
 		vec2 mp = vec2(dot(p, uWaterMoon.xy), dot(p, vec2(-uWaterMoon.y, uWaterMoon.x)));
-		float crest = sbWaterNoise(mp * vec2(uWaterMoonB.x, uWaterMoonB.y) + vec2(t * uWaterMoonB.z, t * 0.07));
+		vec2 kb = 6.2831853 * uWaterMoonB.xy;
+		float ms = 6.2831853 * uWaterMoonB.z * t;
+		float mc = sin(dot(mp, kb) + ms)
+			+ 0.7 * sin(dot(mp, kb * vec2(1.37, -0.83)) - 1.19 * ms + 1.7)
+			+ 0.5 * sin(dot(mp, kb * vec2(0.61, 1.53)) + 0.77 * ms + 4.1);
+		float mfar = 1.0 - smoothstep(0.2, 0.45, px * uWaterMoonB.x);
+		float crest = 0.5 + mc / 4.4 * mfar;
 		float broken = mix(1.0 - uWaterMoonB.w, 1.0, smoothstep(0.35, 0.7, crest));
 		wEmit += uWaterMoonCol * (glow * glow * uWaterMoonK.z + spark * uWaterMoonK.w) * broken * along * F * night;
 	}
@@ -764,6 +772,19 @@ const lin = (c: number) => Math.pow(Math.max(0, c), 2.2);
  * the water (unit x, z), its height (the sine of its elevation), and whether the path shows (by night, with the light
  * above the horizon). By night the key light is the moon (DayNight swings it round), so the path lies below the moon.
  */
+/**
+ * E28.W06: the moon path's crests at a point (`a` along the moon's heading, `b` across it, world units) at time `t`:
+ * 0 … 1, as the shader sums them (three crest trains, no lattice). `px` is the world size of a pixel there: once a
+ * crest is only a few pixels long they settle to 0.5.
+ */
+export function moonCrest(a: number, b: number, t: number, bands = LOOK.water.moonPath.bands, px = 0): number {
+  const ka = 2 * Math.PI * bands.along;
+  const kb = 2 * Math.PI * bands.across;
+  const s = 2 * Math.PI * bands.drift * t;
+  const c = Math.sin(a * ka + b * kb + s) + 0.7 * Math.sin(a * ka * 1.37 - b * kb * 0.83 - 1.19 * s + 1.7) + 0.5 * Math.sin(a * ka * 0.61 + b * kb * 1.53 + 0.77 * s + 4.1);
+  return 0.5 + (c / 4.4) * (1 - ss(0.2, 0.45, px * bands.along));
+}
+
 export function moonPathOf(toLight: { x: number; y: number; z: number } | undefined, night: number): [number, number, number, number] {
   if (!toLight || night <= 0) return [0, 1, 1, 0];
   const l = Math.hypot(toLight.x, toLight.z);
