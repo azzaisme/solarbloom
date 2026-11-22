@@ -28,7 +28,7 @@ const SPOTS = [
   ['1-surf-tip', 0, 41],
   ['2-sandbar-corner', 10, 56],
   ['3-canal-bank', -4, 24],
-  ['4-terrace-edge', -23, 1],
+  ['4-terrace-edge', 8, 13],
   ['5-pond-edge', 63, 44, true],
 ];
 try {
