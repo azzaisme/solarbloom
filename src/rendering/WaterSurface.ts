@@ -162,6 +162,9 @@ vec3 sbWaves(vec2 p, float t, float edgeDist, float px) {
 /** The most disturbers the shader rings round at once. */
 export const DISTURB_MAX = 16;
 
+/** E28.W05 (#698): the most lamps the water reflects at once (the nearest where the camera looks). */
+export const LAMP_MAX = 8;
+
 const WATER_COMMON = /* glsl */ `
 uniform float uWaterTime;
 uniform vec3 uWaterCam;
@@ -194,9 +197,13 @@ uniform vec4 uWaterRipC;   // strength, distort, map 1's turn (sin), the maps' s
 uniform vec4 uWaterObs[${DISTURB_MAX}]; // things in the water: x, z, radius, strength
 uniform vec4 uWaterObsK;   // how many, rate, reach, ring spacing
 uniform vec2 uWaterObsW;   // ring width, strength
-uniform vec3 uWaterGlint;  // cut, softness, strength
+uniform vec4 uWaterGlint;  // cut, softness, strength, the moon's boost by night
 uniform vec3 uWaterLightDir;  // toward the sun (or moon)
 uniform vec3 uWaterLightCol;  // its colour × strength (linear)
+uniform vec4 uWaterLamp[${LAMP_MAX}];  // E28.W05: lamps shining: x, y, z (the bulb), how strongly (0 … 1)
+uniform vec3 uWaterLampC[${LAMP_MAX}]; // their colours (linear)
+uniform vec4 uWaterLampK; // how many, the streak's width, the sheen's width, reach
+uniform vec2 uWaterLampS; // the streak's strength, the sheen's
 uniform vec4 uWaterAA;    // variance gain, the ripples' fade (pixels per ripple, as 1/x: from, to), a typical ripple's length
 vec3 wNormal;
 vec3 wEmit;
@@ -371,7 +378,26 @@ void sbWaterSetup() {
 	float widen = fw + 0.35 * sqrt(vary);
 	float glint = smoothstep(uWaterGlint.x - uWaterGlint.y - widen, uWaterGlint.x + uWaterGlint.y + widen, sl);
 	glint *= (uWaterGlint.y + 0.002) / (uWaterGlint.y + 0.002 + widen) * (1.0 - smoothstep(0.01, 0.03, fw)) * keep;
-	wEmit += uWaterLightCol * glint * uWaterGlint.z * (1.0 - wFoam) * smoothstep(0.0, 0.1, uWaterLightDir.y);
+	// (E28.W05: by night the moon's are boosted, so it lays a path of light across the sea)
+	wEmit += uWaterLightCol * glint * uWaterGlint.z * mix(1.0, uWaterGlint.w, uWaterMisc.y) * (1.0 - wFoam) * smoothstep(0.0, 0.1, uWaterLightDir.y);
+	// ── E28.W05 (#698): the lamps on the water. Each lit lamp near the view lays its reflection on the ripples: a
+	// bright streak where the surface turns the bulb toward the eye (the ripples break it into a broken column of
+	// light running toward the camera, as lamps do on real water) and a broad, faint sheen round it. Both widen and dim
+	// with the normal's spread, like the glints, and fade with the lamp's distance. ──
+	vec3 lampL = vec3(0.0);
+	for (int i = 0; i < ${LAMP_MAX}; i++) {
+		if (float(i) >= uWaterLampK.x) break;
+		vec4 lp = uWaterLamp[i];
+		vec3 toL = lp.xyz - vPositionW;
+		float d2 = max(dot(toL, toL), 1e-4);
+		float ls = dot(R, toL * inversesqrt(d2));
+		float wid = uWaterLampK.y + 0.35 * sqrt(vary) + fwidth(ls);
+		float streak = exp(-(1.0 - ls) / wid) * uWaterLampK.y / wid;
+		float sheen = exp(-(1.0 - ls) / uWaterLampK.z);
+		lampL += uWaterLampC[i] * (lp.w / (1.0 + d2 / (uWaterLampK.w * uWaterLampK.w))) * (streak * uWaterLampS.x + sheen * uWaterLampS.y);
+	}
+	// (a mirror reflects more toward grazing: from about a third looking straight down to all of it)
+	wEmit += lampL * (1.0 - wFoam) * mix(0.35, 1.0, F / max(uWaterFres.z, 1e-3));
 	// ── E28.W03 (#696): under a deck low over the water (a cover) the water lies in its shade: its colour, the sky it
 	// reflects and the sun's glints all darken, from a little in under the deck's edge, fading out just past it ──
 	float shadeK = 0.0;
@@ -642,7 +668,7 @@ export function applyWaterLook() {
   m.setParameter('uWaterRipC', [R.strength, R.distort, sin, RIPPLE_RANGE]);
   const D = W.disturb;
   m.setParameter('uWaterObsW', [D.width, D.strength]);
-  m.setParameter('uWaterGlint', [W.glint.cut, W.glint.soft, W.glint.strength]);
+  m.setParameter('uWaterGlint', [W.glint.cut, W.glint.soft, W.glint.strength, W.glint.moon]);
   m.setParameter('uWaterAA', [W.antiAlias.variance, 1 / W.antiAlias.rippleFrom, 1 / W.antiAlias.rippleTo, (R.min + R.max) / 2]);
   m.specular = new pc.Color(W.specular, W.specular, W.specular);
   obsAt = undefined;
@@ -665,10 +691,38 @@ export interface WaterFrame {
   trTime?: number;
   /** the sun (or moon): toward it, its colour (0–1) and its strength as a share of the noon sun */
   light?: { toLight: { x: number; y: number; z: number }; color: { r: number; g: number; b: number }; share: number };
+  /** E28.W05 (#698): the lamps shining now (LightVisuals.shining): the nearest LAMP_MAX to the focus are reflected */
+  lamps?: readonly WaterLampIn[];
   /** the planar reflection this frame (High), or none */
   reflect?: { tex: pc.Texture; viewProj: pc.Mat4; planeY: number };
 }
 
+/** A lamp as the water takes it: where its bulb is, its colour (sRGB hex) and how strongly it glows (0 … 1). */
+export interface WaterLampIn {
+  x: number;
+  y: number;
+  z: number;
+  tone: string;
+  power: number;
+}
+
+/**
+ * The lamps the water reflects (for the shader and tests): those glowing at all, nearest the focus first (across the
+ * ground), at most `LAMP_MAX` and `LOOK.water.lamps.max`.
+ */
+export function pickWaterLamps(lamps: readonly WaterLampIn[], fx: number, fz: number): WaterLampIn[] {
+  const n = Math.min(LAMP_MAX, LOOK.water.lamps.max);
+  return lamps
+    .filter((l) => l.power > 0.01)
+    .map((l) => ({ l, d: (l.x - fx) ** 2 + (l.z - fz) ** 2 }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, n)
+    .map((o) => o.l);
+}
+
+const lampPos = new Float32Array(LAMP_MAX * 4);
+const lampCol = new Float32Array(LAMP_MAX * 3);
+const toneLin = new Map<string, [number, number, number]>();
 const cam3 = new Float32Array(3);
 const light3 = new Float32Array(3);
 const lcol3 = new Float32Array(3);
@@ -722,6 +776,20 @@ export function setWaterFrame(f: WaterFrame) {
     m.setParameter('uWaterCover[0]', cov);
   }
   m.setParameter('uWaterCoverN', covN);
+  // the lamps
+  const lamps = pickWaterLamps(f.lamps ?? [], fx, fz);
+  for (let i = 0; i < lamps.length; i++) {
+    const l = lamps[i];
+    lampPos.set([l.x, l.y, l.z, Math.min(1, l.power)], i * 4);
+    let c = toneLin.get(l.tone);
+    if (!c) toneLin.set(l.tone, (c = lin3(l.tone)));
+    lampCol.set(c, i * 3);
+  }
+  const LL = W.lamps;
+  m.setParameter('uWaterLamp[0]', lampPos);
+  m.setParameter('uWaterLampC[0]', lampCol);
+  m.setParameter('uWaterLampK', [lamps.length, LL.streak, LL.sheen, LL.reach]);
+  m.setParameter('uWaterLampS', [LL.strength, LL.sheenStrength]);
   const D = W.disturb;
   m.setParameter('uWaterObsK', [obsAt.n, D.rate, D.reach, D.length]);
   if (f.reflect) {

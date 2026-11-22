@@ -12,12 +12,14 @@
 //   pond      the Cistern's pond
 // Times: day (noon), golden (late afternoon) and night (midnight).
 // PERF=1 measures instead of shooting: frame time (median, mean, p95 over 8 s, vsync off) and draw calls on High, at
-// the island spot and the overview by day, printed as `perf …`. Run it on base and branch alternately (timing on this
-// machine swings a lot).
+// the island spot and the overview by day (PERF_AT=night: at night), printed as `perf …`. Run it on base and branch
+// alternately (timing on this machine swings a lot).
 //   ONLY=day,night just these times;   SPOTS=surf,pond just these spots
 //   PRE='js'  a snippet run in the page before each shot (`g`: the game);   DIST=dist-base  shoot another build (the base, for before shots);   STRIP=1  also 6 frames 0.5 s apart (motion; STRIP_MS sets the gap)
 // E28.W04 (#697) adds the `outlet` spot (the Saltwind canal's head, where it runs out of the wall under Elder Grove) and
 // logs how much life is in the water round each shot (WaterLife, per kind; nothing on a build without it).
+// E28.W05 (#698) adds the `lamps` spot: solar lamp posts, lanterns, stake lights and glow-pods (all lit without a grid)
+// along the island's shore by the start, the camera on the bank looking out past them over the water.
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
@@ -32,7 +34,7 @@ const ALL = { day: 0.3, golden: 0.6, night: 0.83 };
 /** times shot only when asked for by ONLY: dusk (the light going, between golden hour and night) */
 const MORE = { dusk: 0.7 };
 const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries({ ...ALL, ...MORE }).filter(([k]) => process.env.ONLY.split(',').includes(k))) : ALL;
-const SPOTS = (process.env.SPOTS ?? 'island,overview,surf,sandbar,canal,outlet,culvert,pond').split(',');
+const SPOTS = (process.env.SPOTS ?? 'island,overview,surf,sandbar,canal,outlet,culvert,pond,lamps').split(',');
 const PERF = !!process.env.PERF;
 /** the close spots: the edge tile (or, for the pond, where to search for the nearest bank) */
 const EDGES = { surf: [0, 41], sandbar: [10, 56], canal: [-4, 24], pond: [63, 44, true], outlet: [-4, 19], culvert: [-1, 18] };
@@ -138,6 +140,50 @@ try {
       console.error(`    ✗ ${name}: no edge tile`);
     }
   }
+  if (SPOTS.includes('lamps')) {
+    edgeAt.lamps = await page.evaluate((start) => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      const [x0, z0] = start.map(Math.round);
+      const peek = (x, z) => s.grid.peek('g', x, z);
+      const wet = (t) => !t || t.feature === 'water';
+      const cz = (s.state.cozy ??= {});
+      const kinds = ['solarlamppost', 'lantern', 'solarstake', 'solarlamppost', 'glowpod', 'lantern'];
+      cz.decorUnlocked = [...new Set([...(cz.decorUnlocked ?? []), ...kinds])];
+      s.state.salvage.decorMade = [...new Set([...(s.state.salvage.decorMade ?? []), ...kinds])].sort();
+      g.cozy.checkDecorUnlocks();
+      // shore tiles round the start, nearest first, every other one
+      const shore = [];
+      for (let dz = -7; dz <= 7; dz++)
+        for (let dx = -7; dx <= 7; dx++) {
+          const t = peek(x0 + dx, z0 + dz);
+          if (!t || wet(t) || t.blocked || t.ramp || t.occupantId || !s.areas.canTouch(t)) continue;
+          const o = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => wet(peek(t.x + a, t.z + b)));
+          if (o.length) shore.push({ t, d: dx * dx + dz * dz, o });
+        }
+      shore.sort((a, b) => a.d - b.d);
+      const placed = [];
+      for (const c of shore) {
+        if (placed.length >= kinds.length) break;
+        if (placed.some((p) => Math.abs(p.t.x - c.t.x) + Math.abs(p.t.z - c.t.z) < 2)) continue;
+        const k = kinds[placed.length];
+        if (g.cozy.canDecorate(k, 'g', c.t.x, c.t.z)) continue;
+        g.cozy.placeDecor(k, 0, 'g', c.t.x, c.t.z);
+        g.chunks.markTile(c.t);
+        placed.push(c);
+      }
+      for (const l of s.lights.all()) if (l.def.power === 'solar') s.lights.nodeOf(l.key).charge = 300;
+      // the camera on the first lamp's tile, looking out over the water past it
+      const f = placed[0];
+      if (!f) return undefined;
+      const ox = f.o.reduce((a, o) => a + o[0], 0);
+      const oz = f.o.reduce((a, o) => a + o[1], 0);
+      const len = Math.hypot(ox, oz) || 1;
+      return { x: f.t.x, z: f.t.z, ox: ox / len, oz: oz / len, n: placed.length };
+    }, start);
+    console.log(`  lamps: ${edgeAt.lamps?.n ?? 0} placed by the water`);
+    if (!edgeAt.lamps) failed = true;
+  }
   await page.waitForFunction(() => window.solarbloom.chunks.pending === 0, null, { timeout: 60_000 }).catch(() => {});
   await page.waitForTimeout(12000); // restored ground grows in
   const place = (spot) =>
@@ -182,7 +228,7 @@ try {
       { spot, start, e: edgeAt[spot], along: ALONG[spot] },
     );
   if (PERF) {
-    await at(ALL.day);
+    await at(ALL[process.env.PERF_AT ?? 'day'] ?? MORE[process.env.PERF_AT]);
     for (const spot of ['island', 'overview']) {
       await place(spot);
       await page.waitForFunction(() => window.solarbloom.chunks.pending === 0, null, { timeout: 60_000 }).catch(() => {});

@@ -189,7 +189,7 @@ export const LOOK = {
     deepAt: 5,
     /** the bed shows through the shallows, fading out by `bedReach` tiles from land, up to `bedShow` of the colour */
     bedReach: 1.4,
-    bedShow: 0.5,
+    bedShow: 0.35,
     /** light nets on the bed in the shallows (0 off) */
     caustics: 0.1,
     /**
@@ -249,9 +249,10 @@ export const LOOK = {
     /**
      * Glints: crisp highlight shapes where the surface turns the sun or moon toward the eye. `cut` (how close to a
      * perfect mirror, as a cosine), `soft` (edge), `strength`. They widen and dim with the normal's spread in a pixel,
-     * so far off they become the soft highlight rather than specks.
+     * so far off they become the soft highlight rather than specks. E28.W05 (#698): by night the moon's glints are
+     * `moon` times as strong (the moon is a faint light, so without it the sea showed no path of moonlight).
      */
-    glint: { cut: 0.985, soft: 0.004, strength: 1.2 },
+    glint: { cut: 0.985, soft: 0.004, strength: 1.2, moon: 3 },
     specular: 0.18,
     /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */
     fresnel: { base: 0.04, power: 5, max: 0.6 },
@@ -272,6 +273,14 @@ export const LOOK = {
     nightAlbedo: 0.55,
     /** by night the water's colour turns to this moonlit navy (the approved night sea) */
     night: '#123a8f',
+    /**
+     * E28.W05 (#698): lamps on the water. The `max` lit lamps nearest where the camera looks lay their reflection on
+     * the ripples: a `streak` (how wide, as 1 − the cosine off a perfect mirror; the ripples stretch it into a broken
+     * column of light toward the camera) at `strength`, and a broad, faint `sheen` round it at `sheenStrength`. Both
+     * fade with the lamp's distance, to half by `reach` tiles. Every tier (the planar reflection on High adds the
+     * bulbs' own image).
+     */
+    lamps: { max: 8, streak: 0.006, sheen: 0.09, strength: 2.4, sheenStrength: 0.12, reach: 4 },
   },
   /**
    * E28.W02 (#695): where natural ground meets the water. Every land edge that opens onto water at its own level

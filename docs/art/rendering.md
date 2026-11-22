@@ -156,6 +156,19 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
     water's own hue (`reflectTint`) so far water reads aqua (or navy at night), not haze grey. The sky also fills the
     water's colour with blue light (`ambient`), since the engine's own sky light is off for it;
   - night: the colour turns `night` navy and dims to `nightAlbedo`; the moon and the lamps glint on it.
+- **Lamps and the moon on the water (E28.W05, #698):** the lamps' real lights (LightVisuals' pool of omni lights)
+  reach the water, but only as diffuse light on its dark night colour, and they don't touch specular
+  (`affectSpecularity: false`, which keeps the lit garden cheap). So without help a lit lamp left nothing on the
+  water but a faint warm smudge, and below High (no planar reflection) not even its bulb. Now LightVisuals keeps the
+  lamps it's lighting (`shining`), and the water shader takes the `LOOK.water.lamps.max` nearest where the camera looks
+  (`pickWaterLamps`). For each one it lays a narrow, bright **streak** where the rippled surface turns the bulb
+  toward the eye (`streak`, `strength`). The ripples break it into rings and a broken column of warm light. A broad,
+  faint **sheen** (`sheen`, `sheenStrength`) goes round it. Both widen and dim with the normal's spread, as the glints
+  do, fade with the lamp's distance (half by `reach`), and grow toward grazing (Fresnel). It works on every tier, in
+  the lamp's own colour. By day no lamp is lit, so the loop does nothing. The moon's glints are `glint.moon` times
+  stronger by night, so the moon lays a path of light across the sea when the camera looks toward it.
+  The shallows show less of the sand bed (`bedShow` 0.5 → 0.35), so the clear shallows read turquoise rather than pale
+  mint.
 - **Why a planar reflection:** buildings, the jetty and plants stand right on the water, and the camera looks along
   it. Screen-space reflection loses what it needs there (it's off screen or behind the thing itself) and a probe
   shows none of it. A second camera mirrors the main one in the sea's plane and draws the sky and the world (not

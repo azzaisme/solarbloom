@@ -2880,6 +2880,7 @@ export class Game {
       skyLow: low,
       skyHigh: high,
       light: { toLight: this.scene.sun.up, color: this.scene.sun.light!.color, share: this.scene.sun.light!.intensity / LOOK.sun.intensity },
+      lamps: this.lightVisuals?.shining,
       reflect: tex && seaY !== undefined ? { tex, viewProj: this.waterReflection!.drawnViewProj, planeY: seaY } : undefined,
     });
     this.waterLife?.update({ time: this.chunks.waterTime, trTime: this.transitions?.time ?? 0, focus: this.camera.target, night: 1 - this.dayNight.daylight });
