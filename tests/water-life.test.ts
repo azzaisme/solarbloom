@@ -72,10 +72,16 @@ describe('LOOK.waterLife', () => {
     expect(L.falls.glow).toBeGreaterThan(0);
     expect(L.falls.glow).toBeLessThanOrEqual(0.4);
     expect(L.falls.sheen).toBeLessThan(1);
+    // by night the stream turns a cool blue-grey, darker than by day: no amber, nothing that reads as a light
+    const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const [nr, ng, nb] = rgb(L.falls.nightColour);
+    expect(nb).toBeGreaterThan(nr);
+    expect(nb).toBeGreaterThanOrEqual(ng);
+    expect(nr + ng + nb).toBeLessThan(rgb(L.falls.colour).reduce((a, b) => a + b) * 0.7);
     // the stream is narrower than the mouth it pours from
     expect(L.falls.width).toBeLessThan(L.falls.culvert * CULVERT.inner * 2);
     expect(L.fish.minDepth).toBeGreaterThan(0.2 + 0.12);
-    for (const hex of [...L.pads.colours, L.pads.vein, L.pads.flower, L.pads.flowerCore, L.fish.colour, ...L.leaves.colours, L.flecks.colour, L.plants.stalk, L.plants.leaf, L.falls.colour, L.falls.tint, L.falls.stone, L.falls.mouth])
+    for (const hex of [...L.pads.colours, L.pads.vein, L.pads.flower, L.pads.flowerCore, L.fish.colour, ...L.leaves.colours, L.flecks.colour, L.plants.stalk, L.plants.leaf, L.falls.colour, L.falls.tint, L.falls.stone, L.falls.mouth, L.falls.nightColour])
       expect(hex).toMatch(/^#[0-9a-f]{6}$/);
   });
 });

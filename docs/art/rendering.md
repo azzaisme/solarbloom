@@ -227,7 +227,10 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
     culvert goes on that face instead (`FACADE_DEPTH`). The stream pours off the sill as two lit, glossy sheets whose
     streaks scroll past each other, partly see-through and thinning at the edges and foot. Where it lands there's
     soft, frothy foam in two churning layers, a puff of spray, and rings on the water. All of it is lit like the
-    world, with a little light of its own by day only (`falls.glow`), so it's moonlit at night and never glows.
+    world, with a little light of its own by day only (`falls.glow`), so it's moonlit at night and never glows. By
+    night its colour fades to `falls.nightColour`, the canal's moonlit blue-grey, and most of its sheen goes. The
+    water's lighting is one-sided on purpose: with two-sided lighting the engine turned the sheets' normals into the
+    wall, where they picked up the warm bounce off the ground and the stream went amber under a blue night.
 
   Each chunk hands its life to `setWaterLife` as it builds (near chunks only). `WaterLife` draws the nearest of each
   kind round the camera's focus (`LOOK.waterLife.radius`, capped by `max`): one instanced draw per kind in view, 11 at

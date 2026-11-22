@@ -29,7 +29,9 @@ const dir = process.argv[2] ?? 'docs/review/e28-695';
 mkdirSync(dir, { recursive: true });
 const TAG = process.env.TAG ?? 'after';
 const ALL = { day: 0.3, golden: 0.6, night: 0.83 };
-const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries(ALL).filter(([k]) => process.env.ONLY.split(',').includes(k))) : ALL;
+/** times shot only when asked for by ONLY: dusk (the light going, between golden hour and night) */
+const MORE = { dusk: 0.7 };
+const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries({ ...ALL, ...MORE }).filter(([k]) => process.env.ONLY.split(',').includes(k))) : ALL;
 const SPOTS = (process.env.SPOTS ?? 'island,overview,surf,sandbar,canal,outlet,culvert,pond').split(',');
 const PERF = !!process.env.PERF;
 /** the close spots: the edge tile (or, for the pond, where to search for the nearest bank) */

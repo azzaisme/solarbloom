@@ -803,7 +803,9 @@ export class WaterLife {
       m.blendType = pc.BLEND_NORMAL;
       m.depthWrite = false;
       m.cull = pc.CULLFACE_NONE;
-      m.twoSidedLighting = true;
+      // one-sided lighting: the sheets' and foam's normals already face out to the water and up. Two-sided lighting
+      // turned them into the wall for whichever side the engine called the back, where they took the warm bounce
+      // off the ground: an amber stream under a blue moonlit night (the send-back on #707)
       m.useFog = true;
       return m;
     };
@@ -879,9 +881,17 @@ export class WaterLife {
       fleck.update();
       // the stream, its foam and spray: lit like the world, with a little light of their own by day only
       const own = new pc.Color().fromString(L.falls.colour).mulScalar(L.falls.glow * (1 - night));
+      // by night the pale stream turns the canal's moonlit blue-grey and loses most of its sheen, so it can't
+      // read as a lamp under the wall
+      const day = new pc.Color().fromString(L.falls.colour);
+      const dark = new pc.Color().fromString(L.falls.nightColour);
+      const diffuse = new pc.Color().lerp(day, dark, night);
+      const sheen = L.falls.sheen * (1 - 0.6 * night);
       for (const [i, m] of this.splash.entries()) {
         // the foam and spray lie in the sun already: half as much of their own as the stream (in the wall's shade)
         m.emissive = i ? own.clone().mulScalar(0.5) : own;
+        m.diffuse = diffuse;
+        m.specular = new pc.Color(sheen, sheen, sheen);
         m.update();
       }
     }

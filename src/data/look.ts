@@ -410,9 +410,10 @@ export const LOOK = {
      * between them, white in their cores) running down at `speed` (stream lengths a second), at `opacity`, with a
      * `sheen` that catches the sun. Where it lands: soft foam `foam` across, a puff of spray `spray` across, and rings
      * of `ring` strength. All of it is lit like the world (moonlit by night), with `glow` of its colour as light of its
-     * own by day only, fading out with the daylight: nothing glows in the dark.
+     * own by day only, fading out with the daylight: nothing glows in the dark. By night the stream, foam and spray
+     * fade to `nightColour` (the canal's moonlit blue-grey) and lose most of their sheen.
      */
-    falls: { outlet: 0.42, culvert: 0.6, width: 0.28, lip: 0.2, speed: 1.4, colour: '#eaf8f5', tint: '#8fd3cc', opacity: 0.9, sheen: 0.55, glow: 0.3, foam: 0.62, spray: 0.3, ring: 2.4, stone: '#b3a998', mouth: '#1c1b19' },
+    falls: { outlet: 0.42, culvert: 0.6, width: 0.28, lip: 0.2, speed: 1.4, colour: '#eaf8f5', tint: '#8fd3cc', opacity: 0.9, sheen: 0.55, glow: 0.3, foam: 0.62, spray: 0.3, ring: 2.4, stone: '#b3a998', mouth: '#1c1b19', nightColour: '#6b8794' },
   },
 };
 
