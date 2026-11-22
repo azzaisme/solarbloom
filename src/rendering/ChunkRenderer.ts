@@ -37,6 +37,7 @@ import { encodeWater, WATER_CLARITY, WATER_ENC, waterMaterial } from './WaterSur
 import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
+import { clearWaterDisturbers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 import { MOVE_TRIPS } from '../data/moveSpots';
 
@@ -921,6 +922,7 @@ export class ChunkRenderer {
     this.transitions?.liveByChunk.delete(v.key);
     v.ground?.destroy();
     v.water?.destroy();
+    clearWaterDisturbers(`rocks:${v.key}`);
     v.gtex?.forEach((e) => e?.destroy());
     for (const t of v.towers ?? []) for (const e of t.entities) e.destroy();
     v.trees?.destroy();
@@ -1586,6 +1588,8 @@ export class ChunkRenderer {
     // clarity all look past the chunk's edge, and a neighbour that didn't exist yet would read as open water (and
     // nothing rebuilds this chunk once it does), so the water would step at the border. Generating only loads tiles.
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (dx || dz) s.grid.chunkAt(GROUND, v.cx + dx, v.cz + dz);
+    // the rocks this build stands in the water (ripples ring round them)
+    this.rocks = [];
     const b = new MeshBuilder();
     const fb = new FoliageBuilder();
     const towers: Tower[] = [];
@@ -1743,6 +1747,7 @@ export class ChunkRenderer {
     }
     // From here to the end is one step: buildings, then every mesh of the chunk swaps in together.
     v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), waterMaterial(this.device), false, this.waterLayer !== undefined ? [this.waterLayer] : undefined);
+    setWaterDisturbers(`rocks:${v.key}`, this.rocks);
     v.gtex = GROUND_TEXTURES.map((name, i) => this.setMesh(v.gtex?.[i], `ground-${name}-${v.key}`, groundTexMesh(this.device, gtex[i]), groundTexMaterial(this.device, name), false));
     if (this.inPark && !v.far) {
       b.grey = fb.grey = 0;
@@ -2124,6 +2129,8 @@ export class ChunkRenderer {
   transitions?: TransitionRenderer;
   /** E28.W01: the layer the water's surface draws in (its own, so the planar reflection leaves it out) */
   waterLayer?: number;
+  /** E28 water: the rocks the chunk being built stands in the water */
+  private rocks: WaterDisturber[] = [];
   /** E28.W01: the open sea's surface height once a chunk of it is built (the planar reflection's plane) */
   seaY?: number;
   /** E28.W01: the water's clock (held still for reduced motion), read by Game for WaterSurface */
@@ -3022,6 +3029,7 @@ export class ChunkRenderer {
           const r = 0.09 + 0.07 * h(0, 8);
           const base = Math.max(y, surface - r * 0.4);
           if (at) b.add('sphere', stones[Math.floor(h(0, 9) * stones.length)], [x, base + r * 0.2, z], [r * 1.35, r, r * 1.1]);
+          if (at) this.rocks.push({ x, z, r: r * 0.7 });
           if (at) b.add('sphere', stones[Math.floor(h(1, 9) * stones.length)], [x + r * 0.9, base + r * 0.05, z - r * 0.4], [r * 0.7, r * 0.55, r * 0.6]);
         }
         if (!restored) return;
@@ -3228,6 +3236,7 @@ export class ChunkRenderer {
       b.grey = keep;
       if (k < 0.3) {
         b.add('sphere', k < 0.15 ? PALETTE.stone.pebble : PALETTE.stone.grey, [ex0, surf + 0.05, ez0], [0.24, 0.2, 0.2]);
+        this.rocks.push({ x: ex0, z: ez0, r: 0.12 });
         b.add('sphere', PALETTE.stone.warm, [ex0 + (dz ? 0.16 : 0), surf + 0.03, ez0 + (dx ? 0.16 : 0)], [0.14, 0.12, 0.13]);
         if (this.poolAlive(t)) b.add('sphere', PALETTE.leaf.light, [ex0, surf + 0.14, ez0], [0.15, 0.04, 0.12]);
       } else if (k < 0.5 && this.poolAlive(t))

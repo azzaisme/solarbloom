@@ -5,12 +5,15 @@
 //   sea       follow camera at the start, looking out over the jetty to the open sea
 //   shore     follow camera at the start, looking back over the restored island and the shallows round it
 //   overview  the zoomed-out view (the furthest zoom) over the start, the island and the sea
-// Times: day (noon), golden (late afternoon, the sun low and warm) and night (midnight).
+//   island    looking down at the open sea by the small island, across chunk borders (the seam check; SPOTS=island)
+// Times: day (noon), golden (late afternoon, the sun low and warm) and night (midnight); afternoon and evening (about
+// 17:20, the owner's second seam shot) too with ONLY=.
 // It also measures, on High at the sea spot by day: frame time (median and mean of the frame times over 8 s, vsync
 // off) and draw calls, printed as `perf …` (the PR's before/after numbers).
 //   TAG=before     name the shots (default: after)
 //   ONLY=day,night just these times;   SPOTS=sea,overview just these spots;   NOPERF=1 skip the measure
 //   NOREFLECT=1    the High-tier planar reflection off (to measure what it costs on its own)
+//   PRE='js'       run a snippet in the page before the shots (`water`: the water material, `g`: the game)
 //   STRIP=1        also 6 frames 0.25 s apart after each shot (`…-f0.png` …), for motion strips and GIFs
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -20,8 +23,8 @@ const { chromium } = require('playwright');
 const dir = process.argv[2] ?? 'docs/review/e28-694';
 mkdirSync(dir, { recursive: true });
 const TAG = process.env.TAG ?? 'after';
-const ALL = { day: 0.3, golden: 0.6, night: 0.83 };
-const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries(ALL).filter(([k]) => process.env.ONLY.split(',').includes(k))) : ALL;
+const ALL = { day: 0.3, afternoon: 0.45, evening: 0.52, golden: 0.6, night: 0.83 };
+const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries(ALL).filter(([k]) => process.env.ONLY.split(',').includes(k))) : { day: ALL.day, golden: ALL.golden, night: ALL.night };
 const SPOTS = (process.env.SPOTS ?? 'sea,shore,overview').split(',');
 const server = await preview({ build: { outDir: process.env.DIST ?? 'dist' }, preview: { port: 4244, strictPort: true }, logLevel: 'silent' });
 const gpu = ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--disable-frame-rate-limit'];
@@ -53,6 +56,17 @@ try {
       r.update = (_on, y) => update(false, y);
     });
   await page.addStyleTag({ content: '#hud, .toast, #toasts { display: none !important; }' });
+  // PRE='…' runs a snippet in the page first (tuning experiments: `water` is the water material)
+  if (process.env.PRE)
+    await page.evaluate((src) => {
+      let water;
+      const walk = (e) => {
+        for (const mi of e.render?.meshInstances ?? e.model?.meshInstances ?? []) if (mi.material?.name === 'water') water = mi.material;
+        e.children.forEach(walk);
+      };
+      walk(window.solarbloom.app.root);
+      new Function('water', 'g', src)(water, window.solarbloom);
+    }, process.env.PRE);
   const start = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
@@ -84,7 +98,14 @@ try {
         const g = window.solarbloom;
         const [x, z] = start;
         g.bot.teleport('g', x, z);
-        if (spot === 'overview') {
+        if (spot === 'island') {
+          // the owner's view: looking down at the open sea by the small island, across a chunk border
+          g.bot.following = false;
+          g.camera.glide(14, 0, 58, 1.2);
+          g.camera.setZoom(1.2);
+          g.camera.turnTo(200);
+          g.camera.pitchGoal = 42;
+        } else if (spot === 'overview') {
           g.bot.following = false;
           g.camera.glide(x - 4, 0, z - 6, g.camera.minZoom);
           g.camera.setZoom(g.camera.minZoom);
