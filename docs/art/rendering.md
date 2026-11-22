@@ -139,6 +139,35 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
   moonlit sea lands exactly on the colours the approved night was tuned with. The sea's slabs carry feature code 8
   (`FEATURE.sea`) so the surface knows which ones to tint. Checked in `sunlit-shots`: the noon sea must stay a clear
   aqua.
+- **The water (E28.W01, #694):** one surface and one material (`WaterSurface.ts`) for every stretch of live water:
+  the open sea and its shelf, the water under the jetty, the beach's surf (murky while dead, clear once restored) and
+  restored pools and ponds. The slabs stay underneath as the bed and the restoration state; the surface is a 4×4 grid
+  per tile (one quad on far chunks) a hair above them, on its own **Water** layer just after the world. Each vertex
+  carries its distance to land (following the rounded shore corners) and its clarity, which blends across tile
+  corners so murky and clear water never step at a border. From those the shader draws:
+  - colour by depth, `LOOK.water.shallow` → `mid` → `deep` (turquoise to blue-teal), with the sand bed and faint
+    light nets through the clear shallows;
+  - drifting ripples (six waves on a noise-bent field so they never form a checker, the finer ones fading with
+    distance), waves that follow the shore and anything standing in the water, and broken foam lines lapping in;
+  - the engine's sun, fill, lamps and lantern on those normals (every world light also lights the Water layer:
+    `worldLightLayers()`), with a soft-capped highlight (`gloss`, `specular`) that sparkles without blooming;
+  - Fresnel reflection (`fresnel`): little looking down, more toward the horizon, capped at 0.6. The sky's colours
+    on every tier; on High a planar reflection of the world (`WaterReflection.ts`). Reflections take a little of the
+    water's own hue (`reflectTint`) so far water reads aqua (or navy at night), not haze grey. The sky also fills the
+    water's colour with blue light (`ambient`), since the engine's own sky light is off for it;
+  - night: the colour turns `night` navy and dims to `nightAlbedo`; the moon and the lamps glint on it.
+- **Why a planar reflection:** buildings, the jetty and plants stand right on the water, and the camera looks along
+  it. Screen-space reflection loses what it needs there (it's off screen or behind the thing itself) and a probe
+  shows none of it. A second camera mirrors the main one in the sea's plane and draws the sky and the world (not
+  the Water layer) into a half-size HDR target; its near plane is tilted onto the water (Lengyel's oblique clip) so
+  nothing under the waterline shows. Only water at the sea's height uses it; pools on other terraces keep the sky
+  colours. It costs a second world pass, so it's High only (`TierSpec.waterReflect`), never on Deck, and off while
+  the loading screen warms shaders up. Two things keep it cheap: it's drawn every other frame (`reflect.every`; the
+  water samples it with the view it was drawn from, so it never slides), and it skips PlayCanvas's per-camera sun
+  shadow pass, reusing the shadow map the main camera left (WaterReflection's constructor). At the start that's
+  about 160 extra draw calls on the frames that draw it.
+- **Cost on High (E28.W01, sea spot at noon, 1080p, median of three runs):** frame time 7.3 → 9.5 ms median, draw
+  calls 516 → 639 on average. The shader skips the caustics where no bed shows and the foam noise away from shore.
 - **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
   25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
   overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back

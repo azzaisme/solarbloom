@@ -161,6 +161,16 @@ export class TransitionRenderer {
     return undefined;
   }
 
+  /**
+   * E28.W01: the window (start, length on this clock) of a tile's transition while it is still playing on screen,
+   * for things outside the transition material that fade in step with it (the water's clarity). Undefined otherwise.
+   */
+  fadeWindow(t: TileData): [number, number] | undefined {
+    const tr = this.trOf(t);
+    if (!tr || !this.live(t, tr)) return undefined;
+    return [tr.t0, tr.d * this.durScale];
+  }
+
   private live(t: TileData, tr: TileTransition | undefined): boolean {
     if (!tr) return false;
     if (this.scrub && this.scrub.x === t.x && this.scrub.z === t.z) return true;

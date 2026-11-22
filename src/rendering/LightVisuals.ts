@@ -8,6 +8,7 @@ import { ball } from './MachineParts';
 import { cableY } from './PowerLines';
 import { SLAB_TOP } from './SceneBuilder';
 import { group } from './Shapes';
+import { worldLightLayers } from './WaterSurface';
 
 type V3 = [number, number, number];
 const L = PALETTE.light;
@@ -238,7 +239,7 @@ export class LightVisuals {
     const n = Math.min(want.length, this.maxCast);
     while (this.pool.length < n) {
       const e = new pc.Entity('lamp-light');
-      e.addComponent('light', { type: 'omni', castShadows: false, falloffMode: pc.LIGHTFALLOFF_INVERSESQUARED, affectSpecularity: false });
+      e.addComponent('light', { type: 'omni', castShadows: false, falloffMode: pc.LIGHTFALLOFF_INVERSESQUARED, affectSpecularity: false, layers: worldLightLayers() });
       this.root.addChild(e);
       this.pool.push(e);
     }

@@ -147,7 +147,8 @@ import { AUTOMATION } from '../data/automation';
 import { itemDef } from '../data/items';
 import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
-import { poolReflectOn, setPoolNight, setPoolReflect } from '../rendering/Water';
+import { setWaterFrame, waterLayer, waterReflectOn } from '../rendering/WaterSurface';
+import { WaterReflection } from '../rendering/WaterReflection';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'In flower', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -232,6 +233,8 @@ export class Game {
   readonly look: LookController;
   readonly camera: CameraController;
   private sky!: Sky;
+  /** E28.W01: the water's planar reflection (High) */
+  private waterReflection?: WaterReflection;
   /** E23.7.1: day and night on screen (the light clock, or photo mode's own time) */
   private dayNight!: DayNight;
   /** E23.7.1.2: the title's "follow my clock" preference (new gardens), kept apart from the save's mode */
@@ -413,6 +416,16 @@ export class Game {
     this.waterOverlay = new WaterOverlay(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
+    // E28.W01 (#694): the water's surface on its own layer, drawn just after the world (so the High-tier planar
+    // reflection, which draws the sky and the world, leaves the water itself out)
+    {
+      const water = waterLayer(this.app); // made by SceneBuilder, before the lights
+      this.chunks.waterLayer = water.id;
+      this.camera.cam.layers = [...this.camera.cam.layers, water.id];
+      this.waterReflection = new WaterReflection(this.app, this.camera.cam, [this.sky.layer.id, pc.LAYERID_WORLD]);
+      // after everything has moved this frame: mirror the camera as it will render, and hand the water its frame
+      this.app.on('prerender', () => this.waterFrame());
+    }
     this.cozy = new Cozy(this.sim);
     this.chunks.plots = { look: (p) => this.plotLook(p), growth: (p) => this.plotGrowth(p) };
     this.chunks.decor = { inChunk: (cx, cz) => this.decorInChunk(cx, cz) }; // E19.2
@@ -2835,6 +2848,31 @@ export class Game {
   }
 
   /** Look 4.7: how clear the sky is (0 grey … 1 clear): the park's stage, then each woken area. */
+  /**
+   * E28.W01 (#694): once per frame, just before rendering: the planar reflection (High, not Deck, once the sea's plane
+   * is known) mirrors the camera as it is now, and the water's material gets its clock, the camera, the night and the
+   * sky's colours.
+   */
+  private waterFrame() {
+    if (!this.camera || !this.dayNight) return;
+    const seaY = this.chunks?.seaY;
+    // (not while the loading screen warms shaders up: its water sample sits on the World layer, which the reflection
+    // draws, and would read the very texture being drawn)
+    const on = waterReflectOn(this.gfxTier, this.deck) && seaY !== undefined && this.warmup.state === 'done';
+    this.waterReflection?.update(on, seaY ?? 0);
+    const tex = this.waterReflection?.tex;
+    const { low, high } = this.sky.reflectColours();
+    setWaterFrame({
+      time: this.chunks.waterTime,
+      trTime: this.transitions?.time ?? 0,
+      cam: this.camera.entity.getPosition(),
+      night: 1 - this.dayNight.daylight,
+      skyLow: low,
+      skyHigh: high,
+      reflect: tex && seaY !== undefined ? { tex, viewProj: this.waterReflection!.drawnViewProj, planeY: seaY } : undefined,
+    });
+  }
+
   private skyClarity(): number {
     const p = this.sim.progression;
     const park = this.city ? Math.max(0, p.parkStage()) / 4 : 0;
@@ -5220,15 +5258,9 @@ export class Game {
     this.look.night = 1 - this.dayNight.light;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
-    // owner (E23 polish): High graphics gives the ponds a soft sky reflection and a sun / moon glint; live with the setting
-    // #563: night water darkens to moonlit navy on every tier
-    setPoolNight(1 - this.dayNight.daylight);
+    // #563: night water darkens to moonlit navy on every tier (the slabs under the water's surface; WaterSurface
+    // takes its own night in waterFrame)
     this.transitions?.setSeaNight(1 - this.dayNight.daylight);
-    if (poolReflectOn(this.gfxTier, this.deck)) {
-      const sun = this.scene.sun;
-      const { low, high } = this.sky.reflectColours();
-      setPoolReflect(true, { low, high, toLight: sun.up, light: sun.light!.color, share: sun.light!.intensity / LOOK.sun.intensity, day: this.dayNight.light });
-    } else setPoolReflect(false);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.syncView();
     {
