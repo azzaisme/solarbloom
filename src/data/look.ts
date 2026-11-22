@@ -372,6 +372,46 @@ export const LOOK = {
      */
     wall: { min: 0.12, max: 0.28, pieces: 5, wet: ['#b5a891', '#837d72'], weed: ['#6c7448', '#646652'], weedHeight: 0.04 },
   },
+  /**
+   * E28.W04 (#697): life in the water (WaterLife). Only on restored water: none on dead or murky water or the open sea,
+   * and more of it as a restored shore blooms (`bloom` 0 … 4 adds `perBloom` to each chance). All of it rides the
+   * waves (it reads the same swell the surface lifts by) and fades in with a restore. Lengths are tiles.
+   */
+  waterLife: {
+    /** drawn within this many tiles of where the camera looks (nearest first, up to `max` of each kind) */
+    radius: 20,
+    max: { pad: 480, flower: 120, leaf: 96, fish: 120, fleck: 160, plant: 240, fall: 12, foam: 12, outlet: 12 },
+    /**
+     * lily pads, on restored fresh water (pools, ponds, canals; not the sea), gathered in patches (`patches` of the
+     * water within `reach` of a bank, in patches about `patch` tiles across): `perTile` (+1 from `crowdFrom` bloom),
+     * `size` across (min, max), riding the swell and turning slowly; a flower on the first pad from `flowerFrom` bloom
+     */
+    pads: { perTile: 3, crowdFrom: 3, reach: 1.6, patches: 0.45, patch: 3.5, size: [0.22, 0.34], turn: 0.04, colours: ['#3f7d36', '#356b33'], vein: '#5c9a40', flowerFrom: 2, flower: '#f58cb8', flowerCore: '#f0c43a' },
+    /**
+     * small fish in clear restored shallows (the surf and fresh water), drawn as dark shapes seen through the water:
+     * a shoal of 1 … `shoal` per spot, `chance` per tile, at least `minDepth` from land, swimming lazy loops of up to
+     * `range` at `speed` (tiles a second). Every `rise` seconds or so one rises and rings the surface (WaterDisturbance)
+     */
+    fish: { chance: 0.1, perBloom: 0.04, shoal: 3, minDepth: 0.45, range: 0.9, speed: 0.22, length: 0.15, colour: '#0d3a47', opacity: 0.38, nightOpacity: 0.14, rise: 11, ring: 0.7 },
+    /** floating leaves near restored shores (within `reach` of land): a slow orbit of `orbit`, `size` long, in these colours */
+    leaves: { chance: 0.06, perBloom: 0.02, reach: 1.6, orbit: 0.22, size: 0.075, turn: 0.05, colours: ['#a9a03c', '#c98a3a'] },
+    /**
+     * drifting flecks (pollen and seed fluff) on calm water near restored shores: each drifts `drift` tiles a second for
+     * `life` seconds, fading in and out, `size` across, at `opacity` by day (`nightOpacity` by night)
+     */
+    flecks: { chance: 0.12, perBloom: 0.03, reach: 1.4, drift: 0.035, life: 14, size: 0.022, colour: '#f4ecd2', opacity: 0.6, nightOpacity: 0.15 },
+    /** aquatic plants standing in the shallows of restored fresh water, within `reach` of a bank: arrowhead clumps `height` tall */
+    plants: { chance: 0.12, perBloom: 0.04, reach: 0.8, height: 0.24, stalk: '#5c8a3e', leaf: '#6fa448' },
+    /**
+     * An outlet where the world already has one: a restored channel of fresh water that ends against ground a level or
+     * more higher (the Saltwind canal's head under Elder Grove) runs out of a stone culvert (`culvert` across, its
+     * mouth `outlet` above the water at most) in a stream `width` wide that falls `lip` out from the wall, its streaks
+     * running down at `speed` (stream lengths a second), in `colour` at `opacity`. Where it lands: a patch of foam
+     * `foam` across, and rings of `ring` strength. The stream and its foam draw no light of their own: by night they
+     * take on `night`, a moonlit blue-grey (no glowing white water in the dark).
+     */
+    falls: { outlet: 0.5, culvert: 0.42, width: 0.3, lip: 0.16, speed: 1.1, colour: '#eef8f4', night: '#5d7590', opacity: 0.72, foam: 0.42, ring: 1.6, stone: '#b9ae99', mouth: '#2b2a27' },
+  },
 };
 
 export interface TierSpec {
