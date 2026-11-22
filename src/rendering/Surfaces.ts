@@ -49,6 +49,12 @@ export interface DressCtx {
   model?(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy?: number, sz?: number): boolean;
   /** E23.4.4: the bloom stage a tile shows (its own, less any fade from low water nearby). Defaults to `t.bloom`. */
   bloom?(t: TileData): number;
+  /**
+   * #687: where a scattered piece of footprint radius `r` meant for (x, z) goes so it stays on the drawn ground of
+   * the tile being dressed (moved in from water and drops, never removed). Foliage added through `fb` while a tile
+   * is dressed is fitted already; this is for solid pieces. Defaults to (x, z).
+   */
+  fit?(x: number, z: number, r: number): [number, number];
 }
 
 /**
@@ -238,8 +244,9 @@ export function thrivingExtras(c: DressCtx, t: TileData, x: number, z: number, t
     const sp: FlowerSpecies = hash01(t.x, t.z, 65) < 0.35 ? 'sunflower' : 'lavender';
     for (let i = 0; i < 2; i++) clump(c, t, sp, true, x + (i - 0.5) * 0.24, z + (hash01(t.x + i, t.z, 67) - 0.5) * 0.3, top, 20 + i);
   } else {
-    const rx = x + (hash01(t.x, t.z, 69) - 0.5) * 0.4;
-    const rz = z + (hash01(t.x, t.z, 71) - 0.5) * 0.4;
+    const sx = x + (hash01(t.x, t.z, 69) - 0.5) * 0.4;
+    const sz = z + (hash01(t.x, t.z, 71) - 0.5) * 0.4;
+    const [rx, rz] = c.fit ? c.fit(sx, sz, 0.17) : [sx, sz];
     c.b.add('sphere', PALETTE.rock, [rx, top + 0.06, rz], [0.34, 0.2, 0.28]);
     c.b.add('sphere', PALETTE.rockMoss, [rx, top + 0.13, rz], [0.24, 0.07, 0.2]);
     c.fb.add(grassGeo(3, t.variant, 1), rx + 0.18, top, rz - 0.1, 0, 1.2);
@@ -382,7 +389,8 @@ export function obstacleClutter(c: DressCtx, t: TileData, x: number, z: number, 
   const kind = kit[Math.floor(hash01(t.x, t.z, 157) * kit.length)];
   if (kind === 'niche' || kind === 'pipes') return;
   const cx = hash01(t.x, t.z, 163) < 0.5 ? -1 : 1, cz = hash01(t.x, t.z, 167) < 0.5 ? -1 : 1;
-  clutter(c, kind, alive, t.variant, x + cx * 0.33, top, z + cz * 0.33, hash01(t.x, t.z, 173) * 6.28, 0.85);
+  const [px, pz] = c.fit ? c.fit(x + cx * 0.33, z + cz * 0.33, 0.15) : [x + cx * 0.33, z + cz * 0.33];
+  clutter(c, kind, alive, t.variant, px, top, pz, hash01(t.x, t.z, 173) * 6.28, 0.85);
 }
 
 // ───────────── buildings ─────────────

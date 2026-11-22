@@ -129,6 +129,7 @@ varying vec4 vTrC;
 uniform float uTrTime;
 uniform float uTrDurScale;
 uniform float uTrDetail;
+uniform vec3 uTrSea;
 uniform vec4 uTrScrub;
 uniform vec4 uTrStages;
 uniform vec3 uTrLush;
@@ -224,6 +225,8 @@ void getAlbedo() {
 		dAlbedo *= saturate(vVertexColor.rgb);
 	#endif
 	if (vTrA.z < 2.5 || vTrA.z > 3.5) return;
+	// E27.1 (#679): the open sea's day lift fades back out by night (Water.seaTintAt)
+	if (vTrC.y > 7.5) dAlbedo *= uTrSea;
 	vec3 to = dAlbedo;
 	vec2 cell = floor(vPositionW.xz + 0.0001);
 	vec2 l = vPositionW.xz - cell;

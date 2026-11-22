@@ -38,6 +38,9 @@ import { Sim } from '../gameplay/Sim';
 import { inSurge } from '../gameplay/PowerEnv';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
+import { BirdHeart } from '../rendering/BirdHeart';
+import { bloomGetsHeart, heartBox, type Rect } from '../rendering/HeartFlight';
+import { BIRD_HEART } from '../data/birdHeart';
 import { Clouds } from '../rendering/Clouds';
 import { CloudWall } from '../rendering/CloudWall';
 import { Fauna } from '../rendering/Fauna';
@@ -77,7 +80,7 @@ import { LightVisuals } from '../rendering/LightVisuals';
 import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
-import { Skyline, skylineVeil } from '../rendering/Skyline';
+import { fogMatchingSky } from '../rendering/LookShaders';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { heightAt, levelY } from '../core/Height';
@@ -115,7 +118,7 @@ import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
 import { Cozy } from '../gameplay/Cozy';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS, PLOT_WORK_TUNING } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
 import type { Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
@@ -153,6 +156,8 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const BOT_ZOOM = 3.2;
 /** E22.1: while a panel is open, these walking actions still reach the game (they close the panel they opened). */
 const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
+/** E27.2 (#680): a worked plot's art steps through this many looks as it grows back */
+const PLOT_GROWTH_STEPS = 4;
 /**
  * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
  * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
@@ -235,7 +240,6 @@ export class Game {
   private nightFindVisuals!: NightFindVisuals;
   /** E23.7.2: rain, storms, fog and wind on screen */
   private weatherVisuals!: WeatherVisuals;
-  private skyline!: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
@@ -269,6 +273,8 @@ export class Game {
   /** Look 3.16: bees, hoverflies, drifting leaves and falling blossom */
   readonly pollinators: Pollinators;
   private birds: Birds;
+  /** #689: the Great Bloom's heart of birds (built when it plays, gone when it ends) */
+  private birdHeart: BirdHeart;
   /** Puffy clouds between the camera and the city when zoomed out. */
   private clouds: Clouds;
   /** region unlocks: the wall of clouds around sealed areas */
@@ -392,9 +398,7 @@ export class Game {
     this.camera = new CameraController(this.app, this.tweens);
     // Look 4.7: the sky behind everything (its own layer, drawn first).
     this.sky = new Sky(this.app, this.scene.sun);
-    this.camera.cam.layers = [this.sky.layer.id, this.sky.clearLayer.id, ...this.camera.cam.layers];
-    // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
-    this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
+    this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
     this.look = new LookController(this.app, this.scene, this.camera);
     this.dayNight = new DayNight(this.app, this.scene, this.sky);
     this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
@@ -410,7 +414,7 @@ export class Game {
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
-    this.chunks.plots = { look: (p) => this.plotLook(p) };
+    this.chunks.plots = { look: (p) => this.plotLook(p), growth: (p) => this.plotGrowth(p) };
     this.chunks.decor = { inChunk: (cx, cz) => this.decorInChunk(cx, cz) }; // E19.2
     this.chainSummary = new ChainSummary(this.sim);
     // City 05.2: the park cheers up in stages as you restore it.
@@ -458,12 +462,12 @@ export class Game {
     this.models = models;
     models.onReady = () => {
       this.chunks.markAll();
-      this.skyline.useModels(models);
       this.machines.rebuildAll();
       this.tillers.rebuildAll();
       this.cat.rebuildAll();
     };
     this.birds = new Birds(this.scene.world);
+    this.birdHeart = new BirdHeart(this.scene.world, this.app.graphicsDevice);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
     this.cloudWall = new CloudWall(this.sim, this.scene.world, this.app.graphicsDevice, this.scene.sun.up, this.app.batcher ?? undefined);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
@@ -641,6 +645,8 @@ export class Game {
       this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
       this.sim.bus.on('buried.dug', (e) => this.hud.pickup(MATERIALS[e.material].name, e.n)); // E23.2.2.3
       this.sim.bus.on('biomass.gathered', (e) => e.by === 'bot' && this.hud.pickup(MATERIALS.biomass.name, e.got));
+      // E27.2 (#680): a plot Bloombot just picked or pruned shows it at once
+      this.sim.bus.on('plot.worked', ({ plotId }) => this.redrawPlot(plotId));
       this.sim.bus.on('planter.harvested', (e) => e.food > 0 && this.hud.pickup(MATERIALS.food.name, e.food));
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
@@ -2352,6 +2358,14 @@ export class Game {
       const verb = (occ.type === 'beehive' && (x.st(occ).ready ?? 0) >= 1) || (occ.type === 'orchard' && x.fruitReady(occ)) || (occ.type === 'mushroomLog' && (x.st(occ).ready ?? 0) >= 1) ? 'Harvest' : 'Look at';
       out.push({ kind: 'machine', id: `extra:${occ.id}`, verb, name: `the ${MACHINES[occ.type].name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.extra(occ) });
     }
+    // E27.2 (#680): a plant plot in front, ready to work: gather from it or prune it. While it grows back, Interact
+    // opens its picker as before (its look shows it was picked or cut back)
+    const work = !pile ? s.plotWork.spotFor(front) : undefined;
+    const job = work && s.plotWork.workOf(work);
+    if (work && job && s.plotWork.regrowsAt(work) === undefined) {
+      const verb = job.verb === 'prune' ? 'Prune' : 'Gather';
+      out.push({ kind: 'salvage', id: `plotwork:${work.id}`, verb, name: job.what, distance: fd, at: front, frame: { roofId: GROUND, x: work.x, z: work.z, size: work.size }, ocHold: PLOT_WORK_TUNING.holdSeconds[job.verb], refused: s.plotWork.problem(work), run: () => oc.plotHold(work) });
+    }
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
@@ -2806,8 +2820,15 @@ export class Game {
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
     if (this.sky) {
       const [r, g, b] = this.sky.hazeColour();
-      this.app.scene.fog.color.set(r, g, b, 1);
-      c.cam.clearColor = new pc.Color(r, g, b, 1);
+      // E27.1 (#679): the engine decodes the fog colour to linear, but the sky dome's colours and the clear colour go
+      // to the screen as they are, so the same haze showed darker on the fogged ground than in the sky behind it (at
+      // night 51,72,124 against 110,131,171): a hard line where the far sea met the sky. By night the fog is encoded to
+      // land on the sky's horizon colour as it is seen; by day the sky's horizon is given the haze as the fog shows it
+      // (Sky.horizonSeen), so the distance melts into the sky at any hour without paling the day's distance.
+      this.app.scene.fog.color.set(...fogMatchingSky(r, g, b, this.sky.night), 1);
+      // the clear colour shows behind the sky's dome only at its rim: the same horizon colour as the dome
+      const [sr, sg, sb] = this.sky.horizonSeen([r, g, b]);
+      c.cam.clearColor = new pc.Color(sr, sg, sb, 1);
     }
     const sun = this.scene.sun.light;
     if (sun) sun.shadowDistance = c.shadowDistance();
@@ -3557,6 +3578,55 @@ export class Game {
     return this.cozy.ready(p) ? null : undefined;
   }
 
+  /**
+   * E27.2 (#680): how grown back a worked plot is, for its art, in steps (so a chunk is rebuilt a few times as a plot
+   * grows back, not every frame). 1 for a plot that's ready, or isn't a plant.
+   */
+  private plotGrowth(p: PlotSpot): number {
+    if (!this.sim.plotWork.workOf(p)) return 1;
+    const g = this.sim.plotWork.growth(p);
+    return g >= 1 ? 1 : Math.floor(g * PLOT_GROWTH_STEPS) / PLOT_GROWTH_STEPS;
+  }
+
+  /** E27.2: the growth step each growing plot was last drawn at, by plot id */
+  private plotSteps = new Map<string, number>();
+  private plotGrowthAt = 0;
+
+  /** E27.2: every couple of seconds, redraws a growing plot whose step has moved on (and one that's grown back). */
+  private updatePlotGrowth() {
+    const now = performance.now();
+    if (now - this.plotGrowthAt < 2000) return;
+    this.plotGrowthAt = now;
+    const seen = new Set<string>();
+    for (const id of Object.keys(this.sim.state.salvage?.clipped ?? {})) {
+      const m = /^g:(-?\d+):(-?\d+)$/.exec(id);
+      const p = m ? this.sim.plotWork.spotFor({ roofId: GROUND, x: Number(m[1]), z: Number(m[2]) }) : undefined;
+      if (!p || seen.has(p.id)) continue;
+      seen.add(p.id);
+    }
+    for (const id of this.plotSteps.keys()) seen.add(id); // grown back since: drawn once more, as ready
+    for (const id of seen) {
+      const p = this.cozy.spot(id);
+      if (!p) continue;
+      const step = this.plotGrowth(p);
+      if (this.plotSteps.get(id) === step) continue;
+      const was = this.plotSteps.get(id);
+      if (step >= 1) this.plotSteps.delete(id);
+      else this.plotSteps.set(id, step);
+      if (was !== undefined || step < 1) this.redrawPlot(id);
+    }
+  }
+
+  /** E27.2: rebuilds the chunk a plot is drawn in. */
+  private redrawPlot(id: string) {
+    const p = this.cozy.spot(id);
+    if (!p) return;
+    const t = this.sim.grid.peek(GROUND, p.x, p.z);
+    if (t) this.chunks.markTile(t);
+    const step = this.plotGrowth(p);
+    if (step < 1) this.plotSteps.set(id, step);
+  }
+
   /** A plot at this cell that can be opened now (ready, or already chosen). */
   private openablePlot(roofId: string, x: number, z: number): PlotSpot | undefined {
     const p = this.cozy.spotAt(roofId, x, z);
@@ -3902,7 +3972,7 @@ export class Game {
     // E23.3.3: the only wait is the grid: off it, or (E23.6.3) on a line with no room left for one more drone at work
     const wait = lit ? 'waiting at home — not enough power on its line' : 'waiting at home — its hub has no power';
     // E23.6.3: docked until its hub has what the role runs on again
-    if (status === 'docked') return `docked — waiting for ${short === 'water' ? 'water beside the hub (a pond, canal or pipe)' : short === 'biomass' ? 'Biomass in the store, through a chest beside the hub' : 'power'}`;
+    if (status === 'docked') return `docked — waiting for ${short === 'water' ? 'water beside the hub (a pond, canal or pipe)' : short === 'biomass' ? 'Greens in the store, through a chest beside the hub' : 'power'}`;
     return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
   }
 
@@ -4411,6 +4481,8 @@ export class Game {
       this.celebrateTier(tier);
       if (tier === 1) return this.playCoreSequence();
       const t = TIERS[tier - 1];
+      // #689: the Great Bloom: once its rings have gone up, a flock flies in from both sides and makes a heart
+      if (bloomGetsHeart(t.look)) this.tweens.add(0.01, () => {}, { delay: BIRD_HEART.delay, done: () => this.playBirdHeart() });
       this.hud.toast(`⛲ ${t.name}!<small>${fountainStepNews(t)}</small>`, 'gold', 6);
       this.sfx.fanfare();
       this.save();
@@ -4655,6 +4727,37 @@ export class Game {
   }
 
   /** E21.6: a short celebration per tier: rings and sparks from the fountain, a fanfare. */
+  /**
+   * #689: the heart of birds, laid out on screen so it reads from whatever camera the bloom is seen through: a third of
+   * the screen wide, centred and as high as it goes clear of the HUD (its cards, the minimap, the prompt, the bloom
+   * message and the other toasts) and of Bloombot.
+   */
+  private playBirdHeart() {
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const cr = c.getBoundingClientRect();
+    const blockers: Rect[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('#obj, #res, #minimap, #prompt, #dock, #toasts .toast')) {
+      if (el.hidden || el.offsetParent === null) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width && r.height) blockers.push({ left: r.left - cr.left, top: r.top - cr.top, right: r.right - cr.left, bottom: r.bottom - cr.top });
+    }
+    // Bloombot: its feet to above its head, a little wider than it is
+    if (this.bot) {
+      const p = this.bot.pose;
+      const y = this.groundY(p.x, p.z);
+      const pts = [
+        [0, 0, 0],
+        [0, 1.3, 0],
+        [-0.5, 0.6, 0],
+        [0.5, 0.6, 0],
+        [0, 0.6, -0.5],
+        [0, 0.6, 0.5],
+      ].map(([dx, dy, dz]) => this.camera.cam.worldToScreen(new pc.Vec3(p.x + dx, y + dy, p.z + dz)));
+      blockers.push({ left: Math.min(...pts.map((q) => q.x)), top: Math.min(...pts.map((q) => q.y)), right: Math.max(...pts.map((q) => q.x)), bottom: Math.max(...pts.map((q) => q.y)) });
+    }
+    this.birdHeart.play(cr.width, cr.height, heartBox(cr.width, cr.height, blockers), this.settings.reducedMotion);
+  }
+
   private celebrateTier(tier: number) {
     const park = this.sim.areas.landmark(PARK);
     if (!park) return;
@@ -5039,6 +5142,7 @@ export class Game {
     this.pollinators.update(wdt, near);
     this.birds.resident = eco.has('birds');
     this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
+    this.birdHeart.update(wdt, this.camera.cam);
     this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5, fog: WEATHER[this.weatherLook().kind].fogFinds });
     this.nightFindVisuals.reducedMotion = this.settings.reducedMotion;
     this.nightFindVisuals.update(wdt);
@@ -5054,6 +5158,7 @@ export class Game {
     }
     this.updateChainPresentation(wdt);
     this.updateGuideLines();
+    this.updatePlotGrowth();
     this.updatePileGlints();
     // #627: every upgrade, move and park growth as a part (data/botParts); rebuilt only when something changes
     if (this.bot) this.bot.visuals.setGrowth(this.botGrowth());
@@ -5118,18 +5223,13 @@ export class Game {
     // owner (E23 polish): High graphics gives the ponds a soft sky reflection and a sun / moon glint; live with the setting
     // #563: night water darkens to moonlit navy on every tier
     setPoolNight(1 - this.dayNight.daylight);
+    this.transitions?.setSeaNight(1 - this.dayNight.daylight);
     if (poolReflectOn(this.gfxTier, this.deck)) {
       const sun = this.scene.sun;
       const { low, high } = this.sky.reflectColours();
       setPoolReflect(true, { low, high, toLight: sun.up, light: sun.light!.color, share: sun.light!.intensity / LOOK.sun.intensity, day: this.dayNight.light });
     } else setPoolReflect(false);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
-    this.skyline.clarity = this.sky.clarity;
-    // #635: fog and rain fade the skyline into the fog colour (the scene fog's, set in applyHaze)
-    this.skyline.veil = skylineVeil(this.weatherVisuals?.view ?? 1);
-    this.skyline.fog = this.sky.hazeColour();
-    this.skyline.reducedMotion = this.settings.reducedMotion;
-    this.skyline.update(wdt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
     {
       const c = this.camera;

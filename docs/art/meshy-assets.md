@@ -102,7 +102,7 @@ All P1 except the dish and niche (P2).
 ### Planter shells (3) (Look 3.9)
 Long stone trough, square raised bed, round pot. P1. Flowers and soil inside are procedural.
 
-### Skyline (6–8), optional (Look 4.8)
+### Skyline (6–8), optional (Look 4.8; removed in #681, models kept in `assets/raw/models/retired/`)
 Terraced tower ×3 variants, bridge span, glass dome, waterfall cliff block. P2. Waterfalls are scrolling-texture
 cards added in code.
 

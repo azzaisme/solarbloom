@@ -231,3 +231,20 @@ export function setPoolReflect(on: boolean, sky?: PoolSky) {
   m.setParameter('uPoolToLight', dir3);
   m.setParameter('uPoolLight', light3);
 }
+
+/**
+ * E27.1 (#679): the open sea and its shallows. They are slabs on the living surface (TransitionMaterial), and under the
+ * old, over-bright light (and the restored grade's extra saturation) their deep authored blues came out a bright,
+ * clear aqua by day: the look the owner approved. With the light brought down to a true sunlit level they showed as
+ * their authored dull grey-teal, so the colours (PALETTE.ground.sea and .shallows) are authored brighter now, by
+ * `SEA_LIFT` per channel (linear). By night that lift would turn the moonlit sea an electric blue, so the surface
+ * divides it back out as night falls (`uTrSea`): at deep night the sea lands exactly on the colours the approved night
+ * was tuned with.
+ */
+export const SEA_LIFT = [2.6, 2.2, 2.1] as const;
+
+/** The sea's colour multiplier at a night amount (0 day … 1 deep night): 1 by day, 1 / SEA_LIFT at deep night. */
+export function seaTintAt(n: number): [number, number, number] {
+  const k = Math.max(0, Math.min(1, n));
+  return SEA_LIFT.map((l) => 1 + (1 / l - 1) * k) as [number, number, number];
+}

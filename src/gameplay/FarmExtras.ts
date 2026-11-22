@@ -286,7 +286,7 @@ export class FarmExtras {
     const inv = this.sim.inventory;
     const item = inv.count('food') >= WORM_BIN.feedCost ? 'food' : 'biomass';
     if (!inv.pay({ [item]: WORM_BIN.feedCost })) {
-      this.sim.bus.emit('action.failed', { reason: 'Needs Food or Biomass' });
+      this.sim.bus.emit('action.failed', { reason: 'Needs Food or Greens' });
       return false;
     }
     this.write(m, { ...st, fed: (st.fed ?? 0) + WORM_BIN.feedDays });

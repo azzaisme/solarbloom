@@ -20,7 +20,7 @@ const QUICK = [
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
-  'power-grid', 'power-helpers', 'power-lights', 'moonlit-night',
+  'power-grid', 'power-helpers', 'power-lights', 'moonlit-night', 'sunlit-look',
   // E23.8: regions and the mainland
   'region-strengths', 'region-unlocks-e23',
   // E23.8.3: the mainland
@@ -50,10 +50,16 @@ const QUICK = [
   'bot-acts', 'bot-turn', 'bot-moves',
   // #631: Bloombot's colour is green
   'bot-green',
-  // #635: the skyline fades into fog and stays behind the world
-  'fog-skyline',
+  // #681: no distant skyline
+  'skyline-off',
+  // #687: nothing scattered hangs over the edge of the ground
+  'edge-plants',
+  // #689: the Great Bloom's heart of birds
+  'bird-heart',
   // #662: toasts that come together each get read; nothing lands under a Keeper's bubble
   'toast-queue',
+  // E27.2 (#680): Bloombot gathers from and prunes the plant plots
+  'plot-work',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

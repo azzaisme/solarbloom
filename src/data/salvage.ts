@@ -37,7 +37,7 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   // E23.8.3.2: steel, from the mainland's industrial ruins only
   steel: { id: 'steel', name: 'Steel', icon: '🔩', models: ['salvage-steel'], home: [], colour: '#8d9aa5', mainlandOnly: true, place: 'the industrial ruins past the causeway' },
   // E23.5.1: farm items (data/farm). Never lying in piles: gathered from restored ground, grown or composted.
-  biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
+  biomass: { id: 'biomass', name: 'Greens', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
   food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
   compost: { id: 'compost', name: 'Compost', icon: '🟫', models: [], home: [], colour: '#8a6a4a', from: 'Made in a compost bin' },
   honey: { id: 'honey', name: 'Honey', icon: '🍯', models: [], home: [], colour: '#f2b632', from: 'From beehives settled near flowers' },

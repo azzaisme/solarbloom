@@ -34,6 +34,8 @@ export class GatherSystem {
   canGather(t: TileData | undefined): t is TileData {
     if (!t || t.roofId !== GROUND) return false;
     if (t.blocked || t.occupantId) return false;
+    // E27.2 (#680): a plant plot is worked as one (PlotWork), not clipped a tile at a time
+    if (this.sim.plotWork?.spotFor(t)) return false;
     return this.yieldOf(t) > 0 && this.regrowsAt(t) === undefined;
   }
 

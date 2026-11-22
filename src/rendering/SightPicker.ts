@@ -142,7 +142,7 @@ export class SightPicker {
     const comp = this.app.scene.layers;
     return this.camera()
       .layers.map((id) => comp.getLayerById(id))
-      .filter((l): l is pc.Layer => !!l && !/^(Sky|SkyDepthClear|UI|Immediate)$/.test(l.name));
+      .filter((l): l is pc.Layer => !!l && !/^(Sky|UI|Immediate)$/.test(l.name));
   }
 
   /** Draws the pick pass from the game camera, with the see-through mask up to date. */

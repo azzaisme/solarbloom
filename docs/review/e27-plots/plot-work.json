@@ -1,0 +1,41 @@
+{
+ "strips": [
+  {
+   "option": "garden",
+   "prompt": "E Hold Gather the greens Nurture",
+   "again": "E Hold Gather the greens Nurture",
+   "got": 8
+  },
+  {
+   "option": "orchard",
+   "prompt": "E Hold Prune the fruit trees Nurture",
+   "again": "E Hold Prune the fruit trees Nurture",
+   "got": 8
+  },
+  {
+   "option": "meadow",
+   "prompt": "E Hold Gather the long grass Nurture",
+   "again": "E Hold Gather the long grass Nurture",
+   "got": 8
+  },
+  {
+   "option": "arbour",
+   "prompt": "E Hold Prune the roses Nurture",
+   "again": "E Hold Prune the roses Nurture",
+   "got": 8
+  },
+  {
+   "option": "parklet",
+   "prompt": "E Hold Prune the planters Nurture",
+   "again": "E Hold Prune the planters Your Greens stack is full: leave some in the storage at the fountain Nurture",
+   "got": 8
+  },
+  {
+   "option": "greenhouse",
+   "prompt": "E Hold Gather the seedlings Nurture",
+   "again": "E Hold Gather the seedlings Your Greens stack is full: leave some in the storage at the fountain Nurture",
+   "got": 8
+  }
+ ],
+ "notes": []
+}
