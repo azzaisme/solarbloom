@@ -77,7 +77,6 @@ import { LightVisuals } from '../rendering/LightVisuals';
 import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
-import { Skyline, skylineVeil } from '../rendering/Skyline';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { heightAt, levelY } from '../core/Height';
@@ -235,7 +234,6 @@ export class Game {
   private nightFindVisuals!: NightFindVisuals;
   /** E23.7.2: rain, storms, fog and wind on screen */
   private weatherVisuals!: WeatherVisuals;
-  private skyline!: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
@@ -392,9 +390,7 @@ export class Game {
     this.camera = new CameraController(this.app, this.tweens);
     // Look 4.7: the sky behind everything (its own layer, drawn first).
     this.sky = new Sky(this.app, this.scene.sun);
-    this.camera.cam.layers = [this.sky.layer.id, this.sky.clearLayer.id, ...this.camera.cam.layers];
-    // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
-    this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
+    this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
     this.look = new LookController(this.app, this.scene, this.camera);
     this.dayNight = new DayNight(this.app, this.scene, this.sky);
     this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
@@ -458,7 +454,6 @@ export class Game {
     this.models = models;
     models.onReady = () => {
       this.chunks.markAll();
-      this.skyline.useModels(models);
       this.machines.rebuildAll();
       this.tillers.rebuildAll();
       this.cat.rebuildAll();
@@ -5124,12 +5119,6 @@ export class Game {
       setPoolReflect(true, { low, high, toLight: sun.up, light: sun.light!.color, share: sun.light!.intensity / LOOK.sun.intensity, day: this.dayNight.light });
     } else setPoolReflect(false);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
-    this.skyline.clarity = this.sky.clarity;
-    // #635: fog and rain fade the skyline into the fog colour (the scene fog's, set in applyHaze)
-    this.skyline.veil = skylineVeil(this.weatherVisuals?.view ?? 1);
-    this.skyline.fog = this.sky.hazeColour();
-    this.skyline.reducedMotion = this.settings.reducedMotion;
-    this.skyline.update(wdt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
     {
       const c = this.camera;
