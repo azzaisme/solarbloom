@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { LOOK } from '../src/data/look';
 import { waterDistance } from '../src/rendering/ChunkRenderer';
 import { obliqueClip } from '../src/rendering/WaterReflection';
-import { WATER_CLARITY, WATER_ENC, encodeWater, setWaterFrame, waterColourAt, waterFade, waterFresnel, waterMaterial, waterReflectOn } from '../src/rendering/WaterSurface';
+import { readFileSync } from 'node:fs';
+import { SWELL_ANCHOR, WATER_CLARITY, WATER_ENC, encodeWater, setWaterFrame, waterColourAt, waterFade, waterFresnel, waterMaterial, waterReflectOn, waterSwell } from '../src/rendering/WaterSurface';
 
 /**
  * E28.W01 (#694): one water surface for the sea, its shallows, the surf and restored pools. Turquoise by the shore,
@@ -71,13 +72,17 @@ describe('water look values', () => {
     expect(W.reflectTint).toBeLessThanOrEqual(0.6); // a cast, not a recolour: the reflection still shows what it reflects
   });
 
-  it('far ripples fade before they are a few pixels long, and their variance roughens the highlight (no pixel sparkle)', () => {
+  it('far ripples fade only once they are truly too fine to draw, and their variance roughens the highlight (no pixel sparkle)', () => {
     const A = W.antiAlias;
     expect(A.variance).toBeGreaterThan(0);
-    // fading starts while a wave is still well over a dozen pixels long and is done before it's a few
-    expect(A.fadeFrom).toBeGreaterThanOrEqual(12);
-    expect(A.fadeTo).toBeGreaterThanOrEqual(4);
+    // a wave keeps its shape until it's only a few pixels long (so the mid and far sea still read as waves), and is
+    // gone before it's down to the two pixels where it could only shimmer
+    expect(A.fadeFrom).toBeGreaterThanOrEqual(4);
+    expect(A.fadeFrom).toBeLessThanOrEqual(8);
+    expect(A.fadeTo).toBeGreaterThanOrEqual(2);
     expect(A.fadeTo).toBeLessThan(A.fadeFrom);
+    // a narrow window: each band drops out on its own rather than all of them smearing together
+    expect(A.fadeFrom / A.fadeTo).toBeLessThanOrEqual(2.5);
     // the shader gets them as fractions of a wavelength per pixel
     const aa = (waterMaterial().getParameter('uWaterAA') as { data?: number[] } | undefined)?.data as number[];
     expect(aa[0]).toBe(A.variance);
@@ -104,6 +109,39 @@ describe('water look values', () => {
     expect(W.reflect.every).toBeLessThanOrEqual(2); // any staler and the reflection would trail the camera
     expect(W.nightAlbedo).toBeGreaterThan(0.3);
     expect(W.nightAlbedo).toBeLessThan(1);
+  });
+
+  it('the swell is gentle and slow, and long next to the ripples', () => {
+    const S = W.swell;
+    expect(S.height).toBeGreaterThan(0);
+    expect(S.height * 3.2).toBeLessThanOrEqual(0.1); // its highest crest stays a tenth of a tile: a swell, not a storm
+    expect(S.length).toBeGreaterThanOrEqual(4 * W.ripple.scale);
+    expect(S.speed).toBeGreaterThan(0);
+    expect(S.speed).toBeLessThan(1);
+    expect(S.shore).toBeGreaterThan(0.3); // it eases in from land, never starting at the bank
+  });
+
+  it('crests are lighter than troughs, within a calm range, and only the very tops are capped', () => {
+    const C = W.crest;
+    expect(C.trough).toBeGreaterThanOrEqual(0.75);
+    expect(C.trough).toBeLessThan(1);
+    expect(C.crest).toBeGreaterThan(1);
+    expect(C.crest).toBeLessThanOrEqual(1.2);
+    expect(C.cap).toBeGreaterThan(0.5);
+    expect(C.cap).toBeLessThan(1);
+  });
+
+  it('glints are crisp shapes near a perfect mirror, on the upper part of a wave', () => {
+    const G = W.glint;
+    expect(G.cut).toBeGreaterThan(0.9);
+    expect(G.cut).toBeLessThan(1);
+    expect(G.soft).toBeGreaterThan(0);
+    expect(G.soft).toBeLessThan(0.02); // a crisp edge (the shader widens it by what changes across a pixel)
+    expect(G.cut + G.soft).toBeLessThan(1); // so a glint has an inside, not just an edge
+    expect(G.strength).toBeGreaterThan(0);
+    expect(G.strength).toBeLessThanOrEqual(2);
+    expect(G.crest).toBeGreaterThanOrEqual(-1);
+    expect(G.crest).toBeLessThan(1);
   });
 
   it('the planar reflection is High only, and never on the Steam Deck preset (was water-reflect)', () => {
@@ -142,6 +180,39 @@ describe('water colour and Fresnel', () => {
     expect(F.max).toBeLessThan(1);
     // the follow camera looks down about 35–50°: the water there mostly shows its own colour
     expect(waterFresnel(Math.sin((40 * Math.PI) / 180))).toBeLessThan(0.15);
+  });
+});
+
+describe('the swell', () => {
+  it('only ever lifts the surface (the bed never shows through a trough)', () => {
+    for (let i = 0; i < 400; i++) {
+      const x = (i * 7.31) % 61;
+      const z = (i * 3.17) % 47;
+      expect(waterSwell(x, z, i * 0.37, 8)).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('is still at the shore and under the jetty, and full height out at sea', () => {
+    for (const t of [0, 3.3, 17]) {
+      expect(waterSwell(4.2, 9.1, t, 0)).toBe(0);
+      expect(waterSwell(4.2, 9.1, t, 0.3)).toBe(0);
+    }
+    let max = 0;
+    for (let i = 0; i < 400; i++) max = Math.max(max, waterSwell(i * 0.31, i * 0.17, i * 0.5, 8));
+    expect(max).toBeGreaterThan(LOOK.water.swell.height * 2);
+    expect(max).toBeLessThanOrEqual(LOOK.water.swell.height * 3.2 + 1e-9);
+  });
+
+  it('moves slowly: a point rises and falls over seconds, not frames', () => {
+    // its biggest change across one frame at 60 fps is a sliver of its height
+    let step = 0;
+    for (let i = 0; i < 200; i++) step = Math.max(step, Math.abs(waterSwell(3, 5, i / 60 + 1 / 60, 8) - waterSwell(3, 5, i / 60, 8)));
+    expect(step).toBeLessThan(LOOK.water.swell.height * 0.05);
+  });
+
+  it("hooks into a line the engine's vertex transform still has", () => {
+    const src = readFileSync(new URL('../node_modules/playcanvas/build/playcanvas.mjs', import.meta.url), 'utf8');
+    expect(src.includes(SWELL_ANCHOR)).toBe(true);
   });
 });
 
@@ -257,6 +328,26 @@ describe('water material', () => {
     expect(param('uWaterSkyLow')[2]).toBeCloseTo(Math.pow(0.3, 2.2), 5);
     setWaterFrame({ time: 1, cam: { x: 0, y: 5, z: 0 }, night: 0, skyLow: [0.9, 0.9, 0.85], skyHigh: [0.5, 0.7, 0.95] });
     expect(param('uWaterRefl')[0]).toBe(0);
+  });
+
+  it('hands the shader the look values for the swell, the crests and the glints', () => {
+    const W = LOOK.water;
+    expect(param('uWaterSwell')).toEqual([W.swell.height, W.swell.length, W.swell.speed, W.swell.shore]);
+    expect(param('uWaterCrest')).toEqual([W.crest.trough, W.crest.crest, W.crest.cap]);
+    expect(param('uWaterGlint')).toEqual([W.glint.cut, W.glint.soft, W.glint.strength, W.glint.crest]);
+  });
+
+  it("glints take the sun's or moon's direction and colour, in linear, scaled by its share of full light", () => {
+    const frame = { time: 1, cam: { x: 0, y: 5, z: 0 }, night: 0, skyLow: [0.5, 0.5, 0.6] as [number, number, number], skyHigh: [0.3, 0.4, 0.7] as [number, number, number] };
+    setWaterFrame({ ...frame, light: { toLight: new pc.Vec3(0.6, 0.8, 0), color: new pc.Color(1, 0.8, 0.5), share: 0.5 } });
+    expect(Array.from(param('uWaterLightDir'))).toEqual([expect.closeTo(0.6, 6), expect.closeTo(0.8, 6), 0]);
+    const col = Array.from(param('uWaterLightCol'));
+    expect(col[0]).toBeCloseTo(0.5, 6);
+    expect(col[1]).toBeCloseTo(Math.pow(0.8, 2.2) * 0.5, 6);
+    expect(col[2]).toBeCloseTo(Math.pow(0.5, 2.2) * 0.5, 6);
+    // no light given: no glints
+    setWaterFrame(frame);
+    expect(Array.from(param('uWaterLightCol'))).toEqual([0, 0, 0]);
   });
 
   it('by day the water is untouched by the night; dusk sits in between; night needs no tier (was water-night)', () => {

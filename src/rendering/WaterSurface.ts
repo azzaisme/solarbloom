@@ -56,13 +56,15 @@ export function waterReflectOn(tier: keyof typeof LOOK.tiers, deck: boolean): bo
   return !!LOOK.tiers[tier]?.waterReflect && !deck;
 }
 
+/** GLSL's smoothstep */
+function ss(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
 /** The water's colour by depth (linear), as the shader mixes it before bed, foam and light (tests and tuning). */
 export function waterColourAt(dist: number): [number, number, number] {
   const W = LOOK.water;
-  const ss = (a: number, b: number, x: number) => {
-    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-    return t * t * (3 - 2 * t);
-  };
   const s = lin3(W.shallow);
   const m = lin3(W.mid);
   const d = lin3(W.deep);
@@ -85,6 +87,38 @@ function lin3(hex: string): [number, number, number] {
   const c = new pc.Color().fromString(hex);
   return [Math.pow(c.r, 2.2), Math.pow(c.g, 2.2), Math.pow(c.b, 2.2)];
 }
+
+/**
+ * The slow swell: two long, slow waves that only ever lift the surface (so the slab under it never shows), easing
+ * off toward land so the waterline at the shore and under the jetty stays put. Returns height and slope (x: height,
+ * yz: d height / d xz). Shared by the vertex shader (the lift) and the fragment shader (the light it catches).
+ * This is its height, as the shader works it out (for tests).
+ */
+export function waterSwell(x: number, z: number, t: number, dist: number): number {
+  const S = LOOK.water.swell;
+  const A = S.height * ss(0.3, S.shore, dist);
+  const k = (2 * Math.PI) / Math.max(S.length, 0.5);
+  const p1 = (0.89 * x + 0.45 * z) * k + t * S.speed * k;
+  const p2 = (-0.36 * x + 0.93 * z) * k * 1.37 + t * S.speed * k * 1.21 + 1.7;
+  return A * (1.6 + Math.sin(p1) + 0.6 * Math.sin(p2));
+}
+
+/** The line in the engine's own vertex transform after which the swell lifts the surface. */
+export const SWELL_ANCHOR = 'vec4 posW = modelMatrix * vec4(localPos, 1.0);';
+
+const SWELL_GLSL = /* glsl */ `
+vec3 sbSwell(vec2 p, float t, float dist) {
+	float A = uWaterSwell.x * smoothstep(0.3, uWaterSwell.w, dist);
+	float k = 6.2831853 / max(uWaterSwell.y, 0.5);
+	vec2 d1 = vec2(0.89, 0.45);
+	vec2 d2 = vec2(-0.36, 0.93);
+	float p1 = dot(d1, p) * k + t * uWaterSwell.z * k;
+	float p2 = dot(d2, p) * k * 1.37 + t * uWaterSwell.z * k * 1.21 + 1.7;
+	float h = A * (1.6 + sin(p1) + 0.6 * sin(p2));
+	vec2 s = A * (d1 * k * cos(p1) + d2 * (0.6 * k * 1.37) * cos(p2));
+	return vec3(h, -s);
+}
+`;
 
 const WATER_COMMON = /* glsl */ `
 uniform float uWaterTime;
@@ -115,6 +149,12 @@ vec3 wNormal;
 vec3 wEmit;
 float wFoam;
 float wGloss;
+float wHeight;
+uniform vec4 uWaterSwell;  // height, wave length, speed, how far from shore it reaches full height
+uniform vec3 uWaterCrest;  // trough shade, crest shade, crest cap
+uniform vec4 uWaterGlint;  // cut, softness, strength, on crests from
+uniform vec3 uWaterLightDir;  // toward the sun (or moon)
+uniform vec3 uWaterLightCol;  // its colour × strength (linear)
 uniform vec4 uWaterAA;    // variance gain, wave fade start, wave fade end (pixels per wavelength as 1/x)
 float sbWaterHash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -125,13 +165,16 @@ float sbWaterNoise(vec2 p) {
 	vec2 u = f * f * (3.0 - 2.0 * f);
 	return mix(mix(sbWaterHash(i), sbWaterHash(i + vec2(1.0, 0.0)), u.x), mix(sbWaterHash(i + vec2(0.0, 1.0)), sbWaterHash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
-// one drifting wave's slope (d height / d xz), faded out where it would be finer than a few pixels
-vec2 sbWave(vec2 p, vec2 dir, float len, float speed, float amp, float t, float px) {
+// one drifting wave's slope (d height / d xz), and its height added to h. A band fades out on its own once it's
+// truly sub-pixel (a narrow window, so bands drop one at a time instead of smearing together)
+vec2 sbWave(vec2 p, vec2 dir, float len, float speed, float amp, float t, float px, inout float h) {
 	float k = 6.2831853 / len;
-	// gone before a wave is a few pixels long: finer than that it only shimmers in single pixels
 	float fade = 1.0 - smoothstep(uWaterAA.y, uWaterAA.z, px * k / 6.2831853);
-	return dir * (k * amp * cos(dot(dir, p) * k + t * speed * k) * fade);
+	float ph = dot(dir, p) * k + t * speed * k;
+	h += amp * sin(ph) * fade;
+	return dir * (k * amp * cos(ph) * fade);
 }
+${SWELL_GLSL}
 // light nets on the bed (as the old pool's caustics)
 float sbWaterCaustic(vec2 p, float t) {
 	// continuous (no wrap): a wrapped pattern leaves a seam at every period
@@ -170,12 +213,16 @@ void sbWaterSetup() {
 	float sp = uWaterRipple.y;
 	vec2 pw = p + 0.45 * sc * vec2(sbWaterNoise(p * 0.45 + vec2(t * 0.03, 0.0)) - 0.5, sbWaterNoise(p * 0.45 + vec2(7.3, -t * 0.025)) - 0.5);
 	vec2 g = vec2(0.0);
-	g += sbWave(pw, normalize(vec2(1.0, 0.35)), 1.00 * sc, 0.9 * sp, 0.060, t, px);
-	g += sbWave(pw, normalize(vec2(-0.45, 1.0)), 0.71 * sc, 0.8 * sp, 0.040, t, px);
-	g += sbWave(pw, normalize(vec2(0.8, -0.6)), 0.47 * sc, 1.1 * sp, 0.026, t, px);
-	g += sbWave(pw, normalize(vec2(-1.0, -0.2)), 0.31 * sc, 1.3 * sp, 0.016, t, px) * (0.5 + uWaterRipple.w);
-	g += sbWave(pw, normalize(vec2(0.25, 1.0)), 0.19 * sc, 1.6 * sp, 0.010, t, px) * uWaterRipple.w * 1.6;
-	g += sbWave(pw, normalize(vec2(0.95, 0.3)), 0.12 * sc, 1.9 * sp, 0.006, t, px) * uWaterRipple.w * 1.6;
+	float h = 0.0;
+	float hf = 0.0;
+	g += sbWave(pw, normalize(vec2(1.0, 0.35)), 1.00 * sc, 0.9 * sp, 0.060, t, px, h);
+	g += sbWave(pw, normalize(vec2(-0.45, 1.0)), 0.71 * sc, 0.8 * sp, 0.040, t, px, h);
+	g += sbWave(pw, normalize(vec2(0.8, -0.6)), 0.47 * sc, 1.1 * sp, 0.026, t, px, h);
+	g += sbWave(pw, normalize(vec2(-1.0, -0.2)), 0.31 * sc, 1.3 * sp, 0.016, t, px, hf) * (0.5 + uWaterRipple.w);
+	g += sbWave(pw, normalize(vec2(0.25, 1.0)), 0.19 * sc, 1.6 * sp, 0.010, t, px, hf) * uWaterRipple.w * 1.6;
+	g += sbWave(pw, normalize(vec2(0.95, 0.3)), 0.12 * sc, 1.9 * sp, 0.006, t, px, hf) * uWaterRipple.w * 1.6;
+	// the wave's height, -1 trough … 1 crest (the big bands, a touch of the fine ones)
+	wHeight = clamp((h + hf * 0.5) / 0.09, -1.0, 1.0);
 	// ── waves that follow the shore and the outline of anything in the water, travelling in toward it ──
 	vec2 dd = vec2(dFdx(dist), dFdy(dist));
 	vec2 jx = dFdx(p);
@@ -184,10 +231,14 @@ void sbWaterSetup() {
 	vec2 gd = abs(det) > 1e-8 ? vec2(dd.x * jy.y - dd.y * jx.y, dd.y * jx.x - dd.x * jy.x) / det : vec2(0.0);
 	float lapK = 6.2831853 / max(uWaterLap.y, 0.05);
 	float near = 1.0 - smoothstep(0.0, uWaterLap.x, dist);
-	float lapFade = 1.0 - smoothstep(uWaterAA.y, uWaterAA.z, px * lapK / 6.2831853);
+	// (these fade early, from 20 pixels a wave down to 7: their direction comes from the distance field, which is
+	// flat across each mesh cell, so far away they'd show the cells as steps)
+	float lapFade = 1.0 - smoothstep(0.05, 0.14, px * lapK / 6.2831853);
 	g += gd * (cos(dist * lapK + t * uWaterLap.z * lapK) * lapK * 0.02 * uWaterLap.w * near * lapFade);
 	// murky water lies flatter
 	g *= uWaterRipple.z * mix(0.6, 1.0, clarity) * 7.0;
+	// the slow swell's slope (the vertex shader lifts the surface by the same swell)
+	g += sbSwell(p, t, dist).yz;
 	wNormal = normalize(vec3(-g.x, 1.0, -g.y));
 	// specular anti-aliasing (Kaplanyan / Toksvig): how much the normal varies within a pixel widens the highlight,
 	// so ripples too fine to draw merge into a soft sun or moon path instead of crawling single-pixel specks
@@ -198,6 +249,12 @@ void sbWaterSetup() {
 	// ── colour by depth: turquoise by the shore, deep blue-teal far out ──
 	vec3 c = mix(uWaterShallow, uWaterMid, smoothstep(0.0, uWaterDepth.x, dist));
 	c = mix(c, uWaterDeep, smoothstep(uWaterDepth.x, uWaterDepth.y, dist));
+	// ── wave definition: troughs a shade darker, crests lighter, the very tops a pale cap (filtered: its edge is
+	// as wide as the height changes across a pixel, so far away it softens instead of flickering) ──
+	float hw = fwidth(wHeight) + 0.04;
+	c *= mix(uWaterCrest.x, uWaterCrest.y, smoothstep(-0.8, 0.9, wHeight));
+	float cap = smoothstep(uWaterCrest.z - hw, uWaterCrest.z + hw, wHeight) * (1.0 - smoothstep(0.25, 0.6, hw));
+	c = mix(c, mix(c, uWaterFoam, 0.22), cap * clarity);
 	// the sand bed, and light nets on it, through the clear shallows (shifted by the ripples)
 	float bedK = (1.0 - smoothstep(0.0, uWaterDepth.z, dist)) * uWaterDepth.w * clarity;
 	// two layers at different scales and angles, so the nets never line up into a grid; only where the bed shows
@@ -231,7 +288,7 @@ void sbWaterSetup() {
 	vec3 R = reflect(-V, wNormal);
 	vec3 refl = mix(uWaterSkyLow, uWaterSkyHigh, smoothstep(0.0, 0.6, R.y)) * uWaterFres.w;
 	// only water lying on the reflected plane (the sea and the surf) shows it; a pool on another terrace keeps the sky
-	float onPlane = 1.0 - smoothstep(0.02, 0.1, abs(vPositionW.y - uWaterRefl.z));
+	float onPlane = 1.0 - smoothstep(0.02, 0.1, abs(vPositionW.y - sbSwell(p, t, dist).x - uWaterRefl.z));
 	if (uWaterRefl.x * onPlane > 0.0) {
 		vec4 q = uWaterReflectVP * vec4(vPositionW + vec3(wNormal.x, 0.0, wNormal.z) * uWaterRefl.y, 1.0);
 		vec2 uv = clamp(q.xy / q.w * 0.5 + 0.5, vec2(0.001), vec2(0.999));
@@ -246,6 +303,16 @@ void sbWaterSetup() {
 	vec3 hue = c / max(max(c.r, max(c.g, c.b)), 1e-4);
 	refl *= mix(vec3(1.0), hue, uWaterReflTint);
 	wEmit = dAlbedo * uWaterSkyHigh * uWaterAmbient + refl * F;
+	// ── stylised glints: crisp shapes where a crest turns the sun (or moon) toward the eye. Their edge is as wide as
+	// the reflection changes across a pixel, and where that's too fast to draw cleanly they hand over to the soft
+	// highlight: shapes, never single-pixel specks ──
+	float sl = dot(R, uWaterLightDir);
+	float fw = fwidth(sl);
+	float glint = smoothstep(uWaterGlint.x - uWaterGlint.y - fw, uWaterGlint.x + uWaterGlint.y + fw, sl);
+	glint *= smoothstep(uWaterGlint.w - 0.25, uWaterGlint.w + 0.25, wHeight) * (1.0 - smoothstep(0.006, 0.02, fw));
+	// and only where the big waves span enough pixels (over about 30 a wave) for a glint to be a shape, not a speck
+	glint *= 1.0 - smoothstep(0.025, 0.045, px / uWaterRipple.x);
+	wEmit += uWaterLightCol * glint * uWaterGlint.z * (1.0 - wFoam) * smoothstep(0.0, 0.1, uWaterLightDir.y);
 }
 `;
 
@@ -323,6 +390,18 @@ export function waterMaterial(device?: pc.GraphicsDevice): pc.StandardMaterial {
       chunks.set('normalMapPS', WATER_NORMAL_PS);
       chunks.set('glossPS', WATER_GLOSS_PS);
       chunks.set('emissivePS', WATER_EMISSIVE_PS);
+      // the slow swell lifts the surface in the vertex shader (the engine's own transform, with one line added)
+      const transform = pc.ShaderChunks.get(device, pc.SHADERLANGUAGE_GLSL).get('transformVS');
+      const anchor = SWELL_ANCHOR;
+      if (transform?.includes(anchor))
+        chunks.set(
+          'transformVS',
+          `uniform float uWaterTime;\nuniform vec4 uWaterSwell;\n${SWELL_GLSL}\n` +
+            transform.replace(
+              anchor,
+              `${anchor}\n\t#ifdef VERTEX_COLOR\n\t\tposW.y += sbSwell(posW.xz, uWaterTime, vertex_color.r * ${WATER_ENC.toFixed(1)}).x;\n\t#endif`,
+            ),
+        );
       // a 1×1 placeholder until (and unless) the planar reflection runs
       reflectTex = new pc.Texture(device, { width: 1, height: 1, format: pc.PIXELFORMAT_RGBA8, mipmaps: false, name: 'water-reflect-none' });
       // a white 1×1 AO map (no effect) only so the shader gets uv0, which carries a restore's fade window
@@ -365,6 +444,9 @@ export function applyWaterLook() {
   m.setParameter('uWaterFoamL', [W.foamLine.reach, W.foamLine.lines, W.foamLine.speed, W.foamLine.strength]);
   m.setParameter('uWaterShore', 1 - LOOK.shore.waterPull);
   m.setParameter('uWaterFres', [W.fresnel.base, W.fresnel.power, W.fresnel.max, W.sky]);
+  m.setParameter('uWaterSwell', [W.swell.height, W.swell.length, W.swell.speed, W.swell.shore]);
+  m.setParameter('uWaterCrest', [W.crest.trough, W.crest.crest, W.crest.cap]);
+  m.setParameter('uWaterGlint', [W.glint.cut, W.glint.soft, W.glint.strength, W.glint.crest]);
   m.setParameter('uWaterAA', [W.antiAlias.variance, 1 / W.antiAlias.fadeFrom, 1 / W.antiAlias.fadeTo, 0]);
   m.specular = new pc.Color(W.specular, W.specular, W.specular);
   m.update();
@@ -382,11 +464,15 @@ export interface WaterFrame {
   skyHigh: readonly [number, number, number];
   /** the transition clock (TransitionRenderer.time), for restores' clarity fades */
   trTime?: number;
+  /** the sun (or moon): toward it, its colour (0–1) and its strength as a share of the noon sun */
+  light?: { toLight: { x: number; y: number; z: number }; color: { r: number; g: number; b: number }; share: number };
   /** the planar reflection this frame (High), or none */
   reflect?: { tex: pc.Texture; viewProj: pc.Mat4; planeY: number };
 }
 
 const cam3 = new Float32Array(3);
+const light3 = new Float32Array(3);
+const lcol3 = new Float32Array(3);
 const low3 = new Float32Array(3);
 const high3 = new Float32Array(3);
 const lin = (c: number) => Math.pow(Math.max(0, c), 2.2);
@@ -398,6 +484,16 @@ export function setWaterFrame(f: WaterFrame) {
   const W = LOOK.water;
   m.setParameter('uWaterTime', f.time);
   m.setParameter('uWaterTrTime', f.trTime ?? 0);
+  const L = f.light;
+  light3[0] = L?.toLight.x ?? 0;
+  light3[1] = L?.toLight.y ?? 1;
+  light3[2] = L?.toLight.z ?? 0;
+  m.setParameter('uWaterLightDir', light3);
+  const k = Math.max(0, L?.share ?? 0);
+  lcol3[0] = lin(L?.color.r ?? 1) * k;
+  lcol3[1] = lin(L?.color.g ?? 1) * k;
+  lcol3[2] = lin(L?.color.b ?? 1) * k;
+  m.setParameter('uWaterLightCol', lcol3);
   cam3[0] = f.cam.x;
   cam3[1] = f.cam.y;
   cam3[2] = f.cam.z;

@@ -2869,6 +2869,7 @@ export class Game {
       night: 1 - this.dayNight.daylight,
       skyLow: low,
       skyHigh: high,
+      light: { toLight: this.scene.sun.up, color: this.scene.sun.light!.color, share: this.scene.sun.light!.intensity / LOOK.sun.intensity },
       reflect: tex && seaY !== undefined ? { tex, viewProj: this.waterReflection!.drawnViewProj, planeY: seaY } : undefined,
     });
   }

@@ -11,6 +11,7 @@
 //   TAG=before     name the shots (default: after)
 //   ONLY=day,night just these times;   SPOTS=sea,overview just these spots;   NOPERF=1 skip the measure
 //   NOREFLECT=1    the High-tier planar reflection off (to measure what it costs on its own)
+//   STRIP=1        also 6 frames 0.25 s apart after each shot (`…-f0.png` …), for motion strips and GIFs
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { preview } from 'vite';
@@ -22,7 +23,7 @@ const TAG = process.env.TAG ?? 'after';
 const ALL = { day: 0.3, golden: 0.6, night: 0.83 };
 const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries(ALL).filter(([k]) => process.env.ONLY.split(',').includes(k))) : ALL;
 const SPOTS = (process.env.SPOTS ?? 'sea,shore,overview').split(',');
-const server = await preview({ preview: { port: 4244, strictPort: true }, logLevel: 'silent' });
+const server = await preview({ build: { outDir: process.env.DIST ?? 'dist' }, preview: { port: 4244, strictPort: true }, logLevel: 'silent' });
 const gpu = ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--disable-frame-rate-limit'];
 const browser = await chromium.launch({ args: process.env.GPU ? gpu : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failed = false;
@@ -106,6 +107,11 @@ try {
       const file = `${dir}/${TAG}-${name}-${spot}.png`;
       await page.screenshot({ path: file });
       console.log(`  ${file}`);
+      if (process.env.STRIP)
+        for (let i = 0; i < 6; i++) {
+          await page.screenshot({ path: `${dir}/${TAG}-${name}-${spot}-f${i}.png` });
+          await page.waitForTimeout(250);
+        }
     }
   }
   if (!process.env.NOPERF) {

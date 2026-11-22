@@ -207,7 +207,19 @@ export const LOOK = {
      * they only shimmer in single pixels), and the normal's variance within a pixel roughens the highlight by
      * `variance`, so far glints merge into a soft sun or moon path (specular anti-aliasing)
      */
-    antiAlias: { variance: 5, fadeFrom: 20, fadeTo: 7 },
+    antiAlias: { variance: 3, fadeFrom: 5, fadeTo: 2.5 },
+    /**
+     * A slow swell in the surface itself: `height` (tiles) of two long waves `length` tiles apart drifting at `speed`,
+     * reaching full height `shore` tiles from land (the waterline at the shore and under the jetty stays put)
+     */
+    swell: { height: 0.022, length: 9, speed: 0.35, shore: 2.5 },
+    /** wave definition: troughs and crests shaded by these, the very tops (above `cap`, -1 … 1) a pale cap */
+    crest: { trough: 0.84, crest: 1.12, cap: 0.82 },
+    /**
+     * Stylised glints: crisp shapes where a crest turns the sun or moon toward the eye. `cut` (how close to a perfect
+     * mirror, as a cosine), `soft` (edge), `strength`, and from how high up a wave (-1 … 1) they show
+     */
+    glint: { cut: 0.975, soft: 0.006, strength: 1.4, crest: 0.2 },
     specular: 0.18,
     /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */
     fresnel: { base: 0.04, power: 5, max: 0.6 },
