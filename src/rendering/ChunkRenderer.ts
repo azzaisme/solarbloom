@@ -74,16 +74,38 @@ export function waterDistance(px: number, pz: number, land: ShoreLand[]): number
       }
     }
     // E28.W02: natural ground carries on as a shelf and slopes into the water as a bank, so the water starts further
-    // out, by the shelf and the slope at the nearest point of the shore (the same noise the bank is built from)
-    if (L.shore && e < 2) {
+    // out, by the shelf and the slope at the nearest point of the shore (the same noise the bank is built from).
+    // The pull eases off between BANK_PULL_FULL and BANK_PULL_END tiles out rather than stopping dead: a hard stop
+    // made a step in the distance (and so in the water's colour and shore waves) all round every bank
+    if (L.shore && e < BANK_PULL_END) {
       const cx = Math.min(L.x + 1, Math.max(L.x, px));
       const cz = Math.min(L.z + 1, Math.max(L.z, pz));
       const room = L.room && e > 1e-9 ? L.room(cx, cz, (px - cx) / e, (pz - cz) / e) : Infinity;
-      e = Math.max(0, e - waterlineAt(cx, cz, L.shore === 'beach', room));
+      e = Math.max(0, e - waterlineAt(cx, cz, L.shore === 'beach', room) * bankPullShare(e));
     }
     if (e < d) d = e;
   }
   return d;
+}
+
+/**
+ * How much of a bank's pull applies at a raw distance `e` from its land tile: all of it up to BANK_PULL_FULL, easing to
+ * none at BANK_PULL_END. The ease is gentle enough that the pulled distance still only ever grows away from land (a
+ * bank pulls at most a tile: its slope is at least 1 - 0.75 × 0.95).
+ */
+export const BANK_PULL_FULL = 1;
+export const BANK_PULL_END = 3;
+export function bankPullShare(e: number): number {
+  const k = Math.min(1, Math.max(0, (e - BANK_PULL_FULL) / (BANK_PULL_END - BANK_PULL_FULL)));
+  return 1 - k * k * (3 - 2 * k);
+}
+
+/**
+ * How far (tiles) a water tile looks for land, and so the most any water vertex's distance to land reads: land beyond
+ * it is at least that far from every point of the tile, so capping there keeps every tile sharing a point in agreement.
+ */
+export function waterReach(): number {
+  return Math.max(BANK_PULL_END, Math.ceil(Math.min(WATER_ENC, LOOK.water.deepAt + 1)));
 }
 
 /** E28.W02: the same land with no banks (for how far the banks pulled the water's edge out). */
@@ -1560,6 +1582,10 @@ export class ChunkRenderer {
     const s = this.sim;
     const c = s.grid.chunkAt(GROUND, v.cx, v.cz);
     if (!c) return;
+    // the chunks round this one, generated if they aren't yet: the water's distance to land, its banks and its
+    // clarity all look past the chunk's edge, and a neighbour that didn't exist yet would read as open water (and
+    // nothing rebuilds this chunk once it does), so the water would step at the border. Generating only loads tiles.
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (dx || dz) s.grid.chunkAt(GROUND, v.cx + dx, v.cz + dz);
     const b = new MeshBuilder();
     const fb = new FoliageBuilder();
     const towers: Tower[] = [];
@@ -1695,7 +1721,9 @@ export class ChunkRenderer {
       // a pond that holds any), on its own layer. Always, even mid-transition: nothing rebuilds the chunk when a
       // transition ends, so a tile skipped now would keep its bare slab (restored surf clears in one step)
       const ws = fog === 'hidden' ? undefined : this.waterState(t);
-      if (ws) this.waterSurface(pool, t, th, ws, v.far ? 1 : WATER.grid);
+      // the same grid near and far: a coarser far chunk would meet its near neighbour in T-junctions, its colours and
+      // swell interpolated differently along the shared edge (a seam at every chunk border)
+      if (ws) this.waterSurface(pool, t, th, ws, WATER.grid);
       // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
       // (not the jetty: its tiles are paving underneath, but its wooden deck is the model's)
       const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !this.overWater(t) ? this.paintedGround(t) : undefined;
@@ -2221,14 +2249,18 @@ export class ChunkRenderer {
       // E28.W01: the water's surface carries on into the corner, right up to the rounded bank
       const st = this.fog !== 'hidden' ? this.waterState(n) : undefined;
       if (st) {
-        const land = this.landAround(n, 1);
+        // the same distance search, cap and per-point clarity as the water tiles' own surface, so the two agree
+        // wherever they meet
+        const reach = waterReach();
+        const land = this.landAround(n, reach);
         const plain = bare(land);
         const base = pool.pos.length / 3;
         for (const [px, pz] of sq) {
           pool.pos.push(px, surf + 0.003, pz);
-          const d = waterDistance(px, pz, land);
-          pool.col.push(...encodeWater(d, st.to, st.from, waterDistance(px, pz, plain) - d));
-          pool.tr.push(st.t0, st.d);
+          const d = Math.min(reach, waterDistance(px, pz, land));
+          const q = this.waterStateAt(t, px, pz, st);
+          pool.col.push(...encodeWater(d, q.to, q.from, Math.min(reach, waterDistance(px, pz, plain)) - d));
+          pool.tr.push(q.t0, q.d);
         }
         pool.idx.push(base, base + 3, base + 1, base + 1, base + 3, base + 2);
       }
@@ -2764,6 +2796,49 @@ export class ChunkRenderer {
    * the mean of the live water tiles meeting there, so murky surf and clear water blend over a tile rather than
    * stepping at the border. `own` when none of the others has live water.
    */
+  /**
+   * The water's state at any point: blended bilinearly from the four corners of the tile cell it lies in, each the
+   * mean of the live water tiles meeting there (`fallback` for a corner with none). A water tile's own surface works
+   * out the same, so a surface built from a neighbouring tile (a rounded corner's fill) matches it where they meet.
+   */
+  private waterStateAt(t: TileData, px: number, pz: number, fallback: WaterState): WaterState {
+    const ix = Math.min(Math.floor(px), Math.ceil(px) - 1);
+    const iz = Math.min(Math.floor(pz), Math.ceil(pz) - 1);
+    const u = px - ix;
+    const w = pz - iz;
+    const at = (cx: number, cz: number) => this.cornerMean(t.roofId, ix + cx, iz + cz) ?? fallback;
+    const k00 = at(0, 0);
+    const k10 = at(1, 0);
+    const k01 = at(0, 1);
+    const k11 = at(1, 1);
+    const mix = (key: keyof WaterState) => (k00[key] * (1 - u) + k10[key] * u) * (1 - w) + (k01[key] * (1 - u) + k11[key] * u) * w;
+    return { to: mix('to'), from: mix('from'), t0: mix('t0'), d: mix('d') };
+  }
+
+  /** The mean state of the live water tiles meeting at the grid corner (x, z); undefined where none do. */
+  private cornerMean(roofId: string, x: number, z: number): WaterState | undefined {
+    const g = this.sim.grid;
+    const s = { to: 0, from: 0, t0: 0, d: 0 };
+    let n = 0;
+    let m = 0;
+    for (let dz = -1; dz <= 0; dz++)
+      for (let dx = -1; dx <= 0; dx++) {
+        const o = g.peek(roofId, x + dx, z + dz);
+        const c = o && this.fog !== 'hidden' ? this.waterState(o) : undefined;
+        if (!c) continue;
+        s.to += c.to;
+        s.from += c.from;
+        n++;
+        if (c.t0 > NO_FADE.t0) {
+          s.t0 += c.t0;
+          s.d += c.d;
+          m++;
+        }
+      }
+    if (!n) return undefined;
+    return { to: s.to / n, from: s.from / n, ...(m ? { t0: s.t0 / m, d: s.d / m } : NO_FADE) };
+  }
+
   private cornerState(t: TileData, cx: number, cz: number, own: WaterState): WaterState {
     const g = this.sim.grid;
     const s = { to: 0, from: 0, t0: 0, d: 0 };
@@ -3023,7 +3098,8 @@ export class ChunkRenderer {
     const y = h + 0.08 - WATER.drop + 0.003;
     // the open sea's height: the plane the High-tier reflection mirrors in
     if (t.blocked && t.feature === 'water') this.seaY = y;
-    const land = this.landAround(t, Math.ceil(Math.min(WATER_ENC, LOOK.water.deepAt + 1)));
+    const reach = waterReach();
+    const land = this.landAround(t, reach);
     const plain = bare(land);
     const radius = this.isWater(t) ? this.poolCorners(t) : [0, 0, 0, 0];
     const base = out.pos.length / 3;
@@ -3055,6 +3131,10 @@ export class ChunkRenderer {
             d0 = Math.min(d0, Math.max(0, R - Math.hypot(vx, vz)));
           }
         }
+        // land further off than the search reach is only seen by some of the tiles sharing this point: cap every
+        // distance at the reach, so all of them agree (no step where one tile's search stops short)
+        d = Math.min(d, reach);
+        d0 = Math.min(d0, reach);
         out.pos.push(px, y, pz);
         out.col.push(...encodeWater(d, mix('to', u, w), mix('from', u, w), d0 - d));
         out.tr.push(mix('t0', u, w), mix('d', u, w));

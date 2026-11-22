@@ -254,7 +254,8 @@ void sbWaterSetup() {
 	float hw = fwidth(wHeight) + 0.04;
 	c *= mix(uWaterCrest.x, uWaterCrest.y, smoothstep(-0.8, 0.9, wHeight));
 	float cap = smoothstep(uWaterCrest.z - hw, uWaterCrest.z + hw, wHeight) * (1.0 - smoothstep(0.25, 0.6, hw));
-	c = mix(c, mix(c, uWaterFoam, 0.22), cap * clarity);
+	// (open water only: in a canal or by the bank the caps would turn the whole channel milky)
+	c = mix(c, mix(c, uWaterFoam, 0.22), cap * clarity * smoothstep(0.8, 2.0, dist));
 	// the sand bed, and light nets on it, through the clear shallows (shifted by the ripples)
 	float bedK = (1.0 - smoothstep(0.0, uWaterDepth.z, dist)) * uWaterDepth.w * clarity;
 	// two layers at different scales and angles, so the nets never line up into a grid; only where the bed shows
