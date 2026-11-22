@@ -9,8 +9,11 @@
 //   TAG=before     name the shots (default: after)
 //   LOOKSET='{…}'  a JSON patch merged into LOOK before the shots (tuning experiments; e.g. '{"bloom":{"intensity":0}}')
 //   QUICK=1        High only, noon and midnight
+//   ONLY=noon,dusk  just these times;  HIGH=1  High only
+//   CLARITY=1      pin the sky's clarity (0 a fogged city … 1 a restored one; a new game starts near 0.15)
 // Looking out to sea at noon, dusk and midnight it also measures the horizon: the biggest brightness step between
-// rows where the sea meets the sky (#683 took the skyline away; the far sea must fade into the sky, not cut off).
+// rows where the sea meets the sky (#683 took the skyline away; the far sea must fade into the sky, not cut off),
+// and at noon that the open sea is a clear aqua and the sky blue.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { preview } from 'vite';
@@ -21,6 +24,7 @@ mkdirSync(dir, { recursive: true });
 const TAG = process.env.TAG ?? 'after';
 const LOOKSET = process.env.LOOKSET ? JSON.parse(process.env.LOOKSET) : undefined;
 const QUICK = !!process.env.QUICK;
+const CLARITY = process.env.CLARITY !== undefined ? Number(process.env.CLARITY) : undefined;
 const server = await preview({ preview: { port: 4241, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: process.env.GPU ? ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failed = false;
@@ -28,13 +32,14 @@ const SIZES = [
   { name: 'high', width: 1920, height: 1080, query: '&gfx=high' },
   { name: 'deck', width: 1280, height: 800, query: '&gfx=deck' },
 ];
-const TIMES = QUICK ? { noon: 0.3, midnight: 0.83 } : { morning: 0.1, noon: 0.3, afternoon: 0.5, dusk: 0.655, midnight: 0.83 };
+const ALL_TIMES = QUICK ? { noon: 0.3, midnight: 0.83 } : { morning: 0.1, noon: 0.3, afternoon: 0.5, dusk: 0.655, midnight: 0.83 };
+const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries(ALL_TIMES).filter(([k]) => process.env.ONLY.split(',').includes(k))) : ALL_TIMES;
 const fail = (msg) => {
   failed = true;
   console.error(`    ✗ ${msg}`);
 };
 try {
-  for (const size of QUICK ? SIZES.slice(0, 1) : SIZES) {
+  for (const size of QUICK || process.env.HIGH ? SIZES.slice(0, 1) : SIZES) {
     const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
@@ -46,9 +51,13 @@ try {
     await page.waitForTimeout(3000);
     await page.addStyleTag({ content: '#hud, .toast, #toasts { display: none !important; }' });
     // the spots: Bloombot's start with the ground around it restored to full bloom, and the dead ground just past it
-    const spots = await page.evaluate((patch) => {
+    const spots = await page.evaluate(({ patch, clarity }) => {
       const g = window.solarbloom;
       const s = g.sim;
+      if (clarity !== undefined) {
+        g.skyClarity = () => clarity;
+        g.sky.clarity = clarity;
+      }
       if (patch) {
         const merge = (a, b) => {
           for (const [k, v] of Object.entries(b)) if (v && typeof v === 'object' && !Array.isArray(v)) merge((a[k] ??= {}), v);
@@ -89,7 +98,7 @@ try {
           dead = [x, z];
         }
       return { lush: [x0 - 2, z0], dead, sea: [p.x, p.z] };
-    }, LOOKSET);
+    }, { patch: LOOKSET, clarity: CLARITY });
     const at = (f) =>
       page.evaluate((f) => {
         const s = window.solarbloom.sim;
@@ -154,9 +163,18 @@ try {
           return t / 128;
         };
         for (let y = 41; y < 76; y++) horizon = Math.max(horizon, Math.abs(rowLum(y) - rowLum(y - 1)));
+        // the open sea's colour, between the horizon and the jetty on the right (E27.1: a clear aqua by day)
+        // and the sky at the top of the picture, away from the sun (E27.1: blue, not an overcast grey-white)
+        const sky = [0, 0, 0];
+        for (let y = 0; y < 12; y++) for (let x = 240; x < 320; x++) for (let j = 0; j < 3; j++) sky[j] += d[(y * 320 + x) * 4 + j] / 960;
+        const sea = [0, 0, 0];
+        for (let y = 90; y < 120; y++)
+          for (let x = 250; x < 310; x++) for (let j = 0; j < 3; j++) sea[j] += d[(y * 320 + x) * 4 + j] / 1800;
         const avg = sum / n;
         return {
           horizon,
+          sea: sea.map(Math.round),
+          sky: sky.map(Math.round),
           clip: (100 * clip) / n,
           lum: avg,
           spread: Math.sqrt(Math.max(0, sq / n - avg * avg)),
@@ -165,7 +183,7 @@ try {
           mean: mean.map((v) => Math.round(v / n)),
         };
       }, png.toString('base64'));
-      console.log(`  ${file}  horizon step ${m.horizon.toFixed(0)}  clip ${m.clip.toFixed(1)}%  lum ${m.lum.toFixed(0)}  spread ${m.spread.toFixed(0)}  green sat ${m.greenSat.toFixed(2)} (hot ${m.greenHot.toFixed(1)}%)  mean ${m.mean.join(',')}`);
+      console.log(`  ${file}  sky ${m.sky.join(',')}  sea ${m.sea.join(',')}  horizon step ${m.horizon.toFixed(0)}  clip ${m.clip.toFixed(1)}%  lum ${m.lum.toFixed(0)}  spread ${m.spread.toFixed(0)}  green sat ${m.greenSat.toFixed(2)} (hot ${m.greenHot.toFixed(1)}%)  mean ${m.mean.join(',')}`);
       return m;
     };
     const day = {};
@@ -177,10 +195,14 @@ try {
       if (name === 'noon' || name === 'dusk' || name === 'midnight') {
         const sea = await shot(`${name}-sea`, spots.sea, 200);
         if (TAG !== 'before' && sea.horizon > 20) fail(`${name}: the sea meets the sky in a hard line (a step of ${sea.horizon.toFixed(0)})`);
+        // the owner's bright, clear aqua by day: green and blue well over red, and light (the dull grey-teal was 31,110,128)
+        const [sr, sg, sb] = sea.sea;
+        if (TAG !== 'before' && name === 'noon' && sea.sky[2] - sea.sky[0] < 15) fail(`noon: the sky reads overcast, not blue (${sea.sky.join(',')})`);
+        if (TAG !== 'before' && name === 'noon' && (sb - sr < 80 || sg - sr < 60 || 0.2126 * sr + 0.7152 * sg + 0.0722 * sb < 130)) fail(`noon: the sea is not a clear aqua (${sea.sea.join(',')})`);
       }
       if (name === 'noon') day.noon = lush;
       if (TAG === 'before') continue;
-      if (name === 'midnight') {
+      if (name === 'midnight' && day.noon) {
         const share = lush.lum / day.noon.lum;
         console.log(`    midnight is ${(share * 100).toFixed(0)}% as bright as noon; blue − red = ${lush.mean[2] - lush.mean[0]}`);
         if (lush.mean[2] <= lush.mean[0] || share < 0.3) fail(`${name}: not a readable blue night`);

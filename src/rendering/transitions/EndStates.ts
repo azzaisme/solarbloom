@@ -17,7 +17,7 @@ export const STATE = { concrete: 0, moss: 1, soil: 2, grass: 3, hard: 4 } as con
 /** Surface transition kinds understood by the transition shader. */
 export const KIND: Record<TileTransition['k'], number> = { soften: 1, moss: 2, restore: 3, bloom: 4, unblock: 5 };
 /** Ground features as numbers (for the shader's per-feature looks). */
-export const FEATURE: Record<string, number> = { lawn: 0, paving: 1, road: 2, water: 3, clay: 4, litter: 5, obstacle: 6, building: 7 };
+export const FEATURE: Record<string, number> = { lawn: 0, paving: 1, road: 2, water: 3, clay: 4, litter: 5, obstacle: 6, building: 7, sea: 8 };
 
 /** Which surface look a tile has right now (its end state, the transition's target). */
 export function surfaceState(t: TileData): number {

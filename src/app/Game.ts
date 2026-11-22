@@ -5183,6 +5183,7 @@ export class Game {
     // owner (E23 polish): High graphics gives the ponds a soft sky reflection and a sun / moon glint; live with the setting
     // #563: night water darkens to moonlit navy on every tier
     setPoolNight(1 - this.dayNight.daylight);
+    this.transitions?.setSeaNight(1 - this.dayNight.daylight);
     if (poolReflectOn(this.gfxTier, this.deck)) {
       const sun = this.scene.sun;
       const { low, high } = this.sky.reflectColours();

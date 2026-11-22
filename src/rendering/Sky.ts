@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
-import { NIGHT_SKY, NIGHT_SKY_LIGHTS, SKY } from '../data/sky';
+import { NIGHT_SKY, NIGHT_SKY_LIGHTS, SKY, SKY_BANDS, SKY_BANDS_NIGHT } from '../data/sky';
 
 /** sRGB hex → 0–1 components. */
 function rgb(hex: string): [number, number, number] {
@@ -17,6 +17,7 @@ export function skyColour(pair: readonly [string, string] | string, k: number): 
   return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 }
 
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const mix = (a: number[], b: number[], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const smooth = (t: number) => {
   const x = Math.min(1, Math.max(0, t));
@@ -44,7 +45,7 @@ export function skyMaterial(blend: boolean): pc.StandardMaterial {
 }
 
 /** Elevation rings (degrees) of the dome; dense near the horizon where the colour changes fastest. */
-const RINGS = [-40, -6, 0, 1.5, 3.5, 6, 10, 15, 22, 32, 45, 60, 75, 90];
+const RINGS = [-40, -6, 0, 1.5, 3, 5, 8, 12, 16, 22, 32, 45, 60, 75, 90];
 const SEGS = 36;
 
 /**
@@ -314,9 +315,11 @@ export class Sky {
     const upper = this.timeOfDay(skyColour(SKY.upper, k), 'upper');
     const zen = this.timeOfDay(skyColour(SKY.zenith, k), 'zenith');
     let c: [number, number, number];
-    if (el < 4) c = mix(haze, glow, smooth(el / 4));
-    else if (el < 25) c = mix(glow, upper, smooth((el - 4) / 21));
-    else c = mix(upper, zen, smooth((el - 25) / 65));
+    const n = Math.min(1, Math.max(0, this.night));
+    const B = { glow: lerp(SKY_BANDS.glow, SKY_BANDS_NIGHT.glow, n), upper: lerp(SKY_BANDS.upper, SKY_BANDS_NIGHT.upper, n), zenith: lerp(SKY_BANDS.zenith, SKY_BANDS_NIGHT.zenith, n) };
+    if (el < B.glow) c = mix(haze, glow, smooth(el / B.glow));
+    else if (el < B.upper) c = mix(glow, upper, smooth((el - B.glow) / (B.upper - B.glow)));
+    else c = mix(upper, zen, smooth((el - B.upper) / (B.zenith - B.upper)));
     // Warmer toward the sun, mostly low in the sky.
     const s = this.sunDir;
     const cos = d[0] * s.x + d[1] * s.y + d[2] * s.z;

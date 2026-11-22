@@ -4,11 +4,12 @@
 import * as pc from 'playcanvas';
 import { describe, expect, it } from 'vitest';
 import { LOOK } from '../src/data/look';
-import { DAY_LIGHT } from '../src/data/sky';
+import { DAY_LIGHT, SKY, SKY_BANDS, SKY_BANDS_NIGHT } from '../src/data/sky';
 import { DAY } from '../src/data/time';
 import { DayNight } from '../src/rendering/DayNight';
 import { PALETTE } from '../src/rendering/Palette';
 import { fogMatchingSky, horizonHaze } from '../src/rendering/LookShaders';
+import { SEA_LIFT, seaTintAt } from '../src/rendering/Water';
 import { Sky } from '../src/rendering/Sky';
 
 const lin = (hex: string) => new pc.Color().fromString(hex).linear();
@@ -164,5 +165,68 @@ describe('E27.1 the horizon, with the skyline gone (#683)', () => {
       const fog = fogMatchingSky(nightHaze[0], nightHaze[1], nightHaze[2], d);
       seenSky(sky).forEach((c, i) => expect(Math.abs(fog[i] - c) * 255, `dark ${d}`).toBeLessThan(12));
     }
+  });
+});
+
+describe('E27.1 the sea: clear aqua by day, the approved moonlit sea by night', () => {
+  // the colours the approved night (and the old over-bright day) were tuned with
+  const OLD = { sea: ['#2f6f8a', '#2b6880', '#337693'], shallows: ['#4f8592', '#4a7f8b', '#568b98'] };
+  const linOf = (hex: string) => {
+    const c = lin(hex);
+    return [c.r, c.g, c.b];
+  };
+
+  it('the sea and the shallows are the old colours lifted by SEA_LIFT', () => {
+    for (const k of ['sea', 'shallows'] as const)
+      PALETTE.ground[k].forEach((hex, i) => {
+        const now = linOf(hex);
+        const was = linOf(OLD[k][i]);
+        // within a step of 255 after rounding to hex
+        now.forEach((c, j) => expect(Math.abs(c - was[j] * SEA_LIFT[j]), `${k} ${i}`).toBeLessThan(0.012));
+      });
+  });
+
+  it('a clear aqua by day: blue and green well above red, and bright', () => {
+    for (const hex of PALETTE.ground.sea) {
+      const [r, g, b] = linOf(hex);
+      expect(b).toBeGreaterThan(r * 3);
+      expect(g).toBeGreaterThan(r * 2.5);
+      expect(0.2126 * r + 0.7152 * g + 0.0722 * b).toBeGreaterThan(0.25);
+    }
+  });
+
+  it('by night the lift comes back out, so the moonlit sea keeps its approved colour', () => {
+    expect(seaTintAt(0)).toEqual([1, 1, 1]);
+    for (const k of ['sea', 'shallows'] as const)
+      PALETTE.ground[k].forEach((hex, i) => {
+        const night = linOf(hex).map((c, j) => c * seaTintAt(1)[j]);
+        const was = linOf(OLD[k][i]);
+        night.forEach((c, j) => expect(c, `${k} ${i}`).toBeCloseTo(was[j], 2));
+      });
+    // and through dusk it fades smoothly
+    for (let n = 0; n < 1; n += 0.1) seaTintAt(n + 0.1).forEach((c, j) => expect(c).toBeLessThan(seaTintAt(n)[j]));
+  });
+});
+
+describe('E27.1 a sunny sky, not an overcast one', () => {
+  it('the follow camera (about 15° of sky) sees the blue, with the warm haze hugging the horizon', () => {
+    expect(SKY_BANDS.glow).toBeLessThanOrEqual(4);
+    expect(SKY_BANDS.upper).toBeLessThanOrEqual(12);
+    expect(SKY_BANDS.zenith).toBeGreaterThan(SKY_BANDS.upper);
+    // the approved moonlit night keeps the bands it was tuned with
+    expect(SKY_BANDS_NIGHT).toEqual({ glow: 4, upper: 25, zenith: 90 });
+  });
+
+  it('blue overhead and warm low down, even in a new game under the fog (and clearer once restored)', () => {
+    for (const i of [0, 1]) {
+      const up = lin(SKY.upper[i]);
+      const zen = lin(SKY.zenith[i]);
+      const glow = lin(SKY.glow[i]);
+      expect(up.b, `upper ${i}`).toBeGreaterThan(up.r * 1.3);
+      expect(zen.b, `zenith ${i}`).toBeGreaterThan(zen.r * 1.6);
+      expect(glow.r, `glow ${i}`).toBeGreaterThanOrEqual(glow.b);
+    }
+    // restoring the city still clears the sky toward a deeper blue
+    expect(lin(SKY.zenith[1]).b / lin(SKY.zenith[1]).r).toBeGreaterThan(lin(SKY.zenith[0]).b / lin(SKY.zenith[0]).r);
   });
 });

@@ -132,6 +132,19 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
     the sky's lowest `skyBand` (5°) and the clear colour take the haze as the fog shows it (`Sky.horizonSeen`),
     so the day's distance doesn't pale. Measured looking out to sea (`sunlit-shots`, the biggest step in brightness
     from one row to the next across the horizon): 43–59 at dusk and midnight before, 9–12 after, at any hour.
+- **The sea's colour (E27.1):** the open sea and its shallows are slabs on the living surface. Their authored deep
+  blues (#2f6f8a …) only read as the owner's bright, clear aqua because the old light and grade overdrove them; under
+  the true sunlit light they went a dull grey-teal. They're now authored brighter by `SEA_LIFT` (Water.ts, 2.6 / 2.2 /
+  2.1 per linear channel), and the surface takes that lift back out as night falls (`uTrSea`, `seaTintAt`), so the
+  moonlit sea lands exactly on the colours the approved night was tuned with. The sea's slabs carry feature code 8
+  (`FEATURE.sea`) so the surface knows which ones to tint. Checked in `sunlit-shots`: the noon sea must stay a clear
+  aqua.
+- **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
+  25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
+  overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back
+  to the old bands (`SKY_BANDS_NIGHT`) as night falls, so the approved night sky is unchanged. The fogged half of each
+  `SKY` pair (a new game, `Sky.clarity` near 0.15) keeps a soft blue too; restoring the city still clears it to the
+  full blue. `sunlit-shots` fails if the noon sky has no blue.
 - **Motes:** warm light specks (`#ffe9a8`, glow 3, so they catch a little bloom) that drift on slow noise, rise
   gently and fade in and out over 4–10 s. They only spawn above restored tiles near the camera's focus. One
   instanced draw call. High 90, Medium 50, Low none; off with *Fewer particles* and with reduced motion.

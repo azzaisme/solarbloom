@@ -59,10 +59,14 @@ const ground = {
     building: ['#90887c', '#898175', '#978f83'],
     sand: ['#d1bd8e', '#c9b484', '#d8c69a'],
   } as Record<string, string[]>,
-  /** E21.4: the Old City's sea (open water nothing crosses), its surf, and the beach once restored */
-  sea: ['#2f6f8a', '#2b6880', '#337693'],
+  /**
+   * E21.4: the Old City's sea (open water nothing crosses), its surf, and the beach once restored. E27.1 (#679): the sea
+   * and the shallows are the old colours (#2f6f8a, #4f8592 …) lifted by Water.SEA_LIFT, a clear aqua under the true
+   * sunlit light; their mesh takes the lift back out by night, so the moonlit sea keeps its approved colour.
+   */
+  sea: ['#499fc1', '#4295b3', '#4fa9ce'],
   /** the beach's shallow surf while dead: murky shallow sea (it clears to bright pool water once restored) */
-  shallows: ['#4f8592', '#4a7f8b', '#568b98'],
+  shallows: ['#7abecd', '#72b6c3', '#85c7d5'],
   surf: '#9fdcef',
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
   /** the stone edge of dead paving where it stands above the earth beside it */
