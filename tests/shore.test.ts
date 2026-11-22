@@ -9,7 +9,7 @@ import type { TileData } from '../src/core/types';
 import { LOOK } from '../src/data/look';
 import { OLD_CITY } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
-import { ChunkRenderer, waterDistance } from '../src/rendering/ChunkRenderer';
+import { bankPullShare, ChunkRenderer, waterDistance } from '../src/rendering/ChunkRenderer';
 import { FoliageBuilder } from '../src/rendering/Foliage';
 import { bankDrop, bankStrip, bankU, grassLine, leanGeo, roomScale, shelfAt, shoreNoise, shoreRuns, taperScales, waterlineAt, waterlineReach, type BankColours, type BankGeo } from '../src/rendering/Shore';
 import { encodeWater, WATER_SHORE_ENC, waterMaterial } from '../src/rendering/WaterSurface';
@@ -289,7 +289,8 @@ describe('#695: the water starts where the bank meets it', () => {
       const d = waterDistance(px, pz, land);
       const e = waterDistance(px, pz, banked);
       const near = waterlineAt(Math.min(1, Math.max(0, px)), Math.min(1, Math.max(0, pz)), false);
-      expect(e).toBeCloseTo(Math.max(0, d - near), 9);
+      // (easing off from BANK_PULL_FULL out, so there's no step where the pull stops)
+      expect(e).toBeCloseTo(Math.max(0, d - near * bankPullShare(d)), 9);
       expect(e).toBeGreaterThanOrEqual(0);
     }
     // a built edge (no shore) keeps its distance

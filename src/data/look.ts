@@ -171,31 +171,67 @@ export const LOOK = {
    * E28.W01 (#694): the water (WaterSurface). One surface for every stretch of live water (the open sea, its
    * shallows, the beach's surf and restored pools), coloured by how far it is from land, with ripples, sun and moon
    * highlights, Fresnel reflections of the sky (and, on High, of the world itself) and foam that laps the shores and
-   * curls round whatever stands in the water. Colours are sRGB hex (the shader works in linear); lengths are in tiles.
+   * curls round whatever stands in the water. Colours are sRGB hex (the shader works in linear). Lengths are in world
+   * units, and one world unit is one tile (Bloombot stands about half of one).
    */
   water: {
-    /** clear water right by the shore: turquoise */
-    shallow: '#3fbfba',
-    /** a little way out */
-    mid: '#2aa3b4',
-    /** far from land: deep blue-teal */
-    deep: '#1a7f9e',
+    /** clear water right by the shore (shallow): turquoise */
+    shallow: '#53c9cb',
+    /** deep water, `deepAt` tiles from land and beyond: deep teal-blue (the colour blends smoothly between the two) */
+    deep: '#176b83',
     /** the beach's surf while it is still dead: murky (restoring it clears it) */
     murky: '#6e877b',
     /** the sand seen through the shallows */
     bed: '#d3c08e',
     /** foam on the shore and round things in the water */
     foam: '#eef8f4',
-    /** depth: `mid` is reached `midAt` tiles from land and `deep` by `deepAt` */
-    midAt: 1.2,
+    /** depth: the water deepens away from land (its distance to land stands in for depth), reaching `deep` by `deepAt` */
     deepAt: 5,
     /** the bed shows through the shallows, fading out by `bedReach` tiles from land, up to `bedShow` of the colour */
     bedReach: 1.4,
     bedShow: 0.5,
     /** light nets on the bed in the shallows (0 off) */
     caustics: 0.1,
-    /** ripples: wave length scale (tiles), drift speed, slope strength, and how much finer ripples add */
-    ripple: { scale: 1.7, speed: 0.55, strength: 0.14, fine: 0.45 },
+    /**
+     * The large waves: a few long, low waves, each its own direction (`angle`, degrees round from +x toward +z),
+     * wavelength (`length`), height (`amp`, crest to rest), speed (`speed`, units a second) and `phase`. They move
+     * the surface itself (the vertex shader) and its normal follows them exactly. They ease in over `shore` units from
+     * the waterline, so the waterline at the shore, on the banks and under the jetty stays put.
+     */
+    waves: {
+      shore: 2,
+      list: [
+        { angle: 24, length: 5.3, amp: 0.035, speed: 0.55, phase: 0 },
+        { angle: 113, length: 3.9, amp: 0.026, speed: 0.46, phase: 2.1 },
+        { angle: -17, length: 4.5, amp: 0.022, speed: 0.5, phase: 4.4 },
+        { angle: 68, length: 3.1, amp: 0.016, speed: 0.42, phase: 1.3 },
+      ],
+      /** Under a deck built low over the water (the jetty, a bridge: WaterDisturbance's covers) the swell lies flat,
+       * easing back in over this many tiles round it, so a wave never laps up over the planks. */
+      coverEase: 1.5,
+    },
+    /**
+     * Small ripples: two scrolling normal maps, each a tile of `size` units drifting toward `angle` at `speed`,
+     * made of waves `min` to `max` units long, tilting the surface by up to about `strength`. `distort` bends where
+     * they're read by the large waves' slope, so they never scroll as one rigid sheet. Mipmapped: far off they
+     * average out, and how much they varied within a pixel widens the highlight instead of sparkling.
+     */
+    ripples: {
+      maps: [
+        { size: 3.3, angle: 35, speed: 0.11, seed: 11 },
+        { size: 2.3, angle: 161, speed: 0.08, seed: 29 },
+      ],
+      min: 0.2,
+      max: 0.8,
+      strength: 0.16,
+      distort: 0.35,
+    },
+    /**
+     * Ripples round things standing in the water (rocks, the jetty's posts, a bridge's supports): every now and
+     * then (`rate` a second each, at its own time) a ring runs out from one, `length` apart, `width` wide, reaching
+     * `reach` units and tilting the surface by `strength`. The `max` nearest the camera are drawn.
+     */
+    disturb: { max: 16, rate: 0.16, reach: 1.4, length: 0.32, width: 0.3, strength: 0.18 },
     /** waves that follow the shore and the outline of anything in the water, travelling in toward it */
     lap: { reach: 1.6, length: 0.55, speed: 0.5, strength: 0.18 },
     /** foam: how far out it reaches (tiles), how many lines, how fast they travel in, how strong */
@@ -203,18 +239,26 @@ export const LOOK = {
     /** the surface: gloss (sharp sun highlights) and how strong the highlight is (kept off neon, little bloom) */
     gloss: 0.93,
     /**
-     * Keeping far water calm: ripples fade out between `fadeFrom` and `fadeTo` pixels per wavelength (finer than that
-     * they only shimmer in single pixels), and the normal's variance within a pixel roughens the highlight by
-     * `variance`, so far glints merge into a soft sun or moon path (specular anti-aliasing)
+     * Keeping far water calm: a large wave's slope fades out between `fadeFrom` and `fadeTo` pixels per wavelength
+     * (finer than that it could only shimmer), and how much the normal varies within a pixel (the ripple maps'
+     * own spread, plus the large waves') roughens the highlight by `variance`, so far glints merge into a soft sun or
+     * moon path (specular anti-aliasing). The small ripples fade the same way (and hand their slope to that spread)
+     * between `rippleFrom` and `rippleTo` pixels per typical ripple.
      */
-    antiAlias: { variance: 5, fadeFrom: 20, fadeTo: 7 },
+    antiAlias: { variance: 3, fadeFrom: 5, fadeTo: 2.5, rippleFrom: 30, rippleTo: 12 },
+    /**
+     * Glints: crisp highlight shapes where the surface turns the sun or moon toward the eye. `cut` (how close to a
+     * perfect mirror, as a cosine), `soft` (edge), `strength`. They widen and dim with the normal's spread in a pixel,
+     * so far off they become the soft highlight rather than specks.
+     */
+    glint: { cut: 0.985, soft: 0.004, strength: 1.2 },
     specular: 0.18,
     /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */
     fresnel: { base: 0.04, power: 5, max: 0.6 },
     /** how strongly the sky's colours reflect (all tiers) */
-    sky: 0.75,
+    sky: 0.7,
     /** reflections take on this much of the water's own hue, so far water reads aqua (or navy) rather than the haze's grey */
-    reflectTint: 0.45,
+    reflectTint: 0.6,
     /** the sky's blue light filling the water's own colour (the engine's sky light is off for water: it reflects its own way) */
     ambient: 0.55,
     /**
