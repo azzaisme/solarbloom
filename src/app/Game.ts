@@ -38,6 +38,9 @@ import { Sim } from '../gameplay/Sim';
 import { inSurge } from '../gameplay/PowerEnv';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
+import { BirdHeart } from '../rendering/BirdHeart';
+import { bloomGetsHeart, heartBox, type Rect } from '../rendering/HeartFlight';
+import { BIRD_HEART } from '../data/birdHeart';
 import { Clouds } from '../rendering/Clouds';
 import { CloudWall } from '../rendering/CloudWall';
 import { Fauna } from '../rendering/Fauna';
@@ -270,6 +273,8 @@ export class Game {
   /** Look 3.16: bees, hoverflies, drifting leaves and falling blossom */
   readonly pollinators: Pollinators;
   private birds: Birds;
+  /** #689: the Great Bloom's heart of birds (built when it plays, gone when it ends) */
+  private birdHeart: BirdHeart;
   /** Puffy clouds between the camera and the city when zoomed out. */
   private clouds: Clouds;
   /** region unlocks: the wall of clouds around sealed areas */
@@ -462,6 +467,7 @@ export class Game {
       this.cat.rebuildAll();
     };
     this.birds = new Birds(this.scene.world);
+    this.birdHeart = new BirdHeart(this.scene.world);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
     this.cloudWall = new CloudWall(this.sim, this.scene.world, this.app.graphicsDevice, this.scene.sun.up, this.app.batcher ?? undefined);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
@@ -4475,6 +4481,8 @@ export class Game {
       this.celebrateTier(tier);
       if (tier === 1) return this.playCoreSequence();
       const t = TIERS[tier - 1];
+      // #689: the Great Bloom: once its rings have gone up, a flock flies in from both sides and makes a heart
+      if (bloomGetsHeart(t.look)) this.tweens.add(0.01, () => {}, { delay: BIRD_HEART.delay, done: () => this.playBirdHeart() });
       this.hud.toast(`⛲ ${t.name}!<small>${fountainStepNews(t)}</small>`, 'gold', 6);
       this.sfx.fanfare();
       this.save();
@@ -4719,6 +4727,23 @@ export class Game {
   }
 
   /** E21.6: a short celebration per tier: rings and sparks from the fountain, a fanfare. */
+  /**
+   * #689: the heart of birds, laid out in the top band of the screen between the HUD's cards there (the objective card
+   * and the charge card), so it reads from whatever camera the bloom is seen through and covers no card or message.
+   */
+  private playBirdHeart() {
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const cr = c.getBoundingClientRect();
+    const cards: Rect[] = [];
+    for (const id of ['obj', 'res']) {
+      const el = document.getElementById(id);
+      if (!el || el.hidden || el.offsetParent === null) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width && r.height) cards.push({ left: r.left - cr.left, top: r.top - cr.top, right: r.right - cr.left, bottom: r.bottom - cr.top });
+    }
+    this.birdHeart.play(cr.width, cr.height, heartBox(cr.width, cr.height, cards), this.settings.reducedMotion);
+  }
+
   private celebrateTier(tier: number) {
     const park = this.sim.areas.landmark(PARK);
     if (!park) return;
@@ -5103,6 +5128,7 @@ export class Game {
     this.pollinators.update(wdt, near);
     this.birds.resident = eco.has('birds');
     this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
+    this.birdHeart.update(wdt, this.camera.cam);
     this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5, fog: WEATHER[this.weatherLook().kind].fogFinds });
     this.nightFindVisuals.reducedMotion = this.settings.reducedMotion;
     this.nightFindVisuals.update(wdt);
