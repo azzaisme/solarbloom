@@ -202,6 +202,12 @@ export const LOOK = {
     foamLine: { reach: 0.5, lines: 2, speed: 0.3, strength: 0.8 },
     /** the surface: gloss (sharp sun highlights) and how strong the highlight is (kept off neon, little bloom) */
     gloss: 0.93,
+    /**
+     * Keeping far water calm: ripples fade out between `fadeFrom` and `fadeTo` pixels per wavelength (finer than that
+     * they only shimmer in single pixels), and the normal's variance within a pixel roughens the highlight by
+     * `variance`, so far glints merge into a soft sun or moon path (specular anti-aliasing)
+     */
+    antiAlias: { variance: 5, fadeFrom: 20, fadeTo: 7 },
     specular: 0.18,
     /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */
     fresnel: { base: 0.04, power: 5, max: 0.6 },

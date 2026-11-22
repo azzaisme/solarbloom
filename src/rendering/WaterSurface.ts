@@ -104,6 +104,8 @@ uniform mat4 uWaterReflectVP;
 vec3 wNormal;
 vec3 wEmit;
 float wFoam;
+float wGloss;
+uniform vec4 uWaterAA;    // variance gain, wave fade start, wave fade end (pixels per wavelength as 1/x)
 float sbWaterHash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -116,7 +118,8 @@ float sbWaterNoise(vec2 p) {
 // one drifting wave's slope (d height / d xz), faded out where it would be finer than a few pixels
 vec2 sbWave(vec2 p, vec2 dir, float len, float speed, float amp, float t, float px) {
 	float k = 6.2831853 / len;
-	float fade = 1.0 - smoothstep(0.15, 0.45, px * k / 6.2831853);
+	// gone before a wave is a few pixels long: finer than that it only shimmers in single pixels
+	float fade = 1.0 - smoothstep(uWaterAA.y, uWaterAA.z, px * k / 6.2831853);
 	return dir * (k * amp * cos(dot(dir, p) * k + t * speed * k) * fade);
 }
 // light nets on the bed (as the old pool's caustics)
@@ -166,11 +169,17 @@ void sbWaterSetup() {
 	vec2 gd = abs(det) > 1e-8 ? vec2(dd.x * jy.y - dd.y * jx.y, dd.y * jx.x - dd.x * jy.x) / det : vec2(0.0);
 	float lapK = 6.2831853 / max(uWaterLap.y, 0.05);
 	float near = 1.0 - smoothstep(0.0, uWaterLap.x, dist);
-	float lapFade = 1.0 - smoothstep(0.15, 0.45, px * lapK / 6.2831853);
+	float lapFade = 1.0 - smoothstep(uWaterAA.y, uWaterAA.z, px * lapK / 6.2831853);
 	g += gd * (cos(dist * lapK + t * uWaterLap.z * lapK) * lapK * 0.02 * uWaterLap.w * near * lapFade);
 	// murky water lies flatter
 	g *= uWaterRipple.z * mix(0.6, 1.0, clarity) * 7.0;
 	wNormal = normalize(vec3(-g.x, 1.0, -g.y));
+	// specular anti-aliasing (Kaplanyan / Toksvig): how much the normal varies within a pixel widens the highlight,
+	// so ripples too fine to draw merge into a soft sun or moon path instead of crawling single-pixel specks
+	vec2 gx = dFdx(g);
+	vec2 gy = dFdy(g);
+	float rough = 1.0 - uWaterMisc.w;
+	wGloss = 1.0 - sqrt(min(1.0, rough * rough + min(uWaterAA.x * (dot(gx, gx) + dot(gy, gy)), 0.35)));
 	// ── colour by depth: turquoise by the shore, deep blue-teal far out ──
 	vec3 c = mix(uWaterShallow, uWaterMid, smoothstep(0.0, uWaterDepth.x, dist));
 	c = mix(c, uWaterDeep, smoothstep(uWaterDepth.x, uWaterDepth.y, dist));
@@ -240,7 +249,7 @@ void getNormal() {
 
 const WATER_GLOSS_PS = /* glsl */ `
 void getGlossiness() {
-	dGlossiness = mix(uWaterMisc.w, 0.3, wFoam) + 0.0000001;
+	dGlossiness = mix(wGloss, 0.3, wFoam) + 0.0000001;
 }
 `;
 
@@ -340,6 +349,7 @@ export function applyWaterLook() {
   m.setParameter('uWaterLap', [W.lap.reach, W.lap.length, W.lap.speed, W.lap.strength]);
   m.setParameter('uWaterFoamL', [W.foamLine.reach, W.foamLine.lines, W.foamLine.speed, W.foamLine.strength]);
   m.setParameter('uWaterFres', [W.fresnel.base, W.fresnel.power, W.fresnel.max, W.sky]);
+  m.setParameter('uWaterAA', [W.antiAlias.variance, 1 / W.antiAlias.fadeFrom, 1 / W.antiAlias.fadeTo, 0]);
   m.specular = new pc.Color(W.specular, W.specular, W.specular);
   m.update();
 }
