@@ -237,8 +237,8 @@ void sbWaterSetup() {
 	g += gd * (cos(dist * lapK + t * uWaterLap.z * lapK) * lapK * 0.02 * uWaterLap.w * near * lapFade);
 	// murky water lies flatter
 	g *= uWaterRipple.z * mix(0.6, 1.0, clarity) * 7.0;
-	// the slow swell's slope (the vertex shader lifts the surface by the same swell)
-	g += sbSwell(p, t, dist).yz;
+	// the slow swell's slope: the same swell the vertex shader lifts the surface by, easing in from the waterline itself
+	g += sbSwell(p, t, edgeDist).yz;
 	wNormal = normalize(vec3(-g.x, 1.0, -g.y));
 	// specular anti-aliasing (Kaplanyan / Toksvig): how much the normal varies within a pixel widens the highlight,
 	// so ripples too fine to draw merge into a soft sun or moon path instead of crawling single-pixel specks
@@ -288,7 +288,7 @@ void sbWaterSetup() {
 	vec3 R = reflect(-V, wNormal);
 	vec3 refl = mix(uWaterSkyLow, uWaterSkyHigh, smoothstep(0.0, 0.6, R.y)) * uWaterFres.w;
 	// only water lying on the reflected plane (the sea and the surf) shows it; a pool on another terrace keeps the sky
-	float onPlane = 1.0 - smoothstep(0.02, 0.1, abs(vPositionW.y - sbSwell(p, t, dist).x - uWaterRefl.z));
+	float onPlane = 1.0 - smoothstep(0.02, 0.1, abs(vPositionW.y - sbSwell(p, t, edgeDist).x - uWaterRefl.z));
 	if (uWaterRefl.x * onPlane > 0.0) {
 		vec4 q = uWaterReflectVP * vec4(vPositionW + vec3(wNormal.x, 0.0, wNormal.z) * uWaterRefl.y, 1.0);
 		vec2 uv = clamp(q.xy / q.w * 0.5 + 0.5, vec2(0.001), vec2(0.999));
