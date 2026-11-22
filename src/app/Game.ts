@@ -149,6 +149,7 @@ import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
 import { setWaterFrame, waterLayer, waterReflectOn } from '../rendering/WaterSurface';
 import { WaterReflection } from '../rendering/WaterReflection';
+import { WaterLife } from '../rendering/WaterLife';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'In flower', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -235,6 +236,8 @@ export class Game {
   private sky!: Sky;
   /** E28.W01: the water's planar reflection (High) */
   private waterReflection?: WaterReflection;
+  /** E28.W04 (#697): life in the water (lily pads, fish, leaves, flecks, plants, outlets), drawn round the camera */
+  private waterLife?: WaterLife;
   /** E23.7.1: day and night on screen (the light clock, or photo mode's own time) */
   private dayNight!: DayNight;
   /** E23.7.1.2: the title's "follow my clock" preference (new gardens), kept apart from the save's mode */
@@ -426,6 +429,9 @@ export class Game {
       // after everything has moved this frame: mirror the camera as it will render, and hand the water its frame
       this.app.on('prerender', () => this.waterFrame());
       // (the jetty's posts and the decks over the water are fed to the water by the chunks that draw them: E28.W03)
+      const life = new pc.Entity('water-life');
+      this.app.root.addChild(life);
+      this.waterLife = new WaterLife(this.app.graphicsDevice, life, water.id);
     }
     this.cozy = new Cozy(this.sim);
     this.chunks.plots = { look: (p) => this.plotLook(p), growth: (p) => this.plotGrowth(p) };
@@ -929,6 +935,8 @@ export class Game {
     this.faunaTier = this.gfxTier;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
+    // E28.W04: the water's drifting flecks go with the air's motes (reduced motion stills the rest: it stops waterTime)
+    if (this.waterLife) this.waterLife.particles = !s.lowVfx && this.gfxTier !== 'low';
     if (this.overlays) this.overlays.holo.reducedMotion = rm;
     if (this.lightVisuals) this.lightVisuals.reducedMotion = rm;
     if (this.transitions) {
@@ -2874,6 +2882,7 @@ export class Game {
       light: { toLight: this.scene.sun.up, color: this.scene.sun.light!.color, share: this.scene.sun.light!.intensity / LOOK.sun.intensity },
       reflect: tex && seaY !== undefined ? { tex, viewProj: this.waterReflection!.drawnViewProj, planeY: seaY } : undefined,
     });
+    this.waterLife?.update({ time: this.chunks.waterTime, trTime: this.transitions?.time ?? 0, focus: this.camera.target, night: 1 - this.dayNight.daylight });
   }
 
   private skyClarity(): number {

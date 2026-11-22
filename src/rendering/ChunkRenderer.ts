@@ -39,6 +39,7 @@ import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
 import { clearWaterCovers, clearWaterDisturbers, setWaterCovers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
+import { clearWaterLife, lifeForTile, outletSpots, setWaterLife, type LifeSpot } from './WaterLife';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 import { MOVE_TRIPS } from '../data/moveSpots';
 
@@ -632,6 +633,8 @@ void getOpacity() {
  */
 export const SINK = 0.45;
 const TALL_DROP = 2;
+/** Look 4.9: how far a facade's wall reaches into the revealed chunk from the edge it stands on (E28.W04: an outlet in it sits on its face). */
+export const FACADE_DEPTH = 0.4;
 
 /**
  * E21.24: the level a retaining wall on cell (x, z)'s edge facing (dx, dz) drops to, or undefined when there's no
@@ -924,6 +927,7 @@ export class ChunkRenderer {
     v.ground?.destroy();
     v.water?.destroy();
     clearWaterDisturbers(`rocks:${v.key}`);
+    clearWaterLife(`life:${v.key}`);
     v.gtex?.forEach((e) => e?.destroy());
     for (const t of v.towers ?? []) for (const e of t.entities) e.destroy();
     v.trees?.destroy();
@@ -1594,6 +1598,8 @@ export class ChunkRenderer {
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (dx || dz) s.grid.chunkAt(GROUND, v.cx + dx, v.cz + dz);
     // the rocks this build stands in the water (ripples ring round them)
     this.rocks = [];
+    // E28.W04: the life in this chunk's water (WaterLife draws it)
+    this.life = [];
     const b = new MeshBuilder();
     const fb = new FoliageBuilder();
     const towers: Tower[] = [];
@@ -1732,6 +1738,7 @@ export class ChunkRenderer {
       // the same grid near and far: a coarser far chunk would meet its near neighbour in T-junctions, its colours and
       // swell interpolated differently along the shared edge (a seam at every chunk border)
       if (ws) this.waterSurface(pool, t, th, ws, WATER.grid);
+      if (ws && !v.far) this.waterLife(t, h, th, ws);
       // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
       // (not the jetty: its tiles are paving underneath, but its wooden deck is the model's)
       const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !this.overWater(t) ? this.paintedGround(t) : undefined;
@@ -1752,6 +1759,7 @@ export class ChunkRenderer {
     // From here to the end is one step: buildings, then every mesh of the chunk swaps in together.
     v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), waterMaterial(this.device), false, this.waterLayer !== undefined ? [this.waterLayer] : undefined);
     setWaterDisturbers(`rocks:${v.key}`, this.rocks);
+    setWaterLife(`life:${v.key}`, this.life);
     v.gtex = GROUND_TEXTURES.map((name, i) => this.setMesh(v.gtex?.[i], `ground-${name}-${v.key}`, groundTexMesh(this.device, gtex[i]), groundTexMaterial(this.device, name), false));
     if (this.inPark && !v.far) {
       b.grey = fb.grey = 0;
@@ -2135,6 +2143,8 @@ export class ChunkRenderer {
   waterLayer?: number;
   /** E28 water: the rocks the chunk being built stands in the water */
   private rocks: WaterDisturber[] = [];
+  /** E28.W04: the life in the water of the chunk being built */
+  private life: LifeSpot[] = [];
   /** E28.W01: the open sea's surface height once a chunk of it is built (the planar reflection's plane) */
   seaY?: number;
   /** E28.W01: the water's clock (held still for reduced motion), read by Game for WaterSurface */
@@ -2936,19 +2946,73 @@ export class ChunkRenderer {
     this.slab(b, hex, [x, surf - 0.04, z], [1, 0.08, 1]);
     if (shallows) return; // (E28.W01: the surf's foam is the water surface's own now, not dashes on the grid)
     if (t.ground === 'polluted') return; // a dried-out, silted bed: the painted silt does the rest
-    if (t.ground !== 'restored') return;
-    // clear water (its surface is `poolSurface`): lily pads, and lotus flowers as it blooms. As a pond drains they
-    // ride down with it: none where its bed now shows (E23.4.1).
-    if (!this.sim.water.covered(t)) return;
-    const pads = (t.variant % 3) + (t.bloom >= 3 ? 1 : 0);
-    for (let i = 0; i < pads; i++) {
-      const px = x + r.range(-0.28, 0.28);
-      const pz = z + r.range(-0.28, 0.28);
-      b.add('cylinder', i % 2 ? PALETTE.leaf.dark : PALETTE.leaf.mid, [px, surf + 0.012, pz], [0.2, 0.012, 0.2]);
-      if (t.bloom >= 2 && i === 0) {
-        b.add('sphere', PALETTE.flowers.blush, [px, surf + 0.05, pz], [0.13, 0.07, 0.13]);
-        b.add('sphere', PALETTE.flowers.core, [px, surf + 0.075, pz], 0.045);
+    // (E28.W04: restored water's lily pads and flowers are WaterLife's now: they ride the swell, see `waterLife`)
+    void r;
+  }
+
+  /** E28.W04: whether this chunk stands a Look 4.9 facade on the edge between tile `t` and its neighbour `n`. */
+  private facadeOn(t: TileData, n: TileData): boolean {
+    const s = this.sim;
+    const [cx, cz] = [Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)];
+    const [nx, nz] = [Math.floor(n.x / CHUNK), Math.floor(n.z / CHUNK)];
+    if (cx === nx && cz === nz) return false;
+    return s.areas.fog(s.areas.map.areaOfChunk(cx, cz)) !== 'hidden' && s.areas.fog(s.areas.map.areaOfChunk(nx, nz)) === 'hidden';
+  }
+
+  /** E28.W04: how far the restored land within two tiles of a tile has bloomed (its best), or -1 when there is none. */
+  private restoredShore(t: TileData): number {
+    const g = this.sim.grid;
+    let best = -1;
+    for (let dz = -2; dz <= 2; dz++)
+      for (let dx = -2; dx <= 2; dx++) {
+        if (!dx && !dz) continue;
+        const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+        if (n && n.ground === 'restored' && !this.bankless(n) && n.feature !== 'water') best = Math.max(best, n.bloom);
       }
+    return best;
+  }
+
+  /**
+   * E28.W04 (#697): the life on a tile of live water (WaterLife draws it): lily pads, fish, leaves, flecks and plants
+   * on restored clear water (`lifeForTile`), and an outlet where a restored channel of fresh water ends against
+   * higher ground. Rocks for the rings go in `rocks`.
+   */
+  private waterLife(t: TileData, h: number, th: number, ws: WaterState) {
+    if (t.feature !== 'water' || t.occupantId) return;
+    if (ws.to < WATER_CLARITY.clear - 1e-6) return;
+    // living water: restored itself, a pond that has woken, or clear water beside a restored shore (a canal's or the
+    // sea's own tiles never restore; their banks do). It blooms with the shore beside it.
+    const shore = this.restoredShore(t);
+    const own = t.ground === 'restored' ? t.bloom : this.livePond(t) ? Math.max(2, shore) : -1;
+    const bloom = Math.max(own, shore);
+    const living = bloom >= 0;
+    if (!living) return;
+    const y = th + 0.08 - WATER.drop + 0.003;
+    const sea = t.level !== undefined && (seaCell(t.x, t.z) || surfCell(t.x, t.z));
+    const reach = waterReach();
+    const land = this.landAround(t, reach);
+    const dist = (px: number, pz: number) => Math.min(waterDistance(px, pz, land), reach);
+    const covered = this.sim.water.covered(t);
+    this.life.push(...lifeForTile({ x: t.x, z: t.z, y, fresh: !sea, living, bloom, covered, dist, t0: ws.t0, d: ws.d }));
+    // an outlet: this channel ends against higher ground (the water carries on away from the wall)
+    if (sea || t.level === undefined || !covered) return;
+    const g = this.sim.grid;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+      const o = g.peek(t.roofId, t.x - dx, t.z - dz);
+      if (!n || n.level === undefined || this.bankless(n) || n.level <= t.level || !o || !this.bankless(o)) continue;
+      const drop = h + levelY(n.level) + 0.08 - y;
+      // on the wall's face (in front of its courses and its wet band), in the middle of the tile's edge; the water
+      // lies away from it. While the ground above is in a hidden area in another chunk, this chunk stands a facade on
+      // that edge (Look 4.9) in front of the wall: then the outlet is on the facade's face.
+      const proud = this.facadeOn(t, n) ? FACADE_DEPTH + 0.012 : LOOK.wall.thick / 2 + LOOK.wall.courseProud + 0.012;
+      const wx = t.x + 0.5 + dx * (0.5 - proud);
+      const wz = t.z + 0.5 + dz * (0.5 - proud);
+      const yaw = Math.atan2(dz, -dx);
+      const spots = outletSpots(wx, wz, y, yaw, drop, ws.t0, ws.d);
+      this.life.push(...spots);
+      const foam = spots.find((q) => q.kind === 'foam');
+      if (foam) this.rocks.push({ x: foam.x, z: foam.z, r: 0.12, strength: LOOK.waterLife.falls.ring });
     }
   }
 
@@ -3906,7 +3970,7 @@ export class ChunkRenderer {
     const F = PALETTE.retaining;
     const pick = (c: readonly string[]) => (alive ? c[0] : c[1]);
     const stone = pick(F.stone);
-    b.add('box', stone, at(N / 2, -0.2, bottom + H / 2), size(N, 0.4, H));
+    b.add('box', stone, at(N / 2, -FACADE_DEPTH / 2, bottom + H / 2), size(N, FACADE_DEPTH, H));
     if (far) return;
     const seen = dx > 0 || dz > 0;
     if (SINK < TALL_DROP) {

@@ -372,6 +372,49 @@ export const LOOK = {
      */
     wall: { min: 0.12, max: 0.28, pieces: 5, wet: ['#b5a891', '#837d72'], weed: ['#6c7448', '#646652'], weedHeight: 0.04 },
   },
+  /**
+   * E28.W04 (#697): life in the water (WaterLife). Only on restored water: none on dead or murky water or the open sea,
+   * and more of it as a restored shore blooms (`bloom` 0 … 4 adds `perBloom` to each chance). All of it rides the
+   * waves (it reads the same swell the surface lifts by) and fades in with a restore. Lengths are tiles.
+   */
+  waterLife: {
+    /** drawn within this many tiles of where the camera looks (nearest first, up to `max` of each kind) */
+    radius: 20,
+    max: { pad: 480, flower: 120, leaf: 96, fish: 120, fleck: 160, plant: 240, fall: 12, foam: 24, spray: 12, outlet: 12 },
+    /**
+     * lily pads, on restored fresh water (pools, ponds, canals; not the sea), gathered in patches (`patches` of the
+     * water within `reach` of a bank, in patches about `patch` tiles across): `perTile` (+1 from `crowdFrom` bloom),
+     * `size` across (min, max), riding the swell and turning slowly; a flower on the first pad from `flowerFrom` bloom
+     */
+    pads: { perTile: 3, crowdFrom: 3, reach: 1.6, patches: 0.45, patch: 3.5, size: [0.22, 0.34], turn: 0.04, colours: ['#3f7d36', '#356b33'], vein: '#5c9a40', flowerFrom: 2, flower: '#f58cb8', flowerCore: '#f0c43a' },
+    /**
+     * small fish in clear restored shallows (the surf and fresh water), drawn as dark shapes seen through the water:
+     * a shoal of 1 … `shoal` per spot, `chance` per tile, at least `minDepth` from land, swimming lazy loops of up to
+     * `range` at `speed` (tiles a second). Every `rise` seconds or so one rises and rings the surface (WaterDisturbance)
+     */
+    fish: { chance: 0.1, perBloom: 0.04, shoal: 3, minDepth: 0.45, range: 0.9, speed: 0.22, length: 0.15, colour: '#0d3a47', opacity: 0.38, nightOpacity: 0.14, rise: 11, ring: 0.7 },
+    /** floating leaves near restored shores (within `reach` of land): a slow orbit of `orbit`, `size` long, in these colours */
+    leaves: { chance: 0.06, perBloom: 0.02, reach: 1.6, orbit: 0.22, size: 0.075, turn: 0.05, colours: ['#a9a03c', '#c98a3a'] },
+    /**
+     * drifting flecks (pollen and seed fluff) on calm water near restored shores: each drifts `drift` tiles a second for
+     * `life` seconds, fading in and out, `size` across, at `opacity` by day (`nightOpacity` by night)
+     */
+    flecks: { chance: 0.12, perBloom: 0.03, reach: 1.4, drift: 0.035, life: 14, size: 0.022, colour: '#f4ecd2', opacity: 0.6, nightOpacity: 0.15 },
+    /** aquatic plants standing in the shallows of restored fresh water, within `reach` of a bank: arrowhead clumps `height` tall */
+    plants: { chance: 0.12, perBloom: 0.04, reach: 0.8, height: 0.24, stalk: '#5c8a3e', leaf: '#6fa448' },
+    /**
+     * An outlet where the world already has one: a restored channel of fresh water that ends against ground a level or
+     * more higher (the Saltwind canal's head under Elder Grove). A stone culvert `culvert` across (a ring of voussoirs
+     * with a keystone, a dark barrel and a sill: WaterLife's CULVERT proportions), its mouth's middle at most `outlet`
+     * over the water. The stream pours from the sill `width` wide and lands `lip` further out, its streaks (`tint`
+     * between them, white in their cores) running down at `speed` (stream lengths a second), at `opacity`, with a
+     * `sheen` that catches the sun. Where it lands: soft foam `foam` across, a puff of spray `spray` across, and rings
+     * of `ring` strength. All of it is lit like the world (moonlit by night), with `glow` of its colour as light of its
+     * own by day only, fading out with the daylight: nothing glows in the dark. By night the stream, foam and spray
+     * fade to `nightColour` (the canal's moonlit blue-grey) and lose most of their sheen.
+     */
+    falls: { outlet: 0.42, culvert: 0.6, width: 0.28, lip: 0.2, speed: 1.4, colour: '#eaf8f5', tint: '#8fd3cc', opacity: 0.9, sheen: 0.55, glow: 0.3, foam: 0.62, spray: 0.3, ring: 2.4, stone: '#b3a998', mouth: '#1c1b19', nightColour: '#6b8794' },
+  },
 };
 
 export interface TierSpec {

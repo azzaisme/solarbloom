@@ -15,6 +15,9 @@
 // the island spot and the overview by day, printed as `perf …`. Run it on base and branch alternately (timing on this
 // machine swings a lot).
 //   ONLY=day,night just these times;   SPOTS=surf,pond just these spots
+//   PRE='js'  a snippet run in the page before each shot (`g`: the game);   DIST=dist-base  shoot another build (the base, for before shots);   STRIP=1  also 6 frames 0.5 s apart (motion; STRIP_MS sets the gap)
+// E28.W04 (#697) adds the `outlet` spot (the Saltwind canal's head, where it runs out of the wall under Elder Grove) and
+// logs how much life is in the water round each shot (WaterLife, per kind; nothing on a build without it).
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
@@ -26,15 +29,22 @@ const dir = process.argv[2] ?? 'docs/review/e28-695';
 mkdirSync(dir, { recursive: true });
 const TAG = process.env.TAG ?? 'after';
 const ALL = { day: 0.3, golden: 0.6, night: 0.83 };
-const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries(ALL).filter(([k]) => process.env.ONLY.split(',').includes(k))) : ALL;
-const SPOTS = (process.env.SPOTS ?? 'island,overview,surf,sandbar,canal,pond').split(',');
+/** times shot only when asked for by ONLY: dusk (the light going, between golden hour and night) */
+const MORE = { dusk: 0.7 };
+const TIMES = process.env.ONLY ? Object.fromEntries(Object.entries({ ...ALL, ...MORE }).filter(([k]) => process.env.ONLY.split(',').includes(k))) : ALL;
+const SPOTS = (process.env.SPOTS ?? 'island,overview,surf,sandbar,canal,outlet,culvert,pond').split(',');
 const PERF = !!process.env.PERF;
 /** the close spots: the edge tile (or, for the pond, where to search for the nearest bank) */
-const EDGES = { surf: [0, 41], sandbar: [10, 56], canal: [-4, 24], pond: [63, 44, true] };
+const EDGES = { surf: [0, 41], sandbar: [10, 56], canal: [-4, 24], pond: [63, 44, true], outlet: [-4, 19], culvert: [-1, 18] };
+/**
+ * spots shot looking a set way rather than out over the water: the outlet, up the canal toward its head; the culvert,
+ * close from the east bank, at the follow camera's distance
+ */
+const LOOKS = { outlet: [0.45, -1], culvert: [-0.55, -1] };
 /** spots shot looking along the bank (Bloombot on the edge tile, the shore running across the frame), not out over it */
 const ALONG = { canal: Number(process.env.CANAL_YAW ?? -60), pond: Number(process.env.POND_YAW ?? 60) };
 const port = 4246;
-const server = await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
+const server = await preview({ build: { outDir: process.env.DIST ?? 'dist' }, preview: { port, strictPort: true }, logLevel: 'silent' });
 const gpu = ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--disable-frame-rate-limit'];
 const browser = await chromium.launch({ args: process.env.GPU ? gpu : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failed = false;
@@ -79,7 +89,7 @@ try {
   for (const [name, [tx, tz, nearLand]] of Object.entries(EDGES)) {
     if (!SPOTS.includes(name)) continue;
     edgeAt[name] = await page.evaluate(
-      ({ tx, tz, nearLand }) => {
+      ({ tx, tz, nearLand, look }) => {
         const g = window.solarbloom;
         const s = g.sim;
         const peek = (x, z) => s.grid.peek('g', x, z);
@@ -105,6 +115,7 @@ try {
             ox += a;
             oz += b;
           }
+        if (look) [ox, oz] = look;
         const len = Math.hypot(ox, oz) || 1;
         const area = s.areas.areaOf({ roofId: 'g', x: edge.x, z: edge.z });
         if (area && s.state.areas[area]) s.state.areas[area].sealed = false;
@@ -120,7 +131,7 @@ try {
           }
         return { x: edge.x, z: edge.z, ox: ox / len, oz: oz / len };
       },
-      { tx, tz, nearLand: !!nearLand },
+      { tx, tz, nearLand: !!nearLand, look: LOOKS[name] },
     );
     if (!edgeAt[name]) {
       failed = true;
@@ -210,10 +221,27 @@ try {
         await page.waitForFunction(() => window.solarbloom.chunks.pending === 0, null, { timeout: 60_000 }).catch(() => {});
         await page.waitForTimeout(1500);
         await page.evaluate(() => window.solarbloom.look.snapMood());
-        await page.waitForTimeout(2500);
+        // PRE='js' runs a snippet in the page before each shot (experiments; `g` is the game)
+        if (process.env.PRE) await page.evaluate((src) => new Function('g', src)(window.solarbloom), process.env.PRE);
+        await page.waitForTimeout(Number(process.env.PREWAIT ?? 0) + 2500);
+        // PROBE='js' prints what a snippet returns (debugging a shot; `g` is the game)
+        if (process.env.PROBE) console.log('  probe', JSON.stringify(await page.evaluate((src) => new Function('g', src)(window.solarbloom), process.env.PROBE)));
         const file = `${dir}/${TAG}-${name}-${spot}.png`;
         await page.screenshot({ path: file });
-        console.log(`  ${file}`);
+        const life = await page.evaluate(() => {
+          const w = window.solarbloom.waterLife;
+          if (!w) return '';
+          return [...w.slots].map(([k, v]) => `${k} ${v.mi.instancingCount}`).join(', ');
+        });
+        console.log(`  ${file}${life ? `  life: ${life}` : ''}`);
+        if (process.env.STRIP)
+          for (let i = 0; i < 6; i++) {
+            await page.waitForTimeout(Number(process.env.STRIP_MS ?? 500));
+            // STRIP_JS='js' runs before each strip frame (`g` the game, `i` the frame): stepping something by hand
+            if (process.env.STRIP_JS) await page.evaluate(([src, i]) => new Function('g', 'i', src)(window.solarbloom, i), [process.env.STRIP_JS, i]);
+            if (process.env.STRIP_JS) await page.waitForTimeout(200);
+            await page.screenshot({ path: file.replace('.png', `-f${i}.png`) });
+          }
       }
     }
   if (errors.length) {

@@ -209,6 +209,34 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
   The posts and decks also go to the water (`WaterDisturbance`): the posts as the `jetty` and `bridge:<x>,<z>` sources
   (rings round them), the decks as covers. The swell lies flat under a cover, and `WaterSurface` darkens the water's
   colour, the sky it reflects and its glints under it (`LOOK.bridge.under`). None of it is solid.
+- **Living water (E28.W04, #697):** clear water comes alive as the land beside it is restored. A tile is living when
+  it is restored itself, is a pond that has woken, or has restored land within two tiles (a canal's and the sea's own
+  tiles never restore; their banks do), and its life thickens with that shore's bloom. `lifeForTile`
+  (`WaterLife.ts`) places, from a fixed random stream per tile:
+  - **lily pads** on fresh water only (never the sea), in patches along the banks (`lilyPatch`, a smooth noise), a
+    flower on the first pad from bloom 2. They replace the old cylinder pads that were baked into the ground mesh, and
+    they ride the swell now;
+  - **small shoals of fish** where the water is deep enough for their loop to stay off the land: dark, half-clear
+    shapes under the surface. Every so often a shoal's leader rises and rings the water (`WaterDisturbance` source
+    `fish`);
+  - **floating leaves and drifting flecks** near the banks, and **arrowhead plants** in the fresh shallows;
+  - **an outlet** only where the world already has a drop: a restored channel of fresh water ending against ground a
+    level or more higher, which is the Saltwind canal's head under Elder Grove. A stone culvert stands proud of the
+    wall's face: a ring of voussoirs with a keystone, a black throat and a wet stain round it, and a sill. While the
+    area above is hidden, the chunk stands a plain facade (Look 4.9) 0.4 into the canal in front of the wall, so the
+    culvert goes on that face instead (`FACADE_DEPTH`). The stream pours off the sill as two lit, glossy sheets whose
+    streaks scroll past each other, partly see-through and thinning at the edges and foot. Where it lands there's
+    soft, frothy foam in two churning layers, a puff of spray, and rings on the water. All of it is lit like the
+    world, with a little light of its own by day only (`falls.glow`), so it's moonlit at night and never glows. By
+    night its colour fades to `falls.nightColour`, the canal's moonlit blue-grey, and most of its sheen goes. The
+    water's lighting is one-sided on purpose: with two-sided lighting the engine turned the sheets' normals into the
+    wall, where they picked up the warm bounce off the ground and the stream went amber under a blue night.
+
+  Each chunk hands its life to `setWaterLife` as it builds (near chunks only). `WaterLife` draws the nearest of each
+  kind round the camera's focus (`LOOK.waterLife.radius`, capped by `max`): one instanced draw per kind in view, 11 at
+  most, on the water layer. It fades in with the water's restore. By night the fish and flecks dim, and the stream and
+  its foam turn a moonlit blue-grey: nothing glows. The flecks go with *Fewer particles* and the Low tier, and reduced
+  motion stills everything (it stops `waterTime`). Gameplay, saves and the grid never see any of it.
 - **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
   25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
   overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back
