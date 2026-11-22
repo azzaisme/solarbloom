@@ -62,6 +62,8 @@ try {
       s.state.cozy ??= {};
       (s.state.cozy.plots ??= {})[p.id] = option;
       delete s.state.salvage.clipped;
+      const held = s.inventory.count('biomass'); // room in the backpack for this plot (a run of plots fills the stack)
+      if (held > 0) s.inventory.pay({ biomass: held });
       for (const [x, z, facing] of [[p.x + 0.5, p.z - 0.5, 0], [p.x + 0.5, p.z + p.size + 0.5, Math.PI], [p.x - 0.5, p.z + 0.5, Math.PI / 2], [p.x + p.size + 0.5, p.z + 0.5, -Math.PI / 2]]) {
         if (!g.bot.walker.walkable('g', Math.floor(x), Math.floor(z))) continue;
         g.bot.teleport('g', x, z);
@@ -87,7 +89,7 @@ try {
     };
     await page.screenshot({ path: `${dir}/${tag}-prompt-full.png` });
     await shot('a-ready', `${prompt || '(no prompt)'}`);
-    if (!/^E? ?(Gather|Prune) /.test(prompt.replace(/^E\s*/, 'E '))) note(`${option}: prompt is "${prompt}"`);
+    if (!/\b(Gather|Prune) the /.test(prompt) || /full|not long ago/.test(prompt)) note(`${option}: prompt is "${prompt}"`);
     // the hold, a frame every so often
     const before = await page.evaluate(() => window.solarbloom.sim.inventory.count('biomass'));
     await page.keyboard.down('KeyE');
