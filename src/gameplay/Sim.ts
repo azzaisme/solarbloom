@@ -52,6 +52,7 @@ import { DroneFuel } from './DroneFuel';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
+import { PlotWork } from './PlotWork';
 import { FarmSystem } from './FarmSystem';
 import { CompostSystem } from './CompostSystem';
 import { FarmExtras } from './FarmExtras';
@@ -141,6 +142,8 @@ export class Sim {
   readonly weather: Weather;
   /** E23.5.1: gathering biomass from restored ground. */
   readonly gather: GatherSystem;
+  /** E27.2 (#680): gathering from and pruning the plant plots */
+  readonly plotWork: PlotWork;
   /** E23.5.2: planters and crops. */
   readonly farm: FarmSystem;
   /** E23.5.3: compost bins and Bio Digesters (old-city rules). */
@@ -212,6 +215,7 @@ export class Sim {
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
+    this.plotWork = new PlotWork(this);
     this.farm = new FarmSystem(this);
     this.compost = new CompostSystem(this);
     this.farmExtras = new FarmExtras(this);

@@ -29,8 +29,8 @@ export interface ViewProfile {
 
 /**
  * Look 4.10 (#154): zoomed out (≤ farZoom) a high, narrow lens that reads like the old isometric grid; the
- * default zoom (1) is a close three-quarter view with a wide lens, low enough that the skyline rises behind
- * the area; zooming in further lowers it until the sky shows above the skyline.
+ * default zoom (1) is a close three-quarter view with a wide lens, low enough that the city rises behind
+ * the area; zooming in further lowers it until the sky shows above the horizon.
  */
 export const VIEW: ViewProfile = { farZoom: 0.45, nearZoom: 1.0, farPitch: 42, nearPitch: 24, farFov: 12, nearFov: 52, closeZoom: 1.9, closePitch: 19, closeFov: 56 };
 
@@ -54,7 +54,7 @@ export interface CameraSnapshot {
 /**
  * E21.22 (§14), rebuilt as a third-person camera: the exploration camera is a chase camera on a boom behind
  * bloombot. The mouse (pointer lock) or the right stick swings it freely round bloombot and tilts it from a little
- * below the shoulder (looking up at the skyline) to high above; bloombot sits in the lower middle of the frame,
+ * below the shoulder (looking up at the sky) to high above; bloombot sits in the lower middle of the frame,
  * and the middle of the screen (the build crosshair) looks at the ground a few tiles past it.
  *
  * The zoom steps are boom lengths: `zoomSteps` keep the old zoom numbers (bigger is closer; 3.2 × 3.2 / distance)
@@ -544,7 +544,7 @@ export class CameraController {
     // far past the haze, so depth precision stays good from close-up to the city overview.
     c.nearClip = ch > 0.5 ? 0.12 : Math.max(0.3, this.dist - this.viewHeight * 2.2 - 12);
     // Just past the haze, no further: everything beyond is the haze colour, and a deeper far plane would draw
-    // the city behind it. The sky dome and the skyline are a backdrop that fits itself inside (Look 4.7, 4.8).
+    // the city behind it. The sky dome is a backdrop that fits itself inside (Look 4.7).
     c.farClip = this.dist + this.hazeEnd + 10;
     const yr = (this.yaw * Math.PI) / 180;
     // Over the shoulder: the pivot slides along the camera's right, so bloombot stands left of the crosshair.

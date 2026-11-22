@@ -1,6 +1,7 @@
 import { LIGHTS } from './lights';
 // E19 (#245): the cozy city. Plot options and when they unlock. All data, no rules: cosmetic only, so nothing
-// here may ever feed production, chains, milestones, pacing or the biodiversity score.
+// here may ever feed production, chains, milestones, pacing or the biodiversity score. The one exception is E27.2's
+// PLOT_WORK (end of file): Bloombot gathering from or pruning a plant plot, on the existing clipping economy.
 
 import type { AreaType } from './city';
 
@@ -130,4 +131,36 @@ export const DECOR_GEN = {
   reach: 3.6,
   /** most decorations a city can hold (keeps the save inside its limit, #3) */
   max: 4000,
+};
+
+// ───────────── E27.2 (#680): plots Bloombot works on ─────────────
+
+/**
+ * What Bloombot does at a chosen plot with Interact: gather from what grows there, or prune what's overgrown. The
+ * other options (the café, the playground, the pools…) are places, not plants, and have no work.
+ *
+ * This is the one way a plot reaches the economy, and it adds next to nothing: a plot gives what its own tiles would
+ * give if they were clipped one by one (GatherSystem, E23.5.1), each tile counting as flowered ground at least, and it
+ * regrows on the same clock. See PlotWork.
+ */
+export interface PlotWork {
+  verb: 'gather' | 'prune';
+  /** what is gathered or pruned, as the prompt says it ("Gather the greens") */
+  what: string;
+}
+
+export const PLOT_WORK: Readonly<Record<string, PlotWork>> = {
+  garden: { verb: 'gather', what: 'the greens' },
+  meadow: { verb: 'gather', what: 'the long grass' },
+  crates: { verb: 'gather', what: 'the herbs' },
+  reeds: { verb: 'gather', what: 'the reeds' },
+  greenhouse: { verb: 'gather', what: 'the seedlings' },
+  orchard: { verb: 'prune', what: 'the fruit trees' },
+  arbour: { verb: 'prune', what: 'the roses' },
+  parklet: { verb: 'prune', what: 'the planters' },
+};
+
+export const PLOT_WORK_TUNING = {
+  /** seconds Interact is held: gathering an armful, then a few snips round a plant */
+  holdSeconds: { gather: 0.9, prune: 1.2 },
 };

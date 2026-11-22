@@ -4,6 +4,8 @@ import type { Sim } from '../gameplay/Sim';
 import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
+import type { PlotSpot } from '../core/Plots';
+import { PLOT_WORK_TUNING } from '../data/cozy';
 import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
@@ -459,6 +461,18 @@ export class OldCityController {
       return;
     }
     this.startHold('gather', GATHER.holdSeconds, () => this.sim.gather.gather(t));
+  }
+
+  /** E27.2 (#680): holds Interact at a plant plot: Bloombot gathers an armful from it, or prunes it. */
+  plotHold(p: PlotSpot) {
+    const why = this.sim.plotWork.problem(p);
+    if (why) {
+      const sc = this.host.screenOf(p.x + p.size / 2, p.z + p.size / 2);
+      this.host.hud.showFail(why, sc.x, sc.y);
+      return;
+    }
+    const verb = this.sim.plotWork.workOf(p)!.verb;
+    this.startHold(verb, PLOT_WORK_TUNING.holdSeconds[verb], () => this.sim.plotWork.work(p));
   }
 
   /**

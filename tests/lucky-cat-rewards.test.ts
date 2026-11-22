@@ -57,7 +57,7 @@ describe('E23.12 Lucky Cat rewards (#528)', () => {
     const sim = makeSim();
     const before = { food: sim.inventory.count('food'), biomass: sim.inventory.count('biomass'), seeds: sim.inventory.count('seeds') };
     const text = apply(sim, 'luckyHarvest', parkCell(sim));
-    expect(text).toBe('A gift in your backpack: food, biomass and seeds');
+    expect(text).toBe('A gift in your backpack: food, greens and seeds');
     const G = TUNING.cat.gift;
     expect(sim.inventory.count('food') - before.food).toBe(G.food);
     expect(sim.inventory.count('biomass') - before.biomass).toBe(G.biomass);
@@ -65,7 +65,7 @@ describe('E23.12 Lucky Cat rewards (#528)', () => {
     // Mast Row is known for copper; the Cistern Basin for clay.
     expect(Object.keys(sim.cat.giftAt(regionCell('mastRow'), 1))).toContain('copper');
     expect(Object.keys(sim.cat.giftAt(regionCell('cistern'), 1))).toContain('clay');
-    expect(apply(sim, 'luckyHarvest', regionCell('mastRow'))).toMatch(/food, biomass and copper$/);
+    expect(apply(sim, 'luckyHarvest', regionCell('mastRow'))).toMatch(/food, greens and copper$/);
     expect(sim.inventory.count('copper')).toBeGreaterThanOrEqual(G.local);
   });
 
