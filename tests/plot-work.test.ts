@@ -11,7 +11,9 @@ import { gameDays } from '../src/data/time';
 import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
 import { drawPlot } from '../src/rendering/PlotArt';
-import { bannedIn } from '../src/ui/words';
+import { MATERIALS } from '../src/data/salvage';
+import { itemDef } from '../src/data/items';
+import { bannedIn, RESOURCE_NAME } from '../src/ui/words';
 
 /** E27.2 (#680): Bloombot gathers from and prunes the plant plots, and they grow back. */
 
@@ -193,5 +195,13 @@ describe('E27.2: Bloombot acts it out, and the plot shows it', () => {
     lines.push(sim.plotWork.problem(p)!, plot('garden').sim.plotWork.problem(plot('cafe').p) ?? '');
     for (const l of lines) expect(bannedIn(l), l).toEqual([]);
     expect(lines.join(' ')).not.toMatch(/biomass|yield|tile|regrow/i);
+  });
+});
+
+describe('E27.2: what was picked is called what the player knows it as', () => {
+  it('the pickup from a plot (the floating label and the toast) says Greens, as the backpack and stores do', () => {
+    expect(MATERIALS.biomass.name).toBe(RESOURCE_NAME.biomass);
+    expect(itemDef('biomass').name).toBe('Greens');
+    for (const m of Object.values(MATERIALS)) expect(bannedIn(m.name), m.id).toEqual([]);
   });
 });
