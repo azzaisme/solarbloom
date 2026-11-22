@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
 import { DAY_LIGHT } from '../data/sky';
 import { color } from './Materials';
+import { waterLayer, worldLightLayers } from './WaterSurface';
 import type { Tweens } from './Tween';
 
 /** Tile surfaces sit slightly below the slabs so the gaps read as a soft grid. */
@@ -39,9 +40,12 @@ export class SceneBuilder {
     // Distances (from the camera) are converted to fog depth by Game once the camera exists.
     scene.fog.start = 46;
     scene.fog.end = 84;
+    // E28.W01: the water's own layer exists before any light, so every world light can shine on it too
+    waterLayer(this.app);
     const sun = new pc.Entity('sun');
     sun.addComponent('light', {
       type: 'directional',
+      layers: worldLightLayers(),
       castShadows: true,
       shadowResolution: 2048,
       shadowDistance: 45,
@@ -52,7 +56,7 @@ export class SceneBuilder {
     this.app.root.addChild(sun);
     this.sun = sun;
     const fill = new pc.Entity('fill');
-    fill.addComponent('light', { type: 'directional', castShadows: false });
+    fill.addComponent('light', { type: 'directional', castShadows: false, layers: worldLightLayers() });
     this.app.root.addChild(fill);
     this.fill = fill;
     this.applyLights();

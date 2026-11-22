@@ -31,12 +31,40 @@ import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from 
 import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
-import { WATER, poolMaterial, updatePool } from './Water';
+import { WATER } from './Water';
+import { encodeWater, WATER_CLARITY, WATER_ENC, waterMaterial } from './WaterSurface';
 import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 import { MOVE_TRIPS } from '../data/moveSpots';
+
+/**
+ * E28.W01 (#694): the distance (tiles) from a point on the water to the nearest of the given land tiles, each a unit
+ * square whose rounded corners (radius per corner, CORNERS order, as landCuts gives them) are cut away. Capped at
+ * WATER_ENC. Exported for tests.
+ */
+export function waterDistance(px: number, pz: number, land: { x: number; z: number; cut?: number[] }[]): number {
+  let d = WATER_ENC;
+  for (const L of land) {
+    const dx = Math.max(L.x - px, 0, px - L.x - 1);
+    const dz = Math.max(L.z - pz, 0, pz - L.z - 1);
+    let e = Math.hypot(dx, dz);
+    if (L.cut) {
+      // in a rounded corner's zone the shore is the arc, not the square's corner
+      for (let c = 0; c < 4; c++) {
+        const R = L.cut[c];
+        if (!R) continue;
+        const [sx, sz] = CORNERS[c];
+        const cx = L.x + 0.5 + sx * (0.5 - R);
+        const cz = L.z + 0.5 + sz * (0.5 - R);
+        if ((px - cx) * sx > 0 && (pz - cz) * sz > 0) e = Math.max(0, Math.hypot(px - cx, pz - cz) - R);
+      }
+    }
+    if (e < d) d = e;
+  }
+  return d;
+}
 
 /** Small seeded RNG for decoration placement (looks only). */
 class VRng {
@@ -605,6 +633,15 @@ export class ChunkRenderer {
         const n = this.views.get(chunkKey(GROUND, Math.floor((t.x + dx) / CHUNK), Math.floor((t.z + dz) / CHUNK)));
         if (n) n.fogDirty = true;
       }
+    // E28.W01: the water's clarity blends across tile corners, so a water tile on a chunk's edge reaches into the
+    // chunks round it (diagonals too): rebuild those
+    if ((lx === 0 || lz === 0 || lx === CHUNK - 1 || lz === CHUNK - 1) && (t.feature === 'water' || this.overWater(t)))
+      for (let dz = -1; dz <= 1; dz++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dz) continue;
+          const n = this.views.get(chunkKey(GROUND, Math.floor((t.x + dx) / CHUNK), Math.floor((t.z + dz) / CHUNK)));
+          if (n && n !== v) n.dirty = true;
+        }
   }
 
   /** E23.4.4: rebuild every chunk touching these tile bounds (inclusive). */
@@ -683,7 +720,7 @@ export class ChunkRenderer {
     this.tickGrowing(dt);
     // Phase 5 / Look 3.16: foliage, grass, flowers, vines and banners sway; still with reduced motion or `?still`
     updateWind(ChunkRenderer.still ? 0 : this.time, this.reducedMotion || ChunkRenderer.still ? 0 : 1);
-    if (!this.reducedMotion && !ChunkRenderer.still) updatePool(this.time);
+    if (!this.reducedMotion && !ChunkRenderer.still) this.waterTime = this.time;
     const ps = this.sim.grid.isPlayable(GROUND) ? this.sim.progression.parkStage() : 0;
     if (ps !== this.parkStage) {
       const prev = this.parkStage;
@@ -1397,16 +1434,16 @@ export class ChunkRenderer {
     const plain = b.build(this.device)!;
     return [
       { mesh: plain, material: towerMaterial(), own: true },
-      { mesh: plain, material: poolMaterial(this.device) },
+      { mesh: plain, material: waterMaterial(this.device) },
       { mesh: tb.build(this.device)!, material: transitionMaterial(), own: true },
     ];
   }
 
-  private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
+  private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean, layers?: number[]): pc.Entity | undefined {
     holder?.destroy();
     if (!mesh) return undefined;
     const e = new pc.Entity(name);
-    e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, material)], castShadows: shadows, receiveShadows: true });
+    e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, material)], castShadows: shadows, receiveShadows: true, ...(layers ? { layers } : {}) });
     this.root.addChild(e);
     return e;
   }
@@ -1575,14 +1612,17 @@ export class ChunkRenderer {
       if (cut) this.cutWater(b, t, th, cut, pool, gtex);
       if (!v.far && this.isWater(t)) {
         this.poolBanks(b, t, th, gtex);
-        // a natural pond's water (the Cistern's) shows whenever it holds any: its level draws the bared bed on top
-        if ((t.ground === 'restored' || pondCell(t.x, t.z)) && fog !== 'hidden') this.poolSurface(pool, t, th);
         // a dead pond's bed: dried, cracked silt painted across the whole pond (no tile grid)
         if (this.siltBed(t)) {
           const k = Math.round(255 * (1 - 0.3 * b.grey));
           addGroundQuad(gtex[GROUND_TEXTURES.indexOf('silt-bed')], 'silt-bed', t.x, t.z, th + 0.08 - WATER.drop + 0.002, [k, k, k]);
         }
       }
+      // E28.W01: the water's surface over every stretch of live water (the sea, its shallows, the surf, restored pools,
+      // a pond that holds any), on its own layer. Always, even mid-transition: nothing rebuilds the chunk when a
+      // transition ends, so a tile skipped now would keep its bare slab (restored surf clears in one step)
+      const clarity = fog === 'hidden' ? undefined : this.liveWater(t);
+      if (clarity !== undefined) this.waterSurface(pool, t, th, clarity, v.far ? 1 : WATER.grid);
       // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
       // (not the jetty: its tiles are paving underneath, but its wooden deck is the model's)
       const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !this.overWater(t) ? this.paintedGround(t) : undefined;
@@ -1601,7 +1641,7 @@ export class ChunkRenderer {
       yield; // a tile done: `update` decides whether this frame has time for the next
     }
     // From here to the end is one step: buildings, then every mesh of the chunk swaps in together.
-    v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), poolMaterial(this.device), false);
+    v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), waterMaterial(this.device), false, this.waterLayer !== undefined ? [this.waterLayer] : undefined);
     v.gtex = GROUND_TEXTURES.map((name, i) => this.setMesh(v.gtex?.[i], `ground-${name}-${v.key}`, groundTexMesh(this.device, gtex[i]), groundTexMaterial(this.device, name), false));
     if (this.inPark && !v.far) {
       b.grey = fb.grey = 0;
@@ -1981,6 +2021,12 @@ export class ChunkRenderer {
 
   /** The transition framework (Game sets it). Without it, chunks build exactly as before Look 6. */
   transitions?: TransitionRenderer;
+  /** E28.W01: the layer the water's surface draws in (its own, so the planar reflection leaves it out) */
+  waterLayer?: number;
+  /** E28.W01: the open sea's surface height once a chunk of it is built (the planar reflection's plane) */
+  seaY?: number;
+  /** E28.W01: the water's clock (held still for reduced motion), read by Game for WaterSurface */
+  waterTime = 0;
   private slabCap?: (hex: string, p: [number, number, number], s: [number, number, number]) => void;
 
   /** E23.7.1: the fog sheets' tint by the time of day (unlit, so the light can't dim them): DayNight sets it */
@@ -2099,13 +2145,14 @@ export class ChunkRenderer {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
         addGroundFan(gtex[GROUND_TEXTURES.indexOf('silt-bed')], 'silt-bed', sq[0], sq.slice(1), surf + 0.002, [k, k, k]);
       }
-      // a clear pool's surface carries on into the corner, at its bank (pale shallows and foam)
-      if (this.isWater(n) && (n.ground === 'restored' || pondCell(n.x, n.z)) && this.fog !== 'hidden') {
-        const shallow = lin(PALETTE.aqua.foam).map((v) => Math.round(v * 255));
+      // E28.W01: the water's surface carries on into the corner, right up to the rounded bank
+      const clarity = this.fog !== 'hidden' ? this.liveWater(n) : undefined;
+      if (clarity !== undefined) {
+        const land = this.landAround(n, 1);
         const base = pool.pos.length / 3;
         for (const [px, pz] of sq) {
           pool.pos.push(px, surf + 0.003, pz);
-          pool.col.push(shallow[0], shallow[1], shallow[2], 0);
+          pool.col.push(...encodeWater(waterDistance(px, pz, land), clarity));
         }
         pool.idx.push(base, base + 3, base + 1, base + 1, base + 3, base + 2);
       }
@@ -2614,31 +2661,94 @@ export class ChunkRenderer {
   }
 
   /**
-   * Clean water's surface for one tile: a fine grid just above the bed, coloured from pale shallows at the bank to
-   * deep blue in the middle, with the distance to the bank in the vertex alpha (the pool shader draws the foam
-   * line, caustics and ripples from it).
+   * E28.W01 (#694): how clear a tile's water is when it has a live water surface (WaterSurface), else undefined: the
+   * open sea and its shallow shelf, the water under the jetty and canal decks and the broken causeway (clear); the
+   * beach's surf while it is dead (murky; restoring it clears it); restored water and a pond that holds any (clear).
+   * Dead canals and dried beds have none: their slabs and silt show as they are.
    */
-  private poolSurface(out: PoolGeo, t: TileData, h: number) {
+  private liveWater(t: TileData): number | undefined {
+    // under the jetty the water is as clear as the surf round it (restoring the jetty's paving doesn't clear it)
+    if (t.level !== undefined && this.overWater(t)) return surfCell(t.x, t.z) && !this.surfRestoredBy(t) ? WATER_CLARITY.murky : WATER_CLARITY.clear;
+    if (t.feature !== 'water' || t.occupantId) return undefined;
+    if (t.blocked && !pondCell(t.x, t.z)) return t.level !== undefined ? WATER_CLARITY.clear : undefined;
+    if (t.ground === 'restored' || pondCell(t.x, t.z)) return WATER_CLARITY.clear;
+    if (t.level !== undefined && surfCell(t.x, t.z)) return WATER_CLARITY.murky;
+    return undefined;
+  }
+
+  /** E28.W01: whether a restored stretch of surf lies beside a tile (the water under the jetty follows it). */
+  private surfRestoredBy(t: TileData): boolean {
     const g = this.sim.grid;
-    const y = h + 0.08 - WATER.drop + 0.003;
-    const land: [number, number][] = [];
-    for (let dz = -2; dz <= 2; dz++)
-      for (let dx = -2; dx <= 2; dx++) {
-        const n = g.peek(t.roofId, t.x + dx, t.z + dz);
-        if (n && !this.isWater(n)) land.push([t.x + dx, t.z + dz]);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+      if (n && n.feature === 'water' && n.ground === 'restored' && surfCell(n.x, n.z)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * E28.W01: the water's clarity at a tile corner (the tile's own lower-x, lower-z corner shifted by `cx`, `cz`):
+   * the mean of the live water tiles meeting there, so murky surf and clear water blend over a tile rather than
+   * stepping at the border. `own` when none of the others has live water.
+   */
+  private cornerClarity(t: TileData, cx: number, cz: number, own: number): number {
+    const g = this.sim.grid;
+    let sum = 0;
+    let n = 0;
+    for (let dz = -1; dz <= 0; dz++)
+      for (let dx = -1; dx <= 0; dx++) {
+        const o = dx + cx === 0 && dz + cz === 0 ? t : g.peek(t.roofId, t.x + cx + dx, t.z + cz + dz);
+        const c = o === t ? own : o && this.fog !== 'hidden' ? this.liveWater(o) : undefined;
+        if (c === undefined) continue;
+        sum += c;
+        n++;
       }
-    const radius = this.poolCorners(t);
-    const shallow = lin(PALETTE.aqua.foam);
-    const mid = lin(PALETTE.aqua.water);
-    const deep = lin(PALETTE.aqua.deep);
-    const N = WATER.grid;
+    return n ? sum / n : own;
+  }
+
+  /**
+   * E28.W01: the land round a tile, out to the water's deepest colour: each land tile (anything that isn't water or a
+   * deck over it) with its rounded corners (E23.13), for `waterDistance`.
+   */
+  private landAround(t: TileData, reach: number): { x: number; z: number; cut?: number[] }[] {
+    const g = this.sim.grid;
+    const land: { x: number; z: number; cut?: number[] }[] = [];
+    for (let dz = -reach; dz <= reach; dz++)
+      for (let dx = -reach; dx <= reach; dx++) {
+        const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+        if (!n || this.bankless(n)) continue;
+        land.push({ x: n.x, z: n.z, cut: this.landCuts(n) });
+      }
+    return land;
+  }
+
+  /**
+   * E28.W01 (#694): a tile's water surface: a `N`x`N` grid of quads (one on far chunks) a hair over the slab, each
+   * vertex carrying its distance to the nearest land (following the land's rounded corners) and the water's clarity
+   * (encodeWater). The shader turns those into colour by depth, the sand bed in the shallows, foam on the shore and
+   * waves that follow it. Replaces the old pool surface (which only covered restored pools).
+   */
+  private waterSurface(out: PoolGeo, t: TileData, h: number, clarity: number, N: number) {
+    const y = h + 0.08 - WATER.drop + 0.003;
+    // the open sea's height: the plane the High-tier reflection mirrors in
+    if (t.blocked && t.feature === 'water') this.seaY = y;
+    const land = this.landAround(t, Math.ceil(Math.min(WATER_ENC, LOOK.water.deepAt + 1)));
+    const radius = this.isWater(t) ? this.poolCorners(t) : [0, 0, 0, 0];
     const base = out.pos.length / 3;
+    // clarity at the four corners, blended bilinearly across the tile
+    const k00 = this.cornerClarity(t, 0, 0, clarity);
+    const k10 = this.cornerClarity(t, 1, 0, clarity);
+    const k01 = this.cornerClarity(t, 0, 1, clarity);
+    const k11 = this.cornerClarity(t, 1, 1, clarity);
     for (let j = 0; j <= N; j++)
       for (let i = 0; i <= N; i++) {
         const px = t.x + i / N;
         const pz = t.z + j / N;
-        let d = WATER.deepAt;
-        for (const [lx, lz] of land) d = Math.min(d, Math.hypot(Math.max(lx - px, 0, px - lx - 1), Math.max(lz - pz, 0, pz - lz - 1)));
+        const u = i / N;
+        const w = j / N;
+        const k = (k00 * (1 - u) + k10 * u) * (1 - w) + (k01 * (1 - u) + k11 * u) * w;
+        let d = waterDistance(px, pz, land);
+        // a pool's own rounded inside corners: the bank curves round them (as poolBanks builds it)
         for (let c = 0; c < 4; c++) {
           const R = radius[c];
           if (!R) continue;
@@ -2647,13 +2757,8 @@ export class ChunkRenderer {
           const vz = (pz - (t.z + 0.5 + sz * (0.5 - R))) * sz;
           if (vx > 0 && vz > 0) d = Math.min(d, Math.max(0, R - Math.hypot(vx, vz)));
         }
-        const k = Math.min(1, d / WATER.deepAt);
-        // pale at the bank, the water's own blue a third of the way in, deepening to the middle
-        const a = Math.min(1, k / 0.3);
-        const e = Math.max(0, (k - 0.3) / 0.7) * 0.75;
         out.pos.push(px, y, pz);
-        for (let q = 0; q < 3; q++) out.col.push(Math.round((shallow[q] + (mid[q] - shallow[q]) * a + (deep[q] - mid[q]) * e) * 255));
-        out.col.push(Math.round(k * 255));
+        out.col.push(...encodeWater(d, k));
       }
     for (let j = 0; j < N; j++)
       for (let i = 0; i < N; i++) {

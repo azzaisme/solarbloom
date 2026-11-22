@@ -136,11 +136,11 @@ export const LOOK = {
    * bloom, SSAO or depth of field. Fauna caps per tier live in tuning.ts (E16).
    */
   tiers: {
-    low: { post: false, samples: 1, shadowRes: 1024, shadowCascades: 1, softShadows: false, bloom: false, ssao: false, dof: false, rim: true },
+    low: { post: false, samples: 1, shadowRes: 1024, shadowCascades: 1, softShadows: false, bloom: false, ssao: false, dof: false, rim: true, waterReflect: false },
     // #648: 4× MSAA on Medium too (and so on the Deck, which draws Medium at 0.75 scale): at 2× the long thin
     // edges of the retaining walls and their coping stepped visibly
-    medium: { post: true, samples: 4, shadowRes: 2048, shadowCascades: 2, softShadows: false, bloom: true, ssao: false, dof: false, rim: true },
-    high: { post: true, samples: 4, shadowRes: 4096, shadowCascades: 3, softShadows: true, bloom: true, ssao: true, dof: false, rim: true },
+    medium: { post: true, samples: 4, shadowRes: 2048, shadowCascades: 2, softShadows: false, bloom: true, ssao: false, dof: false, rim: true, waterReflect: false },
+    high: { post: true, samples: 4, shadowRes: 4096, shadowCascades: 3, softShadows: true, bloom: true, ssao: true, dof: false, rim: true, waterReflect: true },
   } satisfies Record<GfxTier, TierSpec>,
   /**
    * #156: how the sun's shadow cascades split the shadow distance, 0 (even) … 1 (logarithmic: most detail near the
@@ -167,9 +167,65 @@ export const LOOK = {
     /** how far the foot sinks below the lower side's ground or water */
     footSink: 0.25,
   },
+  /**
+   * E28.W01 (#694): the water (WaterSurface). One surface for every stretch of live water (the open sea, its
+   * shallows, the beach's surf and restored pools), coloured by how far it is from land, with ripples, sun and moon
+   * highlights, Fresnel reflections of the sky (and, on High, of the world itself) and foam that laps the shores and
+   * curls round whatever stands in the water. Colours are sRGB hex (the shader works in linear); lengths are in tiles.
+   */
+  water: {
+    /** clear water right by the shore: turquoise */
+    shallow: '#3fbfba',
+    /** a little way out */
+    mid: '#2aa3b4',
+    /** far from land: deep blue-teal */
+    deep: '#1a7f9e',
+    /** the beach's surf while it is still dead: murky (restoring it clears it) */
+    murky: '#6e877b',
+    /** the sand seen through the shallows */
+    bed: '#d3c08e',
+    /** foam on the shore and round things in the water */
+    foam: '#eef8f4',
+    /** depth: `mid` is reached `midAt` tiles from land and `deep` by `deepAt` */
+    midAt: 1.2,
+    deepAt: 5,
+    /** the bed shows through the shallows, fading out by `bedReach` tiles from land, up to `bedShow` of the colour */
+    bedReach: 1.4,
+    bedShow: 0.5,
+    /** light nets on the bed in the shallows (0 off) */
+    caustics: 0.1,
+    /** ripples: wave length scale (tiles), drift speed, slope strength, and how much finer ripples add */
+    ripple: { scale: 1.7, speed: 0.55, strength: 0.14, fine: 0.45 },
+    /** waves that follow the shore and the outline of anything in the water, travelling in toward it */
+    lap: { reach: 1.6, length: 0.55, speed: 0.5, strength: 0.18 },
+    /** foam: how far out it reaches (tiles), how many lines, how fast they travel in, how strong */
+    foamLine: { reach: 0.5, lines: 2, speed: 0.3, strength: 0.8 },
+    /** the surface: gloss (sharp sun highlights) and how strong the highlight is (kept off neon, little bloom) */
+    gloss: 0.93,
+    specular: 0.18,
+    /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */
+    fresnel: { base: 0.04, power: 5, max: 0.6 },
+    /** how strongly the sky's colours reflect (all tiers) */
+    sky: 0.75,
+    /** reflections take on this much of the water's own hue, so far water reads aqua (or navy) rather than the haze's grey */
+    reflectTint: 0.45,
+    /** the sky's blue light filling the water's own colour (the engine's sky light is off for water: it reflects its own way) */
+    ambient: 0.55,
+    /**
+     * High only: a planar reflection of the world (buildings, the jetty, plants, lamps at night) at `scale` of the
+     * screen's size, drawn as far as `far` tiles, mixed in by `strength` and broken up by the ripples (`distort`)
+     */
+    reflect: { strength: 0.7, scale: 0.5, far: 50, distort: 0.08 },
+    /** by night the water's own colour dims to `nightAlbedo` of the day's (the moon, sky and lamps do the rest) */
+    nightAlbedo: 0.55,
+    /** by night the water's colour turns to this moonlit navy (the approved night sea) */
+    night: '#123a8f',
+  },
 };
 
 export interface TierSpec {
+  /** E28.W01: a planar reflection of the world in the water */
+  waterReflect: boolean;
   /** CameraFrame post-processing (off: the camera tone-maps directly) */
   post: boolean;
   /** MSAA samples of the HDR scene target */
