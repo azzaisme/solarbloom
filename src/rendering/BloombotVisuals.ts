@@ -3,6 +3,7 @@ import { MOVES, TURN_LOOK } from '../data/botMotion';
 import { BotMoves, type MoveIn } from './BotMoves';
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
+import { worldLightLayers } from './WaterSurface';
 import { botParts, growthKey, type BotGrowth, type BotMat, type PartId, type PartPiece } from '../data/botParts';
 import { BOT_CLIPS, REST, seatLift } from '../data/rest';
 import { VISIT_POINTS, type Perch } from '../data/wildlife';
@@ -292,7 +293,7 @@ export class BloombotVisuals {
     }
     if (!this.lantern) {
       const e = (this.lantern = new pc.Entity('bloombot-lantern'));
-      e.addComponent('light', { type: 'omni', castShadows: false, falloffMode: pc.LIGHTFALLOFF_INVERSESQUARED, affectSpecularity: false, color: color(PALETTE.light.lamps.warm) });
+      e.addComponent('light', { type: 'omni', castShadows: false, falloffMode: pc.LIGHTFALLOFF_INVERSESQUARED, affectSpecularity: false, color: color(PALETTE.light.lamps.warm), layers: worldLightLayers() });
       e.setLocalPosition(0, 1.05, 0.12);
       this.root.addChild(e);
     }
