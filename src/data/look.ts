@@ -213,9 +213,11 @@ export const LOOK = {
     ambient: 0.55,
     /**
      * High only: a planar reflection of the world (buildings, the jetty, plants, lamps at night) at `scale` of the
-     * screen's size, drawn as far as `far` tiles, mixed in by `strength` and broken up by the ripples (`distort`)
+     * screen's size, drawn as far as `far` tiles, mixed in by `strength` and broken up by the ripples (`distort`),
+     * re-rendered `every` frames (2: every other frame; the water samples it with the view it was drawn from, so it
+     * stays in place, a frame behind at most, which the ripples hide)
      */
-    reflect: { strength: 0.7, scale: 0.5, far: 50, distort: 0.08 },
+    reflect: { strength: 0.7, scale: 0.5, far: 50, distort: 0.08, every: 2 },
     /** by night the water's own colour dims to `nightAlbedo` of the day's (the moon, sky and lamps do the rest) */
     nightAlbedo: 0.55,
     /** by night the water's colour turns to this moonlit navy (the approved night sea) */

@@ -156,20 +156,30 @@ void sbWaterSetup() {
 	c = mix(c, uWaterDeep, smoothstep(uWaterDepth.x, uWaterDepth.y, dist));
 	// the sand bed, and light nets on it, through the clear shallows (shifted by the ripples)
 	float bedK = (1.0 - smoothstep(0.0, uWaterDepth.z, dist)) * uWaterDepth.w * clarity;
-	// two layers at different scales and angles, so the nets never line up into a grid
-	vec2 pc1 = p * 2.6 + wNormal.xz * 0.6;
-	vec2 pc2 = mat2(0.8, -0.6, 0.6, 0.8) * p * 1.9 + vec2(3.7, 1.9) + wNormal.xz * 0.6;
-	float caus = uWaterMisc.x > 0.0 ? 0.6 * (sbWaterCaustic(pc1, t) + sbWaterCaustic(pc2, t * 0.83)) * uWaterMisc.x : 0.0;
-	c = mix(c, uWaterBed * (1.0 + caus * 1.5), bedK);
+	// two layers at different scales and angles, so the nets never line up into a grid; only where the bed shows
+	// (most of the screen is open water, which skips them)
+	if (bedK > 0.001) {
+		float caus = 0.0;
+		if (uWaterMisc.x > 0.0) {
+			vec2 pc1 = p * 2.6 + wNormal.xz * 0.6;
+			vec2 pc2 = mat2(0.8, -0.6, 0.6, 0.8) * p * 1.9 + vec2(3.7, 1.9) + wNormal.xz * 0.6;
+			caus = 0.6 * (sbWaterCaustic(pc1, t) + sbWaterCaustic(pc2, t * 0.83)) * uWaterMisc.x;
+		}
+		c = mix(c, uWaterBed * (1.0 + caus * 1.5), bedK);
+	}
 	c = mix(uWaterMurky, c, clarity);
 	// ── foam: an edge on the shore and lines lapping in, broken up so it never rings in perfect contours ──
+	// (only near the shore: further out there is none, and the noise is skipped)
 	float fr = max(uWaterFoamL.x, 0.05);
-	float n1 = sbWaterNoise(p * 2.3 + vec2(t * 0.11, -t * 0.07));
-	float n2 = sbWaterNoise(p * 5.1 - vec2(t * 0.05, t * 0.09));
-	float edge = 1.0 - smoothstep(0.02, 0.09 + 0.05 * n1, dist);
-	float band = fract(dist / fr * uWaterFoamL.y + t * uWaterFoamL.z + n1 * 0.35);
-	float lines = smoothstep(0.72, 0.9, band) * (1.0 - smoothstep(0.9, 1.0, band)) * (1.0 - smoothstep(0.0, fr * 2.0, dist));
-	wFoam = clamp((edge + lines * 0.7) * smoothstep(0.25, 0.65, n2 + 0.25 * edge) * uWaterFoamL.w, 0.0, 1.0) * mix(0.5, 1.0, clarity);
+	wFoam = 0.0;
+	if (dist < fr * 2.0) {
+		float n1 = sbWaterNoise(p * 2.3 + vec2(t * 0.11, -t * 0.07));
+		float n2 = sbWaterNoise(p * 5.1 - vec2(t * 0.05, t * 0.09));
+		float edge = 1.0 - smoothstep(0.02, 0.09 + 0.05 * n1, dist);
+		float band = fract(dist / fr * uWaterFoamL.y + t * uWaterFoamL.z + n1 * 0.35);
+		float lines = smoothstep(0.72, 0.9, band) * (1.0 - smoothstep(0.9, 1.0, band)) * (1.0 - smoothstep(0.0, fr * 2.0, dist));
+		wFoam = clamp((edge + lines * 0.7) * smoothstep(0.25, 0.65, n2 + 0.25 * edge) * uWaterFoamL.w, 0.0, 1.0) * mix(0.5, 1.0, clarity);
+	}
 	// ── Fresnel: the sky (and, on High, the world) reflected, more toward the horizon ──
 	vec3 V = normalize(uWaterCam - vPositionW);
 	float ndv = clamp(dot(wNormal, V), 0.0, 1.0);

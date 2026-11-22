@@ -25,6 +25,11 @@ export class WaterReflection {
   private mirror = new pc.Mat4();
   private pos = new pc.Vec3();
   private on = false;
+  private frame = 0;
+  /** whether the texture holds a reflection yet (since it was last switched on or resized) */
+  private drawn = false;
+  /** the view the texture was last drawn from: what the water samples it with */
+  readonly drawnViewProj = new pc.Mat4();
 
   constructor(
     private app: pc.AppBase,
@@ -55,11 +60,23 @@ export class WaterReflection {
     };
     app.root.addChild(e);
     this.entity = e;
+    // PlayCanvas renders the sun's shadow map again for every camera that sees it: a second full shadow pass just for
+    // a rippled reflection. Leave this camera out of that list; it draws first each frame, so it samples the shadow
+    // map and cascade matrices (both the light's own) as the main camera left them a frame ago, and a mirrored view
+    // sees the same depths, so its shadows still land where they should.
+    const culler = (app.renderer as unknown as { culler?: Culler }).culler;
+    if (culler && typeof culler.collectDirectionalShadowLights === 'function' && culler.cameraDirShadowLights instanceof Map) {
+      const collect = culler.collectDirectionalShadowLights.bind(culler);
+      culler.collectDirectionalShadowLights = (comp: unknown) => {
+        collect(comp);
+        culler.cameraDirShadowLights.delete(this.cam.camera);
+      };
+    }
   }
 
-  /** The reflection's texture (when on). */
+  /** The reflection's texture (when on and drawn). */
   get tex(): pc.Texture | undefined {
-    return this.on ? this.texture : undefined;
+    return this.on && this.drawn ? this.texture : undefined;
   }
 
   /**
@@ -67,14 +84,24 @@ export class WaterReflection {
    * `LOOK.water.reflect.scale` of the screen and mirrors the main camera's view in the plane.
    */
   update(on: boolean, planeY: number) {
+    if (on && !this.on) this.drawn = false;
     this.on = on;
-    this.cam.enabled = on;
-    if (!on) return;
+    if (!on) {
+      this.cam.enabled = false;
+      return;
+    }
     const d = this.app.graphicsDevice;
     const R = LOOK.water.reflect;
     const w = Math.max(16, Math.round(d.width * R.scale));
     const h = Math.max(16, Math.round(d.height * R.scale));
-    if (!this.texture || this.texture.width !== w || this.texture.height !== h) this.resize(w, h);
+    if (!this.texture || this.texture.width !== w || this.texture.height !== h) {
+      this.resize(w, h);
+      this.drawn = false;
+    }
+    // drawn every `every` frames (always while it has nothing yet)
+    const draw = !this.drawn || this.frame++ % Math.max(1, Math.round(R.every)) === 0;
+    this.cam.enabled = draw;
+    if (!draw) return;
     const mainCam = this.main;
     this.cam.fov = mainCam.fov;
     this.cam.nearClip = mainCam.nearClip;
@@ -94,6 +121,9 @@ export class WaterReflection {
     this.proj.setPerspective(mainCam.fov, aspect, mainCam.nearClip, this.cam.farClip);
     obliqueClip(this.proj, this.view, planeY + 0.004);
     this.viewProj.mul2(this.proj, this.view);
+    // this frame draws it: from now on the water samples it with this view
+    this.drawnViewProj.copy(this.viewProj);
+    this.drawn = true;
   }
 
   private resize(w: number, h: number) {
@@ -121,6 +151,12 @@ export class WaterReflection {
     this.target?.destroy();
     this.texture?.destroy();
   }
+}
+
+/** The part of the engine's culler the reflection reaches into (not public API; checked before use). */
+interface Culler {
+  collectDirectionalShadowLights(comp: unknown): void;
+  cameraDirShadowLights: Map<unknown, unknown>;
 }
 
 /**

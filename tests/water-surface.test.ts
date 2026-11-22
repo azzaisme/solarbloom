@@ -85,6 +85,9 @@ describe('water look values', () => {
     expect(W.reflect.strength).toBeLessThan(1); // visible, not a mirror
     expect(W.reflect.scale).toBeGreaterThan(0.2);
     expect(W.reflect.scale).toBeLessThanOrEqual(0.5); // half size at most: a cheap pass
+    expect(Number.isInteger(W.reflect.every)).toBe(true);
+    expect(W.reflect.every).toBeGreaterThanOrEqual(1);
+    expect(W.reflect.every).toBeLessThanOrEqual(2); // any staler and the reflection would trail the camera
     expect(W.nightAlbedo).toBeGreaterThan(0.3);
     expect(W.nightAlbedo).toBeLessThan(1);
   });

@@ -161,9 +161,13 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
   shows none of it. A second camera mirrors the main one in the sea's plane and draws the sky and the world (not
   the Water layer) into a half-size HDR target; its near plane is tilted onto the water (Lengyel's oblique clip) so
   nothing under the waterline shows. Only water at the sea's height uses it; pools on other terraces keep the sky
-  colours. It costs a second world pass plus PlayCanvas's per-camera directional shadow pass (about 340 draw calls
-  at the start), so it's High only (`TierSpec.waterReflect`), never on Deck, and off while the loading screen warms
-  shaders up.
+  colours. It costs a second world pass, so it's High only (`TierSpec.waterReflect`), never on Deck, and off while
+  the loading screen warms shaders up. Two things keep it cheap: it's drawn every other frame (`reflect.every`; the
+  water samples it with the view it was drawn from, so it never slides), and it skips PlayCanvas's per-camera sun
+  shadow pass, reusing the shadow map the main camera left (WaterReflection's constructor). At the start that's
+  about 160 extra draw calls on the frames that draw it.
+- **Cost on High (E28.W01, sea spot at noon, 1080p, median of three runs):** frame time 7.3 → 9.5 ms median, draw
+  calls 516 → 639 on average. The shader skips the caustics where no bed shows and the foam noise away from shore.
 - **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
   25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
   overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back

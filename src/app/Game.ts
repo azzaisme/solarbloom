@@ -2868,7 +2868,7 @@ export class Game {
       night: 1 - this.dayNight.daylight,
       skyLow: low,
       skyHigh: high,
-      reflect: tex && seaY !== undefined ? { tex, viewProj: this.waterReflection!.viewProj, planeY: seaY } : undefined,
+      reflect: tex && seaY !== undefined ? { tex, viewProj: this.waterReflection!.drawnViewProj, planeY: seaY } : undefined,
     });
   }
 

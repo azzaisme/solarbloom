@@ -6,8 +6,8 @@
 //   shore     follow camera at the start, looking back over the restored island and the shallows round it
 //   overview  the zoomed-out view (the furthest zoom) over the start, the island and the sea
 // Times: day (noon), golden (late afternoon, the sun low and warm) and night (midnight).
-// It also measures, on High at the sea spot by day: frame time (mean of the engine's own frame times over a few
-// seconds, vsync off) and draw calls, printed as `perf …` (the PR's before/after numbers).
+// It also measures, on High at the sea spot by day: frame time (median and mean of the frame times over 8 s, vsync
+// off) and draw calls, printed as `perf …` (the PR's before/after numbers).
 //   TAG=before     name the shots (default: after)
 //   ONLY=day,night just these times;   SPOTS=sea,overview just these spots;   NOPERF=1 skip the measure
 //   NOREFLECT=1    the High-tier planar reflection off (to measure what it costs on its own)
@@ -125,17 +125,17 @@ try {
             ms.push(now - last);
             last = now;
             calls.push(app.stats?.drawCalls?.total ?? 0);
-            if (now - t0 < 5000) requestAnimationFrame(tick);
+            if (now - t0 < 8000) requestAnimationFrame(tick);
             else {
               ms.sort((a, b) => a - b);
               const mean = ms.reduce((a, b) => a + b, 0) / ms.length;
-              done({ frames: ms.length, mean, p95: ms[Math.floor(ms.length * 0.95)], calls: Math.round(calls.reduce((a, b) => a + b, 0) / calls.length) });
+              done({ frames: ms.length, mean, median: ms[Math.floor(ms.length / 2)], p95: ms[Math.floor(ms.length * 0.95)], calls: Math.round(calls.reduce((a, b) => a + b, 0) / calls.length) });
             }
           };
           requestAnimationFrame(tick);
         }),
     );
-    console.log(`  perf ${TAG}: ${perf.frames} frames, mean ${perf.mean.toFixed(2)} ms, p95 ${perf.p95.toFixed(2)} ms, draw calls ${perf.calls}`);
+    console.log(`  perf ${TAG}: ${perf.frames} frames, median ${perf.median.toFixed(2)} ms, mean ${perf.mean.toFixed(2)} ms, p95 ${perf.p95.toFixed(2)} ms, draw calls ${perf.calls}`);
   }
   if (errors.length) fail('page errors:\n' + [...new Set(errors)].slice(0, 5).join('\n'));
 } catch (e) {
