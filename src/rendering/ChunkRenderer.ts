@@ -28,10 +28,11 @@ import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } 
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
-import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
+import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfAt, turfTop, type DressCtx, type SolidSink } from './Surfaces';
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER } from './Water';
+import { alongRun, bankHeight, bankPoint, bankSize, bankStrip, leanGeo, runLength, shoreHash, shoreRuns, waterlineAt, type BankColours, type BankGeo, type ShoreRoom } from './Shore';
 import { encodeWater, WATER_CLARITY, WATER_ENC, waterMaterial } from './WaterSurface';
 import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
@@ -39,12 +40,23 @@ import type { WarmupSample } from './ShaderWarmup';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 import { MOVE_TRIPS } from '../data/moveSpots';
 
+/** A land tile for `waterDistance`: its corner, its rounded corners, and whether it slopes into the water as a bank. */
+export interface ShoreLand {
+  x: number;
+  z: number;
+  cut?: number[];
+  /** E28.W02: natural ground with a bank (a sand beach's reaches further) */
+  shore?: 'bank' | 'beach';
+  /** E28.W02: how far the open water runs out in front of a point on its shore (a bank keeps to its share of it) */
+  room?: ShoreRoom;
+}
+
 /**
  * E28.W01 (#694): the distance (tiles) from a point on the water to the nearest of the given land tiles, each a unit
  * square whose rounded corners (radius per corner, CORNERS order, as landCuts gives them) are cut away. Capped at
  * WATER_ENC. Exported for tests.
  */
-export function waterDistance(px: number, pz: number, land: { x: number; z: number; cut?: number[] }[]): number {
+export function waterDistance(px: number, pz: number, land: ShoreLand[]): number {
   let d = WATER_ENC;
   for (const L of land) {
     const dx = Math.max(L.x - px, 0, px - L.x - 1);
@@ -61,9 +73,22 @@ export function waterDistance(px: number, pz: number, land: { x: number; z: numb
         if ((px - cx) * sx > 0 && (pz - cz) * sz > 0) e = Math.max(0, Math.hypot(px - cx, pz - cz) - R);
       }
     }
+    // E28.W02: natural ground carries on as a shelf and slopes into the water as a bank, so the water starts further
+    // out, by the shelf and the slope at the nearest point of the shore (the same noise the bank is built from)
+    if (L.shore && e < 2) {
+      const cx = Math.min(L.x + 1, Math.max(L.x, px));
+      const cz = Math.min(L.z + 1, Math.max(L.z, pz));
+      const room = L.room && e > 1e-9 ? L.room(cx, cz, (px - cx) / e, (pz - cz) / e) : Infinity;
+      e = Math.max(0, e - waterlineAt(cx, cz, L.shore === 'beach', room));
+    }
     if (e < d) d = e;
   }
   return d;
+}
+
+/** E28.W02: the same land with no banks (for how far the banks pulled the water's edge out). */
+function bare(land: ShoreLand[]): ShoreLand[] {
+  return land.map((l) => ({ x: l.x, z: l.z, cut: l.cut }));
 }
 
 /** Small seeded RNG for decoration placement (looks only). */
@@ -367,6 +392,40 @@ export class MeshBuilder {
       this.tri(hex, [p[0], yTop, p[1]], [q[0], yTop, q[1]], [q[0], yBot, q[1]], N);
       this.tri(hex, [p[0], yTop, p[1]], [q[0], yBot, q[1]], [p[0], yBot, p[1]], N);
     }
+  }
+
+  /**
+   * E28.W02: a free-form patch: positions, normals and linear 0–1 colours per vertex, and triangle indices (the
+   * shore's banks). Not counted as solid: the line of sight and everything else see the ground as before.
+   */
+  patch(g: BankGeo) {
+    const nv = g.pos.length / 3;
+    if (!nv) return;
+    const base = this.pos.n / 3;
+    this.pos.reserve(nv * 3);
+    this.nrm.reserve(nv * 3);
+    this.col.reserve(nv * 4);
+    this.idx.reserve(g.idx.length);
+    for (let i = 0; i < nv; i++) {
+      const o = this.pos.n + i * 3;
+      this.pos.a[o] = g.pos[i * 3];
+      this.pos.a[o + 1] = g.pos[i * 3 + 1];
+      this.pos.a[o + 2] = g.pos[i * 3 + 2];
+      this.nrm.a[o] = g.nrm[i * 3];
+      this.nrm.a[o + 1] = g.nrm[i * 3 + 1];
+      this.nrm.a[o + 2] = g.nrm[i * 3 + 2];
+      const [r, gg, b] = this.shade(g.col[i * 3], g.col[i * 3 + 1], g.col[i * 3 + 2]);
+      const k = this.col.n + i * 4;
+      this.col.a[k] = Math.round(Math.min(1, Math.max(0, r)) * 255);
+      this.col.a[k + 1] = Math.round(Math.min(1, Math.max(0, gg)) * 255);
+      this.col.a[k + 2] = Math.round(Math.min(1, Math.max(0, b)) * 255);
+      this.col.a[k + 3] = 255;
+    }
+    this.pos.n += nv * 3;
+    this.nrm.n += nv * 3;
+    this.col.n += nv * 4;
+    for (let i = 0; i < g.idx.length; i++) this.idx.a[this.idx.n++] = base + g.idx[i];
+    this.tris += g.idx.length / 3;
   }
 
   /** triangles added (perf readout) */
@@ -1622,6 +1681,8 @@ export class ChunkRenderer {
       // E23.13: ground poking out into water is rounded off (its slab, in `slabInto`): the water fills the corner
       const cut = v.far ? undefined : this.landCuts(t);
       if (cut) this.cutWater(b, t, th, cut, pool, gtex);
+      // E28.W02: natural ground slopes down into the water, its waterline wandering, dressed with stones and plants
+      this.shore(b, fb, t, th, !!v.far);
       if (!v.far && this.isWater(t)) {
         this.poolBanks(b, t, th, gtex);
         // a dead pond's bed: dried, cracked silt painted across the whole pond (no tile grid)
@@ -2161,10 +2222,12 @@ export class ChunkRenderer {
       const st = this.fog !== 'hidden' ? this.waterState(n) : undefined;
       if (st) {
         const land = this.landAround(n, 1);
+        const plain = bare(land);
         const base = pool.pos.length / 3;
         for (const [px, pz] of sq) {
           pool.pos.push(px, surf + 0.003, pz);
-          pool.col.push(...encodeWater(waterDistance(px, pz, land), st.to, st.from));
+          const d = waterDistance(px, pz, land);
+          pool.col.push(...encodeWater(d, st.to, st.from, waterDistance(px, pz, plain) - d));
           pool.tr.push(st.t0, st.d);
         }
         pool.idx.push(base, base + 3, base + 1, base + 1, base + 3, base + 2);
@@ -2753,17 +2816,199 @@ export class ChunkRenderer {
   }
 
   /**
+   * E28.W02 (#695): whether a land tile slopes into the water as a bank: natural ground (lawn, earth, sand, clay),
+   * not paving, roads, buildings, ramps, raised paving or a deck over the water, which keep their built edges. A sand
+   * beach (dead painted sand) reaches further out, more gently.
+   */
+  private shoreKind(t: TileData): 'bank' | 'beach' | undefined {
+    if (t.feature === 'water' || t.ramp || this.overWater(t) || this.raisedPaving(t)) return undefined;
+    const f = t.feature ?? 'lawn';
+    if (f === 'paving' || f === 'road' || f === 'building' || f === 'obstacle') return undefined;
+    if (t.blocked) return undefined;
+    return t.ground !== 'restored' && groundTexFor(t.feature) === 'sand' ? 'beach' : 'bank';
+  }
+
+  /**
+   * E28.W02: how far the open water runs out from a point on the shore in a direction before it meets land again
+   * (tiles, up to 3): three rays a little apart, averaged, so it changes smoothly along a shore. Cached by point and
+   * direction (the grid's land and water don't change while a chunk builds).
+   */
+  private roomCache = new Map<string, number>();
+  private readonly shoreRoom: ShoreRoom = (x, z, nx, nz) => {
+    const key = `${x.toFixed(3)},${z.toFixed(3)},${nx.toFixed(3)},${nz.toFixed(3)}`;
+    const hit = this.roomCache.get(key);
+    if (hit !== undefined) return hit;
+    if (this.roomCache.size > 50000) this.roomCache.clear();
+    const g = this.sim.grid;
+    const ray = (ox: number, oz: number) => {
+      for (let d = 0.05; d < 3; d += 0.1) {
+        const n = g.peek(GROUND, Math.floor(ox + nx * d), Math.floor(oz + nz * d));
+        if (!n || !this.bankless(n)) return d;
+      }
+      return 3;
+    };
+    const r = (ray(x - nz * 0.25, z + nx * 0.25) + ray(x, z) + ray(x + nz * 0.25, z - nx * 0.25)) / 3;
+    this.roomCache.set(key, r);
+    return r;
+  };
+
+  /**
+   * E28.W02: does the shore carry on past this end of a run along a built edge (the next tile along is land with no
+   * bank: paving, a road, a building)? Then the bank tapers off there instead of stopping in a step.
+   */
+  private builtPast(t: TileData, run: { x: number; z: number; nx: number; nz: number }[], end: number): boolean {
+    const p = run[end];
+    const q = run[end === 0 ? 1 : end - 1];
+    let tx = p.x - q.x;
+    let tz = p.z - q.z;
+    const l = Math.hypot(tx, tz);
+    if (l < 1e-9) return false;
+    tx /= l;
+    tz /= l;
+    // the tile just past the end, on the land side of the shore line
+    const n = this.sim.grid.peek(t.roofId, Math.floor(p.x + tx * 0.5 - p.nx * 0.25), Math.floor(p.z + tz * 0.5 - p.nz * 0.25));
+    return !!n && n !== t && !this.bankless(n) && n.level === t.level && !this.shoreKind(n);
+  }
+
+  /** E28.W02: the sides (SIDES order: +x, -x, +z, -z) where a tile's ground opens onto water at its own level. */
+  private shoreOpen(t: TileData): [boolean, boolean, boolean, boolean] {
+    const g = this.sim.grid;
+    return EDGE_DIRS.map(([dx, dz]) => {
+      const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+      return !!n && n.level === t.level && this.bankless(n);
+    }) as [boolean, boolean, boolean, boolean];
+  }
+
+  /**
+   * E28.W02 (#695): a land tile's banks. Each run of its outline that opens onto water (round its rounded corners too)
+   * slopes from the tile's top down under the surface (Shore.bankStrip), so the waterline wanders with the shore's
+   * noise instead of following the grid. Near chunks also get the shore's dressing, seeded by position: pebbles and
+   * the odd rock along the waterline on every bank; on restored banks reeds in the shallows, grass and flowers on the
+   * slope, and now and then a plant on the top of the bank leaning out over the water. None of it is solid (the line
+   * of sight, collision and paths are unchanged).
+   */
+  private shore(b: MeshBuilder, fb: FoliageBuilder, t: TileData, th: number, far: boolean) {
+    const kind = this.shoreKind(t);
+    if (!kind) return;
+    const open = this.shoreOpen(t);
+    if (!open.some((o) => o)) return;
+    const L = LOOK.shore;
+    const cut = (!far && this.landCuts(t)) || [0, 0, 0, 0];
+    const runs = shoreRuns(t.x, t.z, open, cut, far ? 2 : L.segments, far ? 2 : L.arc);
+    if (!runs.length) return;
+    const top = th + 0.08;
+    const surface = top - WATER.drop + 0.003;
+    const beach = kind === 'beach';
+    const restored = t.ground === 'restored';
+    const topRgb = lin(this.topColour(t));
+    const scale = (c: readonly number[], k: number) => [c[0] * k, c[1] * k, c[2] * k] as [number, number, number];
+    const colours: BankColours = restored
+      ? { top: topRgb, bank: lin(L.earth), wet: lin(L.wet), under: lin(L.bed) }
+      : beach
+        ? { top: topRgb, bank: topRgb, wet: lin(L.wetSand), under: scale(lin(L.wetSand), 0.85) }
+        : { top: topRgb, bank: scale(topRgb, 0.86), wet: lin(L.wet), under: lin(L.bed) };
+    const geo: BankGeo = { pos: [], nrm: [], col: [], idx: [] };
+    // a restored lawn's bank starts in the lawn's own mottled colour at that very point, so the lip never shows
+    const lawn = restored && (t.feature ?? 'lawn') !== 'paving' && (t.feature ?? 'lawn') !== 'road';
+    const topAt = lawn ? (x: number, z: number) => turfAt(this.ctx, t, x, z) : undefined;
+    const ranges = runs.map((run) => bankStrip(geo, run, top, surface, beach, colours, topAt, this.shoreRoom, [this.builtPast(t, run, 0), this.builtPast(t, run, run.length - 1)]));
+    b.patch(geo);
+    if (far || this.fog === 'hidden') return;
+    // the dressing: not solid, so the line of sight sees what it saw before
+    const solids = SOLID_SINK.current;
+    SOLID_SINK.current = undefined;
+    try {
+      const { wetU } = bankSize(top - L.crown - surface);
+      const stage = Math.max(1, Math.min(4, this.sim.water.bloomShown(t) || 1));
+      const stones = [PALETTE.stone.pebble, PALETTE.stone.grey, PALETTE.stone.warm, PALETTE.stone.mid];
+      runs.forEach((run, ri) => {
+        const len = runLength(run);
+        if (len < 0.05) return;
+        const h = (i: number, salt: number) => shoreHash(run[0].x + ri * 0.37, run[0].z + i * 0.113, salt);
+        // a point on this run's bank, standing exactly on its surface (undefined if it falls off the mesh: skipped)
+        const on = (s: number, u: number): [number, number, number] | undefined => {
+          const [x, , z] = bankPoint(run, s, u, top, surface, beach, this.shoreRoom);
+          const y = bankHeight(geo, ranges[ri], x, z);
+          return y === undefined ? undefined : [x, y, z];
+        };
+        // pebbles strewn along the waterline
+        const nPeb = Math.round(len * L.pebbles + h(0, 1));
+        for (let i = 0; i < nPeb; i++) {
+          const at = on(h(i, 2), wetU + (h(i, 3) - 0.6) * 0.35);
+          if (!at) continue;
+          const [x, y, z] = at;
+          const r = 0.035 + 0.04 * h(i, 4);
+          b.add('sphere', stones[Math.floor(h(i, 5) * stones.length)], [x, y + r * 0.25, z], [r * 1.3, r * 0.75, r]);
+        }
+        // a bigger rock, half in the water
+        if (h(0, 6) < L.rock * len) {
+          const at = on(h(0, 7), wetU + 0.08);
+          const [x, y, z] = at ?? [0, 0, 0];
+          const r = 0.09 + 0.07 * h(0, 8);
+          const base = Math.max(y, surface - r * 0.4);
+          if (at) b.add('sphere', stones[Math.floor(h(0, 9) * stones.length)], [x, base + r * 0.2, z], [r * 1.35, r, r * 1.1]);
+          if (at) b.add('sphere', stones[Math.floor(h(1, 9) * stones.length)], [x + r * 0.9, base + r * 0.05, z - r * 0.4], [r * 0.7, r * 0.55, r * 0.6]);
+        }
+        if (!restored) return;
+        // a stand of reeds in the shallows (their feet on the bank under the water)
+        if (h(0, 10) < L.reeds * len) {
+          const s0 = h(0, 11);
+          const reeds = [PALETTE.leaf.dark, PALETTE.leaf.mid, PALETTE.leaf.deep, PALETTE.leaf.stalk, PALETTE.leaf.mid];
+          for (let j = 0; j < 5; j++) {
+            const at = on(Math.min(1, Math.max(0, s0 + ((j - 2) * 0.05) / Math.max(0.2, len))), wetU + 0.06 + 0.12 * h(j, 12));
+            if (!at) continue;
+            const [x, y, z] = at;
+            const ht = 0.24 + 0.16 * h(j, 13) + 0.04 * stage;
+            b.add('cone', reeds[j], [x, y + ht / 2, z], [0.04, ht, 0.04]);
+            if (j === 3 && t.bloom >= 2) b.add('capsule', PALETTE.wood.bark, [x, y + ht, z], [0.04, 0.06, 0.04]);
+          }
+        }
+        // a fringe of grass along the lip, so the lawn spills over the top of the bank
+        const nFringe = Math.round(len * L.fringe);
+        for (let i = 0; i < nFringe; i++) {
+          const at = on((i + 0.2 + 0.6 * h(i, 30)) / nFringe, 0.02 + 0.1 * h(i, 31));
+          if (!at) continue;
+          const [x, y, z] = at;
+          fb.add(grassGeo(stage, t.variant + i + 3, 1), x, y, z, h(i, 32) * 6.28, 0.55 + 0.3 * h(i, 33));
+        }
+        // grass tufts and flowers on the dry slope above the water
+        const nTuft = Math.round(len * L.tufts * (0.5 + 0.5 * h(1, 14)));
+        for (let i = 0; i < nTuft; i++) {
+          const at = on(h(i, 15), 0.04 + (wetU - 0.16) * h(i, 16));
+          if (!at) continue;
+          const [x, y, z] = at;
+          fb.add(grassGeo(stage, t.variant + i, 1), x, y, z, h(i, 17) * 6.28, 0.6 + 0.35 * h(i, 18));
+        }
+        if (h(2, 19) < L.flowers * len) {
+          const mix = ['daisy', 'cosmos', 'wild', 'lavender'] as const;
+          const at = on(h(2, 20), 0.05 + (wetU - 0.2) * h(2, 21));
+          if (at) fb.add(flowerGeo(mix[Math.floor(h(2, 22) * mix.length)], Math.floor(h(2, 23) * 4), true, t.variant, 1), at[0], at[1], at[2], h(2, 24) * 6.28, 0.7 + 0.3 * h(2, 25));
+        }
+        // now and then a plant standing on the top of the bank, leaning out over the water
+        if (stage >= 2 && h(3, 26) < L.overhang.chance * len) {
+          const [[px, pz], nx, nz] = alongRun(run, 0.2 + 0.6 * h(3, 27));
+          const plant = leanGeo(leafyShrubGeo(t.variant + ri, 1, stage >= 3), (L.overhang.lean * Math.PI) / 180);
+          fb.add(plant, px - nx * L.overhang.inset, top, pz - nz * L.overhang.inset, Math.atan2(nz, nx), L.overhang.scale * (0.85 + 0.3 * h(3, 28)));
+        }
+      });
+    } finally {
+      SOLID_SINK.current = solids;
+    }
+  }
+
+  /**
    * E28.W01: the land round a tile, out to the water's deepest colour: each land tile (anything that isn't water or a
    * deck over it) with its rounded corners (E23.13), for `waterDistance`.
    */
-  private landAround(t: TileData, reach: number): { x: number; z: number; cut?: number[] }[] {
+  private landAround(t: TileData, reach: number): ShoreLand[] {
     const g = this.sim.grid;
-    const land: { x: number; z: number; cut?: number[] }[] = [];
+    const land: ShoreLand[] = [];
     for (let dz = -reach; dz <= reach; dz++)
       for (let dx = -reach; dx <= reach; dx++) {
         const n = g.peek(t.roofId, t.x + dx, t.z + dz);
         if (!n || this.bankless(n)) continue;
-        land.push({ x: n.x, z: n.z, cut: this.landCuts(n) });
+        const shore = this.shoreKind(n);
+        land.push({ x: n.x, z: n.z, cut: this.landCuts(n), shore, room: shore && this.shoreRoom });
       }
     return land;
   }
@@ -2779,6 +3024,7 @@ export class ChunkRenderer {
     // the open sea's height: the plane the High-tier reflection mirrors in
     if (t.blocked && t.feature === 'water') this.seaY = y;
     const land = this.landAround(t, Math.ceil(Math.min(WATER_ENC, LOOK.water.deepAt + 1)));
+    const plain = bare(land);
     const radius = this.isWater(t) ? this.poolCorners(t) : [0, 0, 0, 0];
     const base = out.pos.length / 3;
     // clarity (now and before a restore, and the restore's window) at the four corners, blended across the tile
@@ -2795,6 +3041,8 @@ export class ChunkRenderer {
         const u = i / N;
         const w = j / N;
         let d = waterDistance(px, pz, land);
+        // E28.W02: how far the banks pulled the water's edge out here
+        let d0 = waterDistance(px, pz, plain);
         // a pool's own rounded inside corners: the bank curves round them (as poolBanks builds it)
         for (let c = 0; c < 4; c++) {
           const R = radius[c];
@@ -2802,10 +3050,13 @@ export class ChunkRenderer {
           const [sx, sz] = CORNERS[c];
           const vx = (px - (t.x + 0.5 + sx * (0.5 - R))) * sx;
           const vz = (pz - (t.z + 0.5 + sz * (0.5 - R))) * sz;
-          if (vx > 0 && vz > 0) d = Math.min(d, Math.max(0, R - Math.hypot(vx, vz)));
+          if (vx > 0 && vz > 0) {
+            d = Math.min(d, Math.max(0, R - Math.hypot(vx, vz)));
+            d0 = Math.min(d0, Math.max(0, R - Math.hypot(vx, vz)));
+          }
         }
         out.pos.push(px, y, pz);
-        out.col.push(...encodeWater(d, mix('to', u, w), mix('from', u, w)));
+        out.col.push(...encodeWater(d, mix('to', u, w), mix('from', u, w), d0 - d));
         out.tr.push(mix('t0', u, w), mix('d', u, w));
       }
     for (let j = 0; j < N; j++)
