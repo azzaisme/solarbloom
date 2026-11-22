@@ -10,8 +10,11 @@ export type GfxTier = 'low' | 'medium' | 'high';
 export const LOOK = {
   /** Look 1.2: the golden-hour key light. Elevation above the horizon and compass direction it shines toward. */
   sun: {
-    color: '#ffe6bf',
-    intensity: 3.4,
+    // E27.1 (#679): was 3.4, which with the old ambient lit sunlit sand and grass three to four times past white
+    // before tone mapping (most of a beach clipped). Now a sunlit pale surface lands just under white, and the
+    // sun is about three times the shade's light, so shadows read
+    color: '#ffdcaa',
+    intensity: 2.1,
     elevation: 34,
     /**
      * Horizontal direction the light travels, as a world-space (x, z) vector. With the default camera yaw (45°)
@@ -22,24 +25,28 @@ export const LOOK = {
     shadowBias: 0.2,
     normalOffsetBias: 0.05,
   },
-  /** Look 1.3: a cool, low fill from the side opposite the sun (no shadows). */
-  fill: { color: '#e4e4dc', intensity: 0.6 },
+  /** Look 1.3: a cool, low fill from the side opposite the sun (no shadows). E27.1: a soft sky blue (was grey). */
+  fill: { color: '#d0dcf0', intensity: 0.45 },
   /**
    * Look 1.3: ambient light from the sky above and the ground below, baked into a tiny environment atlas.
    * Colours are linear-ish sRGB hex; `intensity` scales the whole environment (ambient and reflections).
    */
   env: {
-    zenith: '#9bb8d8',
-    horizon: '#f0eadc',
-    ground: '#a89263',
-    intensity: 1.15,
+    // E27.1 (#679): a bluer sky and a lower strength (was 1.15 of a near-white horizon, which filled every shadow);
+    // the ground's warm bounce keeps the shade side of ivory stone warm, not navy
+    zenith: '#82aae0',
+    horizon: '#dde3ea',
+    ground: '#a08a62',
+    intensity: 0.7,
   },
   /**
    * Look 1.3: a warm rim on silhouettes (a view-dependent term added in the standard shader), stronger on the
    * sun side, so flowers, the drone and machines pick up a bright edge against darker ground.
    */
   // Phase 6: stronger and more golden (was '#ffc98a', 0.8, power 3.0 on a plain 1 - N·V edge); see LookShaders
-  rim: { color: '#ffd35c', intensity: 2.6, power: 1.3 },
+  // E27.1 (#679): softer and tighter (was 2.6, power 1.3): at that strength the gold edge lit half of every bush and
+  // tuft, which is much of why the grass read fluorescent yellow-green
+  rim: { color: '#ffd35c', intensity: 1.2, power: 2.2 },
   /**
    * Look 1.4: tone mapping and exposure. Khronos PBR Neutral keeps the palette's hues and saturation (ACES
    * bleached the greens and pinks toward yellow-white), and rolls highlights off so nothing clips.
@@ -48,11 +55,12 @@ export const LOOK = {
   exposure: 1.1,
   /**
    * Look 1.5: bloom on emissive and very bright pixels only. The threshold is scene-referred (before exposure and
-   * tone mapping): sunlit grass and paving peak around 1.0–1.3, so glows are authored at 3 and above (Look 1.9).
+   * tone mapping): glows are authored at 3 and above (Look 1.9). E27.1 (#679): was 1.15, under sunlit sand (about
+   * 1.7), so pale ground bloomed by day and laid a warm veil over the picture; now only glows and sparkles bloom.
    * E23.7.5: `night` multiplies the intensity by deep night, so lamps, the pulse ring and glows wear soft halos
    * against the blue (by day it would wash the sunlit ground).
    */
-  bloom: { intensity: 0.14, threshold: 1.15, blurLevel: 14, night: 2 },
+  bloom: { intensity: 0.14, threshold: 1.8, blurLevel: 14, night: 2 },
   /**
    * Look 1.9: emissive budget (scene-referred, before exposure; bloom starts at 1.5). See docs/art/rendering.md.
    * `gain` multiplies every standard material authored as a glow (emissiveIntensity >= 1); weaker emissive tints
@@ -73,7 +81,8 @@ export const LOOK = {
    * restore. Read every frame: live edits apply at once.
    */
   grade: {
-    warm: { brightness: 1.0, contrast: 1.04, saturation: 1.32, tint: '#fff2de', shadows: 0.1, highlights: -0.1, vibrance: 0.42 },
+    // E27.1 (#679): saturation 1.32 and vibrance 0.42 pushed the greens fluorescent, and lifted shadows flattened them
+    warm: { brightness: 1.0, contrast: 1.06, saturation: 1.1, tint: '#fff4e4', shadows: 0.0, highlights: -0.15, vibrance: 0.15 },
     dead: { brightness: 0.97, contrast: 1.03, saturation: 0.82, tint: '#e9eef6', shadows: 0.0, highlights: -0.1, vibrance: 0.0 },
     /** High contrast (settings): a flatter grade with no vignette so outlines and text stay readable. */
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
@@ -91,6 +100,20 @@ export const LOOK = {
    * see CameraController.hazeStart / hazeEnd). The camera clears to it when post-processing is on.
    */
   haze: { color: '#f4ecdc' },
+  /**
+   * E27.1 (#679): haze toward the horizon (LookShaders). With the skyline gone (#681) the far sea and coast sat in a
+   * hard line against the sky from the low follow camera. Far surfaces within `band` degrees below the camera fade
+   * into the haze colour, fully by `reach` of the way from where the depth fog starts to where it ends (nothing
+   * nearer than the fog's start is touched), so the sea's edge and the far coast dissolve into the sky. The sky's
+   * lowest `skyBand` degrees and the fog colour are matched to one colour (Sky.horizonSeen, fogMatchingSky).
+   */
+  horizon: {
+    band: 6,
+    reach: 0.45,
+    strength: 1,
+    /** how many degrees of sky above the horizon ease into the haze as the fogged distance shows it (Sky) */
+    skyBand: 5,
+  },
   /**
    * Look 1.10: drifting light motes and soft light shafts over restored ground near the camera's focus. Counts per
    * graphics tier; `lowVfx` and reduced motion turn the motes off, reduced motion freezes the shafts.

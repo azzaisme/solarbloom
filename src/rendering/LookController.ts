@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import { type GfxTier, LOOK } from '../data/look';
 import type { CameraController } from './CameraController';
 import { Atmosphere } from './Atmosphere';
-import { installLookShaders, setLookRim } from './LookShaders';
+import { installLookShaders, setLookHorizon, setLookRim } from './LookShaders';
 import { color } from './Materials';
 import { PostFx } from './PostFx';
 import type { SceneBuilder } from './SceneBuilder';
@@ -116,5 +116,9 @@ export class LookController {
     this.atmosphere.update(dt, g, Math.max(6, cam.viewHeight * 1.2), this.toSun, fwd);
     const R = LOOK.rim;
     setLookRim(this.app.graphicsDevice, this.rimColour, LOOK.tiers[this.tier].rim ? R.intensity * this.rimShare : 0, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
+    // E27.1: the haze thickens toward the horizon from where the depth fog starts to partway into it
+    const H = LOOK.horizon;
+    const fog = this.app.scene.fog;
+    setLookHorizon(this.app.graphicsDevice, H.band, fog.start, fog.start + (fog.end - fog.start) * H.reach, H.strength, this.camera.entity.getPosition());
   }
 }

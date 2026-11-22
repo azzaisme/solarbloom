@@ -77,6 +77,7 @@ import { LightVisuals } from '../rendering/LightVisuals';
 import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
+import { fogMatchingSky } from '../rendering/LookShaders';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { heightAt, levelY } from '../core/Height';
@@ -2813,8 +2814,15 @@ export class Game {
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
     if (this.sky) {
       const [r, g, b] = this.sky.hazeColour();
-      this.app.scene.fog.color.set(r, g, b, 1);
-      c.cam.clearColor = new pc.Color(r, g, b, 1);
+      // E27.1 (#679): the engine decodes the fog colour to linear, but the sky dome's colours and the clear colour go
+      // to the screen as they are, so the same haze showed darker on the fogged ground than in the sky behind it (at
+      // night 51,72,124 against 110,131,171): a hard line where the far sea met the sky. By night the fog is encoded to
+      // land on the sky's horizon colour as it is seen; by day the sky's horizon is given the haze as the fog shows it
+      // (Sky.horizonSeen), so the distance melts into the sky at any hour without paling the day's distance.
+      this.app.scene.fog.color.set(...fogMatchingSky(r, g, b, this.sky.night), 1);
+      // the clear colour shows behind the sky's dome only at its rim: the same horizon colour as the dome
+      const [sr, sg, sb] = this.sky.horizonSeen([r, g, b]);
+      c.cam.clearColor = new pc.Color(sr, sg, sb, 1);
     }
     const sun = this.scene.sun.light;
     if (sun) sun.shadowDistance = c.shadowDistance();

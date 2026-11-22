@@ -83,16 +83,20 @@ export const DAY_LIGHT = {
   moonElevation: 42,
   /** E23.7.5: night is lit, not dimmed: a strong blue moon as the key light (it throws soft shadows) */
   moonColour: '#6d92ff',
-  moonShare: 0.3,
+  /**
+   * E27.1 (#679): night's own light strengths, not shares of the day's: the day's sun, fill and ambient can be
+   * retuned without touching the approved moonlit night. (These are the strengths E23.7.5 tuned night to.)
+   */
+  moonIntensity: 1.02,
   /** how fast the key light swings from the sun's side to the moon's as daylight goes (higher = later, quicker) */
   moonBlend: 1.6,
   /** the sun is warm (`lowSunColour`) below this height (0 horizon … 1 noon), easing to LOOK's colour above it */
   warmBelow: 0.45,
   /** the sun's colour when low (dawn and dusk) */
   lowSunColour: '#ffb27a',
-  /** night shares of the fill light and the ambient environment */
-  fillNight: 0.6,
-  envNight: 0.7,
+  /** night's fill light and ambient environment strengths */
+  fillNight: 0.36,
+  envNight: 0.805,
   fillNightColour: '#4f70e0',
   /**
    * E23.7.5: the ambient environment by night (LOOK.env's three colours by day): cool blue from the sky, the
@@ -103,6 +107,6 @@ export const DAY_LIGHT = {
   envSteps: 16,
   /** the unlit clouds' tint at night (linear 0–1 multipliers) */
   cloudNight: [0.3, 0.34, 0.48] as [number, number, number],
-  /** the warm rim on silhouettes at night */
-  rimNight: 0.25,
+  /** the warm rim on silhouettes at night (its strength, as LOOK.rim.intensity is by day) */
+  rimNight: 0.65,
 };

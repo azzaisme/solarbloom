@@ -129,7 +129,7 @@ export class DayNight {
     if (this.dim > 0) this.tmp.lerp(this.tmp, this.viewLight, this.dim);
     sunLight.color = this.tmp.clone();
     // under cloud the sun all but goes: soft, shadowless light from the sky instead
-    const sunI = LOOK.sun.intensity * lerp(L.moonShare, 1, day) * (1 - oc * 0.88);
+    const sunI = lerp(L.moonIntensity, LOOK.sun.intensity, day) * (1 - oc * 0.88);
     const keep = this.lightKeep;
     sunLight.intensity = (sunI + (m.flash ?? 0) * LOOK.sun.intensity * 0.8) * keep;
     // the fill keeps its own side, opposite the key light
@@ -139,10 +139,11 @@ export class DayNight {
     this.fillCol.lerp(this.base.fillNight, this.base.fill, day);
     if (this.dim > 0) this.fillCol.lerp(this.fillCol, this.viewLight, this.dim);
     fill.color = this.fillCol.clone();
-    fill.intensity = LOOK.fill.intensity * lerp(L.fillNight, 1, day) * (1 + oc * 0.6) * keep;
+    fill.intensity = lerp(L.fillNight, LOOK.fill.intensity, day) * (1 + oc * 0.6) * keep;
     this.scene.setEnvNight(1 - day);
-    this.app.scene.skyboxIntensity = LOOK.env.intensity * lerp(L.envNight, 1, day) * (1 - oc * 0.1) * keep;
-    this.rim = lerp(L.rimNight, 1, day) * (1 - oc * 0.5);
+    this.app.scene.skyboxIntensity = lerp(L.envNight, LOOK.env.intensity, day) * (1 - oc * 0.1) * keep;
+    // the rim's share of LOOK.rim.intensity: night's own strength by night
+    this.rim = lerp(L.rimNight / Math.max(1e-6, LOOK.rim.intensity), 1, day) * (1 - oc * 0.5);
     // E23.7.5: night keeps the day's exposure: it is a blue moonlit look made of light and colour, not a darker picture
     this.app.scene.exposure = LOOK.exposure * (1 - oc * 0.22) * (1 + (m.flash ?? 0) * 0.5) * this.exposureKeep;
     // the sky: night, the warm band at dawn and dusk, and the weather's cloud
