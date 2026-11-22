@@ -41,7 +41,7 @@ export const CHARGE = {
     // E23.5.4.1: honey from beehives, a strong snack
     { id: 'honey', name: 'Honey', charge: FARM_USES.honey.charge * FULL, seconds: 3 },
     { id: 'food', name: 'Food', charge: FARM_USES.food.charge * FULL, seconds: 3 },
-    { id: 'biomass', name: 'Biomass', charge: FARM_USES.biomass.charge * FULL, seconds: 2 },
+    { id: 'biomass', name: 'Greens', charge: FARM_USES.biomass.charge * FULL, seconds: 2 },
   ] as EdibleDef[],
   /** E23.3.3: sitting and meditating at a charger, per second (fast, free, on the grid) */
   meditatePerSecond: 6,

@@ -3958,7 +3958,7 @@ export class Game {
     // E23.3.3: the only wait is the grid: off it, or (E23.6.3) on a line with no room left for one more drone at work
     const wait = lit ? 'waiting at home — not enough power on its line' : 'waiting at home — its hub has no power';
     // E23.6.3: docked until its hub has what the role runs on again
-    if (status === 'docked') return `docked — waiting for ${short === 'water' ? 'water beside the hub (a pond, canal or pipe)' : short === 'biomass' ? 'Biomass in the store, through a chest beside the hub' : 'power'}`;
+    if (status === 'docked') return `docked — waiting for ${short === 'water' ? 'water beside the hub (a pond, canal or pipe)' : short === 'biomass' ? 'Greens in the store, through a chest beside the hub' : 'power'}`;
     return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
   }
 
