@@ -4,7 +4,7 @@
 // At each spot the ground for a few tiles round is restored to full bloom (the edges at their lushest), and its area
 // cleared, then Bloombot stands just back from the edge and the follow camera looks past it at the water or the
 // drop (each shot also saved as a close crop of the edge, `-zoom`): a rounded tip on Saltwind's surf line, a corner of the sandbar island, the canal bank, a terrace edge and the
-// Cistern's pond. 1280 × 800 on the high graphics. Checks: no page errors.
+// Cistern's pond. 1280 × 800 on the high graphics. Checks: no page errors. ONLY=<part of a name> retakes one spot.
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
@@ -44,6 +44,7 @@ try {
     (s.state.clock ??= { offset: 0 }).offset += (0.42 - s.clock.dayFraction()) * 2880;
   });
   for (const [name, tx, tz, nearLand] of SPOTS) {
+    if (process.env.ONLY && !name.includes(process.env.ONLY)) continue; // one spot, when retaking it
     const at = await page.evaluate(({ tx, tz, nearLand }) => {
       const g = window.solarbloom;
       const s = g.sim;
