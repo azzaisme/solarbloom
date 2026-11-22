@@ -221,8 +221,13 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
     `fish`);
   - **floating leaves and drifting flecks** near the banks, and **arrowhead plants** in the fresh shallows;
   - **an outlet** only where the world already has a drop: a restored channel of fresh water ending against ground a
-    level or more higher, which is the Saltwind canal's head under Elder Grove. A culvert in the wall, a stream of
-    scrolling streaks, and foam with rings where it lands.
+    level or more higher, which is the Saltwind canal's head under Elder Grove. A stone culvert stands proud of the
+    wall's face: a ring of voussoirs with a keystone, a black throat and a wet stain round it, and a sill. While the
+    area above is hidden, the chunk stands a plain facade (Look 4.9) 0.4 into the canal in front of the wall, so the
+    culvert goes on that face instead (`FACADE_DEPTH`). The stream pours off the sill as two lit, glossy sheets whose
+    streaks scroll past each other, partly see-through and thinning at the edges and foot. Where it lands there's
+    soft, frothy foam in two churning layers, a puff of spray, and rings on the water. All of it is lit like the
+    world, with a little light of its own by day only (`falls.glow`), so it's moonlit at night and never glows.
 
   Each chunk hands its life to `setWaterLife` as it builds (near chunks only). `WaterLife` draws the nearest of each
   kind round the camera's focus (`LOOK.waterLife.radius`, capped by `max`): one instanced draw per kind in view, 11 at

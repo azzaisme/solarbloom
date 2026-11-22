@@ -380,7 +380,7 @@ export const LOOK = {
   waterLife: {
     /** drawn within this many tiles of where the camera looks (nearest first, up to `max` of each kind) */
     radius: 20,
-    max: { pad: 480, flower: 120, leaf: 96, fish: 120, fleck: 160, plant: 240, fall: 12, foam: 12, outlet: 12 },
+    max: { pad: 480, flower: 120, leaf: 96, fish: 120, fleck: 160, plant: 240, fall: 12, foam: 24, spray: 12, outlet: 12 },
     /**
      * lily pads, on restored fresh water (pools, ponds, canals; not the sea), gathered in patches (`patches` of the
      * water within `reach` of a bank, in patches about `patch` tiles across): `perTile` (+1 from `crowdFrom` bloom),
@@ -404,13 +404,15 @@ export const LOOK = {
     plants: { chance: 0.12, perBloom: 0.04, reach: 0.8, height: 0.24, stalk: '#5c8a3e', leaf: '#6fa448' },
     /**
      * An outlet where the world already has one: a restored channel of fresh water that ends against ground a level or
-     * more higher (the Saltwind canal's head under Elder Grove) runs out of a stone culvert (`culvert` across, its
-     * mouth `outlet` above the water at most) in a stream `width` wide that falls `lip` out from the wall, its streaks
-     * running down at `speed` (stream lengths a second), in `colour` at `opacity`. Where it lands: a patch of foam
-     * `foam` across, and rings of `ring` strength. The stream and its foam draw no light of their own: by night they
-     * take on `night`, a moonlit blue-grey (no glowing white water in the dark).
+     * more higher (the Saltwind canal's head under Elder Grove). A stone culvert `culvert` across (a ring of voussoirs
+     * with a keystone, a dark barrel and a sill: WaterLife's CULVERT proportions), its mouth's middle at most `outlet`
+     * over the water. The stream pours from the sill `width` wide and lands `lip` further out, its streaks (`tint`
+     * between them, white in their cores) running down at `speed` (stream lengths a second), at `opacity`, with a
+     * `sheen` that catches the sun. Where it lands: soft foam `foam` across, a puff of spray `spray` across, and rings
+     * of `ring` strength. All of it is lit like the world (moonlit by night), with `glow` of its colour as light of its
+     * own by day only, fading out with the daylight: nothing glows in the dark.
      */
-    falls: { outlet: 0.5, culvert: 0.42, width: 0.3, lip: 0.16, speed: 1.1, colour: '#eef8f4', night: '#5d7590', opacity: 0.72, foam: 0.42, ring: 1.6, stone: '#b9ae99', mouth: '#2b2a27' },
+    falls: { outlet: 0.42, culvert: 0.6, width: 0.28, lip: 0.2, speed: 1.4, colour: '#eaf8f5', tint: '#8fd3cc', opacity: 0.9, sheen: 0.55, glow: 0.3, foam: 0.62, spray: 0.3, ring: 2.4, stone: '#b3a998', mouth: '#1c1b19' },
   },
 };
 

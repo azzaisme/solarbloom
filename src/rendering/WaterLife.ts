@@ -14,8 +14,8 @@ import { waterFade, waterWaves } from './WaterSurface';
  * floats rides the same swell the surface lifts by (`waterWaves`), on the water's own clock, and fades in with a
  * restore. Fish now and then rise and ring the surface (WaterDisturbance, source `fish`).
  */
-export type LifeKind = 'pad0' | 'pad1' | 'flower' | 'leaf0' | 'leaf1' | 'fish' | 'fleck' | 'plant' | 'fall' | 'foam' | 'outlet';
-export const LIFE_KINDS: readonly LifeKind[] = ['pad0', 'pad1', 'flower', 'leaf0', 'leaf1', 'fish', 'fleck', 'plant', 'fall', 'foam', 'outlet'];
+export type LifeKind = 'pad0' | 'pad1' | 'flower' | 'leaf0' | 'leaf1' | 'fish' | 'fleck' | 'plant' | 'fall' | 'foam' | 'spray' | 'outlet';
+export const LIFE_KINDS: readonly LifeKind[] = ['pad0', 'pad1', 'flower', 'leaf0', 'leaf1', 'fish', 'fleck', 'plant', 'fall', 'foam', 'spray', 'outlet'];
 
 export interface LifeSpot {
   kind: LifeKind;
@@ -161,10 +161,14 @@ export function lifeForTile(t: LifeTile): LifeSpot[] {
   return out;
 }
 
+/** The culvert's proportions, as shares of its outer width (`LOOK.waterLife.falls.culvert`): `outletGeo` builds to them. */
+export const CULVERT = { inner: 0.34, outer: 0.5, depth: 0.12, sill: 0.12 };
+
 /**
  * An outlet in a wall: a channel of fresh water at rest height `y` ends against higher ground whose top stands `drop`
- * over it. The wall's foot is at (x, z) and the water lies the way `yaw` points (+x turned by it). Its culvert, the
- * stream falling from it, and the foam where it lands.
+ * over it. (x, z) is on the wall's face (in front of its courses), and the water lies the way `yaw` points (+x turned
+ * by it). Its culvert (the mouth's middle `range` over the water), the stream pouring from the mouth's lip, and where
+ * that lands: foam and a puff of spray.
  */
 export function outletSpots(x: number, z: number, y: number, yaw: number, drop: number, t0: number, d: number): LifeSpot[] {
   const F = LOOK.waterLife.falls;
@@ -173,11 +177,31 @@ export function outletSpots(x: number, z: number, y: number, yaw: number, drop: 
   const base = { x, z, y, edge: 0, range: mouth, phase: 0, yaw, t0, d };
   const fx = Math.cos(yaw);
   const fz = -Math.sin(yaw);
+  const land = fallReach();
+  const at = { x: x + fx * land, z: z + fz * land, range: 0 };
   return [
     { ...base, kind: 'outlet', size: F.culvert },
     { ...base, kind: 'fall', size: F.width },
-    { ...base, kind: 'foam', x: x + fx * F.lip, z: z + fz * F.lip, size: F.foam, range: 0 },
+    { ...base, ...at, kind: 'foam', size: F.foam },
+    { ...base, ...at, kind: 'spray', size: F.spray },
   ];
+}
+
+/** The streaks' scroll at time `t` (the map's v offset, 0 … 1): it grows with time, so the water falls. */
+export function fallScroll(t: number): number {
+  const k = (t * LOOK.waterLife.falls.speed) % 1;
+  return k < 0 ? k + 1 : k;
+}
+
+/** How far out from the wall's face an outlet's stream lands: past the culvert's sill, then `lip` further as it falls. */
+export function fallReach(): number {
+  const F = LOOK.waterLife.falls;
+  return F.culvert * (CULVERT.depth + CULVERT.sill * 0.5) + F.lip;
+}
+
+/** How high over the water an outlet's stream leaves the mouth (its lip, a little up from the barrel's floor). */
+export function fallTop(range: number): number {
+  return range - LOOK.waterLife.falls.culvert * CULVERT.inner * 0.82;
 }
 
 /**
@@ -305,15 +329,36 @@ export function placeMatrix(m: Float32Array, o: number, x: number, y: number, z:
 
 // ── the meshes (unit size, flat on y = 0 unless they stand) ──
 
-type Geo = { pos: number[]; col: number[]; idx: number[] };
+type Geo = { pos: number[]; col: number[]; idx: number[]; nrm?: number[]; uv?: number[] };
 const rgb = (hex: string, k = 1): [number, number, number] => {
   const n = parseInt(hex.slice(1), 16);
   return [((n >> 16) & 255) * k, ((n >> 8) & 255) * k, (n & 255) * k].map((v) => Math.min(255, Math.round(v))) as [number, number, number];
 };
-function vert(g: Geo, x: number, y: number, z: number, c: [number, number, number]) {
+function vert(g: Geo, x: number, y: number, z: number, c: [number, number, number], alpha = 1) {
   g.pos.push(x, y, z);
-  g.col.push(c[0], c[1], c[2], 255);
+  g.col.push(c[0], c[1], c[2], Math.round(255 * Math.max(0, Math.min(1, alpha))));
   return g.pos.length / 3 - 1;
+}
+
+type V3 = [number, number, number];
+/**
+ * A flat face (a convex polygon, its own vertices, its own normal): for the culvert's stones. Its normal is turned to
+ * point along `out` (the way the face looks), whatever order its corners come in.
+ */
+function face(g: Geo, pts: V3[], c: [number, number, number], out: V3) {
+  const [a, b, d] = [pts[0], pts[1], pts[pts.length - 1]];
+  const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+  let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const l = Math.hypot(n[0], n[1], n[2]) || 1;
+  n = n.map((q) => q / l);
+  if (n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0) n = n.map((q) => -q);
+  const first = g.pos.length / 3;
+  for (const p of pts) {
+    vert(g, p[0], p[1], p[2], c);
+    g.nrm!.push(n[0], n[1], n[2]);
+  }
+  for (let i = 1; i < pts.length - 1; i++) g.idx.push(first, first + i, first + i + 1);
 }
 
 /** A lily pad: a disc half a unit round with a notch cut to its middle, lighter toward its centre. */
@@ -459,71 +504,213 @@ export function plantGeo(stalk: string, leaf: string): Geo {
 }
 
 /**
- * An outlet's stream: a ribbon a unit wide (z) leaving the wall (x = 0) at its top (y = 1) and curving down and out to
- * x = 1 at the water (y = 0), as water thrown forward falls. `uv` runs down it (its streaks scroll that way).
+ * An outlet's stream: two sheets a unit wide (z) leaving the mouth (x = 0) at its top (y = 1) and curving down and out
+ * to x = 1 at the water (y = 0), as water poured over a lip falls. The front sheet is narrower and its streaks are
+ * finer (its `uv` runs further), so the two scroll past each other. Alpha thins toward the edges and the foot, where it
+ * breaks up; normals face out and up, so the sheet catches the light.
  */
-export function fallGeo(): Geo & { uv: number[] } {
-  const g: Geo & { uv: number[] } = { pos: [], col: [], idx: [], uv: [] };
+export function fallGeo(): Geo & { uv: number[]; nrm: number[] } {
+  const g: Geo & { uv: number[]; nrm: number[] } = { pos: [], col: [], idx: [], uv: [], nrm: [] };
   const c: [number, number, number] = [255, 255, 255];
-  const rows = 10;
-  for (let j = 0; j <= rows; j++) {
-    const u = j / rows;
-    for (const w of [-0.5, 0, 0.5]) {
-      // narrower at the mouth, spreading a little as it falls
-      vert(g, Math.sqrt(u), 1 - u, w * (0.8 + 0.2 * u), c);
-      g.uv.push(w + 0.5, u);
+  const rows = 12;
+  for (const [layer, wide, out, vk, uk] of [
+    [0, 1, 0, 1, 0],
+    [1, 0.62, 0.05, 1.7, 0.37],
+  ] as const) {
+    const first = g.pos.length / 3;
+    for (let j = 0; j <= rows; j++) {
+      const u = j / rows;
+      const k = 0.5 / Math.max(0.08, Math.sqrt(u));
+      const l = Math.hypot(1, k);
+      for (const w of [-0.5, -0.25, 0, 0.25, 0.5]) {
+        // narrow at the lip, spreading as it falls; thinner at its edges and as it breaks up near the water
+        const edge = 1 - Math.pow(Math.abs(w) * 2, 2) * 0.7;
+        vert(g, Math.sqrt(u) + out * (1 - u), 1 - u, w * wide * (0.85 + 0.3 * u), c, edge * (1 - 0.5 * u * u) * (layer ? 0.8 : 1));
+        g.uv.push(w + 0.5 + uk, u * vk);
+        g.nrm.push(1 / l, k / l, 0);
+      }
     }
+    for (let j = 0; j < rows; j++)
+      for (let i = 0; i < 4; i++) {
+        const a = first + j * 5 + i;
+        g.idx.push(a, a + 5, a + 1, a + 1, a + 5, a + 6);
+      }
   }
-  for (let j = 0; j < rows; j++)
-    for (let i = 0; i < 2; i++) {
-      const a = j * 3 + i;
-      g.idx.push(a, a + 3, a + 1, a + 1, a + 3, a + 4);
-    }
   return g;
 }
 
-/** A culvert's mouth in a wall face (the plane x = 0, facing +x): a dark round opening in a ring of stone, a unit across. */
-export function outletGeo(stone: string, mouth: string): Geo {
+/**
+ * Foam where a stream lands: froth a unit across, its bubbles clumped (alpha that varies from vertex to vertex), thick
+ * in the middle and thinning to nothing at its rim, so it melts into the water round it rather than sitting on it.
+ */
+export function foamGeo(): Geo {
   const g: Geo = { pos: [], col: [], idx: [] };
-  const n = 12;
-  const S = rgb(stone);
-  const M = rgb(mouth);
-  const mid = vert(g, 0.01, 0, 0, M);
-  const inner: number[] = [];
-  const innerS: number[] = [];
-  const outer: number[] = [];
-  for (let i = 0; i <= n; i++) {
-    const a = (i / n) * TAU;
-    const y = Math.sin(a);
-    const zz = Math.cos(a);
-    inner.push(vert(g, 0.01, y * 0.32, zz * 0.32, M));
-    innerS.push(vert(g, 0.02, y * 0.32, zz * 0.32, S));
-    outer.push(vert(g, 0.02, y * 0.5, zz * 0.5, rgb(stone, i % 3 ? 1 : 0.88)));
-  }
-  for (let i = 0; i < n; i++) {
-    g.idx.push(mid, inner[i + 1], inner[i]);
-    g.idx.push(innerS[i], innerS[i + 1], outer[i + 1], innerS[i], outer[i + 1], outer[i]);
+  const c: [number, number, number] = [255, 255, 255];
+  const rnd = tileRng(5, 9, 13);
+  const n = 24;
+  // (radius, alpha at its thickest): the froth thins outward
+  const rings = [
+    [0, 0.8],
+    [0.08, 0.8],
+    [0.17, 0.75],
+    [0.26, 0.6],
+    [0.35, 0.4],
+    [0.43, 0.18],
+    [0.5, 0],
+  ];
+  const mid = vert(g, 0, 0, 0, c, rings[0][1]);
+  const jag = Array.from({ length: n }, () => 0.8 + rnd() * 0.4);
+  let prev: number[] = [];
+  for (let r = 1; r < rings.length; r++) {
+    const [rad, a] = rings[r];
+    const ring: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n) * TAU + r * 0.13;
+      const rr = rad * jag[(i + r) % n];
+      // clumps of bubbles: some points nearly clear, some thick
+      const froth = r === rings.length - 1 ? 0 : 0.25 + 0.75 * rnd();
+      ring.push(vert(g, Math.cos(ang) * rr, 0, Math.sin(ang) * rr, c, a * froth));
+    }
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      if (r === 1) g.idx.push(mid, ring[j], ring[i]);
+      else g.idx.push(prev[i], ring[j], ring[i], prev[i], prev[j], ring[j]);
+    }
+    prev = ring;
   }
   return g;
 }
 
-/** The streaks a stream's opacity scrolls through: soft vertical runs of more and less water. */
-function streakTexture(device: pc.GraphicsDevice): pc.Texture {
-  const W = 16;
+/** Spray at a stream's foot: three soft upright puffs crossed round the middle, a unit across and a unit tall. */
+export function sprayGeo(): Geo {
+  const g: Geo = { pos: [], col: [], idx: [] };
+  const c: [number, number, number] = [255, 255, 255];
+  const n = 10;
+  for (let p = 0; p < 3; p++) {
+    const a = (p / 3) * Math.PI;
+    const ax = Math.cos(a);
+    const az = Math.sin(a);
+    const mid = vert(g, 0, 0.3, 0, c, 0.55);
+    const ring: number[] = [];
+    for (let i = 0; i < n; i++) {
+      // a dome: wide at the water, rounded over the top
+      const t = (i / n) * TAU;
+      const s = Math.cos(t) * 0.5;
+      const h = Math.max(0, Math.sin(t)) * 0.7 + 0.3 - (Math.sin(t) < 0 ? 0.3 : 0);
+      ring.push(vert(g, ax * s, h, az * s, c, 0));
+    }
+    for (let i = 0; i < n; i++) g.idx.push(mid, ring[(i + 1) % n], ring[i]);
+  }
+  return g;
+}
+
+/**
+ * A culvert set in a wall face (the plane x = 0; the water lies toward +x), a unit across: a ring of stone voussoirs
+ * standing proud of the wall with a keystone at the top, mortar between them, a dark barrel running back into the
+ * wall (darkest at its far end) and a stone sill under the mouth that the water pours over. All flat-shaded stone.
+ */
+export function outletGeo(stone: string, mouth: string): Geo & { nrm: number[] } {
+  const g: Geo & { nrm: number[] } = { pos: [], col: [], idx: [], nrm: [] };
+  const { inner: ri, outer: ro, depth: d, sill } = CULVERT;
+  const p = (r: number, a: number, x: number): V3 => [x, Math.sin(a) * r, Math.cos(a) * r];
+  const M = rgb(mouth);
+  const n = 11;
+  const gap = 0.05;
+  // mortar behind the stones (it shows in the joints)
+  for (let i = 0; i < 24; i++) {
+    const a0 = (i / 24) * TAU;
+    const a1 = ((i + 1) / 24) * TAU;
+    face(g, [p(ri, a0, 0.005), p(ri, a1, 0.005), p(ro * 1.04, a1, 0.005), p(ro * 1.04, a0, 0.005)], rgb(stone, 0.5), [1, 0, 0]);
+  }
+  // the voussoirs, the keystone (i = 0) at the top
+  for (let i = 0; i < n; i++) {
+    const a0 = Math.PI / 2 + ((i - 0.5) / n) * TAU + gap / 2;
+    const a1 = Math.PI / 2 + ((i + 0.5) / n) * TAU - gap / 2;
+    const key = i === 0;
+    const o = ro * (key ? 1.1 : 1 + 0.03 * ((i * 7) % 3 - 1));
+    const x = d + (key ? 0.03 : 0.01 * ((i * 5) % 3));
+    const col = rgb(stone, key ? 1.05 : [1, 0.93, 0.97, 0.9][i % 4]);
+    const shade = rgb(stone, 0.72);
+    // front, outer edge, both joint faces (the inner edge is the barrel's lip, below)
+    for (let k = 0; k < 2; k++) {
+      const b0 = a0 + ((a1 - a0) * k) / 2;
+      const b1 = a0 + ((a1 - a0) * (k + 1)) / 2;
+      const bm = (b0 + b1) / 2;
+      face(g, [p(ri, b0, x), p(o, b0, x), p(o, b1, x), p(ri, b1, x)], col, [1, 0, 0]);
+      face(g, [p(o, b0, x), p(o, b0, 0), p(o, b1, 0), p(o, b1, x)], shade, [0, Math.sin(bm), Math.cos(bm)]);
+    }
+    // the joints face along the ring, away from the stone's middle
+    face(g, [p(ri, a0, 0), p(o, a0, 0), p(o, a0, x), p(ri, a0, x)], shade, [0, -Math.cos(a0), Math.sin(a0)]);
+    face(g, [p(ri, a1, x), p(o, a1, x), p(o, a1, 0), p(ri, a1, 0)], shade, [0, Math.cos(a1), -Math.sin(a1)]);
+  }
+  // the barrel: from the stones' face back to the wall's, dark, its roof catching a little light; then its throat on
+  // the wall's face (the wall itself is solid behind it), near black in the middle, so the mouth reads as deep
+  for (let i = 0; i < 16; i++) {
+    const a0 = (i / 16) * TAU;
+    const a1 = ((i + 1) / 16) * TAU;
+    const lit = 1.3 + 0.9 * Math.max(0, Math.sin((a0 + a1) / 2));
+    face(g, [p(ri, a0, d), p(ri, a1, d), p(ri, a1, 0.006), p(ri, a0, 0.006)], rgb(mouth, lit), [0, -Math.sin((a0 + a1) / 2), -Math.cos((a0 + a1) / 2)]);
+  }
+  const throat = vert(g, 0.007, 0, 0, rgb(mouth, 0.25));
+  g.nrm.push(1, 0, 0);
+  const rim: number[] = [];
+  for (let i = 0; i <= 16; i++) {
+    const a = (i / 16) * TAU;
+    rim.push(vert(g, 0.007, Math.sin(a) * ri, Math.cos(a) * ri, rgb(mouth, 0.9)));
+    g.nrm.push(1, 0, 0);
+  }
+  for (let i = 0; i < 16; i++) g.idx.push(throat, rim[i], rim[i + 1]);
+  // the wall round it, darker with the wet that seeps from it
+  const wet: number[] = [];
+  const dry: number[] = [];
+  for (let i = 0; i <= 24; i++) {
+    const a = (i / 24) * TAU;
+    // the stain runs further down than up
+    const k = 1 + 0.5 * Math.max(0, -Math.sin(a));
+    wet.push(vert(g, 0.003, Math.sin(a) * ro * 1.02, Math.cos(a) * ro * 1.02, rgb(stone, 0.45)));
+    g.nrm.push(1, 0, 0);
+    dry.push(vert(g, 0.003, Math.sin(a) * ro * 1.35 * k, Math.cos(a) * ro * 1.3, rgb(stone, 0.45), 0));
+    g.nrm.push(1, 0, 0);
+  }
+  for (let i = 0; i < 24; i++) g.idx.push(wet[i], dry[i], dry[i + 1], wet[i], dry[i + 1], wet[i + 1]);
+  // the sill the water pours over: a slab under the mouth, its top a little up the barrel's floor
+  const top = -ri * 0.82;
+  const w = ri * 0.95;
+  const x1 = d + sill;
+  const S = rgb(stone, 0.94);
+  const Sd = rgb(stone, 0.7);
+  face(g, [[0, top, -w], [0, top, w], [x1, top, w], [x1, top, -w]], S, [0, 1, 0]);
+  face(g, [[x1, top, -w], [x1, top, w], [x1, top - 0.08, w], [x1, top - 0.08, -w]], Sd, [1, 0, 0]);
+  face(g, [[0, top, w], [0, top - 0.08, w], [x1, top - 0.08, w], [x1, top, w]], Sd, [0, 0, 1]);
+  face(g, [[0, top, -w], [x1, top, -w], [x1, top - 0.08, -w], [0, top - 0.08, -w]], Sd, [0, 0, -1]);
+  void M;
+  return g;
+}
+
+/**
+ * The streaks a stream scrolls through: soft vertical runs of more and less water. Its colour runs from `tint` between
+ * the runs to white in their cores, and its alpha from a little to nearly solid.
+ */
+function streakTexture(device: pc.GraphicsDevice, tint: string): pc.Texture {
+  const W = 32;
   const H = 64;
-  const tex = new pc.Texture(device, { name: 'water-life-streaks', width: W, height: H, format: pc.PIXELFORMAT_RGBA8, mipmaps: true, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_REPEAT });
+  const tex = new pc.Texture(device, { name: 'water-life-streaks', width: W, height: H, format: pc.PIXELFORMAT_RGBA8, mipmaps: true, addressU: pc.ADDRESS_REPEAT, addressV: pc.ADDRESS_REPEAT });
   const px = tex.lock() as Uint8Array;
   const rnd = tileRng(3, 5, 11);
-  const cols = Array.from({ length: W }, () => [rnd() * TAU, 2 + Math.floor(rnd() * 3), 0.55 + rnd() * 0.3]);
+  const T = rgb(tint);
+  const cols = Array.from({ length: W }, () => [rnd() * TAU, 2 + Math.floor(rnd() * 3), 0.45 + rnd() * 0.35, rnd() * TAU, 5 + Math.floor(rnd() * 4)]);
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
-      const [ph, k, base] = cols[x];
-      // whole cycles down the texture, so it wraps without a seam; the ribbon's edges thin out
-      const v = base + 0.35 * Math.sin((y / H) * TAU * k + ph);
-      const edge = Math.sin(((x + 0.5) / W) * Math.PI);
+      const [ph, k, base, ph2, k2] = cols[x];
+      // whole cycles down the texture, so it wraps without a seam: long runs with finer ripples in them
+      const v = base + 0.45 * Math.sin((y / H) * TAU * k + ph) + 0.15 * Math.sin((y / H) * TAU * k2 + ph2);
+      const s = Math.max(0, Math.min(1, v));
+      const core = s * s;
       const i = (y * W + x) * 4;
-      px[i] = px[i + 1] = px[i + 2] = 255;
-      px[i + 3] = Math.round(255 * Math.max(0, Math.min(1, v)) * Math.pow(edge, 0.6));
+      px[i] = Math.round(T[0] + (255 - T[0]) * core);
+      px[i + 1] = Math.round(T[1] + (255 - T[1]) * core);
+      px[i + 2] = Math.round(T[2] + (255 - T[2]) * core);
+      px[i + 3] = Math.round(255 * (0.4 + 0.6 * s));
     }
   tex.unlock();
   return tex;
@@ -533,8 +720,9 @@ function meshOf(device: pc.GraphicsDevice, g: Geo & { uv?: number[] }): pc.Mesh 
   const m = new pc.Mesh(device);
   m.setPositions(g.pos);
   if (g.uv) m.setUvs(0, g.uv);
-  // flat things face up; the standing plant is lit as if from above too (soft, no hard facets)
-  m.setNormals(g.pos.map((_, i) => (i % 3 === 1 ? 1 : 0)));
+  // flat things face up; the standing plant is lit as if from above too (soft, no hard facets); the culvert's stones
+  // and the stream bring their own
+  m.setNormals(g.nrm ?? g.pos.map((_, i) => (i % 3 === 1 ? 1 : 0)));
   m.setColors32(g.col);
   m.setIndices(g.idx);
   m.update(pc.PRIMITIVE_TRIANGLES);
@@ -568,6 +756,8 @@ export class WaterLife {
   private rising = '';
   private night = -1;
   private fallMat: pc.StandardMaterial;
+  /** the stream, its foam and its spray: their light of their own fades out as the day does */
+  private splash: pc.StandardMaterial[] = [];
   /** the drifting flecks are particles: off on the Low tier and with Fewer particles, as the air's motes are */
   particles = true;
 
@@ -600,20 +790,43 @@ export class WaterLife {
       m.update();
       return m;
     };
-    // the outlets' streams: streaks of water scrolling down a soft ribbon
-    const fm = new pc.StandardMaterial();
-    fm.useLighting = false;
-    fm.diffuse = new pc.Color(0, 0, 0);
-    fm.emissive = new pc.Color().fromString(L.falls.colour);
-    fm.opacity = L.falls.opacity;
-    fm.opacityMap = streakTexture(device);
+    // the outlets' water: lit like the world (so it is moonlit by night, never glowing), with a glossy sheen that
+    // catches the sun, and a touch of its own light by day only (`glow`, see `update`)
+    const water = (opacity: number) => {
+      const m = new pc.StandardMaterial();
+      m.diffuse = new pc.Color().fromString(L.falls.colour);
+      m.specular = new pc.Color(L.falls.sheen, L.falls.sheen, L.falls.sheen);
+      m.gloss = 0.85;
+      m.opacity = opacity;
+      m.opacityVertexColor = true;
+      m.opacityVertexColorChannel = 'a';
+      m.blendType = pc.BLEND_NORMAL;
+      m.depthWrite = false;
+      m.cull = pc.CULLFACE_NONE;
+      m.twoSidedLighting = true;
+      m.useFog = true;
+      return m;
+    };
+    // the stream: streaks scrolling down two sheets
+    const fm = water(L.falls.opacity);
+    const streaks = streakTexture(device, L.falls.tint);
+    fm.diffuseMap = streaks;
+    fm.opacityMap = streaks;
     fm.opacityMapChannel = 'a';
-    fm.blendType = pc.BLEND_NORMAL;
-    fm.depthWrite = false;
-    fm.cull = pc.CULLFACE_NONE;
-    fm.useFog = true;
     fm.update();
     this.fallMat = fm;
+    const foamMat = water(L.falls.opacity * 0.85);
+    foamMat.update();
+    const sprayMat = water(L.falls.opacity * 0.6);
+    sprayMat.update();
+    this.splash = [fm, foamMat, sprayMat];
+    // the culvert: stone, solid, but the wet stain round it fades into the wall (its vertex alpha)
+    const culvertMat = lit(pc.CULLFACE_NONE);
+    culvertMat.opacityVertexColor = true;
+    culvertMat.opacityVertexColorChannel = 'a';
+    culvertMat.blendType = pc.BLEND_NORMAL;
+    culvertMat.depthWrite = true;
+    culvertMat.update();
     const geos: Record<LifeKind, [Geo, pc.StandardMaterial]> = {
       pad0: [padGeo(L.pads.colours[0], L.pads.vein), lit()],
       pad1: [padGeo(L.pads.colours[1], L.pads.vein), lit()],
@@ -624,8 +837,9 @@ export class WaterLife {
       fleck: [fleckGeo(), ghost(L.flecks.colour, L.flecks.opacity)],
       plant: [plantGeo(L.plants.stalk, L.plants.leaf), lit(pc.CULLFACE_NONE)],
       fall: [fallGeo(), this.fallMat],
-      foam: [fleckGeo(), ghost(L.falls.colour, L.falls.opacity * 0.8)],
-      outlet: [outletGeo(L.falls.stone, L.falls.mouth), lit(pc.CULLFACE_NONE)],
+      foam: [foamGeo(), foamMat],
+      spray: [sprayGeo(), sprayMat],
+      outlet: [outletGeo(L.falls.stone, L.falls.mouth), culvertMat],
     };
     const fmt = pc.VertexFormat.getDefaultInstancingFormat(device);
     for (const k of LIFE_KINDS) {
@@ -639,7 +853,7 @@ export class WaterLife {
       mi.cull = false;
       mi.visible = false;
       const e = new pc.Entity(`water-life-${k}`);
-      e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: k !== 'fish' && k !== 'fleck' && k !== 'fall' && k !== 'foam', layers: layer !== undefined ? [layer] : [pc.LAYERID_WORLD] });
+      e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: k !== 'fish' && k !== 'fleck' && k !== 'fall' && k !== 'foam' && k !== 'spray', layers: layer !== undefined ? [layer] : [pc.LAYERID_WORLD] });
       parent.addChild(e);
       this.slots.set(k, { mi, mat, vb, data: new Float32Array(cap * 16), cap, spots: [] });
     }
@@ -663,19 +877,23 @@ export class WaterLife {
       const fleck = this.slots.get('fleck')!.mat;
       fleck.opacity = L.flecks.opacity + (L.flecks.nightOpacity - L.flecks.opacity) * night;
       fleck.update();
-      // the stream and its foam: moonlit blue-grey by night
-      const day = new pc.Color().fromString(L.falls.colour);
-      const dark = new pc.Color().fromString(L.falls.night);
-      const c = new pc.Color().lerp(day, dark, night);
-      for (const m of [this.fallMat, this.slots.get('foam')!.mat]) {
-        m.emissive = c;
+      // the stream, its foam and spray: lit like the world, with a little light of their own by day only
+      const own = new pc.Color().fromString(L.falls.colour).mulScalar(L.falls.glow * (1 - night));
+      for (const [i, m] of this.splash.entries()) {
+        // the foam and spray lie in the sun already: half as much of their own as the stream (in the wall's shade)
+        m.emissive = i ? own.clone().mulScalar(0.5) : own;
         m.update();
       }
     }
     const t = f.time;
     // the streams' streaks run down
     if (this.slots.get('fall')!.spots.length) {
-      this.fallMat.opacityMapOffset = new pc.Vec2(0, -((t * L.falls.speed) % 1));
+      // the streaks run down the sheet (its v grows downward): the engine flips a map's v offset (it stores
+      // 1 - tiling - offset), so a growing offset moves the pattern down the screen. Checked in motion by
+      // shore-shots STRIP_MS (the owner saw it running up with the sign the other way)
+      const run = new pc.Vec2(0, fallScroll(t));
+      this.fallMat.diffuseMapOffset = run;
+      this.fallMat.opacityMapOffset = run;
       this.fallMat.update();
     }
     const rises: WaterDisturber[] = [];
@@ -717,18 +935,43 @@ export class WaterLife {
           x = p.x;
           z = p.z;
           k2 *= p.k;
-        } else if (k === 'fall' || k === 'outlet') {
-          // in the wall: the stream from the culvert's mouth down to the water, a little out from the wall
-          const sx = k === 'fall' ? L.falls.lip : s.size;
-          placeMatrix(m, n * 16, x, k === 'fall' ? s.y : s.y + s.range, z, yaw, sx * grow, k === 'fall' ? s.range * grow : s.size * grow, s.size * grow);
+        } else if (k === 'outlet') {
+          // in the wall's face, the mouth's middle `range` over the water
+          placeMatrix(m, n * 16, x, s.y + s.range, z, yaw, s.size * grow, s.size * grow, s.size * grow);
           n++;
           continue;
-        } else if (k === 'foam') k2 *= 0.9 + 0.1 * Math.sin(t * 2.3 + s.x * 3.1);
+        } else if (k === 'fall') {
+          // from the sill's edge down and out to the water
+          const out = L.falls.culvert * (CULVERT.depth + CULVERT.sill);
+          const fx = Math.cos(yaw);
+          const fz = -Math.sin(yaw);
+          const reach = fallReach() - out + L.falls.culvert * CULVERT.sill * 0.5;
+          placeMatrix(m, n * 16, x + fx * out, s.y, z + fz * out, yaw, reach * grow, fallTop(s.range) * grow, s.size * grow);
+          n++;
+          continue;
+        } else if (k === 'foam') {
+          // two layers churning round each other, breathing a little
+          for (const [turn, k3] of [
+            [0.7, 1],
+            [-1.1, 0.68],
+          ] as const) {
+            if (n >= slot.cap) break;
+            const b = 0.92 + 0.08 * Math.sin(t * 2.3 * k3 + s.x * 3.1);
+            placeMatrix(m, n * 16, x, s.y + 0.006 + (k3 < 1 ? 0.002 : 0), z, s.yaw + t * turn, s.size * k3 * b * grow, 1, s.size * k3 * b * grow);
+            n++;
+          }
+          continue;
+        } else if (k === 'spray') {
+          const b = 0.85 + 0.15 * Math.sin(t * 5.1 + s.z * 2.3);
+          placeMatrix(m, n * 16, x, s.y, z, t * 0.4, s.size * grow, s.size * 0.8 * b * grow, s.size * grow);
+          n++;
+          continue;
+        }
         else if (k !== 'plant') yaw = s.yaw + Math.sin(t * L.pads.turn + s.phase) * 0.6;
         // floating things ride the swell (plants stand rooted in the shallows, foam at a wall's foot, where it has eased off)
-        const lift = k === 'plant' || k === 'foam' ? 0 : waterWaves(x, z, t, s.edge);
+        const lift = k === 'plant' ? 0 : waterWaves(x, z, t, s.edge);
         // fish show just under the surface's own height (drawn over it, seen through it); the rest sit on it
-        const y = s.y + lift + (k === 'fish' ? 0.004 : k === 'fleck' || k === 'foam' ? 0.006 : k === 'flower' ? 0.012 : 0.008);
+        const y = s.y + lift + (k === 'fish' ? 0.004 : k === 'fleck' ? 0.006 : k === 'flower' ? 0.012 : 0.008);
         const sz = s.size * k2;
         placeMatrix(m, n * 16, x, y, z, yaw, sz, k === 'plant' || k === 'flower' ? sz : 1, sz);
         n++;

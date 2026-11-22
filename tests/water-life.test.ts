@@ -7,10 +7,17 @@ import { CHUNK } from '../src/core/Hash';
 import { seaCell, surfCell } from '../src/core/OldCityLayout';
 import { LOOK } from '../src/data/look';
 import { Sim } from '../src/gameplay/Sim';
-import { ChunkRenderer } from '../src/rendering/ChunkRenderer';
+import { ChunkRenderer, FACADE_DEPTH } from '../src/rendering/ChunkRenderer';
 import {
   clearWaterLife,
+  CULVERT,
+  fallGeo,
+  fallReach,
+  fallScroll,
+  fallTop,
   fishAt,
+  foamGeo,
+  outletGeo,
   fishRise,
   fleckAt,
   leafAt,
@@ -41,11 +48,11 @@ function strip(rows: number, over: Partial<LifeTile> = {}) {
   return out;
 }
 
-const big = { pad: 1e4, flower: 1e4, leaf: 1e4, fish: 1e4, fleck: 1e4, plant: 1e4, fall: 1e4, foam: 1e4, outlet: 1e4 };
+const big = { pad: 1e4, flower: 1e4, leaf: 1e4, fish: 1e4, fleck: 1e4, plant: 1e4, fall: 1e4, foam: 1e4, spray: 1e4, outlet: 1e4 };
 
 describe('LOOK.waterLife', () => {
   it('keeps every kind small, sparse and soft', () => {
-    for (const k of ['pad', 'flower', 'leaf', 'fish', 'fleck', 'plant', 'fall', 'foam', 'outlet'] as const) expect(L.max[k]).toBeGreaterThan(0);
+    for (const k of ['pad', 'flower', 'leaf', 'fish', 'fleck', 'plant', 'fall', 'foam', 'spray', 'outlet'] as const) expect(L.max[k]).toBeGreaterThan(0);
     expect(L.radius).toBeGreaterThan(8);
     expect(L.pads.size[0]).toBeLessThan(L.pads.size[1]);
     expect(L.pads.size[1]).toBeLessThan(0.5);
@@ -61,12 +68,14 @@ describe('LOOK.waterLife', () => {
     expect(L.fish.nightOpacity).toBeLessThan(L.fish.opacity);
     expect(L.flecks.nightOpacity).toBeLessThan(L.flecks.opacity);
     expect(L.falls.opacity).toBeLessThan(1);
-    // the falls darken by night: their night colour is well under their day colour, and bluer than it is red
-    const lum = (hex: string) => [1, 3, 5].reduce((a, i) => a + parseInt(hex.slice(i, i + 2), 16), 0) / 3;
-    expect(lum(L.falls.night)).toBeLessThan(lum(L.falls.colour) * 0.5);
-    expect(parseInt(L.falls.night.slice(5, 7), 16)).toBeGreaterThan(parseInt(L.falls.night.slice(1, 3), 16));
+    // the outlet's water is lit like the world; its own light (by day only) is a touch, never a glow
+    expect(L.falls.glow).toBeGreaterThan(0);
+    expect(L.falls.glow).toBeLessThanOrEqual(0.4);
+    expect(L.falls.sheen).toBeLessThan(1);
+    // the stream is narrower than the mouth it pours from
+    expect(L.falls.width).toBeLessThan(L.falls.culvert * CULVERT.inner * 2);
     expect(L.fish.minDepth).toBeGreaterThan(0.2 + 0.12);
-    for (const hex of [...L.pads.colours, L.pads.vein, L.pads.flower, L.pads.flowerCore, L.fish.colour, ...L.leaves.colours, L.flecks.colour, L.plants.stalk, L.plants.leaf, L.falls.colour, L.falls.night, L.falls.stone, L.falls.mouth])
+    for (const hex of [...L.pads.colours, L.pads.vein, L.pads.flower, L.pads.flowerCore, L.fish.colour, ...L.leaves.colours, L.flecks.colour, L.plants.stalk, L.plants.leaf, L.falls.colour, L.falls.tint, L.falls.stone, L.falls.mouth])
       expect(hex).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
@@ -161,6 +170,77 @@ describe('the life on a tile', () => {
 });
 
 describe('an outlet', () => {
+  it('the stream leaves the mouth from its lip, over the water, and lands past the sill', () => {
+    const range = L.falls.outlet;
+    expect(fallTop(range)).toBeLessThan(range);
+    expect(fallTop(range)).toBeGreaterThan(0.1);
+    // the mouth's bottom stays clear of the water
+    expect(range - L.falls.culvert * CULVERT.outer).toBeGreaterThan(0.1);
+    expect(fallReach()).toBeGreaterThan(L.falls.culvert * (CULVERT.depth + CULVERT.sill));
+  });
+
+  it('a culvert of stone with a dark barrel into the wall, its stones proud of the face; its water soft at the edges', () => {
+    const g = outletGeo(L.falls.stone, L.falls.mouth);
+    const xs = g.pos.filter((_, i) => i % 3 === 0);
+    expect(Math.min(...xs)).toBeGreaterThan(-0.61);
+    expect(Math.max(...xs)).toBeGreaterThan(CULVERT.depth);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(CULVERT.depth + CULVERT.sill + 1e-9);
+    expect(g.nrm.length).toBe(g.pos.length);
+    for (let i = 0; i < g.nrm.length; i += 3) expect(Math.hypot(g.nrm[i], g.nrm[i + 1], g.nrm[i + 2])).toBeCloseTo(1);
+    // some of it is near-black (the barrel's far end), some of it stone
+    const lum = (i: number) => (g.col[i] + g.col[i + 1] + g.col[i + 2]) / 3;
+    const l = Array.from({ length: g.col.length / 4 }, (_, i) => lum(i * 4));
+    expect(Math.min(...l)).toBeLessThan(20);
+    expect(Math.max(...l)).toBeGreaterThan(150);
+    // foam fades to nothing at its rim, and is near solid in its middle
+    const f = foamGeo();
+    const alpha = f.col.filter((_, i) => i % 4 === 3);
+    // its middle, then its rings out to the rim (the last ring)
+    expect(alpha[0]).toBeGreaterThan(200);
+    expect(Math.max(...alpha.slice(-18))).toBe(0);
+    // the stream thins at its edges and its foot
+    const s = fallGeo();
+    expect(s.nrm.length).toBe(s.pos.length);
+    const a = s.col.filter((_, i) => i % 4 === 3);
+    expect(Math.min(...a)).toBeLessThan(120);
+    expect(Math.max(...a)).toBe(255);
+  });
+
+  it("the stream's streaks scroll down: the map's v offset grows with time (the engine flips it, so that is downward)", () => {
+    // within one cycle it only grows, by `speed` stream lengths a second, and it stays in 0 … 1
+    const dt = 0.01;
+    let grew = 0;
+    for (let t = 0; t < 20; t += dt) {
+      const a = fallScroll(t);
+      const b = fallScroll(t + dt);
+      expect(a).toBeGreaterThanOrEqual(0);
+      expect(a).toBeLessThan(1);
+      if (b > a) {
+        grew++;
+        expect(b - a).toBeCloseTo(L.falls.speed * dt, 6);
+      }
+    }
+    expect(grew).toBeGreaterThan(20 / dt - 40);
+  });
+
+  it("so a streak moves down the sheet, toward the water, as the engine draws it (PlayCanvas's own map transform)", () => {
+    // The stream's v runs 0 at the mouth to 1 at the water (fallGeo). PlayCanvas samples a map at v * tiling +
+    // (1 - tiling - offset): read that from the engine itself, so an engine change in the convention fails here.
+    // A streak at texture row T shows where the sampled v' is T: on the sheet at v = (T - c) / k.
+    const mt = (new pc.StandardMaterial() as unknown as { _mapTransforms: { _compute(p: string, t: pc.Vec2, o: pc.Vec2, r: number): void; _values: Map<string, Float32Array> } })._mapTransforms;
+    const at = (t: number, T: number) => {
+      mt._compute('diffuse', new pc.Vec2(1, 1), new pc.Vec2(0, fallScroll(t)), 0);
+      const v = mt._values.get('diffuse')!;
+      return (T - v[5]) / v[4];
+    };
+    // a quarter of a cycle apart, never across the wrap
+    for (const t0 of [0.05, 0.2, 0.4]) {
+      const t1 = t0 + 0.25 / L.falls.speed;
+      expect(at(t1, 0.3)).toBeGreaterThan(at(t0, 0.3));
+      expect(at(t1, 0.3) - at(t0, 0.3)).toBeCloseTo(0.25, 5);
+    }
+  });
+
   it('none where the ground above is barely higher', () => {
     expect(outletSpots(0, 0, 0, 0, 0.2, 0, 1)).toEqual([]);
   });
@@ -168,11 +248,13 @@ describe('an outlet', () => {
   it('a culvert and its stream in the wall, the foam out on the water the way it lies', () => {
     for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
       const s = outletSpots(5, 5, 0.3, yaw, 1.2, 0, 1);
-      expect(s.map((q) => q.kind).sort()).toEqual(['fall', 'foam', 'outlet']);
-      const foam = s.find((q) => q.kind === 'foam')!;
-      expect(foam.x - 5).toBeCloseTo(Math.cos(yaw) * L.falls.lip);
-      expect(foam.z - 5).toBeCloseTo(-Math.sin(yaw) * L.falls.lip);
-      for (const q of s.filter((k) => k.kind !== 'foam')) {
+      expect(s.map((q) => q.kind).sort()).toEqual(['fall', 'foam', 'outlet', 'spray']);
+      for (const kind of ['foam', 'spray']) {
+        const q = s.find((k) => k.kind === kind)!;
+        expect(q.x - 5).toBeCloseTo(Math.cos(yaw) * fallReach());
+        expect(q.z - 5).toBeCloseTo(-Math.sin(yaw) * fallReach());
+      }
+      for (const q of s.filter((k) => k.kind === 'outlet' || k.kind === 'fall')) {
         expect(q.x).toBe(5);
         expect(q.range).toBeLessThanOrEqual(L.falls.outlet);
       }
@@ -219,10 +301,10 @@ describe('the sources and what is drawn', () => {
 describe('the chunks feed it from the real world', () => {
   type R = { band: number; detail: string; farFrom: number; life: LifeSpot[]; buildGround(v: unknown): Generator<void> };
 
-  function build(restore: boolean) {
+  function build(restore: boolean, hide?: string) {
     resetWaterLife();
     const sim = new Sim(createInitialState(7));
-    sim.areas.fog = () => 'cleared';
+    sim.areas.fog = (id) => (id === hide ? 'hidden' : 'cleared');
     if (restore)
       for (let z = 4; z < 44; z++)
         for (let x = -12; x < 10; x++) {
@@ -272,9 +354,20 @@ describe('the chunks feed it from the real world', () => {
     for (const o of outlets) {
       expect(o.x).toBeGreaterThan(-3.01);
       expect(o.x).toBeLessThan(-0.99);
-      expect(Math.abs(o.z - 16)).toBeLessThan(0.01);
+      // on the wall's face, in front of its courses: a little out over the water from the tile edge at z 16
+      expect(o.z).toBeCloseTo(16 + LOOK.wall.thick / 2 + LOOK.wall.courseProud + 0.012);
     }
     expect(life.get('fall')!.length).toBe(outlets.length);
     expect(life.get('foam')!.length).toBe(outlets.length);
+    expect(life.get('spray')!.length).toBe(outlets.length);
+  });
+
+  it("while Elder Grove is hidden, the outlet sits on the face of the facade its edge gets (Look 4.9), not behind it", () => {
+    const sim = new Sim(createInitialState(7));
+    const grove = sim.areas.map.areaOfCell(-3, 15);
+    expect(grove).not.toBe(sim.areas.map.areaOfCell(-3, 16));
+    const outlets = build(true, grove).get('outlet')!;
+    expect(outlets.length).toBeGreaterThan(0);
+    for (const o of outlets) expect(o.z).toBeCloseTo(16 + FACADE_DEPTH + 0.012);
   });
 });

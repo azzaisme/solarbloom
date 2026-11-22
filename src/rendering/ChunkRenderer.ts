@@ -633,6 +633,8 @@ void getOpacity() {
  */
 export const SINK = 0.45;
 const TALL_DROP = 2;
+/** Look 4.9: how far a facade's wall reaches into the revealed chunk from the edge it stands on (E28.W04: an outlet in it sits on its face). */
+export const FACADE_DEPTH = 0.4;
 
 /**
  * E21.24: the level a retaining wall on cell (x, z)'s edge facing (dx, dz) drops to, or undefined when there's no
@@ -2948,6 +2950,15 @@ export class ChunkRenderer {
     void r;
   }
 
+  /** E28.W04: whether this chunk stands a Look 4.9 facade on the edge between tile `t` and its neighbour `n`. */
+  private facadeOn(t: TileData, n: TileData): boolean {
+    const s = this.sim;
+    const [cx, cz] = [Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)];
+    const [nx, nz] = [Math.floor(n.x / CHUNK), Math.floor(n.z / CHUNK)];
+    if (cx === nx && cz === nz) return false;
+    return s.areas.fog(s.areas.map.areaOfChunk(cx, cz)) !== 'hidden' && s.areas.fog(s.areas.map.areaOfChunk(nx, nz)) === 'hidden';
+  }
+
   /** E28.W04: how far the restored land within two tiles of a tile has bloomed (its best), or -1 when there is none. */
   private restoredShore(t: TileData): number {
     const g = this.sim.grid;
@@ -2991,14 +3002,17 @@ export class ChunkRenderer {
       const o = g.peek(t.roofId, t.x - dx, t.z - dz);
       if (!n || n.level === undefined || this.bankless(n) || n.level <= t.level || !o || !this.bankless(o)) continue;
       const drop = h + levelY(n.level) + 0.08 - y;
-      // the wall's foot, in the middle of the tile's edge; the water lies away from it
-      const wx = t.x + 0.5 + dx * 0.5;
-      const wz = t.z + 0.5 + dz * 0.5;
+      // on the wall's face (in front of its courses and its wet band), in the middle of the tile's edge; the water
+      // lies away from it. While the ground above is in a hidden area in another chunk, this chunk stands a facade on
+      // that edge (Look 4.9) in front of the wall: then the outlet is on the facade's face.
+      const proud = this.facadeOn(t, n) ? FACADE_DEPTH + 0.012 : LOOK.wall.thick / 2 + LOOK.wall.courseProud + 0.012;
+      const wx = t.x + 0.5 + dx * (0.5 - proud);
+      const wz = t.z + 0.5 + dz * (0.5 - proud);
       const yaw = Math.atan2(dz, -dx);
       const spots = outletSpots(wx, wz, y, yaw, drop, ws.t0, ws.d);
       this.life.push(...spots);
       const foam = spots.find((q) => q.kind === 'foam');
-      if (foam) this.rocks.push({ x: foam.x, z: foam.z, r: 0.06, strength: LOOK.waterLife.falls.ring });
+      if (foam) this.rocks.push({ x: foam.x, z: foam.z, r: 0.12, strength: LOOK.waterLife.falls.ring });
     }
   }
 
@@ -3956,7 +3970,7 @@ export class ChunkRenderer {
     const F = PALETTE.retaining;
     const pick = (c: readonly string[]) => (alive ? c[0] : c[1]);
     const stone = pick(F.stone);
-    b.add('box', stone, at(N / 2, -0.2, bottom + H / 2), size(N, 0.4, H));
+    b.add('box', stone, at(N / 2, -FACADE_DEPTH / 2, bottom + H / 2), size(N, FACADE_DEPTH, H));
     if (far) return;
     const seen = dx > 0 || dz > 0;
     if (SINK < TALL_DROP) {
