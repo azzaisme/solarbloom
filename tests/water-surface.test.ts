@@ -15,6 +15,8 @@ import {
   WATER_ENC,
   WAVES_ANCHOR,
   encodeWater,
+  moonCrest,
+  moonPathOf,
   pickWaterLamps,
   rippleDrift,
   rippleMapData,
@@ -619,5 +621,90 @@ describe('water material', () => {
     expect(n[1]).toBeCloseTo(lin((c >> 8) & 255), 3);
     expect(n[2]).toBeCloseTo(lin(c & 255), 3);
     expect(param('uWaterAmbient') as unknown as number).toBe(LOOK.water.ambient);
+  });
+});
+
+describe('E28.W06 (#699): the moon lays a path on the water by night', () => {
+  const M = LOOK.water.moonPath;
+  it('has named look values in range (soft, never blown out)', () => {
+    expect(M.width).toBeGreaterThan(0);
+    expect(M.width).toBeLessThan(0.1);
+    expect(M.glitter).toBeGreaterThan(0);
+    expect(M.glitter).toBeLessThan(M.width);
+    expect(M.soft).toBeGreaterThan(0);
+    expect(M.soft).toBeLessThan(1);
+    expect(M.sparkle).toBeGreaterThan(0);
+    expect(M.sparkle).toBeLessThanOrEqual(3);
+    expect(M.colour).toMatch(/^#[0-9a-f]{6}$/);
+    expect(M.bands.break).toBeGreaterThan(0);
+    expect(M.bands.break).toBeLessThan(1);
+    expect(M.bands.along).toBeGreaterThan(M.bands.across); // bands lie across the path
+  });
+
+  it('heads toward the key light (the moon by night) and rises only as high as it; off by day or below the horizon', () => {
+    const m = moonPathOf({ x: -0.5, y: 0.67, z: 0.55 }, 1);
+    expect(m[3]).toBe(1);
+    expect(Math.hypot(m[0], m[1])).toBeCloseTo(1, 9);
+    expect(m[0] / m[1]).toBeCloseTo(-0.5 / 0.55, 9);
+    expect(m[2]).toBeCloseTo(0.67 / Math.hypot(0.5, 0.67, 0.55), 9);
+    expect(moonPathOf({ x: -0.5, y: 0.67, z: 0.55 }, 0)[3]).toBe(0);
+    expect(moonPathOf({ x: -0.5, y: -0.2, z: 0.55 }, 1)[3]).toBe(0);
+    expect(moonPathOf(undefined, 1)[3]).toBe(0);
+    expect(moonPathOf({ x: 0, y: 1, z: 0 }, 1)[3]).toBe(0); // straight overhead: no heading to lay a path along
+  });
+
+  it('its crests have no seams: smooth everywhere in world space, with no lattice lines (the first cut showed them)', () => {
+    // the shader's crests are this sum; the old value noise turned at every whole lattice step, so a slope that jumps
+    // there (a kink, a straight line on screen once the threshold cuts it) is what this hunts for. Sampled finely
+    // across and along the path, through every whole and half step of the old lattice, at several times
+    const B = M.bands;
+    const h = 1e-3;
+    // a smooth sum of sines can't bend faster than its wavenumbers allow: the biggest second step it can take
+    const ka = 2 * Math.PI * B.along * 1.37;
+    const kb = 2 * Math.PI * B.across * 1.53;
+    const bound = ((ka * ka + kb * kb) * h * h * 2.2) / 4.4;
+    for (const t of [0, 7.3, 123.4]) {
+      for (const [da, db] of [[0, 1], [1, 0], [0.6, 0.8]]) {
+        let worst = 0;
+        for (let i = 1; i < 6000; i++) {
+          const s = -3 + i * h;
+          const f = (k: number) => moonCrest(5 + da * (s + k * h), 11 + db * (s + k * h), t);
+          worst = Math.max(worst, Math.abs(f(1) - 2 * f(0) + f(-1)));
+          expect(Math.abs(f(1) - f(0))).toBeLessThan(0.05); // and never a step
+        }
+        expect(worst).toBeLessThanOrEqual(bound);
+      }
+    }
+    // it ranges over its whole span, so the bands really break the path
+    let lo = 1;
+    let hi = 0;
+    for (let a = 0; a < 20; a += 0.05) for (let b = 0; b < 6; b += 0.25) [lo, hi] = [Math.min(lo, moonCrest(a, b, 0)), Math.max(hi, moonCrest(a, b, 0))];
+    expect(lo).toBeLessThan(0.3);
+    expect(hi).toBeGreaterThan(0.7);
+    expect(lo).toBeGreaterThanOrEqual(0);
+    expect(hi).toBeLessThanOrEqual(1);
+    // far off, where a crest is a few pixels long, they settle to even rather than flicker
+    expect(moonCrest(3.3, 1.1, 2, B, 1)).toBeCloseTo(0.5, 9);
+  });
+
+  it('the shader sums the same crests, in world space only, with no lattice noise', () => {
+    const src = readFileSync('src/rendering/WaterSurface.ts', 'utf8');
+    const block = src.slice(src.indexOf('E28.W06 (#699): the moon'), src.indexOf('wEmit += uWaterMoonCol'));
+    expect(block).not.toContain('sbWaterNoise');
+    expect(block).toContain('vec2 mp = vec2(dot(p, uWaterMoon.xy)');
+    for (const k of ['vec2(1.37, -0.83)', '1.19 * ms + 1.7', 'vec2(0.61, 1.53)', '0.77 * ms + 4.1', 'mc / 4.4']) expect(block).toContain(k);
+  });
+
+  it('the material carries the path, and the frame turns it on only by night', () => {
+    const m = waterMaterial();
+    const param = (k: string) => (m.getParameter(k) as { data: number[] }).data;
+    expect(Array.from(param('uWaterMoonK'))).toEqual([M.width, M.glitter, M.soft, M.sparkle]);
+    expect(Array.from(param('uWaterMoonB'))).toEqual([M.bands.along, M.bands.across, M.bands.drift, M.bands.break]);
+    const frame = { time: 1, cam: { x: 0, y: 5, z: 0 }, skyLow: [0.1, 0.14, 0.3] as [number, number, number], skyHigh: [0.05, 0.08, 0.22] as [number, number, number] };
+    const light = { toLight: { x: -0.5, y: 0.67, z: 0.55 }, color: { r: 0.7, g: 0.8, b: 1 }, share: 0.4 };
+    setWaterFrame({ ...frame, night: 1, light });
+    expect(param('uWaterMoon')[3]).toBe(1);
+    setWaterFrame({ ...frame, night: 0, light });
+    expect(param('uWaterMoon')[3]).toBe(0);
   });
 });

@@ -198,6 +198,10 @@ uniform vec4 uWaterObs[${DISTURB_MAX}]; // things in the water: x, z, radius, st
 uniform vec4 uWaterObsK;   // how many, rate, reach, ring spacing
 uniform vec2 uWaterObsW;   // ring width, strength
 uniform vec4 uWaterGlint;  // cut, softness, strength, the moon's boost by night
+uniform vec4 uWaterMoon;   // E28.W06: the moon's heading (x, z, unit), its height (sin of its elevation), on (1) or off (0)
+uniform vec4 uWaterMoonK;  // the moon path's width, glitter width, glow, sparkle
+uniform vec3 uWaterMoonCol; // the moon path's colour (linear)
+uniform vec4 uWaterMoonB;  // its bands: along and across scale, drift speed, how much they break it
 uniform vec3 uWaterLightDir;  // toward the sun (or moon)
 uniform vec3 uWaterLightCol;  // its colour × strength (linear)
 uniform vec4 uWaterLamp[${LAMP_MAX}];  // E28.W05: lamps shining: x, y, z (the bulb), how strongly (0 … 1)
@@ -380,6 +384,31 @@ void sbWaterSetup() {
 	glint *= (uWaterGlint.y + 0.002) / (uWaterGlint.y + 0.002 + widen) * (1.0 - smoothstep(0.01, 0.03, fw)) * keep;
 	// (E28.W05: by night the moon's are boosted, so it lays a path of light across the sea)
 	wEmit += uWaterLightCol * glint * uWaterGlint.z * mix(1.0, uWaterGlint.w, uWaterMisc.y) * (1.0 - wFoam) * smoothstep(0.0, 0.1, uWaterLightDir.y);
+	// ── E28.W06 (#699): the moon's path. Every bit of the sea whose reflection heads toward the moon (across, within
+	// the path's width) and rises no higher than the moon (along: from the moon's mirror point out to the horizon)
+	// catches it; the ripples turning R break it into a broken column, brighter glitter where they turn it right at the
+	// eye, all stronger toward the horizon by the Fresnel reflectance ──
+	if (night * uWaterMoon.w > 0.0) {
+		float rl = length(R.xz);
+		float head = dot(R.xz / max(rl, 1e-4), uWaterMoon.xy);
+		float along = smoothstep(-0.01, 0.04, R.y) * (1.0 - smoothstep(uWaterMoon.z, uWaterMoon.z + 0.08, R.y));
+		float glow = smoothstep(1.0 - uWaterMoonK.x, 1.0, head);
+		float spark = smoothstep(1.0 - uWaterMoonK.y - 0.5 * fwidth(head), 1.0, head);
+		// broken into drifting bands across the path, like wave crests catching it (where the ripples are too fine to
+		// draw, far off, this is what breaks the column up). Three crest trains in world space, none on a lattice: value
+		// noise here, stretched along the path and cut by the threshold below, showed its grid as straight seams
+		// (moonCrest is the same sum, for the tests); far off, once a crest is a few pixels long, they settle to even
+		vec2 mp = vec2(dot(p, uWaterMoon.xy), dot(p, vec2(-uWaterMoon.y, uWaterMoon.x)));
+		vec2 kb = 6.2831853 * uWaterMoonB.xy;
+		float ms = 6.2831853 * uWaterMoonB.z * t;
+		float mc = sin(dot(mp, kb) + ms)
+			+ 0.7 * sin(dot(mp, kb * vec2(1.37, -0.83)) - 1.19 * ms + 1.7)
+			+ 0.5 * sin(dot(mp, kb * vec2(0.61, 1.53)) + 0.77 * ms + 4.1);
+		float mfar = 1.0 - smoothstep(0.2, 0.45, px * uWaterMoonB.x);
+		float crest = 0.5 + mc / 4.4 * mfar;
+		float broken = mix(1.0 - uWaterMoonB.w, 1.0, smoothstep(0.35, 0.7, crest));
+		wEmit += uWaterMoonCol * (glow * glow * uWaterMoonK.z + spark * uWaterMoonK.w) * broken * along * F * night;
+	}
 	// ── E28.W05 (#698): the lamps on the water. Each lit lamp near the view lays its reflection on the ripples: a
 	// bright streak where the surface turns the bulb toward the eye (the ripples break it into a broken column of
 	// light running toward the camera, as lamps do on real water) and a broad, faint sheen round it. Both widen and dim
@@ -669,6 +698,10 @@ export function applyWaterLook() {
   const D = W.disturb;
   m.setParameter('uWaterObsW', [D.width, D.strength]);
   m.setParameter('uWaterGlint', [W.glint.cut, W.glint.soft, W.glint.strength, W.glint.moon]);
+  m.setParameter('uWaterMoonK', [W.moonPath.width, W.moonPath.glitter, W.moonPath.soft, W.moonPath.sparkle]);
+  m.setParameter('uWaterMoonCol', lin3(W.moonPath.colour));
+  m.setParameter('uWaterMoonB', [W.moonPath.bands.along, W.moonPath.bands.across, W.moonPath.bands.drift, W.moonPath.bands.break]);
+  m.setParameter('uWaterMoon', [0, 1, 1, 0]);
   m.setParameter('uWaterAA', [W.antiAlias.variance, 1 / W.antiAlias.rippleFrom, 1 / W.antiAlias.rippleTo, (R.min + R.max) / 2]);
   m.specular = new pc.Color(W.specular, W.specular, W.specular);
   obsAt = undefined;
@@ -734,6 +767,32 @@ let covN = 0;
 let obsAt: { x: number; z: number; v: number; n: number } | undefined;
 const lin = (c: number) => Math.pow(Math.max(0, c), 2.2);
 
+/**
+ * E28.W06 (#699): the moon path's uniform from the key light (toward it) and the night: the light's heading across
+ * the water (unit x, z), its height (the sine of its elevation), and whether the path shows (by night, with the light
+ * above the horizon). By night the key light is the moon (DayNight swings it round), so the path lies below the moon.
+ */
+/**
+ * E28.W06: the moon path's crests at a point (`a` along the moon's heading, `b` across it, world units) at time `t`:
+ * 0 … 1, as the shader sums them (three crest trains, no lattice). `px` is the world size of a pixel there: once a
+ * crest is only a few pixels long they settle to 0.5.
+ */
+export function moonCrest(a: number, b: number, t: number, bands = LOOK.water.moonPath.bands, px = 0): number {
+  const ka = 2 * Math.PI * bands.along;
+  const kb = 2 * Math.PI * bands.across;
+  const s = 2 * Math.PI * bands.drift * t;
+  const c = Math.sin(a * ka + b * kb + s) + 0.7 * Math.sin(a * ka * 1.37 - b * kb * 0.83 - 1.19 * s + 1.7) + 0.5 * Math.sin(a * ka * 0.61 + b * kb * 1.53 + 0.77 * s + 4.1);
+  return 0.5 + (c / 4.4) * (1 - ss(0.2, 0.45, px * bands.along));
+}
+
+export function moonPathOf(toLight: { x: number; y: number; z: number } | undefined, night: number): [number, number, number, number] {
+  if (!toLight || night <= 0) return [0, 1, 1, 0];
+  const l = Math.hypot(toLight.x, toLight.z);
+  const len = Math.hypot(toLight.x, toLight.y, toLight.z) || 1;
+  if (l < 1e-6 || toLight.y <= 0) return [0, 1, 1, 0];
+  return [toLight.x / l, toLight.z / l, toLight.y / len, 1];
+}
+
 /** Per frame: time, camera, night, the sky's colours, the things in the water and the planar reflection (when on). */
 export function setWaterFrame(f: WaterFrame) {
   const m = material;
@@ -751,6 +810,8 @@ export function setWaterFrame(f: WaterFrame) {
   lcol3[1] = lin(L?.color.g ?? 1) * k;
   lcol3[2] = lin(L?.color.b ?? 1) * k;
   m.setParameter('uWaterLightCol', lcol3);
+  // E28.W06: by night the key light is the moon: its heading and height lay its path on the water
+  m.setParameter('uWaterMoon', moonPathOf(L?.toLight, f.night));
   cam3[0] = f.cam.x;
   cam3[1] = f.cam.y;
   cam3[2] = f.cam.z;

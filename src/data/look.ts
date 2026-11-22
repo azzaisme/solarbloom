@@ -88,6 +88,12 @@ export const LOOK = {
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
     /** Seconds for the mood to follow a change in restoration. */
     follow: 2.5,
+    /**
+     * E28.W06 (#699): the soft floor under the grade (linear light). Contrast pivots on 0.5, so it pushes the darkest
+     * channels below zero; they used to clip flat, which drew a hard line across the night sea where its green ran
+     * out. Now they bend smoothly to black over about this much.
+     */
+    toe: 0.006,
   },
   /**
    * Look 1.8: depth of field (High tier). Focus is on the camera's goal point; the far blur starts `blurFrom` world
@@ -253,6 +259,28 @@ export const LOOK = {
      * `moon` times as strong (the moon is a faint light, so without it the sea showed no path of moonlight).
      */
     glint: { cut: 0.985, soft: 0.004, strength: 1.2, moon: 3 },
+    /**
+     * E28.W06 (#699): the moon's path by night. A wavy sea scatters the moon into a column of broken light running out
+     * from below the moon to the horizon: every bit of surface whose reflection points toward the moon's heading
+     * (within `width`, as 1 - cos of the angle) and no higher than the moon itself. `soft` is the path's glow, `sparkle`
+     * the brighter glitter where a ripple turns it right at the eye (within `glitter`), both in `colour` and both
+     * stronger toward the horizon (by the Fresnel reflectance). The moon sits 42° up, so its mirror point lands near
+     * Bloombot's feet: the glints alone (`glint.moon`) never reached up the screen to make a path.
+     */
+    moonPath: {
+      width: 0.014,
+      glitter: 0.005,
+      soft: 0.34,
+      sparkle: 2,
+      colour: '#c6d4ff',
+      /**
+       * the path is broken into drifting bands across it (wave crests catching it): three crest trains summed, `along`
+       * crests a tile down the path and `across` a tile sideways (so they lie slanted, never in rows), drifting at
+       * `drift` cycles a second; `break` of the light goes where the bands are dark. Smooth everywhere in world space:
+       * no lattice, so no straight seams (the first cut used value noise, whose grid showed through)
+       */
+      bands: { along: 1.6, across: 0.45, drift: 0.2, break: 0.75 },
+    },
     specular: 0.18,
     /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */
     fresnel: { base: 0.04, power: 5, max: 0.6 },
