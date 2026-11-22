@@ -71,6 +71,20 @@ describe('water look values', () => {
     expect(W.reflectTint).toBeLessThanOrEqual(0.6); // a cast, not a recolour: the reflection still shows what it reflects
   });
 
+  it('far ripples fade before they are a few pixels long, and their variance roughens the highlight (no pixel sparkle)', () => {
+    const A = W.antiAlias;
+    expect(A.variance).toBeGreaterThan(0);
+    // fading starts while a wave is still well over a dozen pixels long and is done before it's a few
+    expect(A.fadeFrom).toBeGreaterThanOrEqual(12);
+    expect(A.fadeTo).toBeGreaterThanOrEqual(4);
+    expect(A.fadeTo).toBeLessThan(A.fadeFrom);
+    // the shader gets them as fractions of a wavelength per pixel
+    const aa = (waterMaterial().getParameter('uWaterAA') as { data?: number[] } | undefined)?.data as number[];
+    expect(aa[0]).toBe(A.variance);
+    expect(aa[1]).toBeCloseTo(1 / A.fadeFrom, 9);
+    expect(aa[2]).toBeCloseTo(1 / A.fadeTo, 9);
+  });
+
   it('distances and strengths sit in sensible ranges', () => {
     expect(W.midAt).toBeGreaterThan(0);
     expect(W.deepAt).toBeGreaterThan(W.midAt);
