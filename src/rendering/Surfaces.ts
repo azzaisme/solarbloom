@@ -126,10 +126,31 @@ const turfColour = (t: TileData, bloom = t.bloom) => lin(pick(STAGE_GRASS[Math.m
  * so neighbouring lawns blend instead of showing square seams; the grid only shows where a tool draws it.
  */
 export function turfTop(c: DressCtx, t: TileData, top: number) {
-  const cols: number[] = [];
+  const cols = turfCorners(c, t);
   const pos: number[] = [];
-  const corners: [number, number][] = [[0, 0], [0, 1], [1, 1], [1, 0]];
-  for (const [cx, cz] of corners) {
+  for (const [cx, cz] of TURF_CORNERS) pos.push(t.x + cx, top + 0.002, t.z + cz);
+  c.b.quad(pos, cols);
+}
+
+const TURF_CORNERS: [number, number][] = [[0, 0], [0, 1], [1, 1], [1, 0]];
+
+/**
+ * E28.W02: a restored lawn's colour at a point on its top (linear), as `turfTop` draws it: its corners' blended,
+ * mottled turf, mixed across the tile. The shore's banks start in exactly this colour.
+ */
+export function turfAt(c: DressCtx, t: TileData, x: number, z: number): [number, number, number] {
+  const k = turfCorners(c, t);
+  const u = Math.min(1, Math.max(0, x - t.x));
+  const w = Math.min(1, Math.max(0, z - t.z));
+  // corners (0,0) (0,1) (1,1) (1,0)
+  const f = [(1 - u) * (1 - w), (1 - u) * w, u * w, u * (1 - w)];
+  return [0, 1, 2].map((ch) => f[0] * k[ch] + f[1] * k[3 + ch] + f[2] * k[6 + ch] + f[3] * k[9 + ch]) as [number, number, number];
+}
+
+/** A lawn tile's four corner colours (linear, corners (0,0) (0,1) (1,1) (1,0)), for `turfTop` and `turfAt`. */
+function turfCorners(c: DressCtx, t: TileData): number[] {
+  const cols: number[] = [];
+  for (const [cx, cz] of TURF_CORNERS) {
     let r = 0, g = 0, b = 0, n = 0;
     for (const [ox, oz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
       const n2 = ox === 0 && oz === 0 && cx === 0 && cz === 0 ? t : c.peek(t.x + cx + ox, t.z + cz + oz);
@@ -146,9 +167,8 @@ export function turfTop(c: DressCtx, t: TileData, top: number) {
     // so a big lawn reads as soft sunlit and shaded areas rather than one flat green
     const m = 0.5 + 0.28 * noise2((t.x + cx) * 0.45, (t.z + cz) * 0.45, 7) + 0.14 * noise2((t.x + cx) * 1.3, (t.z + cz) * 1.3, 8);
     cols.push(k[0] * m, k[1] * m, k[2] * m);
-    pos.push(t.x + cx, top + 0.002, t.z + cz);
   }
-  c.b.quad(pos, cols);
+  return cols;
 }
 
 /** Grass clumps over a tile (sparse while young, lush in full bloom); blades lean out and spill over edges. */

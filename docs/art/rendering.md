@@ -139,6 +139,142 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
   moonlit sea lands exactly on the colours the approved night was tuned with. The sea's slabs carry feature code 8
   (`FEATURE.sea`) so the surface knows which ones to tint. Checked in `sunlit-shots`: the noon sea must stay a clear
   aqua.
+- **The water (E28.W01, #694):** one surface and one material (`WaterSurface.ts`) for every stretch of live water:
+  the open sea and its shelf, the water under the jetty, the beach's surf (murky while dead, clear once restored) and
+  restored pools and ponds. The slabs stay underneath as the bed and the restoration state; the surface is a 4×4 grid
+  per tile (one quad on far chunks) a hair above them, on its own **Water** layer just after the world. Each vertex
+  carries its distance to land (following the rounded shore corners) and its clarity, which blends across tile
+  corners so murky and clear water never step at a border. From those the shader draws:
+  - colour by depth, `LOOK.water.shallow` → `mid` → `deep` (turquoise to blue-teal), with the sand bed and faint
+    light nets through the clear shallows;
+  - drifting ripples (six waves on a noise-bent field so they never form a checker, the finer ones fading with
+    distance), waves that follow the shore and anything standing in the water, and broken foam lines lapping in;
+  - the engine's sun, fill, lamps and lantern on those normals (every world light also lights the Water layer:
+    `worldLightLayers()`), with a soft-capped highlight (`gloss`, `specular`) that sparkles without blooming;
+  - Fresnel reflection (`fresnel`): little looking down, more toward the horizon, capped at 0.6. The sky's colours
+    on every tier; on High a planar reflection of the world (`WaterReflection.ts`). Reflections take a little of the
+    water's own hue (`reflectTint`) so far water reads aqua (or navy at night), not haze grey. The sky also fills the
+    water's colour with blue light (`ambient`), since the engine's own sky light is off for it;
+  - night: the colour turns `night` navy and dims to `nightAlbedo`; the moon and the lamps glint on it.
+- **Lamps and the moon on the water (E28.W05, #698):** the lamps' real lights (LightVisuals' pool of omni lights)
+  reach the water, but only as diffuse light on its dark night colour, and they don't touch specular
+  (`affectSpecularity: false`, which keeps the lit garden cheap). So without help a lit lamp left nothing on the
+  water but a faint warm smudge, and below High (no planar reflection) not even its bulb. Now LightVisuals keeps the
+  lamps it's lighting (`shining`), and the water shader takes the `LOOK.water.lamps.max` nearest where the camera looks
+  (`pickWaterLamps`). For each one it lays a narrow, bright **streak** where the rippled surface turns the bulb
+  toward the eye (`streak`, `strength`). The ripples break it into rings and a broken column of warm light. A broad,
+  faint **sheen** (`sheen`, `sheenStrength`) goes round it. Both widen and dim with the normal's spread, as the glints
+  do, fade with the lamp's distance (half by `reach`), and grow toward grazing (Fresnel). It works on every tier, in
+  the lamp's own colour. By day no lamp is lit, so the loop does nothing. The moon's glints are `glint.moon` times
+  stronger by night, so the moon lays a path of light across the sea when the camera looks toward it.
+  The shallows show less of the sand bed (`bedShow` 0.5 → 0.35), so the clear shallows read turquoise rather than pale
+  mint.
+- **Why a planar reflection:** buildings, the jetty and plants stand right on the water, and the camera looks along
+  it. Screen-space reflection loses what it needs there (it's off screen or behind the thing itself) and a probe
+  shows none of it. A second camera mirrors the main one in the sea's plane and draws the sky and the world (not
+  the Water layer) into a half-size HDR target; its near plane is tilted onto the water (Lengyel's oblique clip) so
+  nothing under the waterline shows. Only water at the sea's height uses it; pools on other terraces keep the sky
+  colours. It costs a second world pass, so it's High only (`TierSpec.waterReflect`), never on Deck, and off while
+  the loading screen warms shaders up. Two things keep it cheap: it's drawn every other frame (`reflect.every`; the
+  water samples it with the view it was drawn from, so it never slides), and it skips PlayCanvas's per-camera sun
+  shadow pass, reusing the shadow map the main camera left (WaterReflection's constructor). At the start that's
+  about 160 extra draw calls on the frames that draw it.
+- **Cost on High (E28.W01, sea spot at noon, 1080p, median of three runs):** frame time 7.3 → 9.5 ms median, draw
+  calls 516 → 639 on average. The shader skips the caustics where no bed shows and the foam noise away from shore.
+- **The shore (E28.W02, #695):** natural ground (lawn, earth, sand, clay; not paving, roads, buildings, ramps or decks)
+  doesn't stop at its tile's straight side where it meets water at its own level. `Shore.ts` works out the runs of
+  each land tile's outline that open onto water (round its rounded corners too, and fanning round square ones), and
+  `ChunkRenderer.shore` builds a bank under each run, into the chunk's ground mesh (no extra draw calls):
+  - first a **shelf**: the land's own top carries on out past the edge by `LOOK.shore.shelf` (0 to 0.3 tiles, its
+    own noise), so the edge of the lawn bulges and draws back;
+  - then a **slope** down to its toe `under` below the surface, meeting the water `reach` out (by the shore noise; a
+    sand beach `beach` times further, more gently). A bank keeps to `room` of the open water in front of it, so the
+    two banks of a narrow channel never close it, and where the shore carries on past a built edge (paving, a road)
+    it eases down to nothing over `taper` instead of stopping in a step;
+  - coloured from the lawn's own mottled colour at that very point (`turfAt`), carrying down the bank by
+    `grassLine` (its own noise), through `earth` and a `wet` band at the waterline, darker there (`ao`);
+  - dressed, seeded by position: pebbles and the odd rock along the waterline; on restored banks reeds standing in
+    the shallows, a fringe of grass on the lip, tufts and flowers on the slope, and now and then a shrub on the top of
+    the bank leaning out over the water (`overhang`; its foot stays on the tile, `leanGeo` only leans what grows
+    above). Every piece stands exactly on the bank's triangles (`bankHeight`).
+  
+  Everything is decided by world position, so two tiles sharing a corner build the same bank there and the shore runs
+  on with no seam. The water's distance to land (`waterDistance`) is pulled out by the same shelf and slope
+  (`waterlineAt`), and each water vertex also carries how far it was pulled (the alpha channel, `encodeWater`). The
+  foam's contact edge sits right on the bank's waterline; the colour by depth, the sand bed, the shore waves and the
+  foam lines follow only `waterPull` of the pull, so the shallows trace the new outline but a narrow canal keeps its
+  clear turquoise middle. None of it is solid: the tiles, paths, collision, the line of sight and saves are unchanged.
+- **Where decks meet the water (E28.W03, #696):** five things stand in the water.
+  - **Two decks:** the Landing's jetty (its model on six posts) and the Saltwind canal's plank bridge (once its gate is
+    open).
+  - **Walls standing in the sea:** the Long Causeway, the old pier and the mainland avenues over its canals.
+
+  `Bridges.ts` knows where each post stands. The jetty's come from the model's feet, measured from jetty.glb. It also
+  knows each deck's footprint and the end where it meets the land. With them `ChunkRenderer`:
+  - **shades the bank under a deck:** a soft contact shadow, darkened by `LOOK.bridge.shade` under the deck and fading
+    over `soft` past its edge;
+  - **gives each post a wet sleeve and a line of weed** at the waterline;
+  - **seats each deck's land end on a row of worn stones,** with a boulder and a pebble either side;
+  - **puts two beams under the plank bridge;**
+  - **wets the foot of every wall standing in water:** a band in a darker wet colour whose top edge wanders along the
+    wall (`wetLine`), with weed at the waterline.
+
+  The posts and decks also go to the water (`WaterDisturbance`): the posts as the `jetty` and `bridge:<x>,<z>` sources
+  (rings round them), the decks as covers. The swell lies flat under a cover, and `WaterSurface` darkens the water's
+  colour, the sky it reflects and its glints under it (`LOOK.bridge.under`). None of it is solid.
+- **Living water (E28.W04, #697):** clear water comes alive as the land beside it is restored. A tile is living when
+  it is restored itself, is a pond that has woken, or has restored land within two tiles (a canal's and the sea's own
+  tiles never restore; their banks do), and its life thickens with that shore's bloom. `lifeForTile`
+  (`WaterLife.ts`) places, from a fixed random stream per tile:
+  - **lily pads** on fresh water only (never the sea), in patches along the banks (`lilyPatch`, a smooth noise), a
+    flower on the first pad from bloom 2. They replace the old cylinder pads that were baked into the ground mesh, and
+    they ride the swell now;
+  - **small shoals of fish** where the water is deep enough for their loop to stay off the land: dark, half-clear
+    shapes under the surface. Every so often a shoal's leader rises and rings the water (`WaterDisturbance` source
+    `fish`);
+  - **floating leaves and drifting flecks** near the banks, and **arrowhead plants** in the fresh shallows;
+  - **an outlet** only where the world already has a drop: a restored channel of fresh water ending against ground a
+    level or more higher, which is the Saltwind canal's head under Elder Grove. A stone culvert stands proud of the
+    wall's face: a ring of voussoirs with a keystone, a black throat and a wet stain round it, and a sill. While the
+    area above is hidden, the chunk stands a plain facade (Look 4.9) 0.4 into the canal in front of the wall, so the
+    culvert goes on that face instead (`FACADE_DEPTH`). The stream pours off the sill as two lit, glossy sheets whose
+    streaks scroll past each other, partly see-through and thinning at the edges and foot. Where it lands there's
+    soft, frothy foam in two churning layers, a puff of spray, and rings on the water. All of it is lit like the
+    world, with a little light of its own by day only (`falls.glow`), so it's moonlit at night and never glows. By
+    night its colour fades to `falls.nightColour`, the canal's moonlit blue-grey, and most of its sheen goes. The
+    water's lighting is one-sided on purpose: with two-sided lighting the engine turned the sheets' normals into the
+    wall, where they picked up the warm bounce off the ground and the stream went amber under a blue night.
+
+  Each chunk hands its life to `setWaterLife` as it builds (near chunks only). `WaterLife` draws the nearest of each
+  kind round the camera's focus (`LOOK.waterLife.radius`, capped by `max`): one instanced draw per kind in view, 11 at
+  most, on the water layer. It fades in with the water's restore. By night the fish and flecks dim, and the stream and
+  its foam turn a moonlit blue-grey: nothing glows. The flecks go with *Fewer particles* and the Low tier, and reduced
+  motion stills everything (it stops `waterTime`). Gameplay, saves and the grid never see any of it.
+- **The moon's path, and the water in both cameras (E28.W06, #699):** W05's stronger moon glints never made a path
+  in play. The moon sits 42° up (`DAY_LIGHT.moonElevation`), so its mirror point lands about 42° below the horizon:
+  at the very bottom of the follow camera's view (16° pitch, 62° FOV), near Bloombot's feet or under the jetty deck.
+  The glints gathered there and nowhere else, and the moon's disc is off the top of the screen. A real moon path is
+  the sea scattering the moon into a column, so the water shader now adds one by night (`LOOK.water.moonPath`). Any
+  bit of water lights up when its reflection heads toward the moon's bearing (within `width`) and rises no higher than
+  the moon. Drifting crest bands across the path break it up (`bands`): three crest trains summed in world space,
+  slanted so they never line up in rows. The first cut used value noise there, and its lattice, stretched along the
+  path and cut by the threshold, showed as a hard rectangular seam in the column; `moonCrest` mirrors the sum for the
+  tests. The path also has a soft glow (`soft`) and brighter glitter where a ripple turns the light right at the eye
+  (`glitter`, `sparkle`). All of it is weighted by Fresnel, so it
+  runs from below the moon out to the horizon and gets stronger toward it. `moonPathOf` hands the shader the moon's
+  heading and height each frame. It is off by day and when the moon is down, costs one branch, and adds no draw
+  calls. `tests/e2e/water-cameras.mjs` shoots the water from both cameras at day, golden hour and night: six
+  follow-camera spots (start, out to sea, toward the key light, the shore at player height, the canal, a 2° grazing
+  pitch) and two zoomed-out ones (the bay at the furthest zoom, open water at a middle zoom). It fails on any page
+  error or GL warning, and on straight lines in the shots: a seam across the moon path at night, or a hard band
+  across the open sea from the zoomed-out view. `PERF=1` measures frame time and draw calls instead. The open-sea
+  shots show no tiling, even contrast-stretched, and nothing in the shore or grazing shots needed fixing.
+- **The grade's soft floor (E28.W06):** CameraFrame's grade pivots contrast on 0.5 in linear light, so a contrast of
+  1.06 takes 0.03 off every dark channel, and the engine then clips below zero. The night sea's green sits right
+  there, so it ran out part way down the zoomed-out view and clipped flat to 0: the hue kinked from fog-blue to pure
+  navy in a dead-straight line across the whole sea. `LookShaders` now hands the compose pass the same grade with a
+  softplus floor `LOOK.grade.toe` wide (0.006) in place of the clip (`composeGradingPS`, set before the pass adds its
+  own). Above about 0.03 nothing changes and black stays black, and day frames come out identical.
 - **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
   25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
   overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back

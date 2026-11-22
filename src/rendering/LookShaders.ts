@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 
 /**
  * Look 1.3: a warm rim on silhouettes. A directional back light barely shows in this high camera view (the faces
@@ -57,6 +58,40 @@ float lookHorizonFog(float f) { return f; }
 #endif
 `;
 
+/**
+ * E28.W06 (#699): the post grade (CameraFrame's compose pass), as the engine's own but with a soft floor. The engine
+ * pivots contrast on 0.5 in linear light, so a contrast of 1.06 takes 0.03 off every dark channel. The night sea's
+ * green sits about there: it crossed zero part way down the zoomed-out view and clipped flat to 0, and the hue
+ * kinked from fog-blue to pure navy in a dead-straight line. The floor bends each channel smoothly to 0 instead
+ * (a softplus `look_gradeToe` wide): above a few times that it's the engine's grade unchanged, and black stays black.
+ */
+export const GRADING_GLSL = `
+#ifdef GRADING
+	uniform vec3 brightnessContrastSaturation;
+	uniform vec3 tint;
+	uniform float look_gradeToe;
+	vec3 colorGradingHDR(vec3 color, float brt, float sat, float con) {
+		color *= tint;
+		color = color * brt;
+		float grey = dot(color, vec3(0.3, 0.59, 0.11));
+		grey = grey / max(1.0, max(color.r, max(color.g, color.b)));
+		color = mix(vec3(grey), color, sat);
+		vec3 g = mix(vec3(0.5), color, con);
+		float s = max(look_gradeToe, 1e-5);
+		return max(g, 0.0) + s * log(1.0 + exp(-abs(g) / s));
+	}
+	vec3 applyGrading(vec3 color) {
+		return colorGradingHDR(color, brightnessContrastSaturation.x, brightnessContrastSaturation.z, brightnessContrastSaturation.y);
+	}
+#endif
+`;
+
+/** The soft floor the grade puts under each channel (tests): `g` as the engine grades it, `toe` its width. */
+export function gradeFloor(g: number, toe: number): number {
+  const s = Math.max(toe, 1e-5);
+  return Math.max(g, 0) + s * Math.log(1 + Math.exp(-Math.abs(g) / s));
+}
+
 let installed = false;
 
 /** Installs the rim into the standard emissive chunk (once per device; materials compile it on first use). */
@@ -77,6 +112,9 @@ export function installLookShaders(device: pc.GraphicsDevice) {
     const withHelper = at2 >= 0 ? fog.slice(0, at2) + HORIZON_GLSL + fog.slice(at2) : fog + HORIZON_GLSL;
     if (at2 >= 0) chunks.set('fogPS', withHelper.replace(mixFrag, 'return mix(fog_color * dBlendModeFogFactor, color, lookHorizonFog(getFogFactor()));'));
   }
+  // the compose pass adds its own chunks without overriding, so this one, set first, is the one it builds with
+  chunks.set('composeGradingPS', GRADING_GLSL);
+  device.scope.resolve('look_gradeToe').setValue(LOOK.grade.toe);
   setLookHorizon(device, 1, 0, 1, 0, { x: 0, y: 0, z: 0 });
   installed = true;
 }
