@@ -49,6 +49,9 @@ export class LightVisuals {
   private sig = '';
   private mats = new Map<string, pc.StandardMaterial>();
   private pool: pc.Entity[] = [];
+  /** E28.W05 (#698): the lamps casting light now (nearest the view first when there are more than the pool): where
+   * each shines from, its colour (sRGB hex) and how strongly it glows (0 … 1). The water reflects these. */
+  readonly shining: { x: number; y: number; z: number; tone: string; power: number }[] = [];
   private toneCol = new Map<string, pc.Color>();
   /** the most real lights at once (Game lowers it on the low graphics tier) */
   maxCast: number = LIGHTING.cast.max;
@@ -242,6 +245,12 @@ export class LightVisuals {
       e.addComponent('light', { type: 'omni', castShadows: false, falloffMode: pc.LIGHTFALLOFF_INVERSESQUARED, affectSpecularity: false, layers: worldLightLayers() });
       this.root.addChild(e);
       this.pool.push(e);
+    }
+    // E28.W05 (#698): the lamps shining now, for the water to reflect (WaterSurface.setWaterLamps)
+    this.shining.length = 0;
+    for (let i = 0; i < n; i++) {
+      const w = want[i];
+      this.shining.push({ x: w.pos[0], y: w.pos[1], z: w.pos[2], tone: L.lamps[w.tone as keyof typeof L.lamps] ?? L.lamps.warm, power: w.power });
     }
     this.pool.forEach((e, i) => {
       const w = want[i];

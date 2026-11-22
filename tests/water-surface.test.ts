@@ -8,12 +8,14 @@ import { resetWaterDisturbers, setWaterCovers, setWaterDisturbers } from '../src
 import {
   COVER_MAX,
   DISTURB_MAX,
+  LAMP_MAX,
   RIPPLE_RANGE,
   RIPPLE_RES,
   WATER_CLARITY,
   WATER_ENC,
   WAVES_ANCHOR,
   encodeWater,
+  pickWaterLamps,
   rippleDrift,
   rippleMapData,
   setWaterFrame,
@@ -204,6 +206,26 @@ describe('water look values', () => {
     expect(G.cut + G.soft).toBeLessThan(1); // so a glint has an inside, not just an edge
     expect(G.strength).toBeGreaterThan(0);
     expect(G.strength).toBeLessThanOrEqual(2);
+    // E28.W05: the moon's path by night is brighter than its plain glints, but never a second sun
+    expect(G.moon).toBeGreaterThanOrEqual(1);
+    expect(G.moon).toBeLessThanOrEqual(5);
+  });
+
+  it('E28.W05: lamps lay a narrow streak and a faint, broad sheen on the water, fading within a few tiles', () => {
+    const L = W.lamps;
+    expect(L.max).toBeGreaterThan(0);
+    expect(L.max).toBeLessThanOrEqual(LAMP_MAX);
+    // the streak is much narrower than the sheen, and both are well off a perfect mirror's point
+    expect(L.streak).toBeGreaterThan(0);
+    expect(L.streak).toBeLessThan(0.02);
+    expect(L.sheen).toBeGreaterThan(L.streak * 5);
+    expect(L.sheen).toBeLessThan(0.3);
+    // the sheen is a glow round the streak, never a second lamp
+    expect(L.sheenStrength).toBeGreaterThan(0);
+    expect(L.sheenStrength).toBeLessThan(L.strength * 0.25);
+    expect(L.strength).toBeLessThanOrEqual(4);
+    expect(L.reach).toBeGreaterThan(1);
+    expect(L.reach).toBeLessThan(10);
   });
 
   it('the planar reflection is High only, and never on the Steam Deck preset (was water-reflect)', () => {
@@ -507,7 +529,7 @@ describe('water material', () => {
     expect(param('uWaterRipC')[1]).toBe(W.ripples.distort);
     expect(param('uWaterRipC')[3]).toBe(RIPPLE_RANGE);
     expect(param('uWaterObsW')).toEqual([W.disturb.width, W.disturb.strength]);
-    expect(param('uWaterGlint')).toEqual([W.glint.cut, W.glint.soft, W.glint.strength]);
+    expect(param('uWaterGlint')).toEqual([W.glint.cut, W.glint.soft, W.glint.strength, W.glint.moon]);
     expect(param('uWaterDepth')[1]).toBe(W.deepAt);
   });
 
@@ -531,6 +553,33 @@ describe('water material', () => {
     setWaterFrame({ ...frame, focus: { x: 60, z: 50 } });
     expect(param('uWaterObsK')[0]).toBe(0);
     expect(param('uWaterCoverN') as unknown as number).toBe(0);
+  });
+
+  it('E28.W05: reflects the lit lamps nearest where the camera looks, in their own colours, none by day', () => {
+    const frame = { time: 1, cam: { x: 0, y: 5, z: 0 }, night: 1, skyLow: [0.1, 0.1, 0.3] as [number, number, number], skyHigh: [0.05, 0.08, 0.2] as [number, number, number] };
+    const lamp = (x: number, z: number, power = 1, tone = '#ffc46b') => ({ x, y: 1, z, tone, power });
+    // nearest first across the ground; a lamp that is out isn't one
+    const far = Array.from({ length: 12 }, (_, i) => lamp(20 + i, 0));
+    const picked = pickWaterLamps([...far, lamp(3, 0, 0), lamp(2, 0), lamp(1, 1, 0.5, '#9dffb0')], 0, 0);
+    expect(picked.length).toBe(Math.min(LAMP_MAX, LOOK.water.lamps.max));
+    expect(picked[0]).toMatchObject({ x: 1, z: 1 });
+    expect(picked[1]).toMatchObject({ x: 2, z: 0 });
+    expect(picked.some((l) => l.x === 3)).toBe(false);
+    setWaterFrame({ ...frame, focus: { x: 0, z: 0 }, lamps: [lamp(1, 1, 0.5, '#9dffb0'), lamp(2, 0, 1.4)] });
+    const K = param('uWaterLampK');
+    expect(K[0]).toBe(2);
+    expect(Array.from(K).slice(1)).toEqual([LOOK.water.lamps.streak, LOOK.water.lamps.sheen, LOOK.water.lamps.reach].map((v) => expect.closeTo(v, 6)));
+    expect(Array.from(param('uWaterLampS'))).toEqual([LOOK.water.lamps.strength, LOOK.water.lamps.sheenStrength].map((v) => expect.closeTo(v, 6)));
+    const pos = Array.from(param('uWaterLamp[0]'));
+    expect(pos.slice(0, 4)).toEqual([1, 1, 1, 0.5]);
+    expect(pos[7]).toBe(1); // capped at full glow
+    // the colours go in linear
+    const col = Array.from(param('uWaterLampC[0]'));
+    expect(col[1]).toBeCloseTo(1, 5);
+    expect(col[0]).toBeCloseTo(Math.pow(0x9d / 255, 2.2), 4);
+    // by day no lamp is lit, so none is reflected
+    setWaterFrame({ ...frame, night: 0, focus: { x: 0, z: 0 } });
+    expect(param('uWaterLampK')[0]).toBe(0);
   });
 
   it("glints take the sun's or moon's direction and colour, in linear, scaled by its share of full light", () => {
