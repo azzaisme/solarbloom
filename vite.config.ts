@@ -52,6 +52,8 @@ const QUICK = [
   'bot-green',
   // #681: no distant skyline
   'skyline-off',
+  // #687: nothing scattered hangs over the edge of the ground
+  'edge-plants',
   // #662: toasts that come together each get read; nothing lands under a Keeper's bubble
   'toast-queue',
   // E27.2 (#680): Bloombot gathers from and prunes the plant plots

@@ -17,6 +17,7 @@ import { inSurfBand, moveLandAt, onJetty, pileById, pondCell, regionWater, seaCe
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
+import { fitOnGround, geoRadius, type GroundFit } from './GroundFit';
 import { LOOK } from '../data/look';
 import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
@@ -1499,9 +1500,11 @@ export class ChunkRenderer {
       get b() {
         return self.solidSink();
       },
+      // #687: while a tile is dressed, its scattered pieces keep their footprint on its drawn top
       get fb() {
-        return self.fb;
+        return self.fitNow ? self.scatter : self.fb;
       },
+      fit: (x, z, r) => self.spot(x, z, r),
       // hidden (deep fog) chunks keep only the cheap shapes: nothing fine shows through the fog
       dens: fog === 'hidden' ? 0 : tierK * (this.band >= 2 ? 1 : 0.6),
       lod: v.far || fog === 'hidden' ? 0 : this.band >= 2 ? 2 : 1,
@@ -1734,6 +1737,42 @@ export class ChunkRenderer {
     // area-wave edges (#135): rails and clutter go through the transition builder so they grow in with the ivy
     if (b instanceof TrMeshBuilder) return { get grey() { return b.grey; }, add: (type, hex, p, sc, glow) => b.add(type, hex, p, sc, glow), addGeo: (g, x, y, z, r, s) => b.addGeo(g, x, y, z, r, s), quad() {} };
     return { get grey() { return b.grey; }, add: (type, hex, p, sc, glow) => b.add(type as 'box', hex, p, sc, glow), addGeo() {}, quad() {} };
+  }
+
+  /** #687: the drawn top of the tile being dressed (undefined between tiles, and for water and decks). */
+  private fitNow?: GroundFit;
+  /** #687: the foliage sink a tile's scatter goes through: each piece is moved in until its footprint is on the ground. */
+  private readonly scatter = {
+    add: (g: TreeGeo, x: number, y: number, z: number, rot: number, scale: number) => {
+      if (this.fitNow) [x, z] = fitOnGround(this.fitNow, x, z, geoRadius(g) * scale);
+      this.fb.add(g, x, y, z, rot, scale);
+    },
+  };
+  /** #687: where a scattered piece of footprint radius `r` meant for (x, z) goes, so it stays on the tile's top. */
+  private spot(x: number, z: number, r: number): [number, number] {
+    return this.fitNow ? fitOnGround(this.fitNow, x, z, r) : [x, z];
+  }
+  /** #687: `spot` as a primitive's position, at height y. */
+  private at(x: number, y: number, z: number, r: number): [number, number, number] {
+    const [px, pz] = this.spot(x, z, r);
+    return [px, y, pz];
+  }
+
+  /**
+   * #687: a land tile's drawn top for `fitOnGround`: its square, the corners `landCuts` rounds off, and the sides
+   * where the ground ends (water, a deck over water, or a lower terrace). Undefined for water and decks.
+   */
+  groundFit(t: TileData): GroundFit | undefined {
+    if (t.feature === 'water' || this.overWater(t)) return undefined;
+    const g = this.sim.grid;
+    const top = t.level !== undefined ? levelY(t.level) : 0;
+    const open = EDGE_DIRS.map(([dx, dz]) => {
+      const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+      if (!n) return false;
+      if (n.feature === 'water' || this.overWater(n)) return true;
+      return t.level !== undefined && n.level !== undefined && levelY(n.level) < top - 1e-3;
+    }) as GroundFit['open'];
+    return { x0: t.x, z0: t.z, open, cut: this.landCuts(t) ?? [0, 0, 0, 0] };
   }
 
   /** Adds the tile's tree at its stage, unless it's growing on its own right now. True if the tile has one. */
@@ -2116,6 +2155,16 @@ export class ChunkRenderer {
   private chunkFb = new FoliageBuilder();
 
   private tile(b: Sink, t: TileData, h: number) {
+    const keep = this.fitNow;
+    this.fitNow = this.groundFit(t);
+    try {
+      this.dressTile(b, t, h);
+    } finally {
+      this.fitNow = keep;
+    }
+  }
+
+  private dressTile(b: Sink, t: TileData, h: number) {
     this.sink = b;
     const cut = this.landCuts(t);
     this.cutNow = cut && { x: t.x, z: t.z, r: cut };
@@ -2212,16 +2261,16 @@ export class ChunkRenderer {
         if (f === 'paving' && !paintedDead(t)) {
           // Look 3.2: cracked slabs with weeds in the gaps (scrubbed lighter once the park is swept)
           paving(this.ctx, t, false, x, z, h, this.inPark && this.level >= 1);
-          if (!(this.inPark && this.level >= 1) && this.inPark) for (let i = 0; i < 2; i++) b.add('sphere', [PALETTE.soilDark, PALETTE.soil][i], [x + r.range(-0.35, 0.35), top + 0.04, z + r.range(-0.35, 0.35)], [0.14, 0.025, 0.09]);
+          if (!(this.inPark && this.level >= 1) && this.inPark) for (let i = 0; i < 2; i++) b.add('sphere', [PALETTE.soilDark, PALETTE.soil][i], this.at(x + r.range(-0.35, 0.35), top + 0.04, z + r.range(-0.35, 0.35), 0.07), [0.14, 0.025, 0.09]);
           break;
         }
         if (paintedDead(t)) {
           // Painted ground (GroundTex) lies on top: this slab only gives it sides where it meets lower ground. No
           // drawn cracks or dirt patches (the painting has them); a few dry tufts and leaves stand on it.
           this.slab(b, shade, [x, h, z], [1, 0.16, 1]);
-          if (f === 'litter') for (let i = 0; i < 2; i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], [x + r.range(-0.35, 0.35), top + 0.016, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
-          if (f !== 'sand' && r.next() < (f === 'paving' ? 0.15 : 0.35)) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1);
-          if (t.variant % 7 === 0) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 0.8);
+          if (f === 'litter') for (let i = 0; i < 2; i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], this.at(x + r.range(-0.35, 0.35), top + 0.016, z + r.range(-0.35, 0.35), 0.08), [0.16, 0.03, 0.1]);
+          if (f !== 'sand' && r.next() < (f === 'paving' ? 0.15 : 0.35)) this.scatter.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1);
+          if (t.variant % 7 === 0) this.scatter.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 0.8);
           break;
         }
         this.slab(b, shade, [x, h, z], [1, 0.16, 1]);
@@ -2231,17 +2280,27 @@ export class ChunkRenderer {
           else if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
         } else if (this.inPark && this.level >= 1) {
           // Swept: the litter is gone, a few weeds remain.
-          if (t.variant % 3 === 0) b.add('box', PALETTE.paving.grout, [x + r.range(-0.2, 0.2), top + 0.004, z + r.range(-0.2, 0.2)], [r.range(0.2, 0.4), 0.01, 0.03]);
-          if (r.next() < 0.5) this.fb.add(grassGeo(0, t.variant, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 1);
+          if (t.variant % 3 === 0) {
+            const [gx, gz] = [x + r.range(-0.2, 0.2), z + r.range(-0.2, 0.2)];
+            const w = r.range(0.2, 0.4);
+            b.add('box', PALETTE.paving.grout, this.at(gx, top + 0.004, gz, w / 2), [w, 0.01, 0.03]);
+          }
+          if (r.next() < 0.5) this.scatter.add(grassGeo(0, t.variant, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 1);
         } else {
-          for (let i = 0; i < 1 + (t.variant % 2); i++) b.add('box', PALETTE.paving.crack, [x + r.range(-0.25, 0.25), top + 0.004, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.6), 0.01, 0.035]);
+          for (let i = 0; i < 1 + (t.variant % 2); i++) {
+            const [kx, kz] = [x + r.range(-0.25, 0.25), z + r.range(-0.25, 0.25)];
+            const w = r.range(0.3, 0.6);
+            b.add('box', PALETTE.paving.crack, this.at(kx, top + 0.004, kz, w / 2), [w, 0.01, 0.035]);
+          }
           // Look 2.6: weathered, not flat: a rust streak on hard ground, a dirt patch on soft ground (seeded).
           const wx = hash01(t.x, t.z, 91);
-          if (wx < 0.22 && f === 'obstacle') b.add('box', PALETTE.ground.rustStreak, [x + (hash01(t.x, t.z, 92) - 0.5) * 0.5, top + 0.003, z], [0.05, 0.008, 0.3 + hash01(t.x, t.z, 93) * 0.3]);
-          else if (wx < 0.3) b.add('sphere', PALETTE.ground.dirt, [x + (hash01(t.x, t.z, 94) - 0.5) * 0.4, top + 0.002, z + (hash01(t.x, t.z, 95) - 0.5) * 0.4], [0.36, 0.02, 0.28]);
-          if (r.next() < 0.6) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1.1);
+          if (wx < 0.22 && f === 'obstacle') {
+            const len = 0.3 + hash01(t.x, t.z, 93) * 0.3;
+            b.add('box', PALETTE.ground.rustStreak, this.at(x + (hash01(t.x, t.z, 92) - 0.5) * 0.5, top + 0.003, z, len / 2), [0.05, 0.008, len]);
+          } else if (wx < 0.3) b.add('sphere', PALETTE.ground.dirt, this.at(x + (hash01(t.x, t.z, 94) - 0.5) * 0.4, top + 0.002, z + (hash01(t.x, t.z, 95) - 0.5) * 0.4, 0.18), [0.36, 0.02, 0.28]);
+          if (r.next() < 0.6) this.scatter.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1.1);
           // Leaf litter: groves always, the dilapidated park until its paths are swept.
-          if (f === 'litter' || this.inPark) for (let i = 0; i < (this.inPark ? 2 + (t.variant % 3) : 3); i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], [x + r.range(-0.35, 0.35), top + 0.01, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
+          if (f === 'litter' || this.inPark) for (let i = 0; i < (this.inPark ? 2 + (t.variant % 3) : 3); i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], this.at(x + r.range(-0.35, 0.35), top + 0.01, z + r.range(-0.35, 0.35), 0.08), [0.16, 0.03, 0.1]);
         }
         break;
       }
@@ -2252,8 +2311,11 @@ export class ChunkRenderer {
         for (let i = 0; i < n; i++) {
           const sx = x + r.range(-0.3, 0.3);
           const sz = z + r.range(-0.3, 0.3);
-          if (t.ground === 'growing') this.fb.add(grassGeo(1, t.variant + i, 1), sx, top, sz, i * 1.7, 0.8);
-          else b.add('sphere', PALETTE.moss, [sx, top + 0.005, sz], [r.range(0.14, 0.26), 0.05, r.range(0.12, 0.24)]);
+          if (t.ground === 'growing') this.scatter.add(grassGeo(1, t.variant + i, 1), sx, top, sz, i * 1.7, 0.8);
+          else {
+            const [mw, md] = [r.range(0.14, 0.26), r.range(0.12, 0.24)];
+            b.add('sphere', PALETTE.moss, this.at(sx, top + 0.005, sz, Math.max(mw, md) / 2), [mw, 0.05, md]);
+          }
         }
         break;
       }
@@ -2264,9 +2326,12 @@ export class ChunkRenderer {
     }
     // E23.2.2.3: a buried find the ripple revealed: a little mound of turned earth with a sprout, until dug up
     if (t.roofId === GROUND && this.sim.buried?.known(t.x, t.z)) {
-      b.add('sphere', PALETTE.turnedEarth, [x + 0.08, top + 0.02, z - 0.06], [0.36, 0.11, 0.3]);
-      b.add('sphere', PALETTE.turnedEarthDark, [x + 0.02, top + 0.06, z - 0.02], [0.18, 0.07, 0.15]);
-      this.fb.add(grassGeo(2, t.variant, 1), x + 0.04, top + 0.06, z - 0.04, t.variant, 0.5);
+      // (the mound moves as one: it is fitted by its widest part)
+      const [mx, mz] = this.spot(x + 0.08, z - 0.06, 0.18);
+      const [ox, oz] = [mx - x - 0.08, mz - z + 0.06];
+      b.add('sphere', PALETTE.turnedEarth, [mx, top + 0.02, mz], [0.36, 0.11, 0.3]);
+      b.add('sphere', PALETTE.turnedEarthDark, [x + 0.02 + ox, top + 0.06, z - 0.02 + oz], [0.18, 0.07, 0.15]);
+      this.fb.add(grassGeo(2, t.variant, 1), x + 0.04 + ox, top + 0.06, z - 0.04 + oz, t.variant, 0.5);
     }
   }
 
@@ -2810,7 +2875,7 @@ export class ChunkRenderer {
         for (let i = 0; i < 2; i++) {
           const along = r.range(-0.42, 0.42);
           b.tip = PALETTE.lawn.tuftTip[i];
-          b.add('cone', PALETTE.lawn.tuft[i], [x + (dx ? dx * 0.42 : along), top + 0.05, z + (dz ? dz * 0.42 : along)], [0.05, 0.1, 0.05]);
+          b.add('cone', PALETTE.lawn.tuft[i], this.at(x + (dx ? dx * 0.42 : along), top + 0.05, z + (dz ? dz * 0.42 : along), 0.025), [0.05, 0.1, 0.05]);
           b.tip = '';
         }
       }
@@ -2832,7 +2897,7 @@ export class ChunkRenderer {
     if (!this.addTree(t, h, 1) && stage >= 3 && f !== 'paving') thrivingExtras(c, t, x, z, top);
     else if (stage <= 2 && f !== 'paving' && !treeSpot(t, this.areaType) && dhash(t.x, t.z, 67) < 0.07) {
       // the odd pebble in young lawns (seeded), so open lawn doesn't repeat exactly
-      b.add('sphere', PALETTE.stone.pebble, [x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6], [0.16, 0.08, 0.13]);
+      b.add('sphere', PALETTE.stone.pebble, this.at(x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6, 0.08), [0.16, 0.08, 0.13]);
     }
     if (stage >= 4) radiantExtras(c, t, x, z, top); // Phase 4 E05: Radiant gold, now golden daisies and sunflowers
   }
@@ -2843,7 +2908,7 @@ export class ChunkRenderer {
    * one) in a ring of flowering shrubs. Seeded per tile, so a chunk rebuild draws the same plants.
    */
   private plantExtras(t: TileData, x: number, z: number, top: number) {
-    const fb = this.fb;
+    const fb = this.scatter;
     const at = (i: number, salt: number) => [x + (dhash(t.x, t.z, salt + i * 7) - 0.5) * 0.78, z + (dhash(t.x, t.z, salt + i * 7 + 3) - 0.5) * 0.78] as const;
     if (t.plant === 'meadow') {
       const mix = ['daisy', 'cosmos', 'wild', 'lavender'] as const;
