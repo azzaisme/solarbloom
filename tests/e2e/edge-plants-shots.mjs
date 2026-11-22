@@ -2,8 +2,8 @@
 //   npx vite build && GPU=1 node tests/e2e/edge-plants-shots.mjs [outDir]
 // Run it on the base build for the "before" set and on the branch for "after": the spots and camera are the same.
 // At each spot the ground for a few tiles round is restored to full bloom (the edges at their lushest), and its area
-// cleared, then Bloombot stands two tiles back from the edge and the follow camera looks past it at the water or the
-// drop: a rounded tip on Saltwind's surf line, a corner of the sandbar island, the canal bank, a terrace edge and the
+// cleared, then Bloombot stands just back from the edge and the follow camera looks past it at the water or the
+// drop (each shot also saved as a close crop of the edge, `-zoom`): a rounded tip on Saltwind's surf line, a corner of the sandbar island, the canal bank, a terrace edge and the
 // Cistern's pond. 1280 × 800 on the high graphics. Checks: no page errors.
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -28,7 +28,7 @@ const SPOTS = [
   ['1-surf-tip', 0, 41],
   ['2-sandbar-corner', 10, 56],
   ['3-canal-bank', -4, 24],
-  ['4-terrace-edge', -20, 1],
+  ['4-terrace-edge', -23, 1],
   ['5-pond-edge', 63, 44, true],
 ];
 try {
@@ -90,9 +90,9 @@ try {
           t.pollution = 0;
           g.chunks.markTile(t);
         }
-      // Bloombot two tiles back from the edge, on land
-      let bx = edge.x + 0.5 - ox * 2;
-      let bz = edge.z + 0.5 - oz * 2;
+      // Bloombot just back from the edge, on land
+      let bx = edge.x + 0.5 - ox * 1.2;
+      let bz = edge.z + 0.5 - oz * 1.2;
       const back = peek(Math.floor(bx), Math.floor(bz));
       if (!back || wet(back)) [bx, bz] = [edge.x + 0.5, edge.z + 0.5];
       g.bot.teleport('g', bx, bz);
@@ -119,9 +119,11 @@ try {
     }
     // the chunks rebuild over a few frames
     await page.waitForFunction(() => window.solarbloom.chunks.pending === 0, null, { timeout: 60_000 }).catch(() => {});
-    await page.waitForTimeout(2500);
+    // restored ground grows in (trees, beds) over several seconds: let it finish so both sets match
+    await page.waitForTimeout(12000);
     const file = `${out}/${name}.png`;
     await page.screenshot({ path: file });
+    await page.screenshot({ path: `${out}/${name}-zoom.png`, clip: { x: 340, y: 230, width: 600, height: 375 } });
     console.log(`  ${file}  (edge tile ${at.x}, ${at.z}, looking ${at.ox.toFixed(2)}, ${at.oz.toFixed(2)})`);
   }
   check(errors.length === 0, `no page errors${errors.length ? ` (${errors.slice(0, 3).join(' | ')})` : ''}`);
