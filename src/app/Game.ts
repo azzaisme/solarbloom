@@ -148,7 +148,6 @@ import { itemDef } from '../data/items';
 import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
 import { setWaterFrame, waterLayer, waterReflectOn } from '../rendering/WaterSurface';
-import { jettyCover, jettySupports, setWaterCovers, setWaterDisturbers } from '../rendering/WaterDisturbance';
 import { WaterReflection } from '../rendering/WaterReflection';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'In flower', 'Radiant'];
@@ -426,10 +425,7 @@ export class Game {
       this.waterReflection = new WaterReflection(this.app, this.camera.cam, [this.sky.layer.id, pc.LAYERID_WORLD]);
       // after everything has moved this frame: mirror the camera as it will render, and hand the water its frame
       this.app.on('prerender', () => this.waterFrame());
-      // the jetty's posts stand in the water: ripples ring round them now and then
-      setWaterDisturbers('jetty', jettySupports());
-      // and the swell lies flat under its deck
-      setWaterCovers('jetty', [jettyCover()]);
+      // (the jetty's posts and the decks over the water are fed to the water by the chunks that draw them: E28.W03)
     }
     this.cozy = new Cozy(this.sim);
     this.chunks.plots = { look: (p) => this.plotLook(p), growth: (p) => this.plotGrowth(p) };

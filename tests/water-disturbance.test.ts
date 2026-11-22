@@ -1,13 +1,11 @@
 // E28 water waves: things standing in the water (rocks, the jetty's posts, a bridge's supports) that ripples ring round,
 // and decks built low over it that the swell lies flat under. Any part of the game feeds them by a source key of its own.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { LANDING } from '../src/data/oldcity';
+import { jettyDeck, jettyPosts } from '../src/rendering/Bridges';
 import {
   clearWaterCovers,
   clearWaterDisturbers,
   coverDistance,
-  jettyCover,
-  jettySupports,
   nearestWaterCovers,
   nearestWaterDisturbers,
   resetWaterDisturbers,
@@ -38,12 +36,12 @@ describe('water disturbers', () => {
 
   it('bumps the version on every change (and not on clearing a source that has nothing)', () => {
     const v0 = waterDisturberVersion();
-    setWaterDisturbers('jetty', jettySupports());
+    setWaterDisturbers('jetty', jettyPosts(true));
     const v1 = waterDisturberVersion();
     expect(v1).toBeGreaterThan(v0);
     clearWaterDisturbers('nothing here');
     expect(waterDisturberVersion()).toBe(v1);
-    setWaterCovers('jetty', [jettyCover()]);
+    setWaterCovers('jetty', [jettyDeck(true)]);
     expect(waterDisturberVersion()).toBeGreaterThan(v1);
   });
 
@@ -60,19 +58,6 @@ describe('water disturbers', () => {
     expect(nearestWaterDisturbers(0, 0, 16, all)).toBe(3);
     expect(all[11]).toBe(1);
   });
-
-  it("the jetty's posts stand on its deck's long edges, out over the water", () => {
-    const J = LANDING.jetty;
-    const posts = jettySupports();
-    expect(posts.length).toBeGreaterThanOrEqual(4);
-    for (const p of posts) {
-      expect([J.x, J.x + J.w]).toContain(p.x);
-      expect(p.z).toBeGreaterThan(J.z);
-      expect(p.z).toBeLessThanOrEqual(J.z + J.d);
-      expect(p.r).toBeGreaterThan(0);
-      expect(p.r).toBeLessThan(0.3);
-    }
-  });
 });
 
 describe('water covers', () => {
@@ -86,17 +71,12 @@ describe('water covers', () => {
 
   it('normalise their corners, and pack the nearest first', () => {
     setWaterCovers('bridge', [{ x0: 20, z0: 9, x1: 18, z1: 5 }]);
-    setWaterCovers('jetty', [jettyCover()]);
+    setWaterCovers('jetty', [jettyDeck(true)]);
     expect(waterCovers()).toContainEqual({ x0: 18, z0: 5, x1: 20, z1: 9 });
     const out = new Float32Array(8);
     expect(nearestWaterCovers(19, 6, 4, out)).toBe(2);
     expect(Array.from(out.slice(0, 4))).toEqual([18, 5, 20, 9]);
     clearWaterCovers('bridge');
-    expect(waterCovers()).toEqual([jettyCover()]);
-  });
-
-  it("the jetty's cover is its whole deck", () => {
-    const J = LANDING.jetty;
-    expect(jettyCover()).toEqual({ x0: J.x, z0: J.z, x1: J.x + J.w, z1: J.z + J.d });
+    expect(waterCovers()).toEqual([jettyDeck(true)]);
   });
 });

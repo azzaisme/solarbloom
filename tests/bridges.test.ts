@@ -10,7 +10,9 @@ import { LOOK } from '../src/data/look';
 import { MOVE_LAND } from '../src/data/moveSpots';
 import { LANDING } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
-import { deckShade, JETTY_MODEL_POSTS, jettyDeck, jettyLandEnd, jettyPosts, plankPost, wetLine, type Post, type Rect } from '../src/rendering/Bridges';
+import { deckOf, deckShade, JETTY_MODEL_POSTS, jettyDeck, jettyLandEnd, jettyPosts, plankBridgeTiles, plankPost, wetLine, type Post, type Rect } from '../src/rendering/Bridges';
+import { nearestWaterDisturbers, resetWaterDisturbers, waterCovers } from '../src/rendering/WaterDisturbance';
+import { waterMaterial } from '../src/rendering/WaterSurface';
 import { ChunkRenderer } from '../src/rendering/ChunkRenderer';
 import { oldCityModel } from '../src/rendering/Models';
 import type { BankGeo } from '../src/rendering/Shore';
@@ -98,6 +100,27 @@ describe('#696: the shade under a deck', () => {
   });
 });
 
+describe("#696: a plank bridge's tiles and deck", () => {
+  it('gathers the deck tiles joined side by side, and boxes them', () => {
+    const deck = new Set(['0,0', '1,0', '0,1', '1,1', '5,5']);
+    const at = (x: number, z: number) => (deck.has(`${x},${z}`) ? { x, z } : undefined);
+    const tiles = plankBridgeTiles({ x: 1, z: 1 }, at);
+    expect(tiles.map((t) => `${t.x},${t.z}`).sort()).toEqual(['0,0', '0,1', '1,0', '1,1']);
+    expect(deckOf(tiles)).toEqual({ x0: 0, z0: 0.01, x1: 2, z1: 1.99 });
+  });
+});
+
+describe('#696: the water under a deck', () => {
+  it('the water material darkens under the decks by the share LOOK names', () => {
+    const m = waterMaterial();
+    expect((m.getParameter('uWaterUnder') as { data?: number[] } | undefined)?.data).toEqual([B.under.shade, B.under.inner, B.under.soft]);
+    expect(B.under.shade).toBeGreaterThan(0);
+    expect(B.under.shade).toBeLessThan(0.8);
+    expect(B.under.inner).toBeGreaterThan(0);
+    expect(B.under.soft).toBeGreaterThan(0);
+  });
+});
+
 describe('#696: the wet line on a wall in the water', () => {
   it('stays between min and max, the same every time, and wanders along a long wall', () => {
     const all: number[] = [];
@@ -116,6 +139,7 @@ describe('#696: the wet line on a wall in the water', () => {
 });
 
 describe('#696: the decks, the pier and the walls in the real chunk builder', () => {
+  resetWaterDisturbers();
   const sim = new Sim(createInitialState(7));
   sim.areas.fog = () => 'cleared';
   sim.gates.open('g-saltwind', true); // the canal's plank bridge is down
@@ -212,8 +236,45 @@ describe('#696: the decks, the pier and the walls in the real chunk builder', ()
     }),
   );
   build(r);
+  // what the water was given: every post and every deck
+  const fed = new Float32Array(4 * 64);
+  const fedN = nearestWaterDisturbers(0, 40, 64, fed);
+  const fedPosts: Post[] = [];
+  for (let i = 0; i < fedN; i++) fedPosts.push({ x: fed[i * 4], z: fed[i * 4 + 1], r: fed[i * 4 + 2] });
+  const fedCovers = waterCovers();
   afterAll(() => {
     for (const s of seen) s.mockRestore();
+    resetWaterDisturbers();
+  });
+
+  it("the water rings round the jetty's real posts and the open canal bridge's, and lies flat and shaded under both decks", () => {
+    const model = oldCityModel('jetty') === 'jetty';
+    const key = (p: Post) => `${p.x.toFixed(3)},${p.z.toFixed(3)},${p.r.toFixed(3)}`;
+    const want = [...jettyPosts(model), ...[36, 37].flatMap((z) => [plankPost(-3, z), plankPost(-2, z)])];
+    const posts = fedPosts.filter((p) => (p.x > 6 && p.x < 11 && p.z > 44 && p.z < 50) || (p.x > -4 && p.x < -1 && p.z > 35 && p.z < 39));
+    expect(posts.map(key).sort()).toEqual(want.map(key).sort());
+    expect(fedCovers).toContainEqual(jettyDeck(model));
+    expect(fedCovers).toContainEqual({ x0: -3, z0: 36.01, x1: -1, z1: 37.99 });
+  });
+
+  it('a canal bridge whose barricade still stands gives the water nothing', () => {
+    resetWaterDisturbers();
+    const shut = new Sim(createInitialState(7));
+    shut.areas.fog = () => 'cleared';
+    const rs = new ChunkRenderer(shut, new pc.Entity(), {} as pc.GraphicsDevice) as unknown as R;
+    rs.band = 2;
+    rs.detail = 'high';
+    const v = { key: `${GROUND}:${Math.floor(-3 / CHUNK)}:${Math.floor(36 / CHUNK)}`, cx: Math.floor(-3 / CHUNK), cz: Math.floor(36 / CHUNK), dirty: true, fogDirty: true };
+    const gen = rs.buildGround(v);
+    try {
+      for (let k = 0; k < CHUNK * CHUNK * 4 && !gen.next().done; k++);
+    } catch {
+      /* the GPU upload */
+    }
+    expect(waterCovers().some((c) => c.x0 === -3)).toBe(false);
+    const out = new Float32Array(4 * 16);
+    const n = nearestWaterDisturbers(-2.5, 37, 16, out);
+    for (let i = 0; i < n; i++) expect(Math.hypot(out[i * 4] + 2, out[i * 4 + 1] - 37) > 1.5 || out[i * 4 + 2] !== 0.045).toBe(true);
   });
 
   it('every post of the jetty and the canal bridge gets one wet sleeve, where it stands', () => {

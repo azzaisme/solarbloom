@@ -350,6 +350,11 @@ export const LOOK = {
     shade: 0.45,
     soft: 0.22,
     /**
+     * the water under a deck (WaterSurface, by the decks' covers): its colour and the sky it reflects darkened by `shade`
+     * from `inner` in under the deck's edge, fading out over `soft` past it
+     */
+    under: { shade: 0.55, inner: 0.3, soft: 0.35 },
+    /**
      * a post's wet sleeve: from `sink` under the surface up to `height` above it, `grow` wider than the post, in `wet`,
      * with a thin line of weed (`weed`, `weedHeight` tall) where it meets the water
      */

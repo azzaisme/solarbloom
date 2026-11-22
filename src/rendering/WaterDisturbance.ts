@@ -1,5 +1,3 @@
-import { LANDING } from '../data/oldcity';
-
 /**
  * E28 water: things standing in the water that ripples ring round now and then: rocks at the waterline, the jetty's
  * posts, a bridge's supports. Anything can add some, by a source key of its own; the water draws rings round the
@@ -10,12 +8,14 @@ import { LANDING } from '../data/oldcity';
  *   Each is a point on the water: its centre `x`, `z` (world units: tiles), its footprint radius `r` (the rings start at
  *   its edge) and, optionally, a `strength` (1 is a typical post or rock; 0 … 2).
  * - `clearWaterDisturbers(source)` takes a source's away (a chunk unloading, a bridge removed).
- * Sources in use: `rocks:<chunk key>` (ChunkRenderer, rebuilt with each chunk), `jetty` (the Landing's posts).
- * W03's bridge feeds its supports as `bridge` (or `bridge:<id>` per bridge).
+ * Sources in use: `rocks:<chunk key>` (ChunkRenderer, rebuilt with each chunk); `jetty` (the Landing's six posts, as
+ * the chunk that draws it measures them: Bridges.jettyPosts) and `bridge:<x>,<z>` (a canal's plank bridge while it's
+ * open), both from ChunkRenderer (E28.W03).
  *
  * Covers are the other half: decks built low over the water (the jetty, a bridge). The swell lies flat under each and
  * eases back in over LOOK.water.waves.coverEase tiles round it, so a wave never laps up over the planks.
  * - `setWaterCovers(source, list)` with rectangles `{x0, z0, x1, z1}` (world units: tiles); `clearWaterCovers(source)`.
+ * E28.W03: the water under a cover also lies in the deck's shade (LOOK.bridge.under).
  */
 export interface WaterDisturber {
   x: number;
@@ -74,24 +74,6 @@ export function nearestWaterDisturbers(x: number, z: number, max: number, out: F
   return n;
 }
 
-/**
- * The Landing's jetty stands on posts down both long sides (its model is one piece, so these are where its posts
- * meet the water: along the deck's two long edges and at its far end).
- */
-export function jettySupports(): WaterDisturber[] {
-  const J = LANDING.jetty;
-  const out: WaterDisturber[] = [];
-  // (on the deck's edges, where the model's posts stand: half of each ring shows beside the deck)
-  const x0 = J.x;
-  const x1 = J.x + J.w;
-  // the deck runs along z, from the beach (J.z) out to sea; the posts stand in the water past the first stretch
-  for (const z of [J.z + 1.2, J.z + 2.5, J.z + J.d - 0.15]) {
-    out.push({ x: x0, z, r: 0.08 });
-    out.push({ x: x1, z, r: 0.08 });
-  }
-  return out;
-}
-
 /** A deck built low over the water: a rectangle from (x0, z0) to (x1, z1), in world units (tiles). */
 export interface WaterCover {
   x0: number;
@@ -138,12 +120,6 @@ export function nearestWaterCovers(x: number, z: number, max: number, out: Float
 /** Every cover now (all sources). */
 export function waterCovers(): WaterCover[] {
   return [...covers.values()].flat();
-}
-
-/** The Landing's jetty deck, out over the surf and the bay. */
-export function jettyCover(): WaterCover {
-  const J = LANDING.jetty;
-  return { x0: J.x, z0: J.z, x1: J.x + J.w, z1: J.z + J.d };
 }
 
 /** Clears every source (tests, and a new game). */

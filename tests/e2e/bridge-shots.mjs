@@ -33,7 +33,7 @@ const PERF = !!process.env.PERF;
 const PLACES = {
   jetty: { at: [8.5, 45.6], look: [0, 1], turn: 0 },
   jettyside: { at: [5.5, 44.5], look: [0.75, 0.66], turn: 0 },
-  canal: { at: [-3.75, 35.55], look: [0.8, 0.6], turn: 0 },
+  canal: { at: [-0.6, 34.6], look: [-0.5, 0.85], turn: 30 },
   causeway: { at: [107.5, 11.5], look: [0.8, -0.6], turn: 0 },
   pier: { at: [21.6, 53.6], look: [0.3, 1], turn: 0 },
 };

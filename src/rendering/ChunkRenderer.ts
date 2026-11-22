@@ -32,13 +32,13 @@ import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash,
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER } from './Water';
-import { deckShade, jettyDeck, jettyLandEnd, jettyPosts, plankPost, wetLine, type Post, type Rect } from './Bridges';
+import { deckOf, deckShade, jettyDeck, jettyLandEnd, jettyPosts, plankBridgeTiles, plankPost, wetLine, type Post, type Rect } from './Bridges';
 import { alongRun, bankHeight, bankPoint, bankSize, bankStrip, leanGeo, runLength, shoreHash, shoreRuns, waterlineAt, type BankColours, type BankGeo, type ShoreRoom } from './Shore';
 import { encodeWater, WATER_CLARITY, WATER_ENC, waterMaterial } from './WaterSurface';
 import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
-import { clearWaterDisturbers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
+import { clearWaterCovers, clearWaterDisturbers, setWaterCovers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 import { MOVE_TRIPS } from '../data/moveSpots';
 
@@ -2365,6 +2365,7 @@ export class ChunkRenderer {
         // its deck is 1.7 m up the model (the rope posts rise above it), so that height goes at the beach, not the top
         if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - JETTY_DECK * sc, J.z + J.d / 2, LANDING.jettyYaw, sc, sc, sc);
         this.deckMeetsWater(b, t, h, jettyPosts(true), jettyLandEnd(true), h + 0.08);
+        this.feedJetty(t, true);
         return;
       }
       const sea = PALETTE.ground.sea;
@@ -2372,6 +2373,7 @@ export class ChunkRenderer {
       for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x, h + 0.06, z - 0.375 + i * 0.25], [0.98, 0.05, 0.22]);
       if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
       this.deckMeetsWater(b, t, h, jettyPosts(false), jettyLandEnd(false), h + 0.085);
+      this.feedJetty(t, false);
       return;
     }
     // E23.13: a gate or bridge standing on a canal keeps the canal under it: the water, then the barricade on it while
@@ -2379,6 +2381,7 @@ export class ChunkRenderer {
     if (t.feature === 'obstacle' && this.overWater(t)) {
       const sea = PALETTE.ground.sea;
       this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      this.feedPlankBridge(t);
       if (t.blocked && t.prop && this.oldCityProp(b, t, x, h + 0.08, z)) return;
       for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x - 0.375 + i * 0.25, h + 0.06, z], [0.22, 0.05, 0.98]);
       b.add('cylinder', PALETTE.wood.deep, [x, h - 0.25, t.z % 2 ? z + 0.42 : z - 0.42], [0.09, 0.7, 0.09]);
@@ -2825,6 +2828,37 @@ export class ChunkRenderer {
   }
 
   /**
+   * E28.W03 (#696): the jetty's posts and its deck, for the water (rings round the posts, the swell flat and the water
+   * shaded under the deck). Fed from its first tile, as drawn: the model's six posts, or the planks' while it's missing.
+   */
+  private feedJetty(t: TileData, model: boolean) {
+    const J = LANDING.jetty;
+    if (t.x !== J.x || t.z !== J.z) return;
+    setWaterDisturbers('jetty', jettyPosts(model));
+    setWaterCovers('jetty', [jettyDeck(model)]);
+  }
+
+  /**
+   * E28.W03 (#696): a canal's plank bridge for the water: while it's open, its posts (rings round them) and its deck
+   * (the swell flat and the water shaded under it), as one source per bridge (keyed by its lowest corner tile); while
+   * its barricade still stands, nothing. Fed from each of its tiles as it's drawn (they're all the same bridge).
+   */
+  private feedPlankBridge(t: TileData) {
+    const tiles = plankBridgeTiles(t, (x, z) => {
+      const n = this.sim.grid.peek(t.roofId, x, z);
+      return !!n && n.feature === 'obstacle' && this.overWater(n) ? n : undefined;
+    });
+    const key = `bridge:${Math.min(...tiles.map((n) => n.x))},${Math.min(...tiles.map((n) => n.z))}`;
+    if (tiles.some((n) => n.blocked)) {
+      clearWaterDisturbers(key);
+      clearWaterCovers(key);
+      return;
+    }
+    setWaterDisturbers(key, tiles.map((n) => plankPost(n.x, n.z)));
+    setWaterCovers(key, [deckOf(tiles)]);
+  }
+
+  /**
    * E28.W03 (#696): the decks over the water round a tile (each once): the jetty's deck, or a canal bridge's tile while
    * it's open. The bank under them is shaded (`deckShade`).
    */
@@ -2839,7 +2873,7 @@ export class ChunkRenderer {
         if (onJetty(n.x, n.z)) {
           if (!jetty) out.push(jettyDeck(oldCityModel('jetty') === 'jetty'));
           jetty = true;
-        } else if (!n.blocked) out.push({ x0: n.x, z0: n.z + 0.01, x1: n.x + 1, z1: n.z + 0.99 });
+        } else if (!n.blocked) out.push({ x0: n.x, z0: n.z + 0.01, x1: n.x + 1, z1: n.z + 0.99 }); // (its planks' ends)
       }
     return out;
   }

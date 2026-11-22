@@ -113,6 +113,37 @@ export function plankPost(tx: number, tz: number): Post {
 }
 
 /**
+ * The tiles of the plank bridge that tile `t` belongs to: every deck tile joined to it side by side (`deckAt` says
+ * whether a cell is one of its tiles, and gives it). Never more than a small bridge's worth.
+ */
+export function plankBridgeTiles<T extends { x: number; z: number }>(t: T, deckAt: (x: number, z: number) => T | undefined): T[] {
+  const seen = new Map<string, T>([[`${t.x},${t.z}`, t]]);
+  const todo = [t];
+  while (todo.length && seen.size < 64) {
+    const c = todo.pop()!;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = `${c.x + dx},${c.z + dz}`;
+      if (seen.has(k)) continue;
+      const n = deckAt(c.x + dx, c.z + dz);
+      if (!n) continue;
+      seen.set(k, n);
+      todo.push(n);
+    }
+  }
+  return [...seen.values()];
+}
+
+/** A plank bridge's deck over the water: the box round its tiles (its planks stop just short of each tile's sides). */
+export function deckOf(tiles: readonly { x: number; z: number }[]): Rect {
+  return {
+    x0: Math.min(...tiles.map((t) => t.x)),
+    z0: Math.min(...tiles.map((t) => t.z)) + 0.01,
+    x1: Math.max(...tiles.map((t) => t.x)) + 1,
+    z1: Math.max(...tiles.map((t) => t.z)) + 0.99,
+  };
+}
+
+/**
  * How much light reaches the ground at (x, z) under the decks: 1 in the open, `1 - LOOK.bridge.shade` under a deck,
  * fading smoothly over `LOOK.bridge.soft` past its edge (a soft contact shadow, the same at any time of day).
  */
