@@ -1,5 +1,5 @@
 /**
- * Look 4.7 / 4.8: sky, haze and skyline colours in one place, so lighting (Look 1) can grade against them.
+ * Look 4.7: sky and haze colours in one place, so lighting (Look 1) can grade against them.
  * Each pair is [fogged, clear]: the world starts greyed under the fog and clears as areas are woken
  * (`Sky.clarity`, 0 … 1). The haze colour is also the scene fog colour and the sky's colour at the horizon,
  * so the ground fades seamlessly into the sky.
@@ -18,24 +18,11 @@ export const SKY = {
   sunCore: '#fff7e2',
   cloudLit: ['#e7e9ea', '#ffffff'],
   cloudShade: ['#b4bac0', '#dde3ee'],
-  /** distant skyline silhouettes: stone, greenery, glass, water; each layer is hazed toward `haze` */
-  stone: ['#9a9d9c', '#e9e1cf'],
-  green: ['#8d978f', '#a9c98a'],
-  glass: ['#a3adb4', '#bcd6e4'],
-  water: ['#b5bdc2', '#bfeaff'],
-  glowWarm: ['#9a9a92', '#ffd36a'],
 } as const;
 
 /**
- * #635: fog and rain veil the distant skyline toward the fog colour, so it fades into the haze with the rest of
- * the view. A view share (WEATHER[].view) of 1 leaves it as it is; `foggiest` and below veil it by `max`, which
- * leaves a faint outline. The skyline recolours when the veil or the fog colour moves by more than `step`.
- */
-export const SKYLINE_FOG = { max: 0.88, foggiest: 0.32, step: 0.02 };
-
-/**
  * Haze reach (world units past the camera target) as a function of how near the view is (0 far … 1 near). Close
- * up it reaches far enough that the real city's buildings carry out to the foot of the distant skyline.
+ * up it reaches far enough that the real city's buildings carry out toward the horizon.
  */
 export const HAZE = {
   start: [8, 6],

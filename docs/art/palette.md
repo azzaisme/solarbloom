@@ -106,9 +106,6 @@ these are the clear values to set there (`PALETTE.sky` holds the same values).
 | warm band above the horizon | `glow` | `#f6e2c0` |
 | horizon, haze, scene fog | `haze` | `#e6e2d4` (pale and warm; the ground fades into it, no blue-grey seam) |
 | cloud shade | `cloudShade` | `#dde3ee` |
-| skyline stone (cream) | `stone` | `#e9e1cf` |
-| skyline greenery (terraces) | `green` | `#a9c98a` (not lime) |
-| skyline glass (pale blue) | `glass` | `#bcd6e4` |
 | gameplay fog of war | `ChunkRenderer.buildFog` sheets | keep the cool grey (`#aab0b8` lower, `#bac0c6` upper, as rendered): darker than the haze (L\* ~71 vs ~90) and opposite in temperature, so it reads as gloomy fog, never as sky |
 
 Look 1's haze (`look.ts` `haze.color`, `#e9dcc4` on its branch) should converge on the same horizon colour, or

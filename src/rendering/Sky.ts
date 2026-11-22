@@ -22,8 +22,8 @@ const smooth = (t: number) => {
   return x * x * (3 - 2 * x);
 };
 
-/** An unlit, vertex-coloured material that ignores the scene fog (the sky is the fog's backdrop; the skyline bakes its own haze). */
-export function skyMaterial(blend: boolean, depthWrite = false): pc.StandardMaterial {
+/** An unlit, vertex-coloured material that ignores the scene fog (the sky is the fog's backdrop). */
+export function skyMaterial(blend: boolean): pc.StandardMaterial {
   const m = new pc.StandardMaterial();
   m.useLighting = false;
   m.useFog = false;
@@ -31,7 +31,7 @@ export function skyMaterial(blend: boolean, depthWrite = false): pc.StandardMate
   m.diffuse = new pc.Color(0, 0, 0);
   m.emissive = new pc.Color(1, 1, 1);
   m.emissiveVertexColor = true;
-  m.depthWrite = depthWrite;
+  m.depthWrite = false;
   m.cull = pc.CULLFACE_NONE;
   if (blend) {
     m.opacityVertexColor = true;
@@ -82,7 +82,6 @@ export class Sky {
   private builtOvercast = -1;
   reducedMotion = false;
   readonly layer: pc.Layer;
-  readonly clearLayer: pc.Layer;
 
   constructor(
     app: pc.AppBase,
@@ -90,25 +89,11 @@ export class Sky {
   ) {
     this.root = new pc.Entity('sky');
     app.root.addChild(this.root);
-    // Its own layer, drawn before the world: the world paints over it, and the soft clouds never sort in
-    // front of the (depth-less) fog sheets.
+    // Its own layer, drawn before the world: nothing in it writes depth, so the world paints over it, and the
+    // soft clouds never sort in front of the (depth-less) fog sheets.
     const comp = app.scene.layers;
     this.layer = comp.getLayerByName('Sky') ?? new pc.Layer({ name: 'Sky' });
     if (!comp.getLayerByName('Sky')) comp.insert(this.layer, 0);
-    // An empty layer right after it that only clears depth: the sky and skyline are a backdrop, so the world
-    // draws over them wherever it has geometry, and the camera's far plane can stop at the haze.
-    // #635: the clear is done by hand as the layer comes up. A layer's own clear flags only count on the first
-    // layer a camera draws when CameraFrame (PostFx) runs the camera, so the flag alone never cleared, and in fog
-    // (where the skyline is scaled in close) the towers' depth hid the park.
-    this.clearLayer = comp.getLayerByName('SkyDepthClear') ?? new pc.Layer({ name: 'SkyDepthClear' });
-    this.clearLayer.clearDepthBuffer = false;
-    if (!comp.getLayerByName('SkyDepthClear')) comp.insertOpaque(this.clearLayer, comp.getTransparentIndex(this.layer) + 1);
-    const clearLayer = this.clearLayer;
-    // (GraphicsDevice.clear is public on every device but missing from the typings)
-    const device0 = app.graphicsDevice as unknown as { clear(o: { flags: number; depth: number }): void };
-    app.scene.on('prerender:layer', (_cam: pc.CameraComponent, layer: pc.Layer, transparent: boolean) => {
-      if (layer === clearLayer && !transparent) device0.clear({ flags: pc.CLEARFLAG_DEPTH, depth: 1 });
-    });
     const device = app.graphicsDevice;
 
     // The dome: a unit sphere (rings × segments), coloured per vertex.

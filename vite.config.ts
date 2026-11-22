@@ -50,8 +50,8 @@ const QUICK = [
   'bot-acts', 'bot-turn', 'bot-moves',
   // #631: Bloombot's colour is green
   'bot-green',
-  // #635: the skyline fades into fog and stays behind the world
-  'fog-skyline',
+  // #681: no distant skyline
+  'skyline-off',
   // #662: toasts that come together each get read; nothing lands under a Keeper's bubble
   'toast-queue',
 ].map((name) => `tests/${name}.test.ts`);

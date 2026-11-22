@@ -405,9 +405,6 @@ const sky = {
   haze: '#e6e2d4',
   /** linear distance fog (SceneBuilder, until Look 4's sky sets the fog from its haze) */
   fog: '#e6e2d4',
-  /** distant terraced towers: pale blue, cream and green */
-  skyline: ['#bcd6e4', '#e9e1cf', '#c4dce8', '#d8ccb6'],
-  skylineGreen: '#a9c98a',
   bridge: '#eeeae2',
   /**
    * gameplay fog of war (the fog sheets in ChunkRenderer.buildFog, Look 4's curtains): a cool gloomy grey, darker
@@ -645,8 +642,6 @@ export const PALETTE = {
   cat: fauna.cat,
   catRed: fauna.catRed,
   pink: '#ff8fbf',
-  skyline: sky.skyline,
-  skylineGreen: sky.skylineGreen,
   bridge: sky.bridge,
   // Look 3 (#105) surfaces, foliage and props. Flat keys the Look 3 builders read; where a Look 2 swatch fits they point at it.
   /** E16 turf by stage (index 1 Restored … 4 Radiant), three shades each */
