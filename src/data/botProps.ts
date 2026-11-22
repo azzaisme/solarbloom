@@ -10,7 +10,7 @@
  * an act's 'tool' effects come from (the trowel's blade, the can's spout, the bar's foot). `turn` tips the whole prop
  * in its grip frame (degrees, x then y then z).
  */
-export type PropId = 'bar' | 'trowel' | 'can' | 'basket' | 'sack' | 'wrench' | 'flower' | 'page' | 'shell' | 'spyglass' | 'orb';
+export type PropId = 'bar' | 'trowel' | 'can' | 'basket' | 'sack' | 'wrench' | 'flower' | 'page' | 'shell' | 'spyglass' | 'orb' | 'shears';
 export type PropColour = 'metal' | 'metalDark' | 'wood' | 'cloth' | 'basket' | 'can' | 'brass' | 'paper' | 'stem' | 'petal' | 'core' | 'shell' | 'fruit' | 'glow';
 
 export interface PropPiece {
@@ -117,6 +117,18 @@ export const PROPS: Record<PropId, PropDef> = {
       { shape: 'cylinder', colour: 'metalDark', at: [0, 0.19, 0], size: [0.05, 0.03, 0.05] },
     ],
     tip: [0, 0.2, 0],
+  },
+  // E27.2 (#680): garden shears, wooden handles in the fist and two long blades out in front, a little open
+  shears: {
+    pieces: [
+      { shape: 'cylinder', colour: 'wood', at: [0.02, 0.03, 0], size: [0.03, 0.12, 0.03], euler: [0, 0, -8] },
+      { shape: 'cylinder', colour: 'wood', at: [-0.02, 0.03, 0], size: [0.03, 0.12, 0.03], euler: [0, 0, 8] },
+      { shape: 'cylinder', colour: 'brass', at: [0, 0.1, 0], size: [0.04, 0.02, 0.04], euler: ALONG_Z },
+      { shape: 'box', colour: 'metal', at: [0.022, 0.21, 0], size: [0.022, 0.2, 0.01], euler: [0, 0, 6] },
+      { shape: 'box', colour: 'metal', at: [-0.022, 0.21, 0], size: [0.022, 0.2, 0.01], euler: [0, 0, -6] },
+    ],
+    tip: [0, 0.3, 0],
+    turn: [-20, 0, 0],
   },
   // a glow held out between its palms
   orb: {

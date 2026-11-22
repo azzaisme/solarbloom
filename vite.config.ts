@@ -54,6 +54,8 @@ const QUICK = [
   'skyline-off',
   // #662: toasts that come together each get read; nothing lands under a Keeper's bubble
   'toast-queue',
+  // E27.2 (#680): Bloombot gathers from and prunes the plant plots
+  'plot-work',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
