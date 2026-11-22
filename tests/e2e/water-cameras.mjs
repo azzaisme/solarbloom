@@ -19,6 +19,7 @@
 // PERF=1 measures instead: frame time (median, mean, p95 over 8 s, vsync off) and draw calls on High at `start` and
 // `overview` by day, printed as `perf …`. Alternate base and branch builds.
 //   ONLY=day,night just these times;   SPOTS=light,opensea just these spots;   STRIP=1 also 6 frames 0.25 s apart
+//   DIST=dist-base serve another build (a base, for before shots and perf)
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
@@ -102,7 +103,7 @@ const straightLine = (page, png, c) =>
     { b64: png.toString('base64'), kind: c.kind, rect: c.rect },
   );
 const port = 4248;
-const server = await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
+const server = await preview({ build: { outDir: process.env.DIST ?? 'dist' }, preview: { port, strictPort: true }, logLevel: 'silent' });
 const gpu = ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--disable-frame-rate-limit'];
 const browser = await chromium.launch({ args: process.env.GPU ? gpu : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failed = false;
