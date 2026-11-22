@@ -29,8 +29,12 @@ export interface PlotHost {
 const C = PALETTE.cozy;
 const pick = <T>(list: readonly T[], k: number) => list[((k % list.length) + list.length) % list.length];
 
-/** A plot's look: its option, or the waiting look when `option` is undefined. `y` is the ground's top. */
-export function drawPlot(h: PlotHost, p: PlotSpot, option: string | undefined, y: number, far: boolean) {
+/**
+ * A plot's look: its option, or the waiting look when `option` is undefined. `y` is the ground's top. `growth` (E27.2,
+ * #680) is how grown back a plant plot is since Bloombot last worked it: 0 just picked (or pruned), 1 full again (or,
+ * for the ones Bloombot prunes, grown wild).
+ */
+export function drawPlot(h: PlotHost, p: PlotSpot, option: string | undefined, y: number, far: boolean, growth = 1) {
   const x0 = p.x;
   const z0 = p.z;
   const S = p.size;
@@ -45,7 +49,7 @@ export function drawPlot(h: PlotHost, p: PlotSpot, option: string | undefined, y
     waiting(h, x0, z0, S, y);
     return;
   }
-  const at = { h, x0, z0, S, cx, cz, y, v };
+  const at = { h, x0, z0, S, cx, cz, y, v, g: Math.max(0, Math.min(1, growth)) };
   (ART[option] ?? garden)(at);
 }
 
@@ -58,6 +62,8 @@ interface At {
   cz: number;
   y: number;
   v: number;
+  /** E27.2: grown back, 0 to 1 */
+  g: number;
 }
 
 /** Far: a pad in the option's main colour and one bump (a tree crown, a roof, a pool). */
@@ -92,14 +98,16 @@ function waiting(h: PlotHost, x0: number, z0: number, S: number, y: number) {
 }
 
 /** A raised bed: timber edge, soil, rows of crops. */
-function bed(h: PlotHost, cx: number, cz: number, w: number, d: number, y: number, crop: string, v: number) {
+function bed(h: PlotHost, cx: number, cz: number, w: number, d: number, y: number, crop: string, v: number, g = 1) {
   h.add('box', C.deck, [cx, y + 0.07, cz], [w, 0.14, d]);
   h.add('box', C.bedSoil, [cx, y + 0.145, cz], [w - 0.1, 0.02, d - 0.1]);
   const n = Math.max(2, Math.round(w / 0.2));
+  // E27.2: picked, the rows are short green stubs; they fill out again as it grows back (the crop colour last)
+  const k = 0.3 + 0.7 * g;
   for (let i = 0; i < n; i++) {
     const px = cx - w / 2 + (i + 0.5) * (w / n);
-    h.add('sphere', i % 2 ? PALETTE.flowers.stem : crop, [px, y + 0.19, cz - d * 0.2], 0.11);
-    h.add('sphere', (i + v) % 3 ? PALETTE.flowers.stemSoft : crop, [px, y + 0.19, cz + d * 0.2], 0.1);
+    h.add('sphere', i % 2 || g < 0.6 ? PALETTE.flowers.stem : crop, [px, y + 0.15 + 0.04 * k, cz - d * 0.2], 0.11 * k);
+    h.add('sphere', (i + v) % 3 || g < 0.6 ? PALETTE.flowers.stemSoft : crop, [px, y + 0.15 + 0.04 * k, cz + d * 0.2], 0.1 * k);
   }
 }
 
@@ -136,17 +144,36 @@ function water(a: At, x: number, z: number, w: number, d: number) {
   a.h.add('box', C.waterShallow, [x, a.y + 0.09, z], [w, 0.02, d]);
 }
 
+/**
+ * E27.2: shoots grown wild out of a plant Bloombot prunes, more of them and longer the more overgrown it is (none
+ * just after pruning, when `wild` is 0).
+ */
+function shoots(a: At, x: number, z: number, top: number, spread: number, wild: number, hex: string) {
+  const n = Math.round(wild * 5);
+  for (let i = 0; i < n; i++) {
+    const ang = ((a.v + i * 2.4) % 6.28) + i;
+    const len = 0.16 + 0.22 * wild;
+    a.h.add('cone', hex, [x + Math.cos(ang) * spread, a.y + top + len / 2, z + Math.sin(ang) * spread], [0.05, len, 0.05]);
+  }
+}
+
+/** E27.2: for the plots Bloombot prunes, how wild they've grown (0 just pruned, 1 at `growth` 1). */
+const wildOf = (a: At) => Math.max(0, (a.g - 0.35) / 0.65);
+
 const garden = (a: At) => {
-  bed(a.h, a.cx - 0.45, a.cz, 0.7, 1.6, a.y, pick(C.veg, a.v), a.v);
-  bed(a.h, a.cx + 0.45, a.cz, 0.7, 1.6, a.y, pick(C.veg, a.v + 1), a.v + 1);
+  bed(a.h, a.cx - 0.45, a.cz, 0.7, 1.6, a.y, pick(C.veg, a.v), a.v, a.g);
+  bed(a.h, a.cx + 0.45, a.cz, 0.7, 1.6, a.y, pick(C.veg, a.v + 1), a.v + 1, a.g);
   for (const s of [-1, 1]) a.h.add('sphere', PALETTE.flowers.orange, [a.cx, a.y + 0.14, a.cz + s * 0.6], 0.16); // marigolds on the path
 };
 
 const ART: Record<string, (a: At) => void> = {
   garden,
   orchard: (a) => {
+    // E27.2: pruned they stand neat; left, they bush out and throw up long shoots, until Bloombot prunes them
+    const wild = wildOf(a);
     for (const [dx, dz] of [[-0.48, -0.48], [0.48, -0.48], [-0.48, 0.48], [0.48, 0.48]]) {
-      tree(a, 'cherry', a.cx + dx, a.cz + dz, 0.5, 2); // young trees: a quarter of a grown tree's triangles
+      tree(a, 'cherry', a.cx + dx, a.cz + dz, 0.44 + 0.1 * wild, 2); // young trees: a quarter of a grown tree's triangles
+      shoots(a, a.cx + dx, a.cz + dz, 0.62 + 0.08 * wild, 0.14, wild, PALETTE.flowers.stem);
       a.h.add('sphere', pick(C.fruit, a.v), [a.cx + dx + 0.12, a.y + 0.11, a.cz + dz - 0.1], 0.08); // a windfall
     }
   },
@@ -170,28 +197,38 @@ const ART: Record<string, (a: At) => void> = {
   },
   arbour: (a) => {
     const { h, y, cx, cz } = a;
+    // E27.2: pruned, the roses sit close to the frame; left, they grow bushy and trail long canes
+    const wild = wildOf(a);
+    const r = 0.13 + 0.05 * wild;
     for (const s of [-1, 1]) {
       h.add('box', C.frame, [cx + s * 0.55, y + 0.55, cz], [0.07, 1.1, 0.07]);
-      for (let k = 0; k < 4; k++) h.add('sphere', pick(C.rose, k + (s > 0 ? 1 : 0)), [cx + s * 0.55, y + 0.3 + k * 0.24, cz + ((k % 2) - 0.5) * 0.14], 0.16);
+      for (let k = 0; k < 4; k++) h.add('sphere', pick(C.rose, k + (s > 0 ? 1 : 0)), [cx + s * 0.55, y + 0.3 + k * 0.24, cz + ((k % 2) - 0.5) * 0.14], r);
+      shoots(a, cx + s * 0.62, cz, 0.5, 0.12, wild, PALETTE.flowers.stem);
     }
     h.add('torus', C.frame, [cx, y + 1.1, cz], [1.1, 0.5, 0.2]);
-    for (let k = 0; k < 6; k++) h.add('sphere', pick(C.rose, k), [cx - 0.5 + k * 0.2, y + 1.18 + Math.sin(k) * 0.05, cz], 0.18);
+    for (let k = 0; k < 6; k++) h.add('sphere', pick(C.rose, k), [cx - 0.5 + k * 0.2, y + 1.18 + Math.sin(k) * 0.05, cz], r + 0.02);
+    shoots(a, cx, cz, 1.2, 0.35, wild, PALETTE.flowers.stem);
     if (!h.model('bench', cx, y + 0.08, cz - 0.55, 0, 0.5)) h.add('box', PALETTE.props.benchWood, [cx, y + 0.24, cz - 0.55], [0.7, 0.06, 0.24]);
   },
   meadow: (a) => {
+    // E27.2: cut, short stubble; the long grass and its poppies come back as it grows
+    const tall = 0.1 + 0.3 * a.g;
     for (let i = 0; i < 9; i++) {
       const x = a.x0 + 0.3 + (i % 3) * 0.7;
       const z = a.z0 + 0.3 + Math.floor(i / 3) * 0.7;
-      a.h.add('cone', PALETTE.lawn.tuft[i % 3], [x, a.y + 0.2, z], [0.32, 0.4, 0.32]);
-      a.h.add('sphere', i % 3 ? PALETTE.flowers.red : PALETTE.flowers.yellow, [x + 0.1, a.y + 0.36, z - 0.06], 0.1);
+      a.h.add('cone', PALETTE.lawn.tuft[i % 3], [x, a.y + tall / 2, z], [0.32, tall, 0.32]);
+      if (a.g > 0.5) a.h.add('sphere', i % 3 ? PALETTE.flowers.red : PALETTE.flowers.yellow, [x + 0.1, a.y + tall - 0.04, z - 0.06], 0.1 * Math.min(1, (a.g - 0.5) * 3));
     }
   },
   parklet: (a) => {
     const { h, y, cx, cz } = a;
     h.add('box', C.deck, [cx, y + 0.05, cz], [a.S - 0.2, 0.1, a.S - 0.2]);
+    // E27.2: pruned, neat little rounds in the pots; left, they bush out and sprout
+    const wild = wildOf(a);
     for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) {
       if (!h.model('planter-pot', cx + dx, y + 0.1, cz + dz, 0, 0.42)) h.add('cylinder', C.kerb, [cx + dx, y + 0.24, cz + dz], [0.36, 0.3, 0.36]);
-      shrub(a, cx + dx, cz + dz, 0.45);
+      shrub(a, cx + dx, cz + dz, 0.38 + 0.14 * wild);
+      shoots(a, cx + dx, cz + dz, 0.5, 0.1, wild, PALETTE.flowers.stem);
     }
     if (!h.model('bench', cx, y + 0.1, cz, 0, 0.5)) h.add('box', PALETTE.props.benchWood, [cx, y + 0.28, cz], [0.8, 0.06, 0.28]);
   },
@@ -242,8 +279,8 @@ const ART: Record<string, (a: At) => void> = {
       const x = a.cx + (i % 2 ? 0.45 : -0.45);
       const z = a.cz + (i < 2 ? -0.45 : 0.45);
       if (!a.h.model('crate', x, a.y + 0.08, z, (i * Math.PI) / 7, 0.48)) a.h.add('box', PALETTE.wood.crate, [x, a.y + 0.28, z], [0.62, 0.4, 0.62]);
-      shrub(a, x, z + 0.02, 0.4);
-      a.h.add('sphere', pick(PALETTE.flowers.mix, i + a.v), [x + 0.15, a.y + 0.62, z], 0.14);
+      shrub(a, x, z + 0.02, 0.16 + 0.24 * a.g); // E27.2: picked down to the crate's rim, then growing back
+      if (a.g > 0.5) a.h.add('sphere', pick(PALETTE.flowers.mix, i + a.v), [x + 0.15, a.y + 0.62, z], 0.14);
     }
   },
   reeds: (a) => {
@@ -251,8 +288,9 @@ const ART: Record<string, (a: At) => void> = {
     for (let i = 0; i < 14; i++) {
       const x = a.x0 + 0.3 + ((i * 37) % 13) / 9.5;
       const z = a.z0 + 0.3 + ((i * 53) % 11) / 7.5;
-      a.h.add('cone', C.reed, [x, a.y + 0.36, z], [0.08, 0.62, 0.08]);
-      a.h.add('capsule', i % 3 ? C.reedHead : C.iris, [x, a.y + 0.62, z], [0.06, 0.16, 0.06]);
+      const tall = 0.18 + 0.44 * a.g; // E27.2: cut down near the water, growing back up
+      a.h.add('cone', C.reed, [x, a.y + 0.05 + tall / 2, z], [0.08, tall, 0.08]);
+      if (a.g > 0.5) a.h.add('capsule', i % 3 ? C.reedHead : C.iris, [x, a.y + 0.05 + tall, z], [0.06, 0.16, 0.06]);
     }
   },
   dipping: (a) => {
@@ -282,7 +320,7 @@ const ART: Record<string, (a: At) => void> = {
     h.add('box', C.glass, [cx, y + 0.5, cz], [1.5, 0.7, 1.1], 0.05);
     h.add('box', C.glass, [cx, y + 0.95, cz], [1.2, 0.2, 0.8], 0.05);
     for (const s of [-1, 0, 1]) h.add('box', C.frame, [cx + s * 0.74, y + 0.55, cz], [0.04, 0.8, 1.14]);
-    for (let i = 0; i < 5; i++) h.add('sphere', PALETTE.flowers.stem, [cx - 0.5 + i * 0.25, y + 0.34, cz], 0.14);
+    for (let i = 0; i < 5; i++) h.add('sphere', PALETTE.flowers.stem, [cx - 0.5 + i * 0.25, y + 0.26 + 0.08 * a.g, cz], 0.05 + 0.09 * a.g); // E27.2: picked, then sprouting again
   },
 };
 

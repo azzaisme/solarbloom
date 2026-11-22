@@ -1,0 +1,34 @@
+{
+ "strips": [
+  {
+   "option": "garden",
+   "prompt": "E Hold Gather the greens Nurture",
+   "again": "E Hold Gather the greens Nurture",
+   "got": 8
+  },
+  {
+   "option": "orchard",
+   "prompt": "E Hold Prune the fruit trees Nurture",
+   "again": "E Hold Prune the fruit trees Nurture",
+   "got": 8
+  },
+  {
+   "option": "meadow",
+   "prompt": "E Hold Gather the long grass Nurture",
+   "again": "E Hold Gather the long grass Nurture",
+   "got": 8
+  },
+  {
+   "option": "arbour",
+   "prompt": "E Hold Prune the roses Nurture",
+   "again": "E Hold Prune the roses Nurture",
+   "got": 8
+  }
+ ],
+ "notes": [
+  "garden: prompt is \"E Hold Gather the greens Nurture\"",
+  "orchard: prompt is \"E Hold Prune the fruit trees Nurture\"",
+  "meadow: prompt is \"E Hold Gather the long grass Nurture\"",
+  "arbour: prompt is \"E Hold Prune the roses Nurture\""
+ ]
+}

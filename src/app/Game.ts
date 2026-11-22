@@ -115,7 +115,7 @@ import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
 import { Cozy } from '../gameplay/Cozy';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS, PLOT_WORK_TUNING } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
 import type { Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
@@ -153,6 +153,8 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const BOT_ZOOM = 3.2;
 /** E22.1: while a panel is open, these walking actions still reach the game (they close the panel they opened). */
 const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
+/** E27.2 (#680): a worked plot's art steps through this many looks as it grows back */
+const PLOT_GROWTH_STEPS = 4;
 /**
  * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
  * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
@@ -410,7 +412,7 @@ export class Game {
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
-    this.chunks.plots = { look: (p) => this.plotLook(p) };
+    this.chunks.plots = { look: (p) => this.plotLook(p), growth: (p) => this.plotGrowth(p) };
     this.chunks.decor = { inChunk: (cx, cz) => this.decorInChunk(cx, cz) }; // E19.2
     this.chainSummary = new ChainSummary(this.sim);
     // City 05.2: the park cheers up in stages as you restore it.
@@ -641,6 +643,8 @@ export class Game {
       this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
       this.sim.bus.on('buried.dug', (e) => this.hud.pickup(MATERIALS[e.material].name, e.n)); // E23.2.2.3
       this.sim.bus.on('biomass.gathered', (e) => e.by === 'bot' && this.hud.pickup(MATERIALS.biomass.name, e.got));
+      // E27.2 (#680): a plot Bloombot just picked or pruned shows it at once
+      this.sim.bus.on('plot.worked', ({ plotId }) => this.redrawPlot(plotId));
       this.sim.bus.on('planter.harvested', (e) => e.food > 0 && this.hud.pickup(MATERIALS.food.name, e.food));
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
@@ -2352,6 +2356,14 @@ export class Game {
       const verb = (occ.type === 'beehive' && (x.st(occ).ready ?? 0) >= 1) || (occ.type === 'orchard' && x.fruitReady(occ)) || (occ.type === 'mushroomLog' && (x.st(occ).ready ?? 0) >= 1) ? 'Harvest' : 'Look at';
       out.push({ kind: 'machine', id: `extra:${occ.id}`, verb, name: `the ${MACHINES[occ.type].name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.extra(occ) });
     }
+    // E27.2 (#680): a plant plot in front, ready to work: gather from it or prune it. While it grows back, Interact
+    // opens its picker as before (its look shows it was picked or cut back)
+    const work = !pile ? s.plotWork.spotFor(front) : undefined;
+    const job = work && s.plotWork.workOf(work);
+    if (work && job && s.plotWork.regrowsAt(work) === undefined) {
+      const verb = job.verb === 'prune' ? 'Prune' : 'Gather';
+      out.push({ kind: 'salvage', id: `plotwork:${work.id}`, verb, name: job.what, distance: fd, at: front, frame: { roofId: GROUND, x: work.x, z: work.z, size: work.size }, ocHold: PLOT_WORK_TUNING.holdSeconds[job.verb], refused: s.plotWork.problem(work), run: () => oc.plotHold(work) });
+    }
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
@@ -3555,6 +3567,55 @@ export class Game {
     if (shown) return shown.id;
     if (this.cozy.choice(p.id)) return undefined; // a machine stands on it
     return this.cozy.ready(p) ? null : undefined;
+  }
+
+  /**
+   * E27.2 (#680): how grown back a worked plot is, for its art, in steps (so a chunk is rebuilt a few times as a plot
+   * grows back, not every frame). 1 for a plot that's ready, or isn't a plant.
+   */
+  private plotGrowth(p: PlotSpot): number {
+    if (!this.sim.plotWork.workOf(p)) return 1;
+    const g = this.sim.plotWork.growth(p);
+    return g >= 1 ? 1 : Math.floor(g * PLOT_GROWTH_STEPS) / PLOT_GROWTH_STEPS;
+  }
+
+  /** E27.2: the growth step each growing plot was last drawn at, by plot id */
+  private plotSteps = new Map<string, number>();
+  private plotGrowthAt = 0;
+
+  /** E27.2: every couple of seconds, redraws a growing plot whose step has moved on (and one that's grown back). */
+  private updatePlotGrowth() {
+    const now = performance.now();
+    if (now - this.plotGrowthAt < 2000) return;
+    this.plotGrowthAt = now;
+    const seen = new Set<string>();
+    for (const id of Object.keys(this.sim.state.salvage?.clipped ?? {})) {
+      const m = /^g:(-?\d+):(-?\d+)$/.exec(id);
+      const p = m ? this.sim.plotWork.spotFor({ roofId: GROUND, x: Number(m[1]), z: Number(m[2]) }) : undefined;
+      if (!p || seen.has(p.id)) continue;
+      seen.add(p.id);
+    }
+    for (const id of this.plotSteps.keys()) seen.add(id); // grown back since: drawn once more, as ready
+    for (const id of seen) {
+      const p = this.cozy.spot(id);
+      if (!p) continue;
+      const step = this.plotGrowth(p);
+      if (this.plotSteps.get(id) === step) continue;
+      const was = this.plotSteps.get(id);
+      if (step >= 1) this.plotSteps.delete(id);
+      else this.plotSteps.set(id, step);
+      if (was !== undefined || step < 1) this.redrawPlot(id);
+    }
+  }
+
+  /** E27.2: rebuilds the chunk a plot is drawn in. */
+  private redrawPlot(id: string) {
+    const p = this.cozy.spot(id);
+    if (!p) return;
+    const t = this.sim.grid.peek(GROUND, p.x, p.z);
+    if (t) this.chunks.markTile(t);
+    const step = this.plotGrowth(p);
+    if (step < 1) this.plotSteps.set(id, step);
   }
 
   /** A plot at this cell that can be opened now (ready, or already chosen). */
@@ -5054,6 +5115,7 @@ export class Game {
     }
     this.updateChainPresentation(wdt);
     this.updateGuideLines();
+    this.updatePlotGrowth();
     this.updatePileGlints();
     // #627: every upgrade, move and park growth as a part (data/botParts); rebuilt only when something changes
     if (this.bot) this.bot.visuals.setGrowth(this.botGrowth());

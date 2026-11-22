@@ -58,6 +58,8 @@ export interface GameEvents {
   'bloombot.knack': { keeper: string };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
   'biomass.gathered': { tileId: string; x: number; z: number; got: number; by: 'bot' | 'drone' };
+  /** E27.2 (#680): Bloombot gathered from or pruned a plot (x, z: its centre) */
+  'plot.worked': { plotId: string; verb: 'gather' | 'prune'; got: number; x: number; z: number };
   /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
   'planter.changed': { machineId: string };
   'planter.ripe': { machineId: string; crop: string };

@@ -831,10 +831,14 @@ export class ChunkRenderer {
    * E19.1.5 (#251): what each plot looks like, from the game (the renderer never reads choices itself): an option
    * id, null for the empty "waiting" look, undefined to draw nothing (not restored yet, or a machine on it).
    */
-  plots?: { look(p: PlotSpot): string | null | undefined };
+  plots?: {
+    look(p: PlotSpot): string | null | undefined;
+    /** E27.2 (#680): how grown back a worked plot is, 0 just picked or pruned to 1 ready (default 1) */
+    growth?(p: PlotSpot): number;
+  };
   /** Cells of the chunk being built that a chosen plot covers (their own grass and flowers stay flat under it). */
   private plotCells = new Set<string>();
-  private chunkPlots: { p: PlotSpot; look: string | null }[] = [];
+  private chunkPlots: { p: PlotSpot; look: string | null; growth: number }[] = [];
 
   /**
    * E19.2 (#255): the decorations standing in a ground chunk, from the game. Drawn into the chunk's own meshes and
@@ -1520,7 +1524,7 @@ export class ChunkRenderer {
       for (const p of plotsInChunk(s.grid.seed, v.cx, v.cz, gen)) {
         const look = this.plots.look(p);
         if (look === undefined) continue;
-        this.chunkPlots.push({ p, look });
+        this.chunkPlots.push({ p, look, growth: look ? (this.plots.growth?.(p) ?? 1) : 1 });
         if (look) for (let j = 0; j < p.size; j++) for (let i = 0; i < p.size; i++) this.plotCells.add(`${p.x + i},${p.z + j}`);
       }
     const pool: PoolGeo = { pos: [], col: [], idx: [] };
@@ -1622,7 +1626,7 @@ export class ChunkRenderer {
         model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
-      for (const { p, look } of this.chunkPlots) drawPlot(host, p, look ?? undefined, h + 0.08 + s.grid.groundOffset(GROUND, p.x, p.z), !!v.far);
+      for (const { p, look, growth } of this.chunkPlots) drawPlot(host, p, look ?? undefined, h + 0.08 + s.grid.groundOffset(GROUND, p.x, p.z), !!v.far, growth);
     }
     // E19.2: decorations, the same way
     const decor = this.decor && fog !== 'hidden' ? this.decor.inChunk(v.cx, v.cz) : [];

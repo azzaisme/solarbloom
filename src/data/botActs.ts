@@ -7,7 +7,8 @@ import type { PropId } from './botProps';
  *
  * The verbs (Game.interactCandidates, OldCity, Resting), and what each does:
  *
- *   held:        Salvage → rummage, Pry → pry, Gather → gather (they loop while Interact is held, then finish)
+ *   held:        Salvage → rummage, Pry → pry, Gather → gather, Prune → prune (they loop while Interact is held,
+ *                then finish)
  *   one press:   Dig up → dig · Harvest → harvest · Tend, Feed → tend · Repair, Mend → repair · Wake → wake
  *                Say hello, Talk to, Trade with, Give a gift to → greet · Read → read · Listen to → listen
  *                Look out, Look at → look · Open, Use, Pick up, Bring things to, Reset, Plant in,
@@ -19,7 +20,7 @@ import type { PropId } from './botProps';
  * `base + amp × sin(harmonic × 2π t / period + phase)`, where `t` is seconds into the act. Reduced motion keeps the
  * base pose and drops the swings.
  */
-export type ActId = 'rummage' | 'pry' | 'gather' | 'dig' | 'plant' | 'tend' | 'harvest' | 'repair' | 'wake' | 'greet' | 'read' | 'listen' | 'look' | 'reach';
+export type ActId = 'rummage' | 'pry' | 'gather' | 'prune' | 'dig' | 'plant' | 'tend' | 'harvest' | 'repair' | 'wake' | 'greet' | 'read' | 'listen' | 'look' | 'reach';
 
 /**
  * The channels. lean: the spine tips forward (back if negative); twist: it turns left (+) or right; knee: its knees
@@ -101,6 +102,16 @@ export const ACTS: Record<ActId, ActDef> = {
     channels: { lean: [30, 8, 2], twist: [0, 12], knee: [24, 10, 2], headPitch: [20, 6, 2], headYaw: [0, 10], lRaise: [18], lOut: [40], lElbow: [20], rRaise: [70, 18, 2], rElbow: [26, -20, 2], rOut: [10, 10] },
     tick: { kind: 'burst', at: 'hands', every: 0.3, count: 5, hex: LEAF, speed: 0.4, up: 2.0, size: 0.06, life: 0.8, gravity: 3, fan: 1.0, back: 0.3 },
     finish: { kind: 'sparkles', at: 'tool', count: 8, life: 0.8 },
+  },
+  // E27.2 (#680) Prune: up close to the plant, the shears held out at chest height and snipping fast, the other hand
+  // steadying a branch; head tipped to see the cut, leaves falling from each snip and a little shower as it finishes
+  prune: {
+    prop: { id: 'shears', hand: 'right' },
+    period: 0.36,
+    once: 1.0,
+    channels: { lean: [16, 4, 2], twist: [0, 14, 1], knee: [10, 6, 2], headPitch: [8, 6, 2], headYaw: [0, 12, 1], headRoll: [8], rRaise: [96, 10, 1], rElbow: [30, 26, 2], rOut: [8, 10, 1], lRaise: [104], lElbow: [22, 8, 2], lOut: [-6] },
+    tick: { kind: 'burst', at: 'tool', every: 0.18, count: 4, hex: LEAF, speed: 0.35, up: 0.6, size: 0.06, life: 1.0, gravity: 2.5, fan: 1.1, back: 0.3 },
+    finish: { kind: 'burst', at: 'tool', count: 16, hex: LEAF, speed: 0.6, up: 1.4, size: 0.07, life: 1.2, gravity: 2.5, fan: 1.6, back: 0.6 },
   },
   // Dig up: right down in a crouch, the trowel scooping; soil flung back over its shoulders
   dig: {
@@ -198,7 +209,7 @@ export const ACTS: Record<ActId, ActDef> = {
 };
 
 /** The verbs that are held (OldCity.startHold's kinds) and their acts. */
-export const HOLD_ACTS: Record<string, ActId> = { salvage: 'rummage', pry: 'pry', gather: 'gather' };
+export const HOLD_ACTS: Record<string, ActId> = { salvage: 'rummage', pry: 'pry', gather: 'gather', prune: 'prune' };
 
 /** The act for an Interact verb (the prompt's verb), or undefined for the ones with poses of their own. */
 export function actForVerb(verb: string): ActId | undefined {
@@ -210,6 +221,7 @@ export const VERB_ACTS: Record<string, ActId | undefined> = {
   Pry: 'pry',
   'Pry open': 'pry', // #626: a vault door (Pry II)
   Gather: 'gather',
+  Prune: 'prune', // E27.2 (#680): an orchard, the roses, a parklet's planters
   'Dig up': 'dig',
   Harvest: 'harvest',
   Tend: 'tend',
