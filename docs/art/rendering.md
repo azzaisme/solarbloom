@@ -250,6 +250,21 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
   most, on the water layer. It fades in with the water's restore. By night the fish and flecks dim, and the stream and
   its foam turn a moonlit blue-grey: nothing glows. The flecks go with *Fewer particles* and the Low tier, and reduced
   motion stills everything (it stops `waterTime`). Gameplay, saves and the grid never see any of it.
+- **The moon's path, and the water in both cameras (E28.W06, #699):** W05's stronger moon glints never made a path
+  in play. The moon sits 42° up (`DAY_LIGHT.moonElevation`), so its mirror point lands about 42° below the horizon:
+  at the very bottom of the follow camera's view (16° pitch, 62° FOV), near Bloombot's feet or under the jetty deck.
+  The glints gathered there and nowhere else, and the moon's disc is off the top of the screen. A real moon path is
+  the sea scattering the moon into a column, so the water shader now adds one by night (`LOOK.water.moonPath`). Any
+  bit of water lights up when its reflection heads toward the moon's bearing (within `width`) and rises no higher than
+  the moon. Drifting crest bands across the path break it up (`bands`), with a soft glow (`soft`) and brighter glitter
+  where a ripple turns the light right at the eye (`glitter`, `sparkle`). All of it is weighted by Fresnel, so it
+  runs from below the moon out to the horizon and gets stronger toward it. `moonPathOf` hands the shader the moon's
+  heading and height each frame. It is off by day and when the moon is down, costs one branch, and adds no draw
+  calls. `tests/e2e/water-cameras.mjs` shoots the water from both cameras at day, golden hour and night: six
+  follow-camera spots (start, out to sea, toward the key light, the shore at player height, the canal, a 2° grazing
+  pitch) and two zoomed-out ones (the bay at the furthest zoom, open water at a middle zoom). It fails on any page
+  error or GL warning. `PERF=1` measures frame time and draw calls instead. The open-sea shots show no tiling, even
+  contrast-stretched, and nothing in the shore or grazing shots needed fixing.
 - **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
   25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
   overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back

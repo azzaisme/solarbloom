@@ -15,6 +15,7 @@ import {
   WATER_ENC,
   WAVES_ANCHOR,
   encodeWater,
+  moonPathOf,
   pickWaterLamps,
   rippleDrift,
   rippleMapData,
@@ -619,5 +620,48 @@ describe('water material', () => {
     expect(n[1]).toBeCloseTo(lin((c >> 8) & 255), 3);
     expect(n[2]).toBeCloseTo(lin(c & 255), 3);
     expect(param('uWaterAmbient') as unknown as number).toBe(LOOK.water.ambient);
+  });
+});
+
+describe('E28.W06 (#699): the moon lays a path on the water by night', () => {
+  const M = LOOK.water.moonPath;
+  it('has named look values in range (soft, never blown out)', () => {
+    expect(M.width).toBeGreaterThan(0);
+    expect(M.width).toBeLessThan(0.1);
+    expect(M.glitter).toBeGreaterThan(0);
+    expect(M.glitter).toBeLessThan(M.width);
+    expect(M.soft).toBeGreaterThan(0);
+    expect(M.soft).toBeLessThan(1);
+    expect(M.sparkle).toBeGreaterThan(0);
+    expect(M.sparkle).toBeLessThanOrEqual(3);
+    expect(M.colour).toMatch(/^#[0-9a-f]{6}$/);
+    expect(M.bands.break).toBeGreaterThan(0);
+    expect(M.bands.break).toBeLessThan(1);
+    expect(M.bands.along).toBeGreaterThan(M.bands.across); // bands lie across the path
+  });
+
+  it('heads toward the key light (the moon by night) and rises only as high as it; off by day or below the horizon', () => {
+    const m = moonPathOf({ x: -0.5, y: 0.67, z: 0.55 }, 1);
+    expect(m[3]).toBe(1);
+    expect(Math.hypot(m[0], m[1])).toBeCloseTo(1, 9);
+    expect(m[0] / m[1]).toBeCloseTo(-0.5 / 0.55, 9);
+    expect(m[2]).toBeCloseTo(0.67 / Math.hypot(0.5, 0.67, 0.55), 9);
+    expect(moonPathOf({ x: -0.5, y: 0.67, z: 0.55 }, 0)[3]).toBe(0);
+    expect(moonPathOf({ x: -0.5, y: -0.2, z: 0.55 }, 1)[3]).toBe(0);
+    expect(moonPathOf(undefined, 1)[3]).toBe(0);
+    expect(moonPathOf({ x: 0, y: 1, z: 0 }, 1)[3]).toBe(0); // straight overhead: no heading to lay a path along
+  });
+
+  it('the material carries the path, and the frame turns it on only by night', () => {
+    const m = waterMaterial();
+    const param = (k: string) => (m.getParameter(k) as { data: number[] }).data;
+    expect(Array.from(param('uWaterMoonK'))).toEqual([M.width, M.glitter, M.soft, M.sparkle]);
+    expect(Array.from(param('uWaterMoonB'))).toEqual([M.bands.along, M.bands.across, M.bands.drift, M.bands.break]);
+    const frame = { time: 1, cam: { x: 0, y: 5, z: 0 }, skyLow: [0.1, 0.14, 0.3] as [number, number, number], skyHigh: [0.05, 0.08, 0.22] as [number, number, number] };
+    const light = { toLight: { x: -0.5, y: 0.67, z: 0.55 }, color: { r: 0.7, g: 0.8, b: 1 }, share: 0.4 };
+    setWaterFrame({ ...frame, night: 1, light });
+    expect(param('uWaterMoon')[3]).toBe(1);
+    setWaterFrame({ ...frame, night: 0, light });
+    expect(param('uWaterMoon')[3]).toBe(0);
   });
 });
