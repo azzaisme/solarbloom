@@ -168,6 +168,29 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
   about 160 extra draw calls on the frames that draw it.
 - **Cost on High (E28.W01, sea spot at noon, 1080p, median of three runs):** frame time 7.3 → 9.5 ms median, draw
   calls 516 → 639 on average. The shader skips the caustics where no bed shows and the foam noise away from shore.
+- **The shore (E28.W02, #695):** natural ground (lawn, earth, sand, clay; not paving, roads, buildings, ramps or decks)
+  doesn't stop at its tile's straight side where it meets water at its own level. `Shore.ts` works out the runs of
+  each land tile's outline that open onto water (round its rounded corners too, and fanning round square ones), and
+  `ChunkRenderer.shore` builds a bank under each run, into the chunk's ground mesh (no extra draw calls):
+  - first a **shelf**: the land's own top carries on out past the edge by `LOOK.shore.shelf` (0 to 0.3 tiles, its
+    own noise), so the edge of the lawn bulges and draws back;
+  - then a **slope** down to its toe `under` below the surface, meeting the water `reach` out (by the shore noise; a
+    sand beach `beach` times further, more gently). A bank keeps to `room` of the open water in front of it, so the
+    two banks of a narrow channel never close it, and where the shore carries on past a built edge (paving, a road)
+    it eases down to nothing over `taper` instead of stopping in a step;
+  - coloured from the lawn's own mottled colour at that very point (`turfAt`), carrying down the bank by
+    `grassLine` (its own noise), through `earth` and a `wet` band at the waterline, darker there (`ao`);
+  - dressed, seeded by position: pebbles and the odd rock along the waterline; on restored banks reeds standing in
+    the shallows, a fringe of grass on the lip, tufts and flowers on the slope, and now and then a shrub on the top of
+    the bank leaning out over the water (`overhang`; its foot stays on the tile, `leanGeo` only leans what grows
+    above). Every piece stands exactly on the bank's triangles (`bankHeight`).
+  
+  Everything is decided by world position, so two tiles sharing a corner build the same bank there and the shore runs
+  on with no seam. The water's distance to land (`waterDistance`) is pulled out by the same shelf and slope
+  (`waterlineAt`), and each water vertex also carries how far it was pulled (the alpha channel, `encodeWater`). The
+  foam's contact edge sits right on the bank's waterline; the colour by depth, the sand bed, the shore waves and the
+  foam lines follow only `waterPull` of the pull, so the shallows trace the new outline but a narrow canal keeps its
+  clear turquoise middle. None of it is solid: the tiles, paths, collision, the line of sight and saves are unchanged.
 - **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
   25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
   overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back

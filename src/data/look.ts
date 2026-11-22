@@ -229,6 +229,74 @@ export const LOOK = {
     /** by night the water's colour turns to this moonlit navy (the approved night sea) */
     night: '#123a8f',
   },
+  /**
+   * E28.W02 (#695): where natural ground meets the water. Every land edge that opens onto water at its own level
+   * slopes down under the surface as a bank whose width wanders with the shore's noise, so the waterline is never the
+   * tile's straight side. Lengths are tiles.
+   */
+  shore: {
+    /** how far past the tile's edge the waterline sits: between `min` and `max`, by the shore's noise */
+    reach: { min: 0.08, max: 0.5 },
+    /**
+     * before it slopes, the land's own top carries on out past the tile's edge by between `min` and `max` (its own
+     * noise), falling only `crown` across it: the edge of the lawn bulges and draws back instead of running straight
+     */
+    shelf: { min: 0, max: 0.3 },
+    crown: 0.012,
+    /**
+     * the water's foam edge sits right on a bank's waterline; its colour by depth, its sand bed, its shore waves and its
+     * foam lines follow only this share of the way the bank pulled the edge out (so the shallows follow the new outline
+     * but a narrow canal isn't all foam)
+     */
+    waterPull: 0.35,
+    /** a bank keeps to this share of the open water in front of it, so the two banks of a narrow channel never meet */
+    room: 0.24,
+    /** where the shore carries on past a built edge (paving, a road), the bank eases down to nothing over this long */
+    taper: 0.5,
+    /** sand beaches reach this much further (and so slope more gently) */
+    beach: 1.3,
+    /** the noise: one broad swell every `scale` tiles, with `fine` of a smaller wobble on top */
+    noise: { scale: 2.2, fine: 0.45 },
+    /** the bank's toe lies this far under the water's surface (so the waterline is where the slope meets it) */
+    under: 0.07,
+    /** the share of the bank's slope that is an even ramp (the rest is a rounded shoulder easing in and out) */
+    shoulder: 0.35,
+    /** bank mesh detail: points per tile of shore, rows across the bank, points round a rounded corner */
+    segments: 8,
+    rows: 5,
+    arc: 8,
+    /**
+     * colours across the bank: the land's own top carries down `grassLine` of the way to the waterline (by its own
+     * noise, so the grass line wanders), then earth, then a wet band
+     */
+    grassLine: { min: 0.1, max: 0.95 },
+    /** restored banks: earth between the grass and the water */
+    earth: '#7a6446',
+    /** the wet band at the waterline, and the bed just under the water */
+    wet: '#6f5c42',
+    bed: '#7e7a5c',
+    /** a sand beach: its wet sand at the waterline */
+    wetSand: '#b49a6c',
+    /** how wide the wet band is (share of the bank's width) */
+    wetBand: 0.14,
+    /** ambient occlusion where the bank meets the water: how much darker, and how wide (share of the bank's width) */
+    ao: 0.32,
+    aoWidth: 0.16,
+    /** pebbles along each tile of shore, and the chance of a bigger rock half in the water */
+    pebbles: 3,
+    rock: 0.3,
+    /** restored banks: chance of a stand of reeds in the shallows, grass tufts and flowers per tile of shore */
+    reeds: 0.45,
+    tufts: 3,
+    /** restored banks: grass tufts along the lip of the bank (per tile of shore), so the lawn spills over its edge */
+    fringe: 6,
+    flowers: 0.5,
+    /**
+     * restored banks: the chance per tile of shore of a plant leaning out over the water (standing on the bank's top,
+     * `inset` in from the edge, leaning by `lean` degrees), and its size
+     */
+    overhang: { chance: 0.22, inset: 0.12, lean: 26, scale: 0.62 },
+  },
 };
 
 export interface TierSpec {

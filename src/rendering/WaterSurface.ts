@@ -30,11 +30,20 @@ export const WATER_CLARITY = { murky: 0.3, clear: 1 } as const;
  * playing on it (blue; the same as green when there's none). Its uv0 carries that restore's window on the transition
  * clock (start, length), and the shader fades blue to green over it, in step with the tile's own transition.
  */
-export function encodeWater(dist: number, clarity: number, from = clarity): [number, number, number, number] {
+export function encodeWater(dist: number, clarity: number, from = clarity, shore = 0): [number, number, number, number] {
   const byte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
   const r = Math.round((Math.min(WATER_ENC, Math.max(0, dist)) / WATER_ENC) * 255);
-  return [r, byte(clarity), byte(from), 255];
+  // E28.W02: alpha carries how far a bank has pulled the water's edge out here (tiles, up to WATER_SHORE_ENC; 255 = none)
+  return [r, byte(clarity), byte(from), 255 - byte(shore / WATER_SHORE_ENC)];
 }
+
+/**
+ * E28.W02 (#695): the most a bank pulls the water's edge out (tiles), as the alpha channel carries it. `dist` (red) is
+ * the distance to the bank's own waterline, where the foam's contact edge lies; the colour by depth, the sand bed, the
+ * shore waves and the foam lines go by that distance plus (1 - `LOOK.shore.waterPull`) of the pull, so they follow the
+ * new outline without crowding a narrow canal with foam.
+ */
+export const WATER_SHORE_ENC = 1;
 
 /** How far a restore's clarity fade has got (0 … 1, eased), as the shader works it out. */
 export function waterFade(time: number, t0: number, d: number): number {
@@ -91,6 +100,7 @@ uniform vec4 uWaterDepth;  // midAt, deepAt, bedReach, bedShow
 uniform vec4 uWaterRipple; // scale, speed, strength, fine
 uniform vec4 uWaterLap;    // reach, length, speed, strength
 uniform vec4 uWaterFoamL;  // reach, lines, speed, strength
+uniform float uWaterShore; // E28.W02: the share of a bank's pull the colour, bed, waves and foam lines don't follow
 uniform vec4 uWaterFres;   // base, power, max, sky
 uniform float uWaterAmbient;
 uniform float uWaterReflTint;
@@ -138,16 +148,21 @@ float sbWaterCaustic(vec2 p, float t) {
 void sbWaterSetup() {
 	vec2 p = vPositionW.xz;
 	float t = uWaterTime;
-	float dist = 0.0;
+	float edgeDist = 0.0;
 	float clarity = 1.0;
+	float shorePull = 0.0;
 	#ifdef STD_DIFFUSE_VERTEX
-		dist = vVertexColor.r * ${WATER_ENC.toFixed(1)};
+		edgeDist = vVertexColor.r * ${WATER_ENC.toFixed(1)};
+		shorePull = (1.0 - vVertexColor.a) * ${WATER_SHORE_ENC.toFixed(1)};
 		clarity = vVertexColor.g;
 		#ifdef STD_AO
 			// a restore still playing: the clarity before it (blue) fades to now (green) over its window (uv0)
 			clarity = mix(vVertexColor.b, clarity, smoothstep(0.0, 1.0, (uWaterTrTime - vUv0.x) / max(vUv0.y, 1e-3)));
 		#endif
 	#endif
+	// E28.W02: the foam's contact edge sits on a bank's own waterline (edgeDist); everything else keeps part of the
+	// distance the bank took (uWaterShore), so a narrow canal keeps its clear middle
+	float dist = edgeDist + shorePull * uWaterShore;
 	float px = length(fwidth(p));
 	// ── ripples: drifting waves in a few directions, the finer ones fading with distance. Their field is bent by
 	// slow noise so crossing waves never settle into a regular checker ──
@@ -201,10 +216,10 @@ void sbWaterSetup() {
 	// (only near the shore: further out there is none, and the noise is skipped)
 	float fr = max(uWaterFoamL.x, 0.05);
 	wFoam = 0.0;
-	if (dist < fr * 2.0) {
+	if (edgeDist < fr * 2.0) {
 		float n1 = sbWaterNoise(p * 2.3 + vec2(t * 0.11, -t * 0.07));
 		float n2 = sbWaterNoise(p * 5.1 - vec2(t * 0.05, t * 0.09));
-		float edge = 1.0 - smoothstep(0.02, 0.09 + 0.05 * n1, dist);
+		float edge = 1.0 - smoothstep(0.02, 0.09 + 0.05 * n1, edgeDist);
 		float band = fract(dist / fr * uWaterFoamL.y + t * uWaterFoamL.z + n1 * 0.35);
 		float lines = smoothstep(0.72, 0.9, band) * (1.0 - smoothstep(0.9, 1.0, band)) * (1.0 - smoothstep(0.0, fr * 2.0, dist));
 		wFoam = clamp((edge + lines * 0.7) * smoothstep(0.25, 0.65, n2 + 0.25 * edge) * uWaterFoamL.w, 0.0, 1.0) * mix(0.5, 1.0, clarity);
@@ -348,6 +363,7 @@ export function applyWaterLook() {
   m.setParameter('uWaterRipple', [W.ripple.scale, W.ripple.speed, W.ripple.strength, W.ripple.fine]);
   m.setParameter('uWaterLap', [W.lap.reach, W.lap.length, W.lap.speed, W.lap.strength]);
   m.setParameter('uWaterFoamL', [W.foamLine.reach, W.foamLine.lines, W.foamLine.speed, W.foamLine.strength]);
+  m.setParameter('uWaterShore', 1 - LOOK.shore.waterPull);
   m.setParameter('uWaterFres', [W.fresnel.base, W.fresnel.power, W.fresnel.max, W.sky]);
   m.setParameter('uWaterAA', [W.antiAlias.variance, 1 / W.antiAlias.fadeFrom, 1 / W.antiAlias.fadeTo, 0]);
   m.specular = new pc.Color(W.specular, W.specular, W.specular);

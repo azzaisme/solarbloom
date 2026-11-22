@@ -53,7 +53,7 @@ const QUICK = [
   // #681: no distant skyline
   'skyline-off',
   // #687: nothing scattered hangs over the edge of the ground
-  'edge-plants',
+  'edge-plants', 'shore',
   // #689: the Great Bloom's heart of birds
   'bird-heart',
   // #662: toasts that come together each get read; nothing lands under a Keeper's bubble
