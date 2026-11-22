@@ -253,6 +253,26 @@ export const LOOK = {
      * `moon` times as strong (the moon is a faint light, so without it the sea showed no path of moonlight).
      */
     glint: { cut: 0.985, soft: 0.004, strength: 1.2, moon: 3 },
+    /**
+     * E28.W06 (#699): the moon's path by night. A wavy sea scatters the moon into a column of broken light running out
+     * from below the moon to the horizon: every bit of surface whose reflection points toward the moon's heading
+     * (within `width`, as 1 - cos of the angle) and no higher than the moon itself. `soft` is the path's glow, `sparkle`
+     * the brighter glitter where a ripple turns it right at the eye (within `glitter`), both in `colour` and both
+     * stronger toward the horizon (by the Fresnel reflectance). The moon sits 42° up, so its mirror point lands near
+     * Bloombot's feet: the glints alone (`glint.moon`) never reached up the screen to make a path.
+     */
+    moonPath: {
+      width: 0.014,
+      glitter: 0.005,
+      soft: 0.34,
+      sparkle: 2,
+      colour: '#c6d4ff',
+      /**
+       * the path is broken into drifting bands across it (wave crests catching it): noise scaled `along` the path and
+       * `across` it (per tile), drifting at `drift`; `break` of the light goes where the bands are dark
+       */
+      bands: { along: 3.2, across: 0.9, drift: 0.35, break: 0.75 },
+    },
     specular: 0.18,
     /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */
     fresnel: { base: 0.04, power: 5, max: 0.6 },
