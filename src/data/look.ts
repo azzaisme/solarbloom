@@ -13,7 +13,8 @@ export const LOOK = {
     // E27.1 (#679): was 3.4, which with the old ambient lit sunlit sand and grass three to four times past white
     // before tone mapping (most of a beach clipped). Now a sunlit pale surface lands just under white, and the
     // sun is about three times the shade's light, so shadows read
-    color: '#ffdcaa',
+    // P7-E27: a warm near-ivory key (#FFF0D6 family) rather than peach, so ivory stone and pale sand stay ivory
+    color: '#ffe8c6',
     intensity: 2.1,
     elevation: 34,
     /**
@@ -26,7 +27,7 @@ export const LOOK = {
     normalOffsetBias: 0.05,
   },
   /** Look 1.3: a cool, low fill from the side opposite the sun (no shadows). E27.1: a soft sky blue (was grey). */
-  fill: { color: '#d0dcf0', intensity: 0.45 },
+  fill: { color: '#c8ddf2', intensity: 0.45 },
   /**
    * Look 1.3: ambient light from the sky above and the ground below, baked into a tiny environment atlas.
    * Colours are linear-ish sRGB hex; `intensity` scales the whole environment (ambient and reflections).
@@ -82,7 +83,7 @@ export const LOOK = {
    */
   grade: {
     // E27.1 (#679): saturation 1.32 and vibrance 0.42 pushed the greens fluorescent, and lifted shadows flattened them
-    warm: { brightness: 1.0, contrast: 1.06, saturation: 1.1, tint: '#fff4e4', shadows: 0.0, highlights: -0.15, vibrance: 0.15 },
+    warm: { brightness: 1.0, contrast: 1.06, saturation: 1.1, tint: '#fff9f0', shadows: 0.0, highlights: -0.15, vibrance: 0.15 },
     dead: { brightness: 0.97, contrast: 1.03, saturation: 0.82, tint: '#e9eef6', shadows: 0.0, highlights: -0.1, vibrance: 0.0 },
     /** High contrast (settings): a flatter grade with no vignette so outlines and text stay readable. */
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
@@ -105,7 +106,9 @@ export const LOOK = {
    * Look 1.10: the warm golden haze toward the horizon (the linear fog; where it starts and ends follows the zoom,
    * see CameraController.hazeStart / hazeEnd). The camera clears to it when post-processing is on.
    */
-  haze: { color: '#f4ecdc' },
+  // P7-E27: a cool pale blue (was cream #f4ecdc, which laid a yellow-white veil over the whole distance). Only the
+  // initial value: Game sets the fog to the sky's horizon colour every frame (SKY.haze)
+  haze: { color: '#dfe7ee' },
   /**
    * E27.1 (#679): haze toward the horizon (LookShaders). With the skyline gone (#681) the far sea and coast sat in a
    * hard line against the sky from the low follow camera. Far surfaces within `band` degrees below the camera fade
@@ -125,13 +128,15 @@ export const LOOK = {
    * graphics tier; `lowVfx` and reduced motion turn the motes off, reduced motion freezes the shafts.
    */
   atmosphere: {
-    motes: { high: 90, medium: 50, low: 0 },
-    shafts: { high: 5, medium: 3, low: 0 },
+    // P7-E27.5: fewer, dimmer motes and a single faint shaft (were 90 motes at glow 3 and 5 shafts at 0.35): the bright
+    // specks and slanting beams read as a haze over the near ground rather than as magic in the air
+    motes: { high: 28, medium: 16, low: 0 },
+    shafts: { high: 1, medium: 0, low: 0 },
     moteColor: '#ffe9a8',
-    moteGlow: 3,
+    moteGlow: 1.4,
     moteSize: 0.05,
     shaftColor: '#ffd9a0',
-    shaftGlow: 0.35,
+    shaftGlow: 0.1,
     shaftWidth: 1.6,
     shaftLength: 7,
   },

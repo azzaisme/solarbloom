@@ -71,7 +71,7 @@ const ground = {
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
   /** the stone edge of dead paving where it stands above the earth beside it */
   pavingKerb: '#a48a72',
-  painted: { sand: ['#e2bf7e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
+  painted: { sand: ['#d9c79e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   /**
    * E25 (#626): the sandbar out in the sea is wet sand: the painted sand is tinted by `wetSandTint` and its sides take
    * `wetSand`: a little darker than the dry beach.

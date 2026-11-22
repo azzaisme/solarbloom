@@ -7,18 +7,20 @@
  */
 export const SKY = {
   /** straight up */
-  zenith: ['#86a5c8', '#78afe6'],
+  // P7-E27: a clear blue sky even before restoration (the fogged sky read overcast grey); clarity still deepens it
+  zenith: ['#6f9fd6', '#5e9ee6'],
   /** about 12° up (SKY_BANDS) */
-  upper: ['#a6bdd3', '#a4cdee'],
+  upper: ['#97bde0', '#8ec3f0'],
   /** a warm band just above the horizon */
-  glow: ['#d6d2c6', '#f6e2c0'],
+  glow: ['#dcdcd6', '#eee8da'],
   /** the horizon and the distance (scene fog colour) */
-  haze: ['#c3c8c8', '#e6e2d4'],
+  // P7-E27: cool pale blue haze (atmospheric perspective), not cream: the distance fades blue and the near scene stays clean
+  haze: ['#c8d6e0', '#d6e4ee'],
   /** extra warmth in the sky toward the sun */
-  sunGlow: ['#d8d4c8', '#ffe0a8'],
+  sunGlow: ['#e0e2dc', '#fff0cc'],
   sunCore: '#fff7e2',
   cloudLit: ['#e7e9ea', '#ffffff'],
-  cloudShade: ['#b4bac0', '#dde3ee'],
+  cloudShade: ['#c4cdd8', '#d6e0ee'],
 } as const;
 
 /**
@@ -35,8 +37,10 @@ export const SKY_BANDS_NIGHT = { glow: 4, upper: 25, zenith: 90 };
  * up it reaches far enough that the real city's buildings carry out toward the horizon.
  */
 export const HAZE = {
-  start: [8, 6],
-  end: [56, 76],
+  // P7-E27.5: the haze starts and completes further out (was 8/6 → 56/76), so the playable island near the camera stays
+  // crisp and only the distance fades
+  start: [12, 10],
+  end: [64, 88],
 };
 
 /**

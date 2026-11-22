@@ -211,7 +211,8 @@ function paintSiltBed(px: Uint8ClampedArray, H: Float32Array) {
 function paintSand(px: Uint8ClampedArray) {
   const n1 = makeNoise(41), n2 = makeNoise(53), n3 = makeNoise(67);
   const peb = stones(rng(15), 26, 0.005, 0.014);
-  const base: RGB = [232, 196, 128], pale: RGB = [246, 220, 160], tawny: RGB = [206, 164, 100], shade: RGB = [178, 136, 84];
+  // P7-E27: pale warm sand (was a saturated orange-gold, base 232,196,128); the Palette's painted.sand is its average
+  const base: RGB = [224, 204, 160], pale: RGB = [240, 226, 192], tawny: RGB = [204, 180, 136], shade: RGB = [174, 150, 112];
   const stoneBody: RGB = [228, 212, 190], stoneLight: RGB = [252, 244, 228], stoneDark: RGB = [168, 132, 92];
   for (let y = 0; y < SIZE; y++)
     for (let x = 0; x < SIZE; x++) {
