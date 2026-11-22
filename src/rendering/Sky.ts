@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
-import { NIGHT_SKY, NIGHT_SKY_LIGHTS, SKY } from '../data/sky';
+import { LOOK } from '../data/look';
+import { NIGHT_SKY, NIGHT_SKY_LIGHTS, SKY, SKY_BANDS, SKY_BANDS_NIGHT } from '../data/sky';
 
 /** sRGB hex → 0–1 components. */
 function rgb(hex: string): [number, number, number] {
@@ -16,6 +17,7 @@ export function skyColour(pair: readonly [string, string] | string, k: number): 
   return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 }
 
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const mix = (a: number[], b: number[], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const smooth = (t: number) => {
   const x = Math.min(1, Math.max(0, t));
@@ -43,7 +45,7 @@ export function skyMaterial(blend: boolean): pc.StandardMaterial {
 }
 
 /** Elevation rings (degrees) of the dome; dense near the horizon where the colour changes fastest. */
-const RINGS = [-40, -6, 0, 1.5, 3.5, 6, 10, 15, 22, 32, 45, 60, 75, 90];
+const RINGS = [-40, -6, 0, 1.5, 3, 5, 8, 12, 16, 22, 32, 45, 60, 75, 90];
 const SEGS = 36;
 
 /**
@@ -267,6 +269,20 @@ export class Sky {
     return this.timeOfDay(skyColour(SKY.haze, this.clarity), 'haze');
   }
 
+  /**
+   * E27.1 (#679): the sky's colour right at the horizon, as it must be given to land where the fogged distance does.
+   * The dome's colours go to the screen as given while the fog colour is decoded first (see fogMatchingSky), so by
+   * day the dome's horizon takes the haze decoded (a touch deeper, as the fogged ground shows it) and by night the
+   * fog takes the sky's: either way the far sea and the sky meet in one colour, at any hour.
+   */
+  horizonSeen(haze = this.hazeColour()): [number, number, number] {
+    const d = Math.min(1, Math.max(0, this.night));
+    return [0, 1, 2].map((i) => {
+      const x = Math.min(1, Math.max(0, haze[i]));
+      return Math.pow(x, 2.2) + (x - Math.pow(x, 2.2)) * d;
+    }) as [number, number, number];
+  }
+
   /** The High-tier water reflection: the sky low over the horizon and higher up, for the time of day (0–1 sRGB). */
   reflectColours(): { low: [number, number, number]; high: [number, number, number] } {
     const k = this.clarity;
@@ -293,19 +309,25 @@ export class Sky {
   private colourAt(d: [number, number, number], k: number): [number, number, number] {
     const el = Math.asin(Math.max(-1, Math.min(1, d[1]))) * (180 / Math.PI);
     const haze = this.timeOfDay(skyColour(SKY.haze, k), 'haze');
-    if (el <= 0) return haze;
+    const seen = this.horizonSeen(haze);
+    if (el <= 0) return seen;
     const glow = this.timeOfDay(skyColour(SKY.glow, k), 'glow');
     const upper = this.timeOfDay(skyColour(SKY.upper, k), 'upper');
     const zen = this.timeOfDay(skyColour(SKY.zenith, k), 'zenith');
     let c: [number, number, number];
-    if (el < 4) c = mix(haze, glow, smooth(el / 4));
-    else if (el < 25) c = mix(glow, upper, smooth((el - 4) / 21));
-    else c = mix(upper, zen, smooth((el - 25) / 65));
+    const n = Math.min(1, Math.max(0, this.night));
+    const B = { glow: lerp(SKY_BANDS.glow, SKY_BANDS_NIGHT.glow, n), upper: lerp(SKY_BANDS.upper, SKY_BANDS_NIGHT.upper, n), zenith: lerp(SKY_BANDS.zenith, SKY_BANDS_NIGHT.zenith, n) };
+    if (el < B.glow) c = mix(haze, glow, smooth(el / B.glow));
+    else if (el < B.upper) c = mix(glow, upper, smooth((el - B.glow) / (B.upper - B.glow)));
+    else c = mix(upper, zen, smooth((el - B.upper) / (B.zenith - B.upper)));
     // Warmer toward the sun, mostly low in the sky.
     const s = this.sunDir;
     const cos = d[0] * s.x + d[1] * s.y + d[2] * s.z;
     const w = Math.pow(Math.max(0, cos), 6) * 0.55 + Math.pow(Math.max(0, cos), 2) * 0.15 * (1 - smooth(el / 40));
-    return mix(c, this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun'), Math.min(0.8, w) * this.sunShow());
+    c = mix(c, this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun'), Math.min(0.8, w) * this.sunShow());
+    // E27.1: the lowest few degrees ease into the colour the fogged distance lands on, so the far sea meets the sky softly
+    const band = LOOK.horizon.skyBand;
+    return el < band ? mix(seen, c, smooth(el / band)) : c;
   }
 
   private recolour() {

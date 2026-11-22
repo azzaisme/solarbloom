@@ -17,7 +17,7 @@ the final output, not against raw hex. All numbers live in `src/data/look.ts`; r
    hex looks identical on a chunk and on a standard material. The 8-bit linear store has coarse steps in very dark
    colours; no palette colour is dark enough for it to show.
 3. **Lighting** in linear space: the sun, the fill, the sky-and-ground environment and the rim (below).
-4. **Exposure:** `LOOK.exposure` (`scene.exposure`), currently 1.0.
+4. **Exposure:** `LOOK.exposure` (`scene.exposure`), currently 1.1. Night keeps it (E23.7.5).
 5. **Tone mapping:** Khronos **PBR Neutral** (`TONEMAP_NEUTRAL`). It keeps the palette's hues and saturation up
    to bright values and rolls highlights off smoothly. ACES was tried first: it bleached the greens and the
    blossom pinks toward yellow-white.
@@ -35,10 +35,21 @@ pipeline, none do.
 
 | Light | Colour | Intensity | Notes |
 | --- | --- | --- | --- |
-| Sun (key) | `#ffd29a` | 3.1 | 34° elevation; light travels toward world (−0.25, 0.97), so shadows fall to the lower left of the default view. PCF shadows, 2048² (1024² on Low). |
-| Fill | `#8fb4ff` | 0.42 | From the side opposite the sun, from above; no shadows. |
-| Sky and ground | zenith `#5d8fd6`, horizon `#cfd9e3`, ground `#7a6a48` | 0.85 | A 32² cubemap prefiltered into `scene.envAtlas`. It provides all ambient light (the flat ambient is black) and the reflections on glossy materials. Rebuilt after a lost WebGL context. |
-| Rim | `#ffc98a` | 0.8, power 3 | A view-dependent term added to the standard emissive chunk for lit materials, tinted by the surface albedo, stronger on the sun side. |
+| Sun (key) | `#ffdcaa` | 2.1 | Follows the day's arc (`DayNight`, 8° at the horizon to 50° at noon); light travels toward world (−0.25, 0.97) at its middle, so shadows fall to the lower left of the default view. PCF shadows, cascaded per tier. |
+| Fill | `#d0dcf0` | 0.45 | A soft sky blue from the side opposite the sun, from above; no shadows. |
+| Sky and ground | zenith `#82aae0`, horizon `#dde3ea`, ground `#a08a62` | 0.7 | A 32² cubemap prefiltered into `scene.envAtlas`. It provides all ambient light (the flat ambient is black) and the reflections on glossy materials. The ground's warm bounce keeps the shade side of ivory stone warm. Rebuilt after a lost WebGL context. |
+| Rim | `#ffd35c` | 1.2, power 2.2 | A view-dependent term added to the standard emissive chunk for lit materials, tinted by the surface albedo, stronger on the sun side. |
+
+**E27.1 (#679), sunlit not washed out.** By E26 the lights had crept up to a 3.4 sun, a 1.15 environment with a
+near-white horizon, a 2.6 rim at power 1.3 and a grade at saturation 1.32 / vibrance 0.42. Sunlit sand and grass
+landed three to four times past white before tone mapping: up to 60% of a beach shot clipped, the bloom threshold
+(1.15) sat under sunlit ground so the whole beach bloomed into a warm veil, the rim lit half of every tuft gold and
+the grade pushed the greens fluorescent. Bloom was not the cause (with it off, the beach still clipped 54%). The
+fix is in the light, not the materials: the sun and the ambient come down together, keeping the sun about three
+times the shade's light so shadows read, and the ambient turns a soft blue. A pale sunlit surface now lands just
+under white. Night's moon, fill, ambient and rim are their own strengths in `DAY_LIGHT` (no longer shares of the
+day's), so the moonlit night is unchanged. `tests/e2e/sunlit-shots.mjs` shoots the same follow-camera spots at
+five times of day on High and on the Deck and measures clipping, light-and-shade spread and green saturation.
 
 Measured on the restored park (`shots:look`, `full-desktop`): lit grass about `(138, 209, 68)` and shadowed grass
 about `(15, 73, 46)`, so a 2.9:1 brightness gap on screen, with the shadow tilted toward blue (blue/red 3.1 in
@@ -55,9 +66,9 @@ offscreen target), then the effects run, then the compose pass applies exposure,
 - **Resizing and the adaptive pixel ratio:** CameraFrame sizes its targets from the canvas every frame. A lost
   WebGL context is handled by the engine (targets are recreated); the generated environment is rebuilt by
   `SceneBuilder` on `devicerestored`.
-- **Bloom:** intensity 0.08 with a scene-referred threshold of 1.5. Sunlit surfaces peak around 1.0–1.3, so only
-  emissives (see the emissive budget below) glow. Checked: the dead park with bloom on and off differs by at most
-  1/255 on a few pixels.
+- **Bloom:** intensity 0.14 (twice that by deep night) with a scene-referred threshold of 1.8. Sunlit surfaces
+  peak around 1.7 (pale sand), so only emissives (see the emissive budget below) glow. Checked (E27.1): noon on the
+  beach with bloom on and off clips 0.6% and 0.4% of the picture.
 - **SSAO (High tier):** CameraFrame SSAO, combined into the final colour, 12 samples, blurred. Its radius is in world
   units (a tile is 1), set every frame to 0.12 × the world height in view, clamped to 0.6–2: tight contact
   shadows under bushes, benches and machines up close, soft grounding around buildings and trees at the overview.
@@ -66,7 +77,7 @@ offscreen target), then the effects run, then the compose pass applies exposure,
   generators write vertex colours, which the parallel E16 vegetation work is rewriting; it should follow E16.
 - **Grading and vignette:** in the compose pass: contrast, saturation, a tint, and HDR-aware shadows / highlights /
   vibrance (`colorEnhance`). Two looks in `LOOK.grade`: `warm` (restored: warm tint, a little more contrast,
-  highlights held down) and `dead` (cool tint, desaturated). The game blends them by the restoration of the area
+  highlights held down, saturation 1.1 and vibrance 0.15 so the greens stay natural) and `dead` (cool tint, desaturated). The game blends them by the restoration of the area
   under the camera (`Game.updateMood`: a cleared area is 1, a fogged one rises toward 1 as restored tiles approach
   its landmark's need), easing over 2.5 s, so restoring reads as the light coming back. A soft warm-brown vignette
   (0.32) frames the view. **High contrast** uses a flat grade with lifted shadows and no vignette.
@@ -81,8 +92,9 @@ offscreen target), then the effects run, then the compose pass applies exposure,
 
 ## Emissive budget (Look 1.9)
 
-Scene-referred brightness is `linear(colour) × intensity`, before exposure and tone mapping. Bloom starts at 1.5
-and is strong by about 3. Ordinary lit surfaces stay at or below about 1.3 and must not be emissive.
+Scene-referred brightness is `linear(colour) × intensity`, before exposure and tone mapping. Bloom starts at 1.8
+and is strong by about 3. Ordinary lit surfaces stay at or below about 1.7 (sunlit sand, the palest ground) and must
+not be emissive. (E27.1: the threshold was 1.15, under sunlit ground, so the beach bloomed by day.)
 
 | Element | How it glows | Rendered intensity |
 | --- | --- | --- |
@@ -108,6 +120,31 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
 - **Haze:** the linear fog is a warm golden `#e9dcc4` (was a flat blue-grey `#bcd9e6`). It still starts and ends at
   the zoom-dependent distances in `CameraController` (`hazeStart` 6, `hazeEnd` 44 past the target), and the camera
   clears to it when post is on. The gameplay fog over unrevealed areas is a separate mesh and is unchanged.
+- **The horizon (E27.1, after #683 took the skyline away):** from the low follow camera, the whole far sea and the
+  far coast squeeze into a few rows of pixels under the horizon, long before the depth fog has caught up, and the
+  same haze colour reached the screen two ways: the fog colour is decoded to linear by the engine, while the sky
+  dome's vertex colours and the clear colour go out as given. At night the fogged sea landed on 51,72,124 against a
+  sky of 110,131,171, so a hard line. Two fixes, both in `LOOK.horizon`:
+  - *Horizon haze* (`LookShaders`, in the fog chunk of every standard material): far surfaces within `band` (6°)
+    below the camera fade into the fog colour, fully by `reach` (0.45) of the way into the depth fog, nothing nearer
+    than where the fog starts. The far sea's edge and the far coast dissolve over a band instead of a pixel.
+  - *One horizon colour*: by night the fog colour is encoded (`fogMatchingSky`) so it lands on the sky as seen; by day
+    the sky's lowest `skyBand` (5°) and the clear colour take the haze as the fog shows it (`Sky.horizonSeen`),
+    so the day's distance doesn't pale. Measured looking out to sea (`sunlit-shots`, the biggest step in brightness
+    from one row to the next across the horizon): 43–59 at dusk and midnight before, 9–12 after, at any hour.
+- **The sea's colour (E27.1):** the open sea and its shallows are slabs on the living surface. Their authored deep
+  blues (#2f6f8a …) only read as the owner's bright, clear aqua because the old light and grade overdrove them; under
+  the true sunlit light they went a dull grey-teal. They're now authored brighter by `SEA_LIFT` (Water.ts, 2.6 / 2.2 /
+  2.1 per linear channel), and the surface takes that lift back out as night falls (`uTrSea`, `seaTintAt`), so the
+  moonlit sea lands exactly on the colours the approved night was tuned with. The sea's slabs carry feature code 8
+  (`FEATURE.sea`) so the surface knows which ones to tint. Checked in `sunlit-shots`: the noon sea must stay a clear
+  aqua.
+- **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
+  25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
+  overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back
+  to the old bands (`SKY_BANDS_NIGHT`) as night falls, so the approved night sky is unchanged. The fogged half of each
+  `SKY` pair (a new game, `Sky.clarity` near 0.15) keeps a soft blue too; restoring the city still clears it to the
+  full blue. `sunlit-shots` fails if the noon sky has no blue.
 - **Motes:** warm light specks (`#ffe9a8`, glow 3, so they catch a little bloom) that drift on slow noise, rise
   gently and fade in and out over 4–10 s. They only spawn above restored tiles near the camera's focus. One
   instanced draw call. High 90, Medium 50, Low none; off with *Fewer particles* and with reduced motion.

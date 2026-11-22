@@ -2,15 +2,16 @@
  * Look 4.7: sky and haze colours in one place, so lighting (Look 1) can grade against them.
  * Each pair is [fogged, clear]: the world starts greyed under the fog and clears as areas are woken
  * (`Sky.clarity`, 0 … 1). The haze colour is also the scene fog colour and the sky's colour at the horizon,
- * so the ground fades seamlessly into the sky.
+ * so the ground fades seamlessly into the sky. E27.1: the fogged sky keeps a soft blue overhead and a little warmth
+ * low down, so a new game reads as a hazy sunny day, not an overcast one; the full clear blue comes with restoration.
  */
 export const SKY = {
   /** straight up */
-  zenith: ['#97a3b0', '#78afe6'],
-  /** about 25° up */
-  upper: ['#b1bac2', '#a4cdee'],
+  zenith: ['#86a5c8', '#78afe6'],
+  /** about 12° up (SKY_BANDS) */
+  upper: ['#a6bdd3', '#a4cdee'],
   /** a warm band just above the horizon */
-  glow: ['#cfcfc8', '#f6e2c0'],
+  glow: ['#d6d2c6', '#f6e2c0'],
   /** the horizon and the distance (scene fog colour) */
   haze: ['#c3c8c8', '#e6e2d4'],
   /** extra warmth in the sky toward the sun */
@@ -19,6 +20,15 @@ export const SKY = {
   cloudLit: ['#e7e9ea', '#ffffff'],
   cloudShade: ['#b4bac0', '#dde3ee'],
 } as const;
+
+/**
+ * E27.1 (#679): where the dome's bands sit (degrees above the horizon). The follow camera sees only the lowest 15° or
+ * so of sky, and with the blue starting at 25° all it showed was the warm glow band, which tone mapping turned a flat
+ * grey-white: an overcast look on a sunny day. Now the warm band hugs the horizon and the sky is blue by about 12°.
+ */
+export const SKY_BANDS = { glow: 3, upper: 12, zenith: 60 };
+/** The bands the approved moonlit night was tuned with: the dome eases back to these as night falls. */
+export const SKY_BANDS_NIGHT = { glow: 4, upper: 25, zenith: 90 };
 
 /**
  * Haze reach (world units past the camera target) as a function of how near the view is (0 far … 1 near). Close
@@ -83,16 +93,20 @@ export const DAY_LIGHT = {
   moonElevation: 42,
   /** E23.7.5: night is lit, not dimmed: a strong blue moon as the key light (it throws soft shadows) */
   moonColour: '#6d92ff',
-  moonShare: 0.3,
+  /**
+   * E27.1 (#679): night's own light strengths, not shares of the day's: the day's sun, fill and ambient can be
+   * retuned without touching the approved moonlit night. (These are the strengths E23.7.5 tuned night to.)
+   */
+  moonIntensity: 1.02,
   /** how fast the key light swings from the sun's side to the moon's as daylight goes (higher = later, quicker) */
   moonBlend: 1.6,
   /** the sun is warm (`lowSunColour`) below this height (0 horizon … 1 noon), easing to LOOK's colour above it */
   warmBelow: 0.45,
   /** the sun's colour when low (dawn and dusk) */
   lowSunColour: '#ffb27a',
-  /** night shares of the fill light and the ambient environment */
-  fillNight: 0.6,
-  envNight: 0.7,
+  /** night's fill light and ambient environment strengths */
+  fillNight: 0.36,
+  envNight: 0.805,
   fillNightColour: '#4f70e0',
   /**
    * E23.7.5: the ambient environment by night (LOOK.env's three colours by day): cool blue from the sky, the
@@ -103,6 +117,6 @@ export const DAY_LIGHT = {
   envSteps: 16,
   /** the unlit clouds' tint at night (linear 0–1 multipliers) */
   cloudNight: [0.3, 0.34, 0.48] as [number, number, number],
-  /** the warm rim on silhouettes at night */
-  rimNight: 0.25,
+  /** the warm rim on silhouettes at night (its strength, as LOOK.rim.intensity is by day) */
+  rimNight: 0.65,
 };

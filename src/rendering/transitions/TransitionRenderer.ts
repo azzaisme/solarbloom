@@ -7,7 +7,10 @@ import { FEATURE, fromTile, KIND, surfaceState } from './EndStates';
 import { transitionMaterial } from './TransitionMaterial';
 import { linHex, packHex, TrMeshBuilder, type Pen } from './TrMeshBuilder';
 import { PALETTE } from '../Materials';
-import { WATER } from '../Water';
+import { seaTintAt, WATER } from '../Water';
+
+/** E27.1 (#679): the sea's and the shallows' slab colours */
+const SEA_HEXES = new Set([...PALETTE.ground.sea, ...PALETTE.ground.shallows]);
 
 /** Something primitives can be added to (the chunk renderer's static builder, or a transition builder). */
 export interface Sink {
@@ -98,6 +101,12 @@ export class TransitionRenderer {
     this.material.setParameter('uTrStages', [S.fracture[1], S.heave[1], S.crumble[1], S.knit[0]]);
     this.material.setParameter('uTrLush', [TUNING.transitions.lushSoak, TUNING.transitions.lushDry, 0]);
     this.applyPalette();
+    this.setSeaNight(0);
+  }
+
+  /** E27.1 (#679): how far into night it is (0 day … 1 deep night): the sea's day lift fades back out. */
+  setSeaNight(n: number) {
+    this.material.setParameter('uTrSea', seaTintAt(n));
   }
 
   /**
@@ -323,7 +332,9 @@ export class TransitionRenderer {
       // Look 6.7: with no transition of its own, dead ground cracks from the side facing living ground, so hairline
       // cracks creep outward from restored tiles and connect across borders (shared edge points). Visual only.
       dir: live && tr ? (tr.dir ?? 0) : t.ground === 'polluted' || t.ground === 'prepared' ? this.sim.transitions.livingEdge(t) : 0,
-      feature: FEATURE[t.feature ?? 'lawn'] ?? 0,
+      // E27.1 (#679): the open sea and its shallows are tinted by night (Water.seaTintAt); a surf tile being restored
+      // has clear water as its target colour, so it keeps the water's own transition
+      feature: SEA_HEXES.has(to.hex) ? FEATURE.sea : (FEATURE[t.feature ?? 'lawn'] ?? 0),
       lushAt: lush ? (t.lushAt ?? lush - TUNING.neighbourhood.reservoir.lushSeconds) : 0,
       lushUntil: lush,
     };
