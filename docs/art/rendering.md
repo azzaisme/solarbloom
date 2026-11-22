@@ -191,6 +191,24 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
   foam's contact edge sits right on the bank's waterline; the colour by depth, the sand bed, the shore waves and the
   foam lines follow only `waterPull` of the pull, so the shallows trace the new outline but a narrow canal keeps its
   clear turquoise middle. None of it is solid: the tiles, paths, collision, the line of sight and saves are unchanged.
+- **Where decks meet the water (E28.W03, #696):** five things stand in the water.
+  - **Two decks:** the Landing's jetty (its model on six posts) and the Saltwind canal's plank bridge (once its gate is
+    open).
+  - **Walls standing in the sea:** the Long Causeway, the old pier and the mainland avenues over its canals.
+
+  `Bridges.ts` knows where each post stands. The jetty's come from the model's feet, measured from jetty.glb. It also
+  knows each deck's footprint and the end where it meets the land. With them `ChunkRenderer`:
+  - **shades the bank under a deck:** a soft contact shadow, darkened by `LOOK.bridge.shade` under the deck and fading
+    over `soft` past its edge;
+  - **gives each post a wet sleeve and a line of weed** at the waterline;
+  - **seats each deck's land end on a row of worn stones,** with a boulder and a pebble either side;
+  - **puts two beams under the plank bridge;**
+  - **wets the foot of every wall standing in water:** a band in a darker wet colour whose top edge wanders along the
+    wall (`wetLine`), with weed at the waterline.
+
+  The posts and decks also go to the water (`WaterDisturbance`): the posts as the `jetty` and `bridge:<x>,<z>` sources
+  (rings round them), the decks as covers. The swell lies flat under a cover, and `WaterSurface` darkens the water's
+  colour, the sky it reflects and its glints under it (`LOOK.bridge.under`). None of it is solid.
 - **A sunny sky (E27.1):** the follow camera sees only the lowest 15° or so of sky. With the dome's blue starting at
   25°, all it showed was the warm glow band, which tone mapping turned a flat grey-white, so a sunny day read as
   overcast. `SKY_BANDS` (data/sky.ts) now puts the warm band in the lowest 3° and the blue by 12°. The dome eases back

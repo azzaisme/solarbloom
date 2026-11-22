@@ -32,12 +32,13 @@ import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash,
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER } from './Water';
+import { deckOf, deckShade, jettyDeck, jettyLandEnd, jettyPosts, plankBridgeTiles, plankPost, wetLine, type Post, type Rect } from './Bridges';
 import { alongRun, bankHeight, bankPoint, bankSize, bankStrip, leanGeo, runLength, shoreHash, shoreRuns, waterlineAt, type BankColours, type BankGeo, type ShoreRoom } from './Shore';
 import { encodeWater, WATER_CLARITY, WATER_ENC, waterMaterial } from './WaterSurface';
 import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
-import { clearWaterDisturbers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
+import { clearWaterCovers, clearWaterDisturbers, setWaterCovers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 import { MOVE_TRIPS } from '../data/moveSpots';
 
@@ -1223,6 +1224,9 @@ export class ChunkRenderer {
       for (let c = 0, y = ground + W.courseFrom; y + W.courseHeight / 2 < top - 0.1; c++, y += W.courseStep)
         piece(bricks[(((line * 7 + c) % bricks.length) + bricks.length) % bricks.length], W.thick / 2 + W.courseProud, y, W.courseHeight, W.thick + W.courseProud, W.courseProud / 2);
       piece(R.coping[alive], W.thick / 2 + W.copingLip, top + 0.02, W.copingHeight, W.thick + W.copingLip * 2, 0);
+      // E28.W03 (#696): a wall standing in water (the causeway, the old pier, an avenue over a canal) is wet at its foot
+      const below = this.sim.grid.peek(t.roofId, t.x + dx, t.z + dz);
+      if (below && this.standsInWater(below)) this.wallWet(b, wx, wz, dx, dz, ground, alive, end0, end1);
       // ivy and hanging plants once the ground above is restored
       if (t.ground === 'restored') {
         const n = 2 + (t.variant % 3);
@@ -2360,12 +2364,16 @@ export class ChunkRenderer {
         this.slab(b, under[t.variant % under.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
         // its deck is 1.7 m up the model (the rope posts rise above it), so that height goes at the beach, not the top
         if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - JETTY_DECK * sc, J.z + J.d / 2, LANDING.jettyYaw, sc, sc, sc);
+        this.deckMeetsWater(b, t, h, jettyPosts(true), jettyLandEnd(true), h + 0.08);
+        this.feedJetty(t, true);
         return;
       }
       const sea = PALETTE.ground.sea;
       this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
       for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x, h + 0.06, z - 0.375 + i * 0.25], [0.98, 0.05, 0.22]);
       if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
+      this.deckMeetsWater(b, t, h, jettyPosts(false), jettyLandEnd(false), h + 0.085);
+      this.feedJetty(t, false);
       return;
     }
     // E23.13: a gate or bridge standing on a canal keeps the canal under it: the water, then the barricade on it while
@@ -2373,9 +2381,11 @@ export class ChunkRenderer {
     if (t.feature === 'obstacle' && this.overWater(t)) {
       const sea = PALETTE.ground.sea;
       this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      this.feedPlankBridge(t);
       if (t.blocked && t.prop && this.oldCityProp(b, t, x, h + 0.08, z)) return;
       for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x - 0.375 + i * 0.25, h + 0.06, z], [0.22, 0.05, 0.98]);
       b.add('cylinder', PALETTE.wood.deep, [x, h - 0.25, t.z % 2 ? z + 0.42 : z - 0.42], [0.09, 0.7, 0.09]);
+      this.plankBridge(b, t, h);
       return;
     }
     // E23.8.3.1: the Long Causeway's broken middle: its low deck under the sea, a few deck stones breaking the surface,
@@ -2688,6 +2698,186 @@ export class ChunkRenderer {
     return t.level !== undefined && (onJetty(t.x, t.z) || (t.feature === 'obstacle' && regionWater(t.x, t.z)));
   }
 
+  /**
+   * E28.W03 (#696): the ground a wall's foot meets has water on it: live water (the sea, a canal, restored water; not
+   * a pond, whose level falls and rises) or the Long Causeway's broken middle, its deck under the sea.
+   */
+  private standsInWater(n: TileData): boolean {
+    return (this.liveWater(n) !== undefined && !pondCell(n.x, n.z)) || (n.blocked && n.prop === 'causeway-broken');
+  }
+
+  /**
+   * E28.W03 (#696): a wall's foot where it stands in water: a band darker with the wet from just under the surface up
+   * to a line that wanders along the wall (`wetLine`), and a thin line of weed at the waterline. Both wrap the wall's
+   * face (over its brick courses) and close round its corners like the wall's own stones. Not solid.
+   */
+  private wallWet(b: Sink, wx: number, wz: number, dx: number, dz: number, ground: number, alive: number, end0: number, end1: number) {
+    const W = LOOK.wall;
+    const B = LOOK.bridge.wall;
+    const surf = ground + 0.08 - WATER.drop + 0.003;
+    const ax = dz ? 1 : 0;
+    const az = dx ? 1 : 0;
+    const face = W.thick + 2 * (W.courseProud + 0.006);
+    const reach = face / 2;
+    const lines = wetLine(wx, wz, ax, az);
+    const n = lines.length;
+    this.unsolid(() => {
+      for (let i = 0; i < n; i++) {
+        const a0 = i / n - 0.5 - (i === 0 ? reach * end0 : 0);
+        const a1 = (i + 1) / n - 0.5 + (i === n - 1 ? reach * end1 : 0);
+        const tall = lines[i] + 0.03;
+        const mid = (a0 + a1) / 2;
+        b.add('box', B.wet[alive], [wx + ax * mid, surf - 0.03 + tall / 2, wz + az * mid], [dx ? face : a1 - a0, tall, dz ? face : a1 - a0]);
+      }
+      const a0 = -0.5 - reach * end0 - 0.004;
+      const a1 = 0.5 + reach * end1 + 0.004;
+      const mid = (a0 + a1) / 2;
+      b.add('box', B.weed[alive], [wx + ax * mid, surf + B.weedHeight / 2 - 0.006, wz + az * mid], [dx ? face + 0.008 : a1 - a0, B.weedHeight, dz ? face + 0.008 : a1 - a0]);
+    });
+  }
+
+  /** E28.W03: draws without telling the line of sight (small dressing that was never solid before). */
+  private unsolid(draw: () => void) {
+    const solids = SOLID_SINK.current;
+    SOLID_SINK.current = undefined;
+    try {
+      draw();
+    } finally {
+      SOLID_SINK.current = solids;
+    }
+  }
+
+  /** E28.W03: a post's wet sleeve where it stands in the water (`surf`: the surface), and its line of weed. Not solid. */
+  private postSleeve(b: Sink, p: Post, surf: number) {
+    const S = LOOK.bridge.sleeve;
+    const d = 2 * (p.r + S.grow);
+    b.add('cylinder', S.wet, [p.x, surf + (S.height - S.sink) / 2, p.z], [d, S.height + S.sink, d]);
+    b.add('cylinder', S.weed, [p.x, surf + S.weedHeight / 2 - 0.004, p.z], [d + 0.008, S.weedHeight, d + 0.008]);
+  }
+
+  /**
+   * E28.W03 (#696): where a deck tile meets the water: the wet sleeves on the posts standing in this tile, and where
+   * the deck's land end crosses this tile, the worn stones it sits on (a row under the deck's edge, half into the
+   * bank, and a bigger stone either side of the deck where the end runs out). Not solid.
+   */
+  private deckMeetsWater(b: Sink, t: TileData, h: number, posts: Post[], end: { x0: number; z0: number; x1: number; z1: number; nx: number; nz: number } | undefined, deckTop: number, corners: readonly [boolean, boolean] = [true, true]) {
+    const surf = h + 0.08 - WATER.drop + 0.003;
+    const mine = (x: number, z: number) => Math.floor(x) === t.x && Math.floor(z) === t.z;
+    this.unsolid(() => {
+      for (const p of posts) if (mine(p.x, p.z)) this.postSleeve(b, p, surf);
+      if (!end) return;
+      const S = LOOK.bridge.sill;
+      const len = Math.hypot(end.x1 - end.x0, end.z1 - end.z0);
+      if (len < 1e-6) return;
+      const ux = (end.x1 - end.x0) / len;
+      const uz = (end.z1 - end.z0) / len;
+      const count = Math.max(1, Math.round(len * S.stones));
+      const step = len / count;
+      const land = h + 0.08;
+      for (let i = 0; i < count; i++) {
+        const along = (i + 0.5) * step;
+        const cx = end.x0 + ux * along + end.nx * S.depth * 0.15;
+        const cz = end.z0 + uz * along + end.nz * S.depth * 0.15;
+        if (!mine(cx, cz) && !mine(cx - end.nx * 0.2, cz - end.nz * 0.2)) continue;
+        const k = shoreHash(cx, cz, 6961);
+        const top = deckTop - 0.012 - k * 0.02;
+        const lx = step * (0.9 + 0.06 * k);
+        b.add('box', S.colours[Math.floor(k * S.colours.length) % S.colours.length], [cx, top - S.height / 2, cz], [ux ? lx : S.depth, S.height, uz ? lx : S.depth]);
+      }
+      // a rounded boulder either side, where the end runs out past the deck, half sunk into the ground, and a pebble
+      for (const [px, pz, sgn, on] of [[end.x0, end.z0, -1, corners[0]], [end.x1, end.z1, 1, corners[1]]] as const) {
+        if (!on) continue;
+        const cx = px + ux * sgn * 0.13 + end.nx * 0.06;
+        const cz = pz + uz * sgn * 0.13 + end.nz * 0.06;
+        if (!mine(px - end.nx * 0.3, pz - end.nz * 0.3)) continue;
+        const k = shoreHash(cx, cz, 6962);
+        const w = S.boulder * (0.85 + 0.3 * k);
+        b.add('sphere', S.colours[(Math.floor(k * 7) + 1) % S.colours.length], [cx, land + 0.01, cz], [w, w * 0.55, w * 0.85]);
+        b.add('sphere', PALETTE.stone.pebble, [cx + ux * sgn * w * 0.6 + end.nx * 0.05, land + 0.005, cz + uz * sgn * w * 0.6 + end.nz * 0.05], [w * 0.45, w * 0.25, w * 0.4]);
+      }
+    });
+  }
+
+  /**
+   * E28.W03 (#696): the canal's plank bridge (once its gate is open) meets the water: two beams under its planks, the
+   * sleeve on its post, and stones under each end where it lands on the bank. Not solid.
+   */
+  private plankBridge(b: Sink, t: TileData, h: number) {
+    const B = LOOK.bridge.stringer;
+    const g = this.sim.grid;
+    const z = t.z + 0.5;
+    this.unsolid(() => {
+      for (const s of [-1, 1]) b.add('box', PALETTE.wood.deep, [t.x + 0.5, h + 0.035 - B.size / 2, z + s * B.apart], [1, B.size, B.size]);
+    });
+    // its ends: the sides along the span (x) where the next tile is land; the big stones only at the bridge's own two
+    // sides, not between its tiles
+    const deckAt = (x: number, z: number) => {
+      const n = g.peek(t.roofId, x, z);
+      return !!n && this.overWater(n);
+    };
+    const corners: [boolean, boolean] = [!deckAt(t.x, t.z - 1), !deckAt(t.x, t.z + 1)];
+    let posts = [plankPost(t.x, t.z)];
+    for (const dx of [-1, 1]) {
+      const n = g.peek(t.roofId, t.x + dx, t.z);
+      if (!n || this.bankless(n)) continue;
+      const ex = dx < 0 ? t.x : t.x + 1;
+      this.deckMeetsWater(b, t, h, posts, { x0: ex, z0: t.z + 0.01, x1: ex, z1: t.z + 0.99, nx: dx, nz: 0 }, h + 0.085, corners);
+      posts = [];
+    }
+    if (posts.length) this.deckMeetsWater(b, t, h, posts, undefined, h + 0.085);
+  }
+
+  /**
+   * E28.W03 (#696): the jetty's posts and its deck, for the water (rings round the posts, the swell flat and the water
+   * shaded under the deck). Fed from its first tile, as drawn: the model's six posts, or the planks' while it's missing.
+   */
+  private feedJetty(t: TileData, model: boolean) {
+    const J = LANDING.jetty;
+    if (t.x !== J.x || t.z !== J.z) return;
+    setWaterDisturbers('jetty', jettyPosts(model));
+    setWaterCovers('jetty', [jettyDeck(model)]);
+  }
+
+  /**
+   * E28.W03 (#696): a canal's plank bridge for the water: while it's open, its posts (rings round them) and its deck
+   * (the swell flat and the water shaded under it), as one source per bridge (keyed by its lowest corner tile); while
+   * its barricade still stands, nothing. Fed from each of its tiles as it's drawn (they're all the same bridge).
+   */
+  private feedPlankBridge(t: TileData) {
+    const tiles = plankBridgeTiles(t, (x, z) => {
+      const n = this.sim.grid.peek(t.roofId, x, z);
+      return !!n && n.feature === 'obstacle' && this.overWater(n) ? n : undefined;
+    });
+    const key = `bridge:${Math.min(...tiles.map((n) => n.x))},${Math.min(...tiles.map((n) => n.z))}`;
+    if (tiles.some((n) => n.blocked)) {
+      clearWaterDisturbers(key);
+      clearWaterCovers(key);
+      return;
+    }
+    setWaterDisturbers(key, tiles.map((n) => plankPost(n.x, n.z)));
+    setWaterCovers(key, [deckOf(tiles)]);
+  }
+
+  /**
+   * E28.W03 (#696): the decks over the water round a tile (each once): the jetty's deck, or a canal bridge's tile while
+   * it's open. The bank under them is shaded (`deckShade`).
+   */
+  private decksNear(t: TileData): Rect[] {
+    const g = this.sim.grid;
+    const out: Rect[] = [];
+    let jetty = false;
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+        if (!n || !this.overWater(n)) continue;
+        if (onJetty(n.x, n.z)) {
+          if (!jetty) out.push(jettyDeck(oldCityModel('jetty') === 'jetty'));
+          jetty = true;
+        } else if (!n.blocked) out.push({ x0: n.x, z0: n.z + 0.01, x1: n.x + 1, z1: n.z + 0.99 }); // (its planks' ends)
+      }
+    return out;
+  }
+
   /** The colour of a tile's top, as `tile` draws it (pool banks borrow it from the neighbouring tile). */
   private topColour(t: TileData): string {
     const f = t.feature ?? 'lawn';
@@ -2994,6 +3184,15 @@ export class ChunkRenderer {
     const lawn = restored && (t.feature ?? 'lawn') !== 'paving' && (t.feature ?? 'lawn') !== 'road';
     const topAt = lawn ? (x: number, z: number) => turfAt(this.ctx, t, x, z) : undefined;
     const ranges = runs.map((run) => bankStrip(geo, run, top, surface, beach, colours, topAt, this.shoreRoom, [this.builtPast(t, run, 0), this.builtPast(t, run, run.length - 1)]));
+    // E28.W03 (#696): the bank under a deck (the jetty, a canal bridge) lies in its shade
+    const decks = this.decksNear(t);
+    if (decks.length)
+      for (let i = 0; i < geo.col.length; i += 3) {
+        const k = deckShade(geo.pos[i], geo.pos[i + 2], decks);
+        geo.col[i] *= k;
+        geo.col[i + 1] *= k;
+        geo.col[i + 2] *= k;
+      }
     b.patch(geo);
     if (far || this.fog === 'hidden') return;
     // the dressing: not solid, so the line of sight sees what it saw before

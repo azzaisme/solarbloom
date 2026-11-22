@@ -179,6 +179,7 @@ uniform vec4 uWaterFres;   // base, power, max, sky
 uniform float uWaterAmbient;
 uniform float uWaterReflTint;
 uniform vec4 uWaterRefl;   // strength (0 = off), distort, the reflected plane's height
+uniform vec3 uWaterUnder;  // E28.W03: the shade under a deck: how much darker, how far in under its edge, how far out past it
 uniform vec4 uWaterMisc;   // caustics, night, nightAlbedo, gloss
 uniform float uWaterTrTime; // the transition clock (TransitionRenderer.time)
 uniform vec3 uWaterSkyLow;
@@ -371,6 +372,19 @@ void sbWaterSetup() {
 	float glint = smoothstep(uWaterGlint.x - uWaterGlint.y - widen, uWaterGlint.x + uWaterGlint.y + widen, sl);
 	glint *= (uWaterGlint.y + 0.002) / (uWaterGlint.y + 0.002 + widen) * (1.0 - smoothstep(0.01, 0.03, fw)) * keep;
 	wEmit += uWaterLightCol * glint * uWaterGlint.z * (1.0 - wFoam) * smoothstep(0.0, 0.1, uWaterLightDir.y);
+	// ── E28.W03 (#696): under a deck low over the water (a cover) the water lies in its shade: its colour, the sky it
+	// reflects and the sun's glints all darken, from a little in under the deck's edge, fading out just past it ──
+	float shadeK = 0.0;
+	for (int i = 0; i < ${COVER_MAX}; i++) {
+		if (float(i) >= uWaterCoverN) break;
+		vec4 cv = uWaterCover[i];
+		vec2 o = max(cv.xy - p, p - cv.zw);
+		float sd = max(o.x, o.y) > 0.0 ? length(max(o, vec2(0.0))) : max(o.x, o.y);
+		shadeK = max(shadeK, 1.0 - smoothstep(-uWaterUnder.y, uWaterUnder.z, sd));
+	}
+	float lit = 1.0 - uWaterUnder.x * shadeK;
+	dAlbedo *= lit;
+	wEmit *= lit;
 }
 `;
 
@@ -605,6 +619,7 @@ export function applyWaterLook() {
   m.setParameter('uWaterNight', v3(W.night));
   m.setParameter('uWaterAmbient', W.ambient);
   m.setParameter('uWaterReflTint', W.reflectTint);
+  m.setParameter('uWaterUnder', [LOOK.bridge.under.shade, LOOK.bridge.under.inner, LOOK.bridge.under.soft]);
   m.setParameter('uWaterDepth', [0, W.deepAt, W.bedReach, W.bedShow]);
   m.setParameter('uWaterLap', [W.lap.reach, W.lap.length, W.lap.speed, W.lap.strength]);
   m.setParameter('uWaterFoamL', [W.foamLine.reach, W.foamLine.lines, W.foamLine.speed, W.foamLine.strength]);

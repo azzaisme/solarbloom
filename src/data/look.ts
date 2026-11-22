@@ -341,6 +341,37 @@ export const LOOK = {
      */
     overhang: { chance: 0.22, inset: 0.12, lean: 26, scale: 0.62 },
   },
+  /**
+   * E28.W03 (#696): where a deck, a pier or a causeway meets the water (Bridges.ts). Lengths are tiles; colours are
+   * [alive, dead] pairs where the ground beside them can be either.
+   */
+  bridge: {
+    /** the bank under a deck is darkened by this share (its contact shadow), fading out over `soft` past the deck's edge */
+    shade: 0.45,
+    soft: 0.22,
+    /**
+     * the water under a deck (WaterSurface, by the decks' covers): its colour and the sky it reflects darkened by `shade`
+     * from `inner` in under the deck's edge, fading out over `soft` past it
+     */
+    under: { shade: 0.55, inner: 0.3, soft: 0.35 },
+    /**
+     * a post's wet sleeve: from `sink` under the surface up to `height` above it, `grow` wider than the post, in `wet`,
+     * with a thin line of weed (`weed`, `weedHeight` tall) where it meets the water
+     */
+    sleeve: { height: 0.07, sink: 0.04, grow: 0.01, wet: '#4b3b2d', weed: '#5d6440', weedHeight: 0.016 },
+    /**
+     * the worn stones a deck's land end sits on: `depth` across, `height` down into the bank from just under the deck,
+     * `stones` to a tile of deck, in these colours; and a rounded boulder (`boulder` across) half sunk either side
+     */
+    sill: { depth: 0.18, height: 0.22, stones: 3, colours: ['#d3cab8', '#c2b9a6', '#dcd4c3'], boulder: 0.22 },
+    /** the plank bridge's two beams under each tile of planks: their thickness, and how far either side of the middle */
+    stringer: { size: 0.07, apart: 0.3 },
+    /**
+     * a wall standing in water: a wet band from the waterline up by `min` to `max` (wandering along it, `pieces` steps
+     * to a tile), in `wet`, with a line of weed at the waterline
+     */
+    wall: { min: 0.12, max: 0.28, pieces: 5, wet: ['#b5a891', '#837d72'], weed: ['#6c7448', '#646652'], weedHeight: 0.04 },
+  },
 };
 
 export interface TierSpec {
