@@ -8,12 +8,31 @@ import { bloomGetsHeart, flightSeconds, HEART_ASPECT, heartBox, HeartFlight, hea
 
 const W = 1280;
 const H = 800;
-/** the Deck at UI 150%: the objective card top left, the charge card top right */
+/**
+ * The Deck at UI 150% at the Great Bloom: the objective card top left, the charge card top right, the minimap, the
+ * prompt, the shortcut dock, the bloom message, and Bloombot in the lower middle (screen pixels).
+ */
 const CARDS = [
-  { left: 27, top: 27, right: 597, bottom: 330 },
-  { left: 883, top: 27, right: 1253, bottom: 200 },
+  { left: 27, top: 27, right: 597, bottom: 412 }, // measured in the game at the bloom (bird-heart-shots, RECTS=1)
+  { left: 881, top: 27, right: 1253, bottom: 143 },
 ];
-const box = heartBox(W, H, CARDS);
+const BLOCKERS = [
+  ...CARDS,
+  { left: 27, top: 473, right: 321, bottom: 767 }, // minimap
+  { left: 536, top: 680, right: 744, bottom: 761 }, // prompt
+  { left: 863, top: 503, right: 1253, bottom: 632 }, // the bloom message
+  { left: 590, top: 420, right: 690, bottom: 565 }, // Bloombot
+];
+const box = heartBox(W, H, BLOCKERS);
+/** is every point of the heart's outline, with a bird's half-wingspan round it, clear of every rect? */
+const clearOf = (b: Box, rects: typeof BLOCKERS) => {
+  const half = new HeartFlight(W, H, b, false).spanPx / 2;
+  for (let k = 0; k < 360; k++) {
+    const [x, y] = onScreen(b, ...outlineAt(k / 360));
+    for (const r of rects) if (x + half > r.left && x - half < r.right && y + half > r.top && y - half < r.bottom) return false;
+  }
+  return b.x >= 0 && b.x + b.w <= W;
+};
 const n = BIRD_HEART.birds;
 
 /** run a flight at 60 fps to time t, returning the flight */
@@ -75,21 +94,41 @@ describe('#689: the heart', () => {
 });
 
 describe('#689: where the heart goes', () => {
-  it('in the top band, between the cards, the size it can be', () => {
-    expect(box.x).toBeGreaterThanOrEqual(CARDS[0].right + BIRD_HEART.box.gap - 1e-6);
-    expect(box.x + box.w).toBeLessThanOrEqual(CARDS[1].left - BIRD_HEART.box.gap + 1e-6);
-    expect(box.y).toBeCloseTo(H * BIRD_HEART.box.top);
-    expect(box.y + box.h).toBeLessThan(H * 0.45);
-    expect(box.h / box.w).toBeCloseTo(HEART_ASPECT);
-    expect(box.w).toBeGreaterThan(W * 0.15);
+  it('with nothing in the way: a third of the screen wide, centred, at the top', () => {
+    const free = heartBox(W, H, []);
+    expect(free.w).toBeCloseTo(W * BIRD_HEART.box.width);
+    expect(free.x + free.w / 2).toBeCloseTo(W / 2);
+    expect(free.y).toBeCloseTo(H * BIRD_HEART.box.top);
+    expect(free.h / free.w).toBeCloseTo(HEART_ASPECT);
   });
 
-  it('with no HUD it is centred; with no room between the cards it drops below them', () => {
-    const free = heartBox(W, H, []);
-    expect(free.x + free.w / 2).toBeCloseTo(W / 2);
-    const tight = heartBox(W, H, [{ left: 0, top: 20, right: 600, bottom: 300 }, { left: 640, top: 20, right: 1280, bottom: 250 }]);
-    expect(tight.y).toBeGreaterThanOrEqual(300);
-    expect(tight.x + tight.w / 2).toBeCloseTo(W / 2);
+  it('on the Deck at UI 150%: about a third of the screen, as near the middle as the cards allow, clear of all of it', () => {
+    expect(clearOf(box, BLOCKERS)).toBe(true);
+    // (the objective card covers the left half down to y 412 here, and Bloombot stands below: 27% is what fits)
+    expect(box.w).toBeGreaterThanOrEqual(W * 0.26);
+    expect(Math.abs(box.x + box.w / 2 - W / 2)).toBeLessThanOrEqual(W * BIRD_HEART.box.aside + 1);
+  });
+
+  it('at UI 100% the full third fits, a little off the middle', () => {
+    // the HUD at two thirds the size, each piece shrunk toward the corner or edge it hangs from
+    const k = 2 / 3;
+    const anchors: [number, number][] = [[0, 0], [W, 0], [0, H], [W / 2, H], [W, H]];
+    const ui100 = BLOCKERS.slice(0, 5).map((r, i) => {
+      const [ax, ay] = anchors[i];
+      return { left: ax + (r.left - ax) * k, top: ay + (r.top - ay) * k, right: ax + (r.right - ax) * k, bottom: ay + (r.bottom - ay) * k };
+    });
+    const rects = [...ui100, BLOCKERS[5]];
+    const b = heartBox(W, H, rects);
+    expect(clearOf(b, rects)).toBe(true);
+    expect(b.w).toBeCloseTo(W * BIRD_HEART.box.width);
+    expect(Math.abs(b.x + b.w / 2 - W / 2)).toBeLessThanOrEqual(W * 0.1);
+  });
+
+  it('a crowded screen shrinks it, but it still fits clear', () => {
+    const crowd = [...BLOCKERS, { left: 300, top: 0, right: 980, bottom: 140 }];
+    const b = heartBox(W, H, crowd);
+    expect(clearOf(b, crowd)).toBe(true);
+    expect(b.w).toBeLessThan(box.w + 1e-6);
   });
 });
 
@@ -109,19 +148,22 @@ describe('#689: the flight', () => {
     const f = flyTo(formed);
     f.slots.forEach((s, i) => {
       const [x, y] = onScreen(box, s.u, s.v);
-      expect(Math.hypot(f.poses[i].x - x, f.poses[i].y - y), `bird ${i}`).toBeLessThan(0.5);
+      // (the first to arrive have begun bobbing in place: a few pixels up or down)
+      expect(Math.abs(f.poses[i].x - x), `bird ${i}`).toBeLessThan(0.5);
+      expect(Math.abs(f.poses[i].y - y), `bird ${i}`).toBeLessThanOrEqual(2 * BIRD_HEART.bob.size * box.h + 0.5);
     });
   });
 
-  it('while it holds every bird stays on the outline, inside its box', () => {
-    for (const t of [formed + 0.5, formed + BIRD_HEART.hold * 0.5, formed + BIRD_HEART.hold]) {
+  it('while it holds it stays a crisp heart: every bird in its own place, bobbing a few pixels, facing up', () => {
+    const bob = 2 * BIRD_HEART.bob.size * box.h + 0.5;
+    for (const t of [formed + 0.3, formed + 1, formed + BIRD_HEART.hold * 0.5, formed + BIRD_HEART.hold - 0.05]) {
       const f = flyTo(t);
-      for (const p of f.poses) {
-        expect(p.x).toBeGreaterThanOrEqual(box.x - 1);
-        expect(p.x).toBeLessThanOrEqual(box.x + box.w + 1);
-        expect(p.y).toBeGreaterThanOrEqual(box.y - 1);
-        expect(p.y).toBeLessThanOrEqual(box.y + box.h + 1);
-      }
+      f.slots.forEach((s, i) => {
+        const [x, y] = onScreen(box, s.u, s.v);
+        expect(Math.abs(f.poses[i].x - x), `bird ${i} at ${t.toFixed(2)}`).toBeLessThan(0.01);
+        expect(Math.abs(f.poses[i].y - y), `bird ${i} at ${t.toFixed(2)}`).toBeLessThanOrEqual(bob);
+      });
+      if (t > formed + 1) for (const p of f.poses) expect(Math.abs(Math.atan2(Math.sin(p.heading + Math.PI / 2), Math.cos(p.heading + Math.PI / 2)))).toBeLessThan(0.05);
     }
   });
 
@@ -195,7 +237,7 @@ describe('#689: once per Great Bloom, and nothing left after', () => {
 
   it('plays once at a time, flies through, and removes every bird when it ends', () => {
     const world = new pc.Entity('world');
-    const heart = new BirdHeart(world, bird);
+    const heart = new BirdHeart(world, undefined, bird);
     expect(heart.play(W, H, box, false)).toBe(true);
     expect(heart.play(W, H, box, false)).toBe(false); // a second call while it flies does nothing
     expect(world.children).toHaveLength(1);
@@ -218,7 +260,7 @@ describe('#689: once per Great Bloom, and nothing left after', () => {
 
   it('the birds face the camera with their backs, in front of it at the flock depth', () => {
     const world = new pc.Entity('world');
-    const heart = new BirdHeart(world, bird);
+    const heart = new BirdHeart(world, undefined, bird);
     heart.play(W, H, box, false);
     for (let k = 0; k < 60 * (BIRD_HEART.stagger + BIRD_HEART.flyIn + 0.5); k++) heart.update(1 / 60, cam);
     for (const b of world.children[0].children as pc.Entity[]) {

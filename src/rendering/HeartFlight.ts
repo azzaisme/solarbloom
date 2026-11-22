@@ -5,8 +5,8 @@ import { BIRD_HEART } from '../data/birdHeart';
  * reads the same from any camera. Pure: no PlayCanvas, so the tests can follow every bird. `BirdHeart` draws it.
  *
  * Normal: half the flock sets off from the left edge and half from the right, staggered, and each swoops on a curve
- * into its own place on the heart's outline, slowing to arrive. The heart holds while its birds glide a little way
- * round the outline together, then they peel away out and up off the screen. Reduced motion: no flight across the
+ * into its own place on the heart's outline, slowing to arrive. The heart holds, each bird bobbing gently in its
+ * place so the dip and the point stay crisp, then they peel away out and up off the screen. Reduced motion: no flight across the
  * screen; the birds grow into their places, hold, and shrink away.
  */
 
@@ -116,32 +116,43 @@ export function heartSlots(n: number): Slot[] {
 
 // ───────────── where the heart goes on screen ─────────────
 
+const overlaps = (x: number, y: number, m: number, r: Rect) => x + m > r.left && x - m < r.right && y + m > r.top && y - m < r.bottom;
+
 /**
- * The heart's box: in the top band of the screen, centred in the gap between the HUD cards there (the objective card on
- * the left, the charge card on the right: `blockers`, in screen pixels), as big as fits. If the gap is too narrow it
- * drops below the cards instead.
+ * The heart's box: a third of the screen wide, centred, as high as it goes while every bird on its outline (with its
+ * wingspan) stays clear of the `blockers` (the HUD cards, the bloom message, the prompt, Bloombot; screen pixels). If no
+ * place fits it moves aside (up to `box.aside` of the screen), then shrinks, step by step. The test is the heart itself, not its box: its round
+ * top corners and narrow point leave room the box would not.
  */
 export function heartBox(w: number, h: number, blockers: Rect[]): Box {
   const B = BIRD_HEART.box;
-  const top = blockers.filter((r) => r.top < h * 0.5 && r.bottom > 0);
-  let lo = 0;
-  let hi = w;
-  for (const r of top) {
-    if ((r.left + r.right) / 2 < w / 2) lo = Math.max(lo, r.right);
-    else hi = Math.min(hi, r.left);
+  const full = Math.min(B.width * w, (B.maxHeight * h) / HEART_ASPECT);
+  const ring = Array.from({ length: 96 }, (_, k) => outlineAt(k / 96));
+  const fits = (bx: Box) => {
+    const m = (BIRD_HEART.span * OUTLINE_LENGTH * bx.w) / BIRD_HEART.birds / 2 + B.gap;
+    if (bx.x < B.gap || bx.x + bx.w > w - B.gap) return false;
+    for (const [u, v] of ring) {
+      const [x, y] = onScreen(bx, u, v);
+      for (const r of blockers) if (overlaps(x, y, m, r)) return false;
+    }
+    return true;
+  };
+  // biggest first; for each size, the nearest the middle it can be (the Deck's big objective card can push it right)
+  for (let k = 1; k >= 0.5 - 1e-9; k -= 0.05) {
+    const bw = full * k;
+    const bh = bw * HEART_ASPECT;
+    for (let off = 0; off <= B.aside + 1e-9; off += 0.02)
+      for (const sd of off ? [-1, 1] : [1]) {
+        const x = w / 2 + sd * off * w - bw / 2;
+        for (let y = B.top * h; y + bh <= B.lowest * h; y += h * 0.01) {
+          const bx = { x, y, w: bw, h: bh };
+          if (fits(bx)) return bx;
+        }
+      }
   }
-  const fit = (avail: number) => Math.min(avail, B.maxWidth * w, (B.maxHeight * h) / HEART_ASPECT);
-  let bw = fit(hi - lo - 2 * B.gap);
-  let cx = (lo + hi) / 2;
-  let y = h * B.top;
-  if (bw < w * 0.14) {
-    // no room between the cards: below them, across the middle
-    cx = w / 2;
-    bw = fit(w - 2 * B.gap);
-    y = Math.max(y, ...top.map((r) => r.bottom + B.gap));
-  }
-  const bh = bw * HEART_ASPECT;
-  return { x: cx - bw / 2, y, w: bw, h: bh };
+  // nothing fits (a very busy screen): the smallest heart, centred at the top
+  const bw = full * 0.5;
+  return { x: w / 2 - bw / 2, y: B.top * h, w: bw, h: bw * HEART_ASPECT };
 }
 
 /** A unit-box point (u, v up) on screen in `box`. */
@@ -182,18 +193,20 @@ export interface BirdPose {
 }
 
 /** Where a bird of `slot` is at time t of the flight (no heading yet: `HeartFlight` steers). */
-export function birdAt(i: number, slot: Slot, t: number, w: number, box: Box, calm: boolean): { x: number; y: number; scale: number; flap: number; gone: boolean } {
+/** Up the screen: the way the birds face while the heart holds, like gulls hanging in the wind. */
+export const HOLD_FACING = -Math.PI / 2;
+
+export function birdAt(i: number, slot: Slot, t: number, w: number, box: Box, calm: boolean): { x: number; y: number; scale: number; flap: number; gone: boolean; face?: number } {
   const H = BIRD_HEART;
   const [sx, sy] = onScreen(box, slot.u, slot.v);
   if (calm) {
     const { fadeIn, hold, fadeOut } = H.calm;
     const scale = t < fadeIn ? smooth(t / fadeIn) : t < fadeIn + hold ? 1 : 1 - smooth((t - fadeIn - hold) / fadeOut);
-    return { x: sx, y: sy, scale, flap: H.flap.glide, gone: t >= fadeIn + hold + fadeOut };
+    return { x: sx, y: sy, scale, flap: H.flap.glide, gone: t >= fadeIn + hold + fadeOut, face: HOLD_FACING };
   }
   const t0 = jitter(i, 1) * H.stagger;
   const arrive = t0 + H.flyIn;
-  const formed = H.stagger + H.flyIn;
-  const held = formed + H.hold;
+  const held = H.stagger + H.flyIn + H.hold;
   if (t < arrive) {
     // the swoop in: a curve from just off its edge, a little below its place, rising and slowing into the heart
     const inward = -slot.side;
@@ -213,12 +226,15 @@ export function birdAt(i: number, slot: Slot, t: number, w: number, box: Box, ca
     const y = P.reduce((a, c, k) => a + c[1] * b[k], 0);
     return { x, y, scale: 1, flap: H.flap.fly - (H.flap.fly - H.flap.glide) * smooth(((t - t0) / H.flyIn - 0.6) / 0.4), gone: false };
   }
-  // the hold: every bird glides the same little way round the outline, easing in from rest
-  const glide = H.drift * easeIn((t - formed) / H.hold) * (t > formed ? 1 : 0);
-  const [u, v] = outlineAt(slot.s + glide);
-  const [hx, hy] = onScreen(box, u, v);
+  // the hold: each bird stays in its place, bobbing gently (from rest, out of step with its neighbours)
+  const since = t - arrive;
+  const bob = Math.sin(since * H.bob.hz * Math.PI * 2 + jitter(i, 4) * 0.8) - Math.sin(jitter(i, 4) * 0.8);
+  const hx = sx;
+  const hy = sy + bob * H.bob.size * box.h * Math.min(1, since / 0.6);
+  const u = slot.u;
+  const v = slot.v;
   const t1 = held + jitter(i, 3) * 0.4;
-  if (t < t1) return { x: hx, y: hy, scale: 1, flap: H.flap.glide, gone: false };
+  if (t < t1) return { x: hx, y: hy, scale: 1, flap: H.flap.glide, gone: false, face: HOLD_FACING };
   // breaking away: out from the heart's middle, up, and back toward its own side, faster and faster
   let ox = u + slot.side * 0.35;
   let oy = -v - 0.6;
@@ -256,16 +272,10 @@ export class HeartFlight {
     this.slots = heartSlots(n);
     this.poses = this.slots.map((sl, i) => {
       const p = birdAt(i, sl, 0, w, box, calm);
-      // flying in, a bird starts heading in from its edge; in the calm heart, along the outline
-      const heading = calm ? this.tangent(sl.s) : sl.side < 0 ? 0 : Math.PI;
+      // flying in, a bird starts heading in from its edge; in the calm heart it faces up from the start
+      const heading = calm ? HOLD_FACING : sl.side < 0 ? 0 : Math.PI;
       return { x: p.x, y: p.y, scale: p.scale, heading, bank: 0, flap: p.flap, shown: p.scale > 0 };
     });
-  }
-
-  /** The heading along the outline at s (going round), on screen. */
-  private tangent(s: number): number {
-    const [a, b] = [onScreen(this.box, ...outlineAt(s - 0.002)), onScreen(this.box, ...outlineAt(s + 0.002))];
-    return Math.atan2(b[1] - a[1], b[0] - a[0]);
   }
 
   /** The bird's on-screen size: its wingspan in pixels, a share of the space between neighbours on the outline. */
@@ -284,8 +294,8 @@ export class HeartFlight {
       const vx = n.x - p.x;
       const vy = n.y - p.y;
       const speed = Math.hypot(vx, vy) / Math.max(dt, 1e-6);
-      // head where it's going while it moves; nearly still (arriving, or calm), head along the outline
-      const want = speed > 12 ? Math.atan2(vy, vx) : this.calm ? this.tangent(sl.s) : p.heading;
+      // in the heart, face up; flying, head where it's going; slowing to arrive, keep the heading it has
+      const want = n.face ?? (speed > 12 ? Math.atan2(vy, vx) : p.heading);
       let d = want - p.heading;
       d = Math.atan2(Math.sin(d), Math.cos(d));
       const turn = Math.max(-turnRate * dt, Math.min(turnRate * dt, d));

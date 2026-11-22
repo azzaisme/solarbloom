@@ -467,7 +467,7 @@ export class Game {
       this.cat.rebuildAll();
     };
     this.birds = new Birds(this.scene.world);
-    this.birdHeart = new BirdHeart(this.scene.world);
+    this.birdHeart = new BirdHeart(this.scene.world, this.app.graphicsDevice);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
     this.cloudWall = new CloudWall(this.sim, this.scene.world, this.app.graphicsDevice, this.scene.sun.up, this.app.batcher ?? undefined);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
@@ -4728,20 +4728,34 @@ export class Game {
 
   /** E21.6: a short celebration per tier: rings and sparks from the fountain, a fanfare. */
   /**
-   * #689: the heart of birds, laid out in the top band of the screen between the HUD's cards there (the objective card
-   * and the charge card), so it reads from whatever camera the bloom is seen through and covers no card or message.
+   * #689: the heart of birds, laid out on screen so it reads from whatever camera the bloom is seen through: a third of
+   * the screen wide, centred and as high as it goes clear of the HUD (its cards, the minimap, the prompt, the bloom
+   * message and the other toasts) and of Bloombot.
    */
   private playBirdHeart() {
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     const cr = c.getBoundingClientRect();
-    const cards: Rect[] = [];
-    for (const id of ['obj', 'res']) {
-      const el = document.getElementById(id);
-      if (!el || el.hidden || el.offsetParent === null) continue;
+    const blockers: Rect[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('#obj, #res, #minimap, #prompt, #dock, #toasts .toast')) {
+      if (el.hidden || el.offsetParent === null) continue;
       const r = el.getBoundingClientRect();
-      if (r.width && r.height) cards.push({ left: r.left - cr.left, top: r.top - cr.top, right: r.right - cr.left, bottom: r.bottom - cr.top });
+      if (r.width && r.height) blockers.push({ left: r.left - cr.left, top: r.top - cr.top, right: r.right - cr.left, bottom: r.bottom - cr.top });
     }
-    this.birdHeart.play(cr.width, cr.height, heartBox(cr.width, cr.height, cards), this.settings.reducedMotion);
+    // Bloombot: its feet to above its head, a little wider than it is
+    if (this.bot) {
+      const p = this.bot.pose;
+      const y = this.groundY(p.x, p.z);
+      const pts = [
+        [0, 0, 0],
+        [0, 1.3, 0],
+        [-0.5, 0.6, 0],
+        [0.5, 0.6, 0],
+        [0, 0.6, -0.5],
+        [0, 0.6, 0.5],
+      ].map(([dx, dy, dz]) => this.camera.cam.worldToScreen(new pc.Vec3(p.x + dx, y + dy, p.z + dz)));
+      blockers.push({ left: Math.min(...pts.map((q) => q.x)), top: Math.min(...pts.map((q) => q.y)), right: Math.max(...pts.map((q) => q.x)), bottom: Math.max(...pts.map((q) => q.y)) });
+    }
+    this.birdHeart.play(cr.width, cr.height, heartBox(cr.width, cr.height, blockers), this.settings.reducedMotion);
   }
 
   private celebrateTier(tier: number) {

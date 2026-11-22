@@ -430,6 +430,8 @@ const fauna = {
   body: '#3b3b45',
   gull: '#f4efe6',
   gullBeak: '#ffb347',
+  /** #689: the Great Bloom's heart gulls: pale backs, soft grey inner wings, dark tips (they show against a pale sky) */
+  heartGull: { back: '#fbf8f1', wing: '#e3e6ea', tip: '#3f4652' },
   butterflyBlue: '#8fd3ff',
   pond: '#4cc3ea',
   helperArm: '#4fa3c9',

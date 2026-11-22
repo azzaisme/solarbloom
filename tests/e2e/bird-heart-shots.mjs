@@ -92,6 +92,7 @@ async function film(name, { reducedMotion = false, turn = false } = {}) {
       );
       const b = { left: st.box.x, top: st.box.y, right: st.box.x + st.box.w, bottom: st.box.y + st.box.h };
       const hits = rects.filter((r) => overlap(b, r));
+      if (process.env.RECTS) console.log(JSON.stringify({ box: st.box, rects }));
       check(hits.length === 0, `${name}: the heart (${Math.round(b.left)}–${Math.round(b.right)} × ${Math.round(b.top)}–${Math.round(b.bottom)}) clears the HUD and the bloom message${hits.length ? `: hits ${hits.map((r) => r.id).join(', ')}` : ''}`);
       check(rects.some((r) => String(r.id).includes('toast')), `${name}: the bloom message is up beside it`);
     }
@@ -120,7 +121,7 @@ async function film(name, { reducedMotion = false, turn = false } = {}) {
       g.birdHeart.stop();
       return { a, b, n };
     });
-    check(once.a && !once.b && once.n === 26, `${name}: one flock at a time (${once.n} birds)`);
+    check(once.a && !once.b && once.n === 36, `${name}: one flock at a time (${once.n} birds)`);
   }
   check(errors.length === 0, `${name}: no page errors${errors.length ? ` (${errors.slice(0, 3).join(' | ')})` : ''}`);
   await page.close();
