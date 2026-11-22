@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { LOOK } from '../src/data/look';
 import { waterDistance } from '../src/rendering/ChunkRenderer';
 import { obliqueClip } from '../src/rendering/WaterReflection';
-import { WATER_CLARITY, WATER_ENC, encodeWater, setWaterFrame, waterColourAt, waterFresnel, waterMaterial } from '../src/rendering/WaterSurface';
+import { WATER_CLARITY, WATER_ENC, encodeWater, setWaterFrame, waterColourAt, waterFade, waterFresnel, waterMaterial, waterReflectOn } from '../src/rendering/WaterSurface';
 
 /**
  * E28.W01 (#694): one water surface for the sea, its shallows, the surf and restored pools. Turquoise by the shore,
@@ -92,10 +92,14 @@ describe('water look values', () => {
     expect(W.nightAlbedo).toBeLessThan(1);
   });
 
-  it('the planar reflection is High only', () => {
+  it('the planar reflection is High only, and never on the Steam Deck preset (was water-reflect)', () => {
     expect(LOOK.tiers.high.waterReflect).toBe(true);
     expect(LOOK.tiers.medium.waterReflect).toBe(false);
     expect(LOOK.tiers.low.waterReflect).toBe(false);
+    expect(waterReflectOn('high', false)).toBe(true);
+    expect(waterReflectOn('medium', false)).toBe(false);
+    expect(waterReflectOn('low', false)).toBe(false);
+    for (const t of ['high', 'medium', 'low'] as const) expect(waterReflectOn(t, true), t).toBe(false);
   });
 });
 
@@ -128,8 +132,31 @@ describe('water colour and Fresnel', () => {
 });
 
 describe('water vertex encoding', () => {
+  it('carries the clarity before a restore in blue (the same as now when there is none)', () => {
+    expect(encodeWater(1, WATER_CLARITY.clear)[2]).toBe(255);
+    expect(encodeWater(1, WATER_CLARITY.clear, WATER_CLARITY.murky)[2]).toBe(Math.round(WATER_CLARITY.murky * 255));
+  });
+
+  it("a restore's clarity fade eases from before to now over the restore's own window", () => {
+    expect(waterFade(4, 5, 10)).toBe(0); // not started
+    expect(waterFade(5, 5, 10)).toBe(0);
+    expect(waterFade(10, 5, 10)).toBeCloseTo(0.5, 9);
+    expect(waterFade(15, 5, 10)).toBe(1);
+    expect(waterFade(99, 5, 10)).toBe(1);
+    // eased: slow at the ends, steady through the middle
+    expect(waterFade(6, 5, 10)).toBeLessThan(0.1);
+    expect(waterFade(14, 5, 10)).toBeGreaterThan(0.9);
+    let prev = 0;
+    for (let t = 5; t <= 15; t += 0.5) {
+      expect(waterFade(t, 5, 10)).toBeGreaterThanOrEqual(prev);
+      prev = waterFade(t, 5, 10);
+    }
+    // no fade (long finished) reads as now
+    expect(waterFade(0, -1e6, 1)).toBe(1);
+  });
+
   it('packs distance into red and clarity into green, clamped', () => {
-    expect(encodeWater(0, WATER_CLARITY.clear)).toEqual([0, 255, 0, 255]);
+    expect(encodeWater(0, WATER_CLARITY.clear)).toEqual([0, 255, 255, 255]);
     expect(encodeWater(WATER_ENC, WATER_CLARITY.clear)[0]).toBe(255);
     expect(encodeWater(99, 1)[0]).toBe(255);
     expect(encodeWater(-1, 1)[0]).toBe(0);
@@ -216,5 +243,31 @@ describe('water material', () => {
     expect(param('uWaterSkyLow')[2]).toBeCloseTo(Math.pow(0.3, 2.2), 5);
     setWaterFrame({ time: 1, cam: { x: 0, y: 5, z: 0 }, night: 0, skyLow: [0.9, 0.9, 0.85], skyHigh: [0.5, 0.7, 0.95] });
     expect(param('uWaterRefl')[0]).toBe(0);
+  });
+
+  it('by day the water is untouched by the night; dusk sits in between; night needs no tier (was water-night)', () => {
+    const at = (night: number) => setWaterFrame({ time: 1, cam: { x: 0, y: 5, z: 0 }, night, skyLow: [0.5, 0.5, 0.6], skyHigh: [0.3, 0.4, 0.7] });
+    at(0);
+    expect(param('uWaterMisc')[1]).toBe(0);
+    expect(param('uWaterMisc')[0]).toBeCloseTo(LOOK.water.caustics, 9);
+    at(0.5);
+    expect(param('uWaterMisc')[1]).toBe(0.5);
+    expect(param('uWaterMisc')[0]).toBeCloseTo(LOOK.water.caustics * 0.5, 9);
+    at(1);
+    expect(param('uWaterMisc')[1]).toBe(1);
+    // out of range clamps
+    at(3);
+    expect(param('uWaterMisc')[1]).toBe(1);
+    at(0);
+  });
+
+  it('the shader tints by the same navy LOOK names, in linear', () => {
+    const n = param('uWaterNight');
+    const c = parseInt(LOOK.water.night.slice(1), 16);
+    const lin = (v: number) => Math.pow(v / 255, 2.2);
+    expect(n[0]).toBeCloseTo(lin((c >> 16) & 255), 3);
+    expect(n[1]).toBeCloseTo(lin((c >> 8) & 255), 3);
+    expect(n[2]).toBeCloseTo(lin(c & 255), 3);
+    expect(param('uWaterAmbient') as unknown as number).toBe(LOOK.water.ambient);
   });
 });

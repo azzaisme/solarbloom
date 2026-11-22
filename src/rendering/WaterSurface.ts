@@ -25,11 +25,26 @@ export const WATER_ENC = 8;
 /** How clear a live water tile is: dead surf is murky; the sea, restored water and ponds are clear. */
 export const WATER_CLARITY = { murky: 0.3, clear: 1 } as const;
 
-/** A water vertex's colour bytes: distance to land and clarity. */
-export function encodeWater(dist: number, clarity: number): [number, number, number, number] {
+/**
+ * A water vertex's colour bytes: distance to land (red), clarity (green) and the clarity before a restore still
+ * playing on it (blue; the same as green when there's none). Its uv0 carries that restore's window on the transition
+ * clock (start, length), and the shader fades blue to green over it, in step with the tile's own transition.
+ */
+export function encodeWater(dist: number, clarity: number, from = clarity): [number, number, number, number] {
+  const byte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
   const r = Math.round((Math.min(WATER_ENC, Math.max(0, dist)) / WATER_ENC) * 255);
-  const g = Math.round(Math.min(1, Math.max(0, clarity)) * 255);
-  return [r, g, 0, 255];
+  return [r, byte(clarity), byte(from), 255];
+}
+
+/** How far a restore's clarity fade has got (0 … 1, eased), as the shader works it out. */
+export function waterFade(time: number, t0: number, d: number): number {
+  const x = Math.min(1, Math.max(0, (time - t0) / Math.max(d, 1e-3)));
+  return x * x * (3 - 2 * x);
+}
+
+/** Whether the planar reflection runs: on the tiers that ask for it (High), never on the Steam Deck preset. */
+export function waterReflectOn(tier: keyof typeof LOOK.tiers, deck: boolean): boolean {
+  return !!LOOK.tiers[tier]?.waterReflect && !deck;
 }
 
 /** The water's colour by depth (linear), as the shader mixes it before bed, foam and light (tests and tuning). */
@@ -81,6 +96,7 @@ uniform float uWaterAmbient;
 uniform float uWaterReflTint;
 uniform vec4 uWaterRefl;   // strength (0 = off), distort, the reflected plane's height
 uniform vec4 uWaterMisc;   // caustics, night, nightAlbedo, gloss
+uniform float uWaterTrTime; // the transition clock (TransitionRenderer.time)
 uniform vec3 uWaterSkyLow;
 uniform vec3 uWaterSkyHigh;
 uniform sampler2D uWaterReflectTex;
@@ -124,6 +140,10 @@ void sbWaterSetup() {
 	#ifdef STD_DIFFUSE_VERTEX
 		dist = vVertexColor.r * ${WATER_ENC.toFixed(1)};
 		clarity = vVertexColor.g;
+		#ifdef STD_AO
+			// a restore still playing: the clarity before it (blue) fades to now (green) over its window (uv0)
+			clarity = mix(vVertexColor.b, clarity, smoothstep(0.0, 1.0, (uWaterTrTime - vUv0.x) / max(vUv0.y, 1e-3)));
+		#endif
 	#endif
 	float px = length(fwidth(p));
 	// ── ripples: drifting waves in a few directions, the finer ones fading with distance. Their field is bent by
@@ -281,6 +301,12 @@ export function waterMaterial(device?: pc.GraphicsDevice): pc.StandardMaterial {
       chunks.set('emissivePS', WATER_EMISSIVE_PS);
       // a 1×1 placeholder until (and unless) the planar reflection runs
       reflectTex = new pc.Texture(device, { width: 1, height: 1, format: pc.PIXELFORMAT_RGBA8, mipmaps: false, name: 'water-reflect-none' });
+      // a white 1×1 AO map (no effect) only so the shader gets uv0, which carries a restore's fade window
+      const white = new pc.Texture(device, { width: 1, height: 1, format: pc.PIXELFORMAT_RGBA8, mipmaps: false, name: 'water-uv0' });
+      const px = white.lock();
+      px.set([255, 255, 255, 255]);
+      white.unlock();
+      m.aoMap = white;
       m.setParameter('uWaterReflectTex', reflectTex);
     } catch {
       /* an engine without per-material chunks: plain lit water */
@@ -328,6 +354,8 @@ export interface WaterFrame {
   /** the sky near the horizon and higher up, 0–1 sRGB (Sky.reflectColours) */
   skyLow: readonly [number, number, number];
   skyHigh: readonly [number, number, number];
+  /** the transition clock (TransitionRenderer.time), for restores' clarity fades */
+  trTime?: number;
   /** the planar reflection this frame (High), or none */
   reflect?: { tex: pc.Texture; viewProj: pc.Mat4; planeY: number };
 }
@@ -343,6 +371,7 @@ export function setWaterFrame(f: WaterFrame) {
   if (!m) return;
   const W = LOOK.water;
   m.setParameter('uWaterTime', f.time);
+  m.setParameter('uWaterTrTime', f.trTime ?? 0);
   cam3[0] = f.cam.x;
   cam3[1] = f.cam.y;
   cam3[2] = f.cam.z;

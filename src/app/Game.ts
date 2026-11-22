@@ -147,7 +147,7 @@ import { AUTOMATION } from '../data/automation';
 import { itemDef } from '../data/items';
 import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
-import { setWaterFrame, waterLayer } from '../rendering/WaterSurface';
+import { setWaterFrame, waterLayer, waterReflectOn } from '../rendering/WaterSurface';
 import { WaterReflection } from '../rendering/WaterReflection';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'In flower', 'Radiant'];
@@ -2858,12 +2858,13 @@ export class Game {
     const seaY = this.chunks?.seaY;
     // (not while the loading screen warms shaders up: its water sample sits on the World layer, which the reflection
     // draws, and would read the very texture being drawn)
-    const on = !!LOOK.tiers[this.gfxTier]?.waterReflect && !this.deck && seaY !== undefined && this.warmup.state === 'done';
+    const on = waterReflectOn(this.gfxTier, this.deck) && seaY !== undefined && this.warmup.state === 'done';
     this.waterReflection?.update(on, seaY ?? 0);
     const tex = this.waterReflection?.tex;
     const { low, high } = this.sky.reflectColours();
     setWaterFrame({
       time: this.chunks.waterTime,
+      trTime: this.transitions?.time ?? 0,
       cam: this.camera.entity.getPosition(),
       night: 1 - this.dayNight.daylight,
       skyLow: low,

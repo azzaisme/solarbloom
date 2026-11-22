@@ -439,7 +439,19 @@ interface PoolGeo {
   pos: number[];
   col: number[];
   idx: number[];
+  /** E28.W01: per vertex, the clarity fade's start and length on the transition clock (uv0) */
+  tr: number[];
 }
+
+/** E28.W01: a water vertex's clarity now (`to`) and before a restore (`from`), and that restore's window. */
+interface WaterState {
+  to: number;
+  from: number;
+  t0: number;
+  d: number;
+}
+/** no fade: long finished */
+const NO_FADE = { t0: -1e6, d: 1 };
 
 interface ChunkView {
   key: string;
@@ -1567,7 +1579,7 @@ export class ChunkRenderer {
         this.chunkPlots.push({ p, look, growth: look ? (this.plots.growth?.(p) ?? 1) : 1 });
         if (look) for (let j = 0; j < p.size; j++) for (let i = 0; i < p.size; i++) this.plotCells.add(`${p.x + i},${p.z + j}`);
       }
-    const pool: PoolGeo = { pos: [], col: [], idx: [] };
+    const pool: PoolGeo = { pos: [], col: [], idx: [], tr: [] };
     const gtex = GROUND_TEXTURES.map(emptyGroundTexGeo);
     for (const t of c.tiles) {
       if (!t) continue;
@@ -1621,8 +1633,8 @@ export class ChunkRenderer {
       // E28.W01: the water's surface over every stretch of live water (the sea, its shallows, the surf, restored pools,
       // a pond that holds any), on its own layer. Always, even mid-transition: nothing rebuilds the chunk when a
       // transition ends, so a tile skipped now would keep its bare slab (restored surf clears in one step)
-      const clarity = fog === 'hidden' ? undefined : this.liveWater(t);
-      if (clarity !== undefined) this.waterSurface(pool, t, th, clarity, v.far ? 1 : WATER.grid);
+      const ws = fog === 'hidden' ? undefined : this.waterState(t);
+      if (ws) this.waterSurface(pool, t, th, ws, v.far ? 1 : WATER.grid);
       // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
       // (not the jetty: its tiles are paving underneath, but its wooden deck is the model's)
       const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !this.overWater(t) ? this.paintedGround(t) : undefined;
@@ -2146,13 +2158,14 @@ export class ChunkRenderer {
         addGroundFan(gtex[GROUND_TEXTURES.indexOf('silt-bed')], 'silt-bed', sq[0], sq.slice(1), surf + 0.002, [k, k, k]);
       }
       // E28.W01: the water's surface carries on into the corner, right up to the rounded bank
-      const clarity = this.fog !== 'hidden' ? this.liveWater(n) : undefined;
-      if (clarity !== undefined) {
+      const st = this.fog !== 'hidden' ? this.waterState(n) : undefined;
+      if (st) {
         const land = this.landAround(n, 1);
         const base = pool.pos.length / 3;
         for (const [px, pz] of sq) {
           pool.pos.push(px, surf + 0.003, pz);
-          pool.col.push(...encodeWater(waterDistance(px, pz, land), clarity));
+          pool.col.push(...encodeWater(waterDistance(px, pz, land), st.to, st.from));
+          pool.tr.push(st.t0, st.d);
         }
         pool.idx.push(base, base + 3, base + 1, base + 1, base + 3, base + 2);
       }
@@ -2278,8 +2291,8 @@ export class ChunkRenderer {
     if (t.blocked && f === 'water') {
       // E23.13: the bay's ragged shallow shelf, and a canal where it runs out through the surf, are the shallows' colour
       const sea = shallowSea(t.x, t.z) || (t.level !== undefined && regionWater(t.x, t.z) && inSurfBand(t.x, t.z)) ? PALETTE.ground.shallows : PALETTE.ground.sea;
+      // (E28.W01: no foam dashes on it any more: the water's surface draws its own glints, following the ripples)
       this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
-      if (t.variant % 5 === 0) b.add('box', PALETTE.ground.seaFoam, [x + r.range(-0.3, 0.3), h + 0.085 - WATER.drop, z + r.range(-0.3, 0.3)], [r.range(0.2, 0.5), 0.006, 0.05]);
       return;
     }
     if (t.blocked) {
@@ -2629,10 +2642,7 @@ export class ChunkRenderer {
     // a dead pond's slab is one colour, the painted silt's own (its top wears the silt texture: see `siltBed`)
     const hex = shallows ? PALETTE.ground.shallows[t.variant % PALETTE.ground.shallows.length] : t.ground === 'restored' || this.livePond(t) ? ALIVE.water : t.ground === 'polluted' ? PALETTE.aqua.bed : PALETTE.ground.wetSoil;
     this.slab(b, hex, [x, surf - 0.04, z], [1, 0.08, 1]);
-    if (shallows) {
-      if (t.variant % 4 === 0) b.add('box', PALETTE.ground.seaFoam, [x + r.range(-0.3, 0.3), surf + 0.004, z + r.range(-0.3, 0.3)], [r.range(0.2, 0.45), 0.006, 0.05]);
-      return;
-    }
+    if (shallows) return; // (E28.W01: the surf's foam is the water surface's own now, not dashes on the grid)
     if (t.ground === 'polluted') return; // a dried-out, silted bed: the painted silt does the rest
     if (t.ground !== 'restored') return;
     // clear water (its surface is `poolSurface`): lily pads, and lotus flowers as it blooms. As a pond drains they
@@ -2691,19 +2701,55 @@ export class ChunkRenderer {
    * the mean of the live water tiles meeting there, so murky surf and clear water blend over a tile rather than
    * stepping at the border. `own` when none of the others has live water.
    */
-  private cornerClarity(t: TileData, cx: number, cz: number, own: number): number {
+  private cornerState(t: TileData, cx: number, cz: number, own: WaterState): WaterState {
     const g = this.sim.grid;
-    let sum = 0;
+    const s = { to: 0, from: 0, t0: 0, d: 0 };
     let n = 0;
+    let m = 0;
     for (let dz = -1; dz <= 0; dz++)
       for (let dx = -1; dx <= 0; dx++) {
         const o = dx + cx === 0 && dz + cz === 0 ? t : g.peek(t.roofId, t.x + cx + dx, t.z + cz + dz);
-        const c = o === t ? own : o && this.fog !== 'hidden' ? this.liveWater(o) : undefined;
-        if (c === undefined) continue;
-        sum += c;
+        const c = o === t ? own : o && this.fog !== 'hidden' ? this.waterState(o) : undefined;
+        if (!c) continue;
+        s.to += c.to;
+        s.from += c.from;
         n++;
+        // the fade's window: from the tiles here that are fading (a corner they share fades with them)
+        if (c.t0 > NO_FADE.t0) {
+          s.t0 += c.t0;
+          s.d += c.d;
+          m++;
+        }
       }
-    return n ? sum / n : own;
+    if (!n) return own;
+    return { to: s.to / n, from: s.from / n, ...(m ? { t0: s.t0 / m, d: s.d / m } : NO_FADE) };
+  }
+
+  /**
+   * E28.W01: a tile's water clarity now and, while a restore is still playing on it, before (so the surf clears in
+   * step with the tile's transition rather than all at once). The water under the jetty fades with the surf beside
+   * it. Undefined where there's no live water.
+   */
+  private waterState(t: TileData): WaterState | undefined {
+    const to = this.liveWater(t);
+    if (to === undefined) return undefined;
+    const tr = this.transitions;
+    const still = { to, from: to, ...NO_FADE };
+    if (!tr || to !== WATER_CLARITY.clear || !surfCell(t.x, t.z)) return still;
+    let w: [number, number] | undefined;
+    if (t.feature === 'water' && t.ground === 'restored') w = tr.fadeWindow(t);
+    else if (this.overWater(t)) {
+      // cleared by restored surf beside it: fades while every such neighbour is still mid-restore
+      const g = this.sim.grid;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+        if (!n || n.feature !== 'water' || n.ground !== 'restored' || !surfCell(n.x, n.z)) continue;
+        const nw = tr.fadeWindow(n);
+        if (!nw) return still;
+        w ??= nw;
+      }
+    }
+    return w ? { to, from: WATER_CLARITY.murky, t0: w[0], d: w[1] } : still;
   }
 
   /**
@@ -2728,25 +2774,26 @@ export class ChunkRenderer {
    * (encodeWater). The shader turns those into colour by depth, the sand bed in the shallows, foam on the shore and
    * waves that follow it. Replaces the old pool surface (which only covered restored pools).
    */
-  private waterSurface(out: PoolGeo, t: TileData, h: number, clarity: number, N: number) {
+  private waterSurface(out: PoolGeo, t: TileData, h: number, st: WaterState, N: number) {
     const y = h + 0.08 - WATER.drop + 0.003;
     // the open sea's height: the plane the High-tier reflection mirrors in
     if (t.blocked && t.feature === 'water') this.seaY = y;
     const land = this.landAround(t, Math.ceil(Math.min(WATER_ENC, LOOK.water.deepAt + 1)));
     const radius = this.isWater(t) ? this.poolCorners(t) : [0, 0, 0, 0];
     const base = out.pos.length / 3;
-    // clarity at the four corners, blended bilinearly across the tile
-    const k00 = this.cornerClarity(t, 0, 0, clarity);
-    const k10 = this.cornerClarity(t, 1, 0, clarity);
-    const k01 = this.cornerClarity(t, 0, 1, clarity);
-    const k11 = this.cornerClarity(t, 1, 1, clarity);
+    // clarity (now and before a restore, and the restore's window) at the four corners, blended across the tile
+    const k00 = this.cornerState(t, 0, 0, st);
+    const k10 = this.cornerState(t, 1, 0, st);
+    const k01 = this.cornerState(t, 0, 1, st);
+    const k11 = this.cornerState(t, 1, 1, st);
+    const mix = (key: keyof WaterState, u: number, w: number) =>
+      (k00[key] * (1 - u) + k10[key] * u) * (1 - w) + (k01[key] * (1 - u) + k11[key] * u) * w;
     for (let j = 0; j <= N; j++)
       for (let i = 0; i <= N; i++) {
         const px = t.x + i / N;
         const pz = t.z + j / N;
         const u = i / N;
         const w = j / N;
-        const k = (k00 * (1 - u) + k10 * u) * (1 - w) + (k01 * (1 - u) + k11 * u) * w;
         let d = waterDistance(px, pz, land);
         // a pool's own rounded inside corners: the bank curves round them (as poolBanks builds it)
         for (let c = 0; c < 4; c++) {
@@ -2758,7 +2805,8 @@ export class ChunkRenderer {
           if (vx > 0 && vz > 0) d = Math.min(d, Math.max(0, R - Math.hypot(vx, vz)));
         }
         out.pos.push(px, y, pz);
-        out.col.push(...encodeWater(d, k));
+        out.col.push(...encodeWater(d, mix('to', u, w), mix('from', u, w)));
+        out.tr.push(mix('t0', u, w), mix('d', u, w));
       }
     for (let j = 0; j < N; j++)
       for (let i = 0; i < N; i++) {
@@ -2775,6 +2823,7 @@ export class ChunkRenderer {
     m.setPositions(geo.pos);
     m.setNormals(nrm);
     m.setColors32(geo.col);
+    if (geo.tr.length) m.setUvs(0, geo.tr);
     m.setIndices(geo.idx);
     m.update(pc.PRIMITIVE_TRIANGLES);
     return m;
