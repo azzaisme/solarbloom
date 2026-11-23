@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
+import { LANDING } from '../src/data/oldcity';
+import { TERRAIN } from '../src/data/terrain';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 import { zoneAt } from '../src/rendering/PlantingZones';
@@ -236,6 +238,41 @@ describe('P7-E29 tree forms (umbrella, columnar, fruit, coastal), in the leafy s
       for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) if (W2.peek(c.x + dx, c.z + dz)?.feature === 'water') (wx += dx / (dx * dx + dz * dz)), (wz += dz / (dx * dx + dz * dz));
       expect(Math.cos(c.s!.rot) * wx + Math.sin(c.s!.rot) * wz, `coastal at ${c.x},${c.z}`).toBeLessThan(0);
     }
+  });
+});
+
+describe('P7-E29 polish: views kept open', () => {
+  const all = () => cells().map(({ x, z }) => ({ x, z, s: spot(x, z) })).filter((c) => c.s && !c.s.planter);
+  it('the waterfall shows from the jetty landing: only small trees on the line between', () => {
+    const [ax, az] = LANDING.spawn, [bx, bz] = [TERRAIN.fall.x + 0.5, TERRAIN.fall.lip];
+    for (const c of all()) {
+      const dx = bx - ax, dz = bz - az;
+      const t = Math.max(0, Math.min(1, ((c.x + 0.5 - ax) * dx + (c.z + 0.5 - az) * dz) / (dx * dx + dz * dz)));
+      if (Math.hypot(c.x + 0.5 - ax - t * dx, c.z + 0.5 - az - t * dz) <= TREES.viewHalf) expect(c.s!.scale, `${c.x},${c.z}`).toBeLessThanOrEqual(TREES.deckScale);
+    }
+  });
+  it('the overlook is a lookout: nothing on top, only small trees at its seaward and beachward edges', () => {
+    const o = TERRAIN.overlook;
+    for (const c of all()) {
+      expect(c.x >= o.x && c.x < o.x + o.w && c.z >= o.z && c.z < o.z + o.d, `${c.x},${c.z} on the overlook`).toBe(false);
+      if (c.x >= o.x - 1 && c.x < o.x + o.w + TREES.overlookEdge && c.z >= o.z - 1 && c.z < o.z + o.d + TREES.overlookEdge) expect(c.s!.scale).toBeLessThanOrEqual(TREES.overlookScale);
+    }
+  });
+  it('no columnar row or big tree stands near a landmark (the Sea Lock from the canal)', () => {
+    const marks = new Set<string>();
+    for (const { x, z } of cells()) {
+      const i = sim.areas.info(sim.areas.map.areaOfCell(x, z));
+      if (!i.noLandmark && i.landmark) marks.add(i.landmark.join(','));
+    }
+    expect(marks.has('-6,40')).toBe(true);
+    for (const c of all())
+      for (const m of marks) {
+        const [lx, lz] = m.split(',').map(Number);
+        const d = Math.max(c.x < lx ? lx - c.x : c.x > lx + 1 ? c.x - lx - 1 : 0, c.z < lz ? lz - c.z : c.z > lz + 1 ? c.z - lz - 1 : 0);
+        if (d > TREES.landmarkView) continue;
+        expect(c.s!.form, `${c.x},${c.z} by ${m}`).not.toBe('columnar');
+        expect(c.s!.scale).toBeLessThanOrEqual(TREES.deckScale);
+      }
   });
 });
 

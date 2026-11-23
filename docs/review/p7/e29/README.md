@@ -36,3 +36,15 @@ Pacing (owner-approved): songbirds after 450 restored tiles round the start (975
 "P7-E29 tree forms".
 
 Still open: young (stage-2) trees are small versions of the grown ones.
+
+## Polish pass (on the Phase 7 base @9c1f2bd8, with P7-E30)
+
+`polish/`: late third (camera A), mid shore, and E30's falls views `late-day-wide` and `late-day-overlook`
+(`tests/e2e/p7-falls-shots.mjs`).
+- Near-camera trees are left out whole (per tree, by view depth against its height), so no dither speckle on near
+  crowns (the wide view's birch and blossom, the crown in the overlook viewer's face).
+- The line from the jetty landing to the waterfall's lip carries only small trees; checked in camera A by projecting
+  the lip (screen ≈ 975, 250–290 of 1920 × 1080): no crown covers it now. At 33 tiles the pale sheet still melts into
+  the hazy bluff, which is atmosphere and the fall's own contrast, not trees.
+- The overlook's top is open; its seaward and beachward edges carry only small trees.
+- No columnar rows or big trees within 6 cells of a landmark: the Sea Lock reads from the canal path.

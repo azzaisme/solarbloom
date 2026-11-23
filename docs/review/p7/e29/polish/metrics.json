@@ -1,0 +1,36 @@
+{
+  "late-day-third": {
+    "clipPct": 0.06,
+    "meanLum": 165.5,
+    "meanSat": 0.476,
+    "drawCalls": 1682,
+    "triangles": 0,
+    "foliageTris": 1531996,
+    "pitch": 16
+  },
+  "mid-day-shore": {
+    "clipPct": 0,
+    "meanLum": 161.8,
+    "meanSat": 0.495,
+    "drawCalls": 911,
+    "triangles": 0,
+    "foliageTris": 472043,
+    "pitch": 16
+  },
+  "late-day-wide": {
+    "clipPct": 0.08,
+    "meanLum": 127.1,
+    "meanSat": 0.581,
+    "drawCalls": 1676,
+    "triangles": 0,
+    "foliageTris": 1563468
+  },
+  "late-day-overlook": {
+    "clipPct": 0,
+    "meanLum": 160.4,
+    "meanSat": 0.503,
+    "drawCalls": 1257,
+    "triangles": 0,
+    "foliageTris": 1555105
+  }
+}

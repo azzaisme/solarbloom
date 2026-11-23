@@ -163,19 +163,23 @@ const TREE_USER_CODE = /* glsl */ `
 attribute vec4 vertex_tree;
 uniform vec4 uTreeCursor; // cursor in NDC (x, y), view depth of the ground under it, strength 0..1
 uniform vec2 uTreeScreen; // canvas size in pixels
-uniform vec2 uNearFade; // view depth where a tree is gone, and where it is whole again
+uniform vec2 uNearFade; // a tree nearer than x + y × its height (view depth) is left out
 `;
 
 /**
  * Fades the vertex's alpha when its tree covers the cursor (forward pass; shadows ignore opacity).
- * P7-E29.3 (#736): and a tree's leaves and limbs right in front of the camera (a crown the follow camera backs into)
- * dither away by view depth, so a crown never fills the screen; the tree's foot and its shadow stay.
+ * P7-E29.3 (#736): and a tree right in front of the camera (a crown the follow camera backs into, or that fills a
+ * fixed view) is left out whole: decided per tree (its base and crown's view depth, against a distance that grows
+ * with its height), so it goes cleanly in one frame instead of dithering into a screen of holes; its shadow stays.
  */
 const TREE_MAIN_END = /* glsl */ `
 	#ifdef VERTEX_COLOR
 	if (vertex_tree.w > 0.6) {
-		float vd = (matrix_viewProjection * vec4(dPositionW, 1.0)).w;
-		vVertexColor.a *= smoothstep(uNearFade.x, uNearFade.y, vd);
+		vec4 nb = dModelMatrix * vec4(vertex_tree.xyz, 1.0);
+		float nh = vertex_tree.w * length(dModelMatrix[1].xyz);
+		float d0 = (matrix_viewProjection * nb).w;
+		float d1 = (matrix_viewProjection * vec4(nb.xyz + vec3(0.0, nh * 0.65, 0.0), 1.0)).w;
+		if (min(d0, d1) < uNearFade.x + uNearFade.y * nh) vVertexColor.a = 0.0;
 	}
 	if (uTreeCursor.w > 0.001 && vertex_tree.w > 0.0) {
 		vec4 b = dModelMatrix * vec4(vertex_tree.xyz, 1.0);
@@ -250,8 +254,8 @@ void getOpacity() {
 /** Dapple per quality tier: [gap share, gap cells per tile] (P7 config). */
 export const DAPPLE_TIER = { low: [0, 3.2, 0, 0], medium: [0.34, 3.2, 0, 0], high: [0.4, 3.2, 0, 0] } as const;
 
-/** P7-E29.3: trees nearer the camera than this (view depth, tiles) fade out: [gone at, whole from] */
-export const NEAR_FADE = [1.0, 2.8] as const;
+/** P7-E29.3: a tree whose base or crown is nearer the camera than [a + b × its height] (view depth, tiles) is left out */
+export const NEAR_FADE = [0.7, 0.55] as const;
 
 let material: pc.StandardMaterial | undefined;
 /** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 4 cm leaves) */

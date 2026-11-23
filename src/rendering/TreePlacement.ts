@@ -1,4 +1,6 @@
 import { areaMapFor } from '../core/Areas';
+import { LANDING } from '../data/oldcity';
+import { TERRAIN } from '../data/terrain';
 import { CHUNK, generateTile } from '../core/Generation';
 import type { LayerData, TileData } from '../core/types';
 import { beachDepth, zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
@@ -70,8 +72,8 @@ const RULES: Record<string, Rule> = {
   // blossom tree, like the reference coast.
   // Pacing (owner-approved, P7-E29 #737): the beach had no trees before; now a few specimens and small groves inland
   // (thinned by half, none on the open sand by the sea) and the odd row of columnar trees bring songbirds (20 thriving
-  // tree tiles) sooner round the start: 975 -> 450 restored tiles in the outward-restore proxy (seeds 7 and 21; 250
-  // with the first, denser pass). See the commit "P7-E29 tree forms". TUNING is unchanged by decision.
+  // tree tiles) sooner round the start: 975 -> 500 restored tiles in the outward-restore proxy (seeds 7 and 21; 250
+  // with the first, denser pass). See the commit "P7-E29 polish". TUNING is unchanged by decision.
   beach: { share: 0.1, grove: [['oak', 6], ['birch', 1], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 0.45, density: 0.6 },
   street: { share: 0.1, planterShare: 0.06, grove: [['birch', 3], ['cherry', 2]], shore: [['willow', 3], ['birch', 1]], specimen: [['cherry', 2], ['birch', 1]], groves: 0.2 },
   plaza: { share: 0.1, planterShare: 0.07, grove: [['birch', 3], ['cherry', 3]], shore: [['willow', 3], ['cherry', 1]], specimen: [['cherry', 2], ['oak', 1]], groves: 0.2 },
@@ -101,6 +103,17 @@ export const TREES = {
   deckSmall: 6,
   /** the largest scale near a deck */
   deckScale: 1.15,
+  /**
+   * P7-E29 polish: the opening view from the jetty landing (Bloombot's spawn) to the showcase waterfall's lip
+   * (P7-E30) stays open: within `viewHalf` cells of that line, only small trees (`deckScale`)
+   */
+  viewHalf: 2.5,
+  /** the Falls overlook works as a lookout: no trees on its top, only small ones (`overlookScale`) within
+   * `overlookEdge` cells of its seaward and beachward edges */
+  overlookEdge: 2,
+  overlookScale: 1.0,
+  /** round a landmark (any area's, within this many cells): no columnar rows, and only small trees */
+  landmarkView: 6,
   /** cells kept clear of trees round an area's landmark (its 2×2 footprint), so it reads from a distance */
   landmarkClear: 3,
   /** shoreline cells that grow a willow */
@@ -260,6 +273,28 @@ const route = (w: TreeWorld) => (x: number, z: number) => {
 /** A jetty or bridge deck: paving or road with water beside it. */
 const deck = (w: TreeWorld) => (x: number, z: number) => isHard(w.peek(x, z)) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => isWater(w.peek(x + dx, z + dz)));
 
+/** Distance from (x, z) to the segment a–b. */
+function segDist(x: number, z: number, a: readonly [number, number], b: readonly [number, number]) {
+  const dx = b[0] - a[0], dz = b[1] - a[1];
+  const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+  return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz);
+}
+
+/** Whether any area's landmark (its 2×2 footprint) lies within `r` cells of (x, z). */
+function landmarkNear(w: TreeWorld, x: number, z: number, r: number): boolean {
+  const seen = new Set<string>();
+  for (const [dx, dz] of [[0, 0], [-r, -r], [r, -r], [-r, r], [r, r], [0, -r], [0, r], [-r, 0], [r, 0]]) {
+    const a = w.areaAt(x + dx, z + dz);
+    if (seen.has(a)) continue;
+    seen.add(a);
+    const info = w.info(a);
+    if (info.noLandmark || !info.landmark) continue;
+    const [lx, lz] = info.landmark;
+    if (Math.max(x < lx ? lx - x : x > lx + 1 ? x - lx - 1 : 0, z < lz ? lz - z : z > lz + 1 ? z - lz - 1 : 0) <= r) return true;
+  }
+  return false;
+}
+
 /** Smooth value noise for the columnar rows (0…1). */
 function rowNoise(x: number, z: number) {
   const s = TREES.rowScale;
@@ -299,7 +334,7 @@ type Role = 'grove' | 'specimen' | 'shore' | 'accent' | 'planter' | 'fallback' |
  * P7-E29.4: the one place a ground cell's tree role is decided (by its planting zone in the generated world).
  * Undefined: no tree. Roof cells (no zones up there) take a plain per-cell share.
  */
-export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, roof = false): { role: Role; mix: Mix; depth?: number; small?: boolean } | undefined {
+export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, roof = false): { role: Role; mix: Mix; depth?: number; small?: boolean; cap?: number } | undefined {
   const rule = RULES[areaType] ?? RULES.park;
   const t = w.peek(x, z);
   if (!t || t.blocked) return undefined;
@@ -318,7 +353,7 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
   // keep the jetty landing and bridge ends open: no crowns over the planks or the first steps off them
   const dd = distTo(x, z, TREES.deckSmall, deck(w));
   if (dd <= TREES.deckClear) return undefined;
-  const small = dd <= TREES.deckSmall;
+  let cap = dd <= TREES.deckSmall ? TREES.deckScale : Infinity;
   // and the landmark: no crown hides it (P7-E28's clearance is one cell, for flowers)
   const info = w.info(w.areaAt(x, z));
   if (!info.noLandmark && info.landmark) {
@@ -326,13 +361,22 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
     const d = Math.max(x < lx ? lx - x : x > lx + 1 ? x - lx - 1 : 0, z < lz ? lz - z : z > lz + 1 ? z - lz - 1 : 0);
     if (d <= (rule.landmarkClear ?? TREES.landmarkClear)) return undefined;
   }
+  // P7-E29 polish: views kept open (the waterfall from the jetty, the overlook, landmarks from round about)
+  const ov = TERRAIN.overlook;
+  if (x >= ov.x && x < ov.x + ov.w && z >= ov.z && z < ov.z + ov.d) return undefined;
+  const e = TREES.overlookEdge;
+  if (x >= ov.x - 1 && x < ov.x + ov.w + e && z >= ov.z - 1 && z < ov.z + ov.d + e) cap = Math.min(cap, TREES.overlookScale);
+  if (segDist(x + 0.5, z + 0.5, LANDING.spawn, [TERRAIN.fall.x + 0.5, TERRAIN.fall.lip]) <= TREES.viewHalf) cap = Math.min(cap, TREES.deckScale);
+  const nearMark = landmarkNear(w, x, z, TREES.landmarkView);
+  if (nearMark) cap = Math.min(cap, TREES.deckScale);
+  const small = cap < Infinity;
   const u = hash01(x, z, 1);
   switch (zone) {
     case 'beach':
       // P7-E28: the open sand by the sea stays a real beach (owner): no trees on it
       return undefined;
     case 'shoreline':
-      return u < TREES.shoreShare ? { small, role: 'shore', mix: rule.shore } : undefined;
+      return u < TREES.shoreShare ? { small, cap, role: 'shore', mix: rule.shore } : undefined;
     default: {
       // open lawn, meadow, woodland floor (and, thinner, gardens): groves first, then a lone specimen framing a
       // path or the water, then the odd ornamental
@@ -340,17 +384,17 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
       const garden = zone === 'flower_garden';
       const depth = groveDepth(x, z, wood ? 1 : rule.groves);
       const p = Math.min(0.92, (depth > 0 ? TREES.groveDensity * (0.45 + 0.55 * depth) : wood ? TREES.woodDensity * 0.5 : 0) * (garden ? rule.gardenGroves ?? 0.5 : 1) * (rule.density ?? 1));
-      if (u < p) return { small, role: 'grove', mix: rule.grove, depth };
+      if (u < p) return { small, cap, role: 'grove', mix: rule.grove, depth };
       if (!wood && specimenCell(x, z)) {
         const d = distTo(x, z, TREES.specimenPath[1], route(w));
-        if (d >= TREES.specimenPath[0] && d <= TREES.specimenPath[1]) return { small, role: 'specimen', mix: rule.specimen };
+        if (d >= TREES.specimenPath[0] && d <= TREES.specimenPath[1]) return { small, cap, role: 'specimen', mix: rule.specimen };
         // just inland of the beach, the odd coastal specimen frames it
-        if (nearBeach(w, x, z, areaType, 2)) return { small, role: 'specimen', mix: rule.specimen };
+        if (nearBeach(w, x, z, areaType, 2)) return { small, cap, role: 'specimen', mix: rule.specimen };
       }
       // columnar trees in short rows along paths and canals
-      if (!wood && rowNoise(x, z) > TREES.rowField && (((x * 7 + z * 13) % 3) + 3) % 3 === 0 && distTo(x, z, 2, route(w)) === 2) return { small, role: 'row', mix: [['birch', 1]] };
-      if (garden) return u < TREES.accentShare ? { small, role: 'accent', mix: [['cherry', 1]] } : undefined;
-      if (zone === 'meadow' && hash01(x, z, 7) < TREES.meadowShare) return { small, role: 'accent', mix: [['birch', 2], ['cherry', 1]] };
+      if (!wood && !nearMark && rowNoise(x, z) > TREES.rowField && (((x * 7 + z * 13) % 3) + 3) % 3 === 0 && distTo(x, z, 2, route(w)) === 2) return { small, cap, role: 'row', mix: [['birch', 1]] };
+      if (garden) return u < TREES.accentShare ? { small, cap, role: 'accent', mix: [['cherry', 1]] } : undefined;
+      if (zone === 'meadow' && hash01(x, z, 7) < TREES.meadowShare) return { small, cap, role: 'accent', mix: [['birch', 2], ['cherry', 1]] };
       return undefined;
     }
   }
@@ -389,7 +433,7 @@ export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'blocked'> & { roofId?: s
     scale *= 0.88 + 0.12 * Math.min(1, (z.depth ?? 0) * 2);
   }
   // near a jetty or bridge, only small trees (the view off the deck stays open)
-  if (z.small) scale = Math.min(scale, TREES.deckScale);
+  if (z.small) scale = Math.min(scale, z.cap ?? TREES.deckScale);
   let species = pick(z.mix, hash01(t.x, t.z, 2));
   let rot = hash01(t.x, t.z, 4) * Math.PI * 2;
   // P7-E29: the shape. Specimens are umbrella or coastal trees now and then (coastal ones by the sea, leaning away
