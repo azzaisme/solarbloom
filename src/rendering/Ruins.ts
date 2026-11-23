@@ -545,6 +545,44 @@ export class RuinPlanner {
 }
 
 /**
+ * P7-E32.8: the ruins' vertex transform (the engine's own, plus one step): each vertex, at its real place hundreds of
+ * units out, is slid along its ray from the camera into a thin band of depth `ruins_depth` = (D, band, t0, t1): its
+ * depth along the view `t` (or its distance, near or behind the camera's plane) maps in order from t0…t1 onto
+ * D…D + band. Exact on screen, and in the right order by depth. Ruins.update sets the uniforms each frame.
+ */
+const RUINS_TRANSFORM = /* glsl */ `
+#ifdef PIXELSNAP
+uniform vec4 screen_size;
+#endif
+#ifdef SCREENSPACE
+uniform float projectionFlipY;
+#endif
+uniform vec3 ruins_cam;
+uniform vec3 ruins_fwd;
+uniform vec4 ruins_depth;
+vec4 evalWorldPosition(vec3 vertexPosition, mat4 modelMatrix) {
+	vec3 localPos = getLocalPosition(vertexPosition);
+	vec4 posW = modelMatrix * vec4(localPos, 1.0);
+	vec3 d = posW.xyz - ruins_cam;
+	float r = length(d);
+	float t = dot(d, ruins_fwd);
+	if (t < r * 0.2) t = r;
+	float k = (ruins_depth.x + ruins_depth.y * clamp((t - ruins_depth.z) / (ruins_depth.w - ruins_depth.z), 0.0, 1.0)) / max(t, 1e-3);
+	posW.xyz = ruins_cam + d * k;
+	return posW;
+}
+vec4 getPosition() {
+	dModelMatrix = getModelMatrix();
+	vec4 posW = evalWorldPosition(vertex_position.xyz, dModelMatrix);
+	dPositionW = posW.xyz;
+	return matrix_viewProjection * posW;
+}
+vec3 getWorldPosition() {
+	return dPositionW;
+}
+`;
+
+/**
  * P7-E32 (#756, #761, #762): the distant ruined city. Three bands of coast round the island (far, mid, near), each
  * with broken stone towers, solarpunk spires with ring platforms and panel fins, aqueduct arches, viaducts, lattice
  * frames, derelict wind turbines and ruined blocks, generated once from RUINS.seed. Where the authored models
@@ -560,9 +598,8 @@ export class RuinPlanner {
 export class Ruins {
   readonly layer: pc.Layer;
   readonly root: pc.Entity;
-  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; e: pc.Entity; dir: [number, number]; stale: boolean; base: Float32Array; drawn: Float32Array; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
+  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; e: pc.Entity; dir: [number, number]; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
   private sig: number[] = [];
-  private viewSig: number[] = [];
   /** E23.7.2: the weather's view (1 clear … less in fog and rain): the ruins fade out with it */
   view = 1;
 
@@ -595,6 +632,11 @@ export class Ruins {
     mat.depthWrite = true;
     mat.depthTest = true;
     mat.cull = pc.CULLFACE_BACK;
+    // P7-E32.8: the slide along each ray (see update) runs in the vertex shader; the meshes keep their real positions
+    mat.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set('transformVS', RUINS_TRANSFORM);
+    mat.setParameter('ruins_cam', [0, 0, 0]);
+    mat.setParameter('ruins_fwd', [0, 0, -1]);
+    mat.setParameter('ruins_depth', [50, 5, 120, 700]);
     mat.update();
     this.mat = mat;
     // the authored pieces are fetched first; the ruins appear once they're in (procedural if they fail)
@@ -606,7 +648,6 @@ export class Ruins {
   private create(built: Built[]) {
     const mat = this.mat;
     const app = this.app;
-    this.viewSig = [];
     this.sig = [];
     for (const b of built) {
       const g = b.geo;
@@ -617,6 +658,9 @@ export class Ruins {
       mesh.setIndices(g.idx);
       mesh.update(pc.PRIMITIVE_TRIANGLES);
       const mi = new pc.MeshInstance(mesh, mat);
+      // the real positions lie far past the far clip: the shader brings them in, and update() switches off the slices
+      // behind the camera instead
+      mi.cull = false;
       mi.drawOrder = b.layer;
       const e = new pc.Entity(`ruins-${RUINS.layers[b.layer].name}-${b.sector}`);
       e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
@@ -635,9 +679,6 @@ export class Ruins {
         mi,
         e,
         dir: [sx / sl, sz / sl],
-        stale: true,
-        base: Float32Array.from(g.pos),
-        drawn: Float32Array.from(g.pos),
         nrm: Float32Array.from(g.nrm),
         alb: Float32Array.from(g.alb),
         y: Float32Array.from({ length: n }, (_, i) => g.pos[i * 3 + 1]),
@@ -656,7 +697,7 @@ export class Ruins {
   /**
    * Places the ruins for this frame's camera and rebakes their colours when the light, haze or night move.
    *
-   * Every vertex is slid along its own ray from the camera into a thin band of depth (its real distance mapped, in
+   * Every vertex is slid (in the vertex shader, RUINS_TRANSFORM) along its own ray from the camera into a thin band of depth (its real distance mapped, in
    * order, onto `D` … `D + RUINS.depthBand` of it), so on screen each silhouette is exactly where the real one,
    * hundreds of units out, would be, and the ruins still hide one another in the right order; but by depth they stand
    * where the distance above the horizon has gone wholly to haze: the horizon haze (LookShaders `lookHorizonFog`, LOOK.horizon) is full
@@ -672,40 +713,16 @@ export class Ruins {
     const D = Math.max(1, full * RUINS.depth);
     const band = full * RUINS.depthBand;
     const [t0, t1] = RUINS.depthRange;
-    const vs = [cam.x, cam.y, cam.z, forward.x, forward.y, forward.z, D];
-    const moved = !this.viewSig.length || vs.some((v, i) => Math.abs(v - this.viewSig[i]) > 1e-4);
-    this.viewSig = vs;
-    // slices behind the camera are switched off and not re-placed (a slice spans 60°, the view about 80° across)
+    const mat = this.mat;
+    mat.setParameter('ruins_cam', [cam.x, cam.y, cam.z]);
+    mat.setParameter('ruins_fwd', [forward.x, forward.y, forward.z]);
+    mat.setParameter('ruins_depth', [D, band, t0, t1]);
+    // the camera can't cull the slices (their real places lie past the far clip), so update() does: a slice spans
+    // RUINS.sectors' share of the round and the view about 80° across, so further round than half a slice plus 48° it is out
+    // of view. Looking steeply down (the overview) keeps them all
     const fl = Math.hypot(forward.x, forward.z);
-    {
-      for (const m of this.meshes) {
-        const seen = fl < 0.2 || (m.dir[0] * forward.x + m.dir[1] * forward.z) / fl > -0.2;
-        m.e.enabled = seen;
-        if (!seen) {
-          m.stale = true;
-          continue;
-        }
-        if (!moved && !m.stale) continue;
-        m.stale = false;
-        const b = m.base;
-        const o = m.drawn;
-        for (let i = 0; i < b.length; i += 3) {
-          const dx = b[i] - cam.x;
-          const dy = b[i + 1] - cam.y;
-          const dz = b[i + 2] - cam.z;
-          // depth along the view; near or behind the camera's plane, fall back to the distance along the ray
-          let t = dx * forward.x + dy * forward.y + dz * forward.z;
-          const r = Math.hypot(dx, dy, dz);
-          if (t < r * 0.2) t = r;
-          const k = (D + band * Math.min(1, Math.max(0, (t - t0) / (t1 - t0)))) / t;
-          o[i] = cam.x + dx * k;
-          o[i + 1] = cam.y + dy * k;
-          o[i + 2] = cam.z + dz * k;
-        }
-        m.mesh.setPositions(o);
-        m.mesh.update(pc.PRIMITIVE_TRIANGLES);
-      }
-    }
+    const seen = Math.cos(((360 / RUINS.sectors / 2 + 48) * Math.PI) / 180);
+    for (const m of this.meshes) m.e.enabled = fl < 0.2 || (m.dir[0] * forward.x + m.dir[1] * forward.z) / fl > seen;
 
     const s = this.sun.up;
     const lc = this.sun.light?.color ?? new pc.Color(1, 1, 1);
