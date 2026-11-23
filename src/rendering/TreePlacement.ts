@@ -1,7 +1,7 @@
 import { areaMapFor } from '../core/Areas';
 import { CHUNK, generateTile } from '../core/Generation';
 import type { LayerData, TileData } from '../core/types';
-import { zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
+import { beachDepth, zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
 import { TREE_VARIANTS, type Species, type TreeStage } from './TreeGen';
 
 /**
@@ -68,10 +68,10 @@ const RULES: Record<string, Rule> = {
   reservoir: { share: 0.14, grove: [['oak', 3], ['willow', 2], ['birch', 1]], shore: [['willow', 6], ['oak', 1]], specimen: [['oak', 3], ['willow', 1]], groves: 0.8, density: 1.8 },
   // the start: a coastal park of broad shade oaks (a pine only as a rare accent), willows on the canal and the odd
   // blossom tree, like the reference coast.
-  // Pacing (owner-approved, P7-E29 #737): the beach had no trees before; now a few specimens and small groves (thinned
-  // by half at the owner's request) bring songbirds (20 thriving tree tiles) about 2x sooner round the start:
-  // 975 -> 450 restored tiles in the outward-restore proxy (seeds 7 and 21; 250 with the first, denser pass). See
-  // the commit "P7-E29 leafy trees restored". TUNING is unchanged by decision.
+  // Pacing (owner-approved, P7-E29 #737): the beach had no trees before; now a few specimens and small groves inland
+  // (thinned by half, and none on the open sand by the sea, at the owner's request) bring songbirds (20 thriving tree
+  // tiles) sooner round the start: 975 -> 550 restored tiles in the outward-restore proxy (seeds 7 and 21; 250 with
+  // the first, denser pass). See the commit "P7-E29: open beach". TUNING is unchanged by decision.
   beach: { share: 0.1, grove: [['oak', 6], ['birch', 1], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 0.45, density: 0.6 },
   street: { share: 0.1, planterShare: 0.06, grove: [['birch', 3], ['cherry', 2]], shore: [['willow', 3], ['birch', 1]], specimen: [['cherry', 2], ['birch', 1]], groves: 0.2 },
   plaza: { share: 0.1, planterShare: 0.07, grove: [['birch', 3], ['cherry', 3]], shore: [['willow', 3], ['cherry', 1]], specimen: [['cherry', 2], ['oak', 1]], groves: 0.2 },
@@ -179,10 +179,18 @@ export function treeWorldOf(sim: { state: { seed: number }; grid: { layer(id: st
 }
 
 /** A cell's planting zone in the generated world: machines are ignored (P7-E28 `ignoreOccupants`). */
-function zoneOfCell(w: TreeWorld, x: number, z: number, areaType: string): PlantingZone {
+function zoneCtx(w: TreeWorld, x: number, z: number, areaType: string): ZoneCtx {
   const info = w.info(w.areaAt(x, z));
-  const ctx: ZoneCtx = { peek: (px, pz) => w.peek(px, pz), areaAt: (px, pz) => w.areaAt(px, pz), areaType, landmark: info.noLandmark ? undefined : info.landmark, ignoreOccupants: true };
-  return zoneAt(x, z, ctx);
+  return { peek: (px, pz) => w.peek(px, pz), areaAt: (px, pz) => w.areaAt(px, pz), areaType, landmark: info.noLandmark ? undefined : info.landmark, ignoreOccupants: true };
+}
+function zoneOfCell(w: TreeWorld, x: number, z: number, areaType: string): PlantingZone {
+  return zoneAt(x, z, zoneCtx(w, x, z, areaType));
+}
+/** Whether a P7-E28 beach (open sand by the sea) lies within `r` cells of (x, z). */
+function nearBeach(w: TreeWorld, x: number, z: number, areaType: string, r: number): boolean {
+  const ctx = zoneCtx(w, x, z, areaType);
+  for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if ((dx || dz) && beachDepth(x + dx, z + dz, ctx) !== undefined) return true;
+  return false;
 }
 
 const pick = (mix: Mix, u: number): Species => {
@@ -279,6 +287,9 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
   }
   const u = hash01(x, z, 1);
   switch (zone) {
+    case 'beach':
+      // P7-E28: the open sand by the sea stays a real beach (owner): no trees on it
+      return undefined;
     case 'shoreline':
       return u < TREES.shoreShare ? { small, role: 'shore', mix: rule.shore } : undefined;
     default: {
@@ -292,6 +303,8 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
       if (!wood && specimenCell(x, z)) {
         const d = distTo(x, z, TREES.specimenPath[1], route(w));
         if (d >= TREES.specimenPath[0] && d <= TREES.specimenPath[1]) return { small, role: 'specimen', mix: rule.specimen };
+        // just inland of the beach, the odd coastal specimen frames it
+        if (nearBeach(w, x, z, areaType, 2)) return { small, role: 'specimen', mix: rule.specimen };
       }
       if (garden) return u < TREES.accentShare ? { small, role: 'accent', mix: [['cherry', 1]] } : undefined;
       if (zone === 'meadow' && hash01(x, z, 7) < TREES.meadowShare) return { small, role: 'accent', mix: [['birch', 2], ['cherry', 1]] };

@@ -44,6 +44,12 @@ describe('P7-E29 tree placement by zone', () => {
     expect(trees.filter(({ x, z }) => spot(x, z)!.species === 'pine').length).toBe(0); // no pines on the coast
   });
 
+  it('the sandy beach by the sea stays open: P7-E28 beach cells grow no trees', () => {
+    const beach = cells().filter(({ x, z }) => zone(x, z) === 'beach');
+    expect(beach.length).toBeGreaterThan(20);
+    for (const { x, z } of beach) expect(spot(x, z), `tree on the beach at ${x},${z}`).toBeUndefined();
+  });
+
   it('the view off a jetty or bridge is framed, not blocked: only small trees near a deck', () => {
     for (const { x, z } of cells()) {
       const sp = spot(x, z);
@@ -59,7 +65,7 @@ describe('P7-E29 tree placement by zone', () => {
     for (const { x, z } of cells()) {
       const t = peek(x, z)!;
       if (!spot(x, z) || t.feature === 'paving') continue;
-      expect(['path_edge', 'landmark_clearance']).not.toContain(zone(x, z));
+      expect(['path_edge', 'landmark_clearance', 'beach']).not.toContain(zone(x, z));
       // landmarks read from a distance: no crown within 2–3 cells of the 2×2 footprint
       const info = sim.areas.info(sim.areas.map.areaOfCell(x, z));
       if (!info.noLandmark && info.landmark) {
@@ -95,7 +101,7 @@ describe('P7-E29 tree placement by zone', () => {
       sizes.push(n);
     }
     const groves = sizes.filter((n) => n >= 3 && n <= 8);
-    expect(groves.length).toBeGreaterThanOrEqual(3);
+    expect(groves.length).toBeGreaterThanOrEqual(2); // fewer since the sea-side sand became an open beach (P7-E28)
     // grove trees come in size classes, the smallest still a real tree (not a shrub)
     for (const { x, z } of trees) expect(spot(x, z)!.scale).toBeGreaterThanOrEqual(TREES.groveSmall[1][0] * 0.88 - 1e-9);
   });
