@@ -76,6 +76,16 @@ describe('P7-E28 planting zones', () => {
     expect(zoneAt(61, 2, ctx)).toBe('shoreline'); // the water itself
   });
 
+  it('ignoreOccupants: a machine changes no zone (for trees), but the landmark and paths still count', () => {
+    const { ctx } = park();
+    const still = { ...ctx, ignoreOccupants: true };
+    expect(zoneAt(11, 23, ctx)).toBe('landmark_clearance');
+    expect(zoneAt(11, 23, still)).not.toBe('landmark_clearance');
+    expect(zoneAt(12, 22, still)).not.toBe('landmark_clearance'); // the machine's own cell
+    expect(zoneAt(19, 30, still)).toBe('landmark_clearance');
+    expect(zoneAt(29, 2, still)).toBe('path_edge');
+  });
+
   it('groves are woodland; every zone shows up somewhere', () => {
     const { ctx } = park(0, 0, 'grove');
     expect(zoneAt(40, 2, ctx)).toBe('woodland_understory');

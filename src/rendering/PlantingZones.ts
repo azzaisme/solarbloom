@@ -9,6 +9,7 @@
  * API (kept stable for P7-E29; any change is called out in its commit message):
  *   zoneAt(x, z, ctx) → PlantingZone
  *   ZONE_DENSITY[zone] → 'calm' | 'moderate' | 'dense'
+ *   ctx.ignoreOccupants: zones from the generated world only (no machines), for trees
  */
 import type { TileData } from '../core/types';
 
@@ -37,6 +38,11 @@ export interface ZoneCtx {
   areaType: string;
   /** The anchor cell of the area's landmark (its 2×2 footprint runs +x, +z from it), if it has one. */
   landmark?: readonly [number, number];
+  /**
+   * Ignore machines (neighbours' `occupantId`, and the cell's own): zones then depend only on the generated world, so
+   * building beside a spot never changes its zone. For things that must not pop in or out (P7-E29 trees).
+   */
+  ignoreOccupants?: boolean;
 }
 
 /** Tunables (P7 config block: composition heuristics, not exact quotas). */
@@ -114,7 +120,8 @@ export function zoneField(x: number, z: number) {
  *  6. the field: `open_lawn`, `meadow` or `flower_garden`.
  */
 export function zoneAt(x: number, z: number, ctx: ZoneCtx): PlantingZone {
-  const t = ctx.peek(x, z);
+  const raw = ctx.peek(x, z);
+  const t = raw && ctx.ignoreOccupants && raw.occupantId ? { ...raw, occupantId: undefined } : raw;
   if (t && !plantable(t)) {
     if (isWater(t)) return 'shoreline';
     if (isHard(t)) return 'path_edge';
@@ -129,7 +136,7 @@ export function zoneAt(x: number, z: number, ctx: ZoneCtx): PlantingZone {
       const n = ctx.peek(x + dx, z + dz);
       if (!n) continue;
       const d = Math.max(Math.abs(dx), Math.abs(dz));
-      if (n.occupantId && d < machine) machine = d;
+      if (n.occupantId && !ctx.ignoreOccupants && d < machine) machine = d;
       if (d > 2) continue;
       if (d === 1 && isWater(n)) water = true;
       if (isHard(n)) {
