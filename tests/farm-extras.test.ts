@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import { keeperById, regionWater, seaCell, surfCell } from '../src/core/OldCityLayout';
+import { keeperById, regionPond, regionWater, seaCell, surfCell } from '../src/core/OldCityLayout';
 import type { MachineData, MachineType } from '../src/core/types';
 import { COMPOST } from '../src/data/compost';
 import { CROP_IDS, CROPS, type CropId } from '../src/data/crops';
 import { DAY_SECONDS } from '../src/data/time';
 import { BEEHIVE, DIVERSITY, FISH_POND, GARDEN_REQUESTS, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type HomeKind } from '../src/data/farmExtras';
-import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { KEEPERS, PARK_SET, REGIONS } from '../src/data/oldcity';
 import { DECOR_OPTION } from '../src/data/cozy';
 import { Cozy, decorOpen } from '../src/gameplay/Cozy';
 import { FARM_USES } from '../src/data/farm';
 import { CHARGE } from '../src/data/charge';
-import { Sim } from '../src/gameplay/Sim';
+import { PONDS_LAYOUT, Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
 
@@ -325,10 +325,10 @@ describe('E23.5.4: every one raises its area’s diversity', () => {
   it('each tended kind and each creature adds to diversityIn(area) and to the city’s biodiversity', () => {
     const sim = farm();
     ground(sim, 12, 20, 3, 3);
-    const area = sim.areas.map.areaOfCell(12, 20); // all of these stand in Saltwind (the park ends at z 16)
+    const area = sim.areas.map.areaOfCell(12, 20); // all of these stand in Saltwind (the park ends at z 15; #763: clear of Tide's pool)
     let last = sim.farmExtras.diversityIn(area);
     const bio0 = sim.ecosystem.score().score;
-    for (const [type, x, z] of [['orchard', 10, 18], ['mushroomLog', 11, 18], ['wormBin', 12, 18], ['fishPond', 13, 18], ['beehive', 14, 18], ['birdBox', 10, 22], ['hedgehogHouse', 12, 22], ['butterflyGarden', 14, 22]] as const) {
+    for (const [type, x, z] of [['orchard', 10, 16], ['mushroomLog', 11, 16], ['wormBin', 12, 16], ['fishPond', 13, 16], ['beehive', 14, 16], ['birdBox', 10, 22], ['hedgehogHouse', 12, 22], ['butterflyGarden', 14, 22]] as const) {
       build(sim, type, x, z);
       expect(sim.areas.map.areaOfCell(x, z)).toBe(area);
       run(sim, 0.3 * DAY_SECONDS);
@@ -646,7 +646,7 @@ describe('E23.5.4.6: Keeper gardens', () => {
     const saver = new SaveService(undefined);
     const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     const ground = back.state.layers.find((l) => l.kind === 'ground')!;
-    expect(ground.pondsChecked).toBe(true);
+    expect(ground.pondsChecked).toBe(PONDS_LAYOUT);
     expect(ground.dryPonds ?? []).toEqual([]);
     expect(back.grid.get(GROUND, pool.x, pool.z)!.feature).toBe('water');
     // even something written onto a pond after the first check (an edited save) never turns the pond to land
@@ -655,6 +655,57 @@ describe('E23.5.4.6: Keeper gardens', () => {
     const later = new Sim(saver.deserialize(JSON.stringify(json))!);
     expect(later.state.layers.find((l) => l.kind === 'ground')!.dryPonds ?? []).toEqual([]);
     expect(later.grid.get(GROUND, pool.x, pool.z)!.feature).toBe('water');
+  });
+
+  it('#763: Tide’s rock pool sits beside Tide, clear of the park’s beach steps and the ground in front of them', () => {
+    const pool = REGIONS.find((r) => r.id === 'saltwind')!.ponds![0];
+    const stair = PARK_SET.ramps[0];
+    const tide = keeperById('tide')!;
+    // nothing of the pool within two rows of the bottom step, across the stair's width and a tile either side
+    for (let x = stair.x - 1; x <= stair.x + stair.w; x++)
+      for (let z = stair.z + stair.d; z < stair.z + stair.d + 2; z++) expect(regionPond(x, z), `${x},${z}`).toBe(false);
+    // beside Tide: its nearest cell within two tiles, and never on Tide's own cell
+    const dx = Math.max(pool.x - tide.x, 0, tide.x - (pool.x + pool.w - 1));
+    const dz = Math.max(pool.z - tide.z, 0, tide.z - (pool.z + pool.d - 1));
+    expect(Math.max(dx, dz)).toBeGreaterThan(0);
+    expect(Math.max(dx, dz)).toBeLessThanOrEqual(2);
+  });
+
+  it('#763: a save checked against the old pond layout is checked again for the moved pool', () => {
+    const saver = new SaveService(undefined);
+    const pool = REGIONS.find((r) => r.id === 'saltwind')!.ponds![0];
+    const save = (edit: (layer: Record<string, unknown>, json: Record<string, unknown>) => void) => {
+      const sim = farm();
+      const json = JSON.parse(saver.serialize(sim.state));
+      const layer = json.layers.find((l: { kind: string }) => l.kind === 'ground');
+      edit(layer, json);
+      return new Sim(saver.deserialize(JSON.stringify(json))!);
+    };
+    // checked against layout 1, with a bench where the pool is now: the pool stays dry land under it
+    const built = save((layer, json) => {
+      layer.pondsChecked = true;
+      delete layer.dryPonds;
+      json.cozy = { ...((json.cozy as object) ?? {}), decor: { [`${GROUND}|${pool.x}|${pool.z + 1}`]: 'bench' } };
+    });
+    let ground = built.state.layers.find((l) => l.kind === 'ground')!;
+    expect(ground.pondsChecked).toBe(PONDS_LAYOUT);
+    expect(ground.dryPonds).toContain('saltwind');
+    expect(built.grid.get(GROUND, pool.x, pool.z)!.feature).not.toBe('water');
+    // checked against layout 1 and dried for something on the old spot: the new spot is clear, so the pool comes back
+    const moved = save((layer) => {
+      layer.pondsChecked = true;
+      layer.dryPonds = ['saltwind', 'clockPlaza'];
+    });
+    ground = moved.state.layers.find((l) => l.kind === 'ground')!;
+    expect(ground.dryPonds).toEqual(['clockPlaza']); // other regions' dried ponds stay dry
+    expect(moved.grid.get(GROUND, pool.x, pool.z)!.feature).toBe('water');
+    expect(moved.grid.get(GROUND, 7, 16)!.feature).not.toBe('water'); // the old spot is plain beach now
+    // and an up-to-date save is never checked again (a bench written onto the pool afterwards doesn't dry it)
+    const fresh = save((layer, json) => {
+      layer.pondsChecked = PONDS_LAYOUT;
+      json.cozy = { ...((json.cozy as object) ?? {}), decor: { [`${GROUND}|${pool.x}|${pool.z}`]: 'bench' } };
+    });
+    expect(fresh.state.layers.find((l) => l.kind === 'ground')!.dryPonds ?? []).toEqual([]);
   });
 
   it('extras survive a save', () => {

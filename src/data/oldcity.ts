@@ -271,8 +271,9 @@ export const REGIONS: RegionDef[] = [
     material: 'timber',
     landmark: { kind: 'sealock', name: 'The Sea Lock', x: -6, z: 40 },
     keeper: 'tide',
-    // E23.5.4.6: a freshwater rock pool above the tide line beside the Keeper's garden: it fills once restored, and waters the beds
-    ponds: [{ x: 7, z: 16, w: 2, d: 3 }],
+    // E23.5.4.6: a freshwater rock pool above the tide line beside the Keeper's garden: it fills once restored, and waters the beds.
+    // #763: just east of Tide (10, 19), clear of the park's beach steps (x 6–9, z 14–15), which used to land in it at x 7–8, z 16
+    ponds: [{ x: 12, z: 18, w: 2, d: 3 }],
     seam: { name: 'the Driftline', x: -12, z: 28 },
     // The boat lands here, so the beach is open from the start. The Sea Lock stands across the canal that runs down
     // to the bay; the barricade blocks the boardwalk bridge over it.
