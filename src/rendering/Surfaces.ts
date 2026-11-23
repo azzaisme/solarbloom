@@ -336,8 +336,8 @@ const RARE: Bloom = ['cosmos', 0];
  * clumps; `shrub`: chance of a medium bush; `reeds`: reed clumps along each water side.
  */
 const ZONE_PLAN: Record<PlantingZone, { flowers: number[]; tufts: number[]; shrub: number[]; reeds?: number[] }> = {
-  flower_garden: { flowers: [0, 2, 5, 8, 9], tufts: [0, 2, 1, 1, 1], shrub: [0, 0, 0.1, 0.3, 0.35] },
-  meadow: { flowers: [0, 0, 2, 4, 4], tufts: [0, 3, 3, 3, 3], shrub: [0, 0, 0, 0.08, 0.1] },
+  flower_garden: { flowers: [0, 3, 8, 14, 16], tufts: [0, 2, 1, 1, 1], shrub: [0, 0, 0.1, 0.3, 0.35] },
+  meadow: { flowers: [0, 0, 2, 5, 6], tufts: [0, 3, 3, 3, 3], shrub: [0, 0, 0, 0.08, 0.1] },
   path_edge: { flowers: [0, 0, 2, 3, 3], tufts: [0, 1, 1, 1, 1], shrub: [0, 0, 0, 0, 0] },
   shoreline: { flowers: [0, 0, 0, 1, 1], tufts: [0, 2, 2, 2, 2], shrub: [0, 0, 0, 0.08, 0.1], reeds: [0, 1, 2, 2, 3] },
   woodland_understory: { flowers: [0, 0, 1, 2, 3], tufts: [0, 2, 3, 3, 3], shrub: [0, 0.15, 0.4, 0.6, 0.7] },
@@ -358,8 +358,9 @@ function bloomAt(f: Family, px: number, pz: number, stage: number, salt: number)
   return b[0] === 'sunflower' && stage < 3 ? ['daisy', 1] : b;
 }
 
-/** Positions on a 3×3 bed grid (−0.3, 0, 0.3), in a seeded order per tile. */
-const BED: [number, number][] = [[0, 0], [-1, -1], [1, 1], [1, -1], [-1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]];
+/** Positions on a 4×4 bed grid (−1.5 … 1.5 in steps, ×0.24), in a seeded order per tile. */
+const BED: [number, number][] = [];
+for (const gz of [-1.5, -0.5, 0.5, 1.5]) for (const gx of [-1.5, -0.5, 0.5, 1.5]) BED.push([gx, gz]);
 
 /**
  * P7-E28 (#714): the dressing of a restored natural tile by its planting zone, in layers (#731): the turf (drawn
@@ -411,11 +412,12 @@ export function zonedPlanting(c: DressCtx, t: TileData, stage: number, x: number
     for (let j = 0; j < BED.length && k < n; j++) {
       const [gx, gz] = BED[(start + j) % BED.length];
       // SIDES order: +x, −x, +z, −z
-      if ((gx === 1 && !open[0]) || (gx === -1 && !open[1]) || (gz === 1 && !open[2]) || (gz === -1 && !open[3])) continue;
-      const px = x + gx * 0.3 + (hash01(t.x * 11 + j, t.z, 53) - 0.5) * 0.14;
-      const pz = z + gz * 0.3 + (hash01(t.x, t.z * 11 + j, 59) - 0.5) * 0.14;
+      if ((gx > 1 && !open[0]) || (gx < -1 && !open[1]) || (gz > 1 && !open[2]) || (gz < -1 && !open[3])) continue;
+      // alternate rows shift half a step, so the mass doesn't read as a grid
+      const px = x + (gx + (Math.round(gz + 1.5) % 2) * 0.25) * 0.24 + (hash01(t.x * 11 + j, t.z, 53) - 0.5) * 0.1;
+      const pz = z + gz * 0.24 + (hash01(t.x, t.z * 11 + j, 59) - 0.5) * 0.1;
       const rare = st >= 3 && k === 0 && hash01(t.x, t.z, 49) < 0.025;
-      plant(rare ? RARE : bloomAt(fam, px, pz, st, 61), px, pz, k++, 1.25, st >= 3 || hash01(t.x + j, t.z, 63) < 0.4);
+      plant(rare ? RARE : bloomAt(fam, px, pz, st, 61), px, pz, k++, 1.4, st >= 3 || hash01(t.x + j, t.z, 63) < 0.4);
     }
   } else if (n) {
     // ── loose drifts: meadow, woodland floor, shore and lawn flowers (small, so open lawn stays calm)
