@@ -146,7 +146,7 @@ export async function shoot(page, path, { ui = false, renderMs = 9000 } = {}) {
   await page.evaluate((css) => document.querySelectorAll('style').forEach((s) => s.textContent.includes(css) && s.remove()), HUD_HIDE);
   const stats = await page.evaluate(() => {
     const st = window.solarbloom.app.stats;
-    return { drawCalls: st.drawCalls?.total ?? 0, triangles: st.frame?.triangles ?? 0 };
+    return { drawCalls: st.drawCalls?.total ?? 0, triangles: st.frame?.triangles ?? 0, foliageTris: window.solarbloom.chunks.foliageTris?.() ?? 0 };
   });
   await page.evaluate(() => (window.solarbloom.app.autoRender = false));
   return { shot, stats };

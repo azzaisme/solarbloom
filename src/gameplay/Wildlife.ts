@@ -3,7 +3,7 @@ import { hashString } from '../core/Hash';
 import type { TileData } from '../core/types';
 import { DIVERSITY, ON_BOT, PERCH_FROM, SINGLE_PERCHES, TIERS, VISIT, VISITORS, type DiversityTier, type Perch, type VisitorDef } from '../data/wildlife';
 import { PLANT_LOAD, PULSE_LOAD } from '../data/pulse';
-import { treeSpot } from '../rendering/TreePlacement';
+import { treeSpot, treeWorldOf, type TreeWorld } from '../rendering/TreePlacement';
 import type { Sim } from './Sim';
 
 /** An area's diversity: the score, its tier and what it came from (E23.2.4.1). */
@@ -39,7 +39,7 @@ export interface Visit {
 }
 
 /** What a tile grows, for counting kinds of plant. */
-function plantKinds(t: TileData, areaType: string | undefined, out: Set<string>) {
+function plantKinds(t: TileData, areaType: string | undefined, out: Set<string>, trees: TreeWorld) {
   if (t.ground !== 'restored') return;
   if (t.feature === 'water') {
     out.add('water plants');
@@ -51,7 +51,7 @@ function plantKinds(t: TileData, areaType: string | undefined, out: Set<string>)
   if (bloom >= 3) out.add('shrubs');
   if (t.plant) out.add(t.plant === 'meadow' ? 'meadow' : t.plant === 'rare' ? 'rare plant' : 'grove');
   if (areaType && !t.occupantId && bloom >= 2) {
-    const spot = treeSpot(t, areaType);
+    const spot = treeSpot(t, areaType, trees);
     if (spot) out.add(`${spot.species} trees`);
   }
 }
@@ -108,7 +108,7 @@ export class WildlifeSystem {
         restored++;
         if ((t.bloom || 1) >= 2) bloomed++;
         if (t.plant) pollinators += PULSE_LOAD[PLANT_LOAD[t.plant]].pollinators;
-        plantKinds(t, type, kinds);
+        plantKinds(t, type, kinds, treeWorldOf(s));
       }
       c = { kinds: [...kinds].sort(), restored, bloomed, pollinators };
       this.cache.set(area, c);

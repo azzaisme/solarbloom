@@ -8,7 +8,7 @@ import type { MachineData, PlantKind, TileData } from '../src/core/types';
 import { DIVERSITY, ON_BOT, PERCH_FROM, TIERS, VISIT, VISITORS, type DiversityTier } from '../src/data/wildlife';
 import { Sim } from '../src/gameplay/Sim';
 import { planVisits, tierOf } from '../src/gameplay/Wildlife';
-import { treeSpot } from '../src/rendering/TreePlacement';
+import { treeSpot, treeWorldOf } from '../src/rendering/TreePlacement';
 
 SaveService.clock = () => 0;
 const oldSim = () => new Sim(createInitialState(7));
@@ -19,7 +19,7 @@ function ground(sim: Sim, n: number, trees = false): TileData[] {
   const type = sim.areas.info(PARK).type;
   return sim.areas
     .tiles(PARK)
-    .filter((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId && t.feature !== 'water' && !!treeSpot(t, type) === trees)
+    .filter((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId && t.feature !== 'water' && !!treeSpot(t, type, treeWorldOf(sim)) === trees)
     .slice(0, n);
 }
 /** Grows tiles as a pulse would leave them (restored, at a bloom, with a plant), and lets the area know. */

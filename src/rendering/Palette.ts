@@ -71,7 +71,7 @@ const ground = {
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
   /** the stone edge of dead paving where it stands above the earth beside it */
   pavingKerb: '#a48a72',
-  painted: { sand: ['#e9dfc2'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
+  painted: { sand: ['#d8d0bd'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   /**
    * E25 (#626): the sandbar out in the sea is wet sand: the painted sand is tinted by `wetSandTint` and its sides take
    * `wetSand`: a little darker than the dry beach.
@@ -106,11 +106,13 @@ const roof = {
 };
 
 const lawn = {
+  /** P7-E28 (#714): every lawn green below pulled toward a natural mid-green (less yellow, a touch bluer, a little
+   * darker: R ×0.85, G ×0.91, B ×1.3 but kept under R), so open lawn no longer reads lime once the flower carpet is gone. */
   /** Look 2.2: slightly golden, less saturated greens (palette.md). Fresh restored grass, picked per tile by noise. */
-  tones: ['#77ad3e', '#80b443', '#6da23a', '#87b84a', '#649a37'],
+  tones: ['#659d53', '#6da459', '#5d934c', '#73a75e', '#558c46'],
   /** large sunlit / shaded patches pull the tile tone toward these */
-  sunlit: '#8dba48',
-  shadow: '#376a2e',
+  sunlit: '#78a962',
+  shadow: '#2f6027',
   dryTip: '#b7c25c',
   /**
    * Grass by bloom stage: index 1 Restored … 4 Radiant. Each stage keeps its own brightness so stages read apart:
@@ -118,11 +120,12 @@ const lawn = {
    */
   stage: [
     [],
-    ['#9cc463', '#a5c96a', '#93bd5c', '#accd72', '#91b75a'],
-    ['#77ad3e', '#80b443', '#6da23a', '#87b84a', '#649a37'],
-    ['#538f34', '#5c973a', '#4c872f', '#639c3f', '#47802c'],
-    // P7-E27 (#713): Radiant less yellow (was #80ae3a …): still the warmest stage, but a natural green in the sun
-    ['#74b23c', '#7db842', '#6ca838', '#85bc48', '#669e34'],
+    ['#85b26d', '#8cb773', '#7dac66', '#92bb78', '#7ba765'],
+    ['#659d53', '#6da459', '#5d934c', '#73a75e', '#558c46'],
+    ['#47823a', '#4e8940', '#417b35', '#548e45', '#3c7431'],
+    // P7-E27 (#713): Radiant less yellow (was #80ae3a …): still the warmest stage, but a natural green in the sun.
+    // P7-E28: pulled less than the other stages, so it stays the warm, bright one
+    ['#6ba949', '#73af50', '#63a044', '#7ab357', '#5e9640'],
   ] as string[][],
   /** tufts: darker base, lighter tips (MeshBuilder.tip) */
   tuft: ['#4a7f2c', '#538a31', '#5f9337'],
@@ -685,6 +688,14 @@ export const PALETTE = {
   flowerSunflower: [flowers.sunflower, flowers.yellow],
   flowerWild: [flowers.white, flowers.yellow, flowers.blue, flowers.rose],
   flowerCentre: flowers.core,
+  /** P7-E28 (#714): shoreline reeds and rushes: blade base, tip, and the brown seed heads */
+  reed: ['#3f6b2e', '#8fae5a'],
+  reedHead: '#6e4a2a',
+  /** P7-E28: restored beach sand (clean, pale and warmer than the greyed dead sand, so the change reads) and its wet band */
+  beachSand: ['#fbe6ac', '#f8e1a2', '#fdeab8'],
+  beachWet: '#bfa57a',
+  /** P7-E28: rounded wet bank stones (darker than the dry rock) */
+  wetStone: ['#7d7a70', '#8d8a7d'],
   sunflowerDisc: flowers.sunflowerCore,
   bud: '#5aa045',
   stemDark: '#2f6e2b',

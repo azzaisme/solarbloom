@@ -214,8 +214,11 @@ function paintSand(px: Uint8ClampedArray) {
   // P7-E27: pale warm sand (was a saturated orange-gold, base 232,196,128); the Palette's painted.sand is its average
   // P7-E27.3 (#721): paler again (was 224,204,160): the warm sun and grade add ~0.08 saturation on screen, so this lands
   // near the brief's pale warm sand (~#E2CFA4) rather than tan
-  const base: RGB = [240, 228, 196], pale: RGB = [250, 242, 218], tawny: RGB = [222, 206, 170], shade: RGB = [190, 174, 140];
+  // P7-E28 (#714): dead sand is dull and spent: desaturated toward a dusty grey-beige (was 240,228,196 …), so the restored
+  // beach's clean cream-gold reads as a change. Still a beach (ripples, pebbles), not concrete
+  const base: RGB = [222, 214, 196], pale: RGB = [234, 228, 212], tawny: RGB = [204, 194, 174], shade: RGB = [172, 164, 148];
   const stoneBody: RGB = [228, 212, 190], stoneLight: RGB = [252, 244, 228], stoneDark: RGB = [168, 132, 92];
+  const wrack: RGB = [128, 120, 100], grit: RGB = [140, 136, 128];
   for (let y = 0; y < SIZE; y++)
     for (let x = 0; x < SIZE; x++) {
       const u = x / SIZE, v = y / SIZE;
@@ -228,11 +231,14 @@ function paintSand(px: Uint8ClampedArray) {
       c = mix(c, pale, smooth(0.3, 1, w) * 0.3 * strength); // crests catch the light
       c = mix(c, shade, smooth(-0.2, -1, w) * 0.22 * strength); // troughs fall into shade
       c = stonePass(c, u, v, peb, stoneBody, stoneLight, stoneDark);
+      // P7-E28: spent ground: drab dried wrack lines along some ripple troughs and grey grit specks
+      c = mix(c, wrack, smooth(0.86, 0.97, -w) * smooth(0.62, 0.8, n1(u, v, 6)) * 0.55);
+      if (n3(u, v, 220) > 0.86 && n2(u, v, 140) > 0.7) c = mix(c, grit, 0.6);
       const g = (n3(u, v, 160) - 0.5) * 10 + (n1(u, v, 80) - 0.5) * 6; // grains
       const i = (y * SIZE + x) * 4;
       px[i] = c[0] + g;
       px[i + 1] = c[1] + g;
-      px[i + 2] = c[2] + g * 0.8;
+      px[i + 2] = c[2] + g * 0.9;
       px[i + 3] = 255;
     }
 }
