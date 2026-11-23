@@ -1,0 +1,18 @@
+{
+  "late-day-beach": {
+    "clipPct": 0,
+    "meanLum": 148.3,
+    "meanSat": 0.504,
+    "drawCalls": 1878,
+    "triangles": 0,
+    "foliageTris": 1656043
+  },
+  "late-day-wide": {
+    "clipPct": 0.07,
+    "meanLum": 126,
+    "meanSat": 0.591,
+    "drawCalls": 1323,
+    "triangles": 0,
+    "foliageTris": 1650283
+  }
+}
