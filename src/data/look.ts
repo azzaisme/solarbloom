@@ -76,7 +76,11 @@ export const LOOK = {
    * is 1): `radiusPerView` × the world height in view, clamped, so close-ups get tight contact shadows under
    * bushes and machines and the overview still shows grounding around buildings and trees.
    */
-  ssao: { intensity: 1, power: 2, minAngle: 10, samples: 12, radiusPerView: 0.12, minRadius: 0.6, maxRadius: 2 },
+  // P7-E27.4 (#722): was intensity 1, power 2, radius 0.6–2 tiles: every grass tuft occluded its neighbours, so open
+  // lawn came out ~22% darker and paving ~43% (the dull, flat grass), with near-black halos under props (~54%).
+  // Measured in the shore shot, 0.6 / 0.2–0.5 gave ~10% at a contact and ~5% on open lawn, 0.8 / 0.3–0.8 ~24% and
+  // ~12%; this sits between them, aiming at the brief's 10–20% at contacts with open ground left nearly untouched
+  ssao: { intensity: 0.7, power: 1.5, minAngle: 10, samples: 12, radiusPerView: 0.04, minRadius: 0.25, maxRadius: 0.6 },
   /**
    * Look 1.7: colour grading. `warm` is the restored look; `dead` is the fogged / unrestored mood. The game blends
    * between them by the restoration of the area in view (0 = dead, 1 = warm), so the light comes back as you

@@ -61,6 +61,16 @@ describe('P7-E27 Bright Day calibration', () => {
   });
 });
 
+describe('P7-E27.4 grounding (#722)', () => {
+  it('SSAO is a contact shadow, not a blanket: a tight radius (it was 0.6–2 tiles and darkened open lawn ~22%)', () => {
+    const A = LOOK.ssao;
+    expect(A.maxRadius).toBeLessThanOrEqual(0.8);
+    expect(A.minRadius).toBeLessThanOrEqual(A.maxRadius);
+    expect(A.intensity).toBeLessThanOrEqual(1);
+    expect(LOOK.tiers.high.ssao).toBe(true);
+  });
+});
+
 describe('P7-E27 cloud ring (owner, 23 Nov 2026)', () => {
   const R = LOOK.cloudRing;
   it('rings the revealed ground in at least the gate walls\' two rows, bigger and so taller', () => {
