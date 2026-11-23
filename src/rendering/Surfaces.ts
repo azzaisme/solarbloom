@@ -197,6 +197,60 @@ function turfCorners(c: DressCtx, t: TileData): number[] {
   return cols;
 }
 
+/**
+ * P7-E28: where restored lawn meets dead natural ground on the same level, the turf spills over the tile edge in an
+ * irregular wavy tongue (a strip of trapezoids whose outer line follows noise along the world edge, so neighbouring
+ * tiles' fringes join up), with a few young tufts on it: the restored patch ends in a ragged grass edge, not a grid
+ * of squares. Visual only; drawn by the restored tile, so it goes when the neighbour is restored too.
+ */
+export function lawnFringe(c: DressCtx, t: TileData, top: number) {
+  if (c.lod === 0) return;
+  const SEG = 5;
+  for (const [dx, dz] of SIDES) {
+    const n = c.peek(t.x + dx, t.z + dz);
+    if (!n || n.ground === 'restored' || n.blocked || n.occupantId || (n.level ?? 0) !== (t.level ?? 0) || n.ramp) continue;
+    const nf = n.feature ?? 'lawn';
+    if (nf !== 'lawn' && nf !== 'sand' && nf !== 'clay' && nf !== 'litter') continue;
+    // the edge runs along u (0…1) from corner a; the tongue reaches out along (dx, dz)
+    const ax = dx > 0 ? t.x + 1 : t.x, az = dz > 0 ? t.z + 1 : t.z;
+    const ux = dz !== 0 ? 1 : 0, uz = dx !== 0 ? 1 : 0;
+    const y = top + 0.012;
+    const reach = (u: number) => {
+      const wx = ax + ux * u, wz = az + uz * u;
+      // world-position noise, so the line is continuous across tiles; never zero, so it always softens the edge
+      return 0.05 + 0.24 * noise2(wx * 1.7 + dx * 0.3, wz * 1.7 + dz * 0.3, 411) * noise2(wx * 0.6, wz * 0.6, 413) * 1.6;
+    };
+    for (let i = 0; i < SEG; i++) {
+      const u0 = i / SEG, u1 = (i + 1) / SEG;
+      const d0 = Math.min(0.32, reach(u0)), d1 = Math.min(0.32, reach(u1));
+      const pts: [number, number][] = [
+        [ax + ux * u0, az + uz * u0],
+        [ax + ux * u1, az + uz * u1],
+        [ax + ux * u1 + dx * d1, az + uz * u1 + dz * d1],
+        [ax + ux * u0 + dx * d0, az + uz * u0 + dz * d0],
+      ];
+      const inside = (k: number) => turfAt(c, t, pts[k][0] - dx * 0.01, pts[k][1] - dz * 0.01);
+      const cols = [inside(0), inside(1), inside(1).map((v) => v * 0.9), inside(0).map((v) => v * 0.9)];
+      // wind like turfTop's corners ((0,0) (0,1) (1,1) (1,0): a negative shoelace sum in x, z)
+      let area = 0;
+      for (let k = 0; k < 4; k++) area += pts[k][0] * pts[(k + 1) % 4][1] - pts[(k + 1) % 4][0] * pts[k][1];
+      const p: number[] = [], col: number[] = [];
+      for (const k of area < 0 ? [0, 1, 2, 3] : [3, 2, 1, 0]) {
+        p.push(pts[k][0], y, pts[k][1]);
+        col.push(...cols[k]);
+      }
+      c.b.quad(p, col);
+    }
+    // a few young tufts straddling the edge
+    const tufts = Math.round(2 * Math.max(0.5, c.dens));
+    for (let i = 0; i < tufts; i++) {
+      const u = hash01(t.x * 19 + i, t.z + dx * 7 + dz, 417);
+      const out = 0.02 + hash01(t.x, t.z * 19 + i + dz, 419) * 0.1;
+      c.fb.add(grassGeo(1, t.variant + i + 2, 1), ax + ux * u + dx * out, top, az + uz * u + dz * out, hash01(t.x + i, t.z, 421) * 6.28, 0.6 + hash01(t.x, t.z + i, 423) * 0.3);
+    }
+  }
+}
+
 /** Grass clumps over a tile (sparse while young, lush in full bloom); blades lean out and spill over edges. */
 export function grassTufts(c: DressCtx, t: TileData, stage: number, x: number, z: number, top: number, span = 0.46, base?: number) {
   const lod: Lod = c.lod === 2 && c.dens > 0.99 ? 2 : 1;

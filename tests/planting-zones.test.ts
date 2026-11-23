@@ -192,3 +192,33 @@ describe('P7-E28 beach zone (Saltwind)', () => {
     expect(withBeach.reduce((a, b) => a + b, 0) / withBeach.length).toBeGreaterThan(2);
   });
 });
+
+describe('P7-E28 lawn fringe', () => {
+  it('spills a wavy turf edge over dead ground on every side, wound like the turf, and never over restored ground', async () => {
+    const { lawnFringe } = await import('../src/rendering/Surfaces');
+    const quads: number[][] = [];
+    const tileAt = (x: number, z: number) => ({ x, z, id: '', roofId: '0', ground: x === 0 && z === 0 ? 'restored' : 'polluted', bloom: 2, variant: 3, blocked: false, pollution: 0, feature: 'lawn', growthRemainingSec: 0 }) as unknown as TileData;
+    const c: DressCtx = {
+      b: { grey: 0, add: () => {}, addGeo: () => {}, quad: (p) => quads.push(p) },
+      fb: { add: () => {} },
+      dens: 1, lod: 2, area: 'a', areaType: 'park', level: 4,
+      peek: tileAt, areaAt: () => 'a',
+    };
+    lawnFringe(c, tileAt(0, 0), 0.08);
+    expect(quads.length).toBe(20); // 4 sides × 5 segments
+    for (const p of quads) {
+      let area = 0;
+      for (let k = 0; k < 4; k++) area += p[k * 3] * p[((k + 1) % 4) * 3 + 2] - p[((k + 1) % 4) * 3] * p[k * 3 + 2];
+      expect(area).toBeLessThan(0);
+      // every point sits on the tile's edge or out past it, by at most 0.32
+      for (let k = 0; k < 4; k++) {
+        const x = p[k * 3], z = p[k * 3 + 2];
+        expect(Math.max(-x, x - 1, -z, z - 1)).toBeLessThanOrEqual(0.32 + 1e-9);
+      }
+    }
+    quads.length = 0;
+    const allRestored: DressCtx = { ...c, peek: (x, z) => ({ ...tileAt(x, z), ground: 'restored' }) as TileData };
+    lawnFringe(allRestored, tileAt(0, 0), 0.08);
+    expect(quads.length).toBe(0);
+  });
+});

@@ -28,7 +28,7 @@ import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } 
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
-import { areaEdges, beachDressing, buildingDressing, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
+import { areaEdges, beachDressing, buildingDressing, grassTufts, lawnFringe, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
 import { zoneAt, type PlantingZone } from './PlantingZones';
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
@@ -3658,6 +3658,7 @@ export class ChunkRenderer {
     } else {
       this.slab(b, grass, [x, h, z], [1, 0.16, 1]);
       turfTop(c, t, top); // Look 3.3: corner-blended turf, no square seams between lawns
+      lawnFringe(c, t, top); // P7-E28: a ragged grass edge over dead ground next door, not a grid of squares
       this.edges(b, t, x, z, top, false);
       // Look 3.9: some reservoir clay becomes a raised bed
       if (f === 'clay' && stage >= 2 && dhash(t.x, t.z, 221) < 0.25 && !treeSpot(t, this.areaType)) {
