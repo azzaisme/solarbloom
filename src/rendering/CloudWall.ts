@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { GROUND } from '../core/GameState';
 import { levelAt, levelY } from '../core/Height';
 import { CHUNK } from '../core/Hash';
+import { LOOK } from '../data/look';
 import type { Sim } from '../gameplay/Sim';
 import { wallCloudParts } from './Clouds';
 import { hash01 } from './FaunaPlan';
@@ -46,6 +47,9 @@ export class CloudWall {
   sync() {
     const s = this.sim;
     const sealed = new Set(s.areas.sealedAreas());
+    // P7-E27 prototype (LOOK.cloudRing): the same wall along every edge where revealed ground meets the hidden city,
+    // so the open island reads as ringed by cloud rather than fading into a grey haze
+    if (LOOK.cloudRing.on) for (const id of this.hiddenNeighbours()) sealed.add(id);
     for (const [id, w] of this.walls) if (!sealed.has(id) && w.leaving === undefined) this.leave(w);
     for (const id of sealed) {
       const old = this.walls.get(id);
@@ -55,11 +59,29 @@ export class CloudWall {
     if (this.batcher && this.group >= 0) this.batcher.markGroupDirty(this.group);
   }
 
+  /** Hidden (never revealed, not sealed) areas that share a chunk edge with revealed ground. */
+  private hiddenNeighbours(): Set<string> {
+    const s = this.sim;
+    const map = s.areas.map;
+    const out = new Set<string>();
+    for (const id of s.areas.revealed())
+      for (const [cx, cz] of s.areas.info(id).chunks)
+        for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const a = map.areaOfChunk(cx + dx, cz + dz);
+          if (a !== id && s.areas.fog(a) === 'hidden') out.add(a);
+        }
+    return out;
+  }
+
   /** Clouds along each chunk edge this sealed area shares with open ground. */
   private build(id: string): pc.Entity {
     const s = this.sim;
     const map = s.areas.map;
     const root = new pc.Entity(`cloudWall:${id}`);
+    const ring = !s.areas.sealed(id);
+    const R = LOOK.cloudRing;
+    const rows = ring ? R.rows : 2;
+    const grow = ring ? R.size : 1;
     this.root.addChild(root);
     const y = (s.grid.layer(GROUND)?.height ?? 0) + SLAB_TOP;
     const open = (cx: number, cz: number) => {
@@ -77,18 +99,19 @@ export class CloudWall {
       for (const [nx, nz, along, edge, inward] of sides) {
         if (!open(nx, nz)) continue;
         const start = along === 'z' ? cz * CHUNK : cx * CHUNK;
-        for (let row = 0; row < 2; row++) {
-          const step = row ? 3.4 : 2.4;
-          for (let u = (row ? 1.6 : 0.6); u < CHUNK; u += step) {
+        for (let row = 0; row < rows; row++) {
+          // each row further in, sparser, larger and higher (rows 0 and 1 are the gate walls' own two rows)
+          const step = 2.4 + row;
+          for (let u = 0.6 + row; u < CHUNK; u += step) {
             const a = start + u;
             const h = hash01(Math.floor(a * 10), edge, row, along === 'z' ? 1 : 2);
-            const depth = (row ? 2.1 : 0.7) + h * 0.5;
+            const depth = (0.7 + 1.4 * row) * grow + h * 0.5;
             const x = along === 'z' ? edge + inward * depth : a + (h - 0.5) * 0.6;
             const z = along === 'z' ? a + (h - 0.5) * 0.6 : edge + inward * depth;
-            const size = (row ? 1.35 : 1.0) + h * 0.45;
+            const size = (1.0 + 0.35 * row + h * 0.45) * grow;
             // E21.24: on the Old City's terraces the wall stands on the higher of the two grounds it divides
             const lift = s.grid.terraced(GROUND) ? Math.max(levelY(levelAt(Math.floor(x), Math.floor(z))), levelY(levelAt(Math.floor(x - (along === 'z' ? inward * 2 : 0)), Math.floor(z - (along === 'x' ? inward * 2 : 0))))) : 0;
-            this.cloud(root, x, y - 0.15 + (row ? 0.5 : 0) + lift, z, size, h * 360);
+            this.cloud(root, x, y - 0.15 + 0.5 * row * grow + lift, z, size, h * 360);
           }
         }
       }

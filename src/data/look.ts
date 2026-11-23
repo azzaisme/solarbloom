@@ -124,6 +124,13 @@ export const LOOK = {
     skyBand: 5,
   },
   /**
+   * P7-E27 prototype (owner's idea, 23 Nov 2026): continue the region-gate cloud wall (CloudWall) along every edge
+   * where revealed ground meets the hidden city, so the open island is ringed by cloud instead of fading into grey
+   * haze. `rows` of clouds (the gate walls have 2), each row further in, larger and higher; `size` scales the ring's
+   * clouds and spacing. Off by default until it is judged in the fixed shots.
+   */
+  cloudRing: { on: false, rows: 3, size: 1.3 },
+  /**
    * Look 1.10: drifting light motes and soft light shafts over restored ground near the camera's focus. Counts per
    * graphics tier; `lowVfx` and reduced motion turn the motes off, reduced motion freezes the shafts.
    */
