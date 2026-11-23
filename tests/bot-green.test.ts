@@ -33,8 +33,9 @@ describe("#631: Bloombot's own colour is green", () => {
     const [r, g, b] = rgb(PALETTE.botGlow);
     expect(read('../assets/tools/bloombot_faces.py')).toContain(`EYE = (${r}, ${g}, ${b}, 255)`);
     expect(read('../src/ui/styles.css')).toContain(`--bot-glow: ${PALETTE.botGlow};`);
-    expect(read('../src/ui/title.css')).toMatch(/\.lb-eye \{[^}]*var\(--bot-glow\)/);
-    expect(read('../src/ui/title.css')).toMatch(/\.lb-ear \{[^}]*var\(--bot-glow\)/);
+    // the loading screen's Bloombot is rendered from the real model by the game's own visuals (its green included)
+    expect(read('../tools/bot-sprite/render.ts')).toContain("import { BloombotVisuals } from '../../src/rendering/BloombotVisuals';");
+    expect(read('../src/ui/Loading.ts')).toContain("new URL('./loading/bot-walk.webp', import.meta.url)");
   });
 
   it("the pulse code draws in Bloombot's green, and its trim glow is recoloured when the model loads", () => {

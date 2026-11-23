@@ -1,5 +1,6 @@
 import type { Slot, SlotHeader } from '../app/SaveService';
 import { TIERS } from '../data/salvage';
+import { lotusSvg } from '../rendering/Emblem';
 import { Confirm } from './Confirm';
 import { keyGlyph, padGlyph, type PadStyle } from './Glyphs';
 import { playedText } from './Menu';
@@ -525,8 +526,8 @@ export class Title {
 /** Stroke icons drawn with the text colour (masks, like the design's .ic). */
 const icon = (name: string) => `<span class="t-ic t-ic-${name}" aria-hidden="true"></span>`;
 const ICON = { play: icon('play'), gear: icon('gear'), door: icon('door'), seed: icon('seed'), sprout: icon('sprout'), star: icon('star'), leaf: icon('leaf') };
-/** The leaf badge: the leaf in a leaf-shaped tile (round with one sharp corner), the system's signature shape. */
-const BADGE = `<div class="t-badge logo" aria-hidden="true">${ICON.leaf}</div>`;
+/** The logo badge: the Solarbloom lotus (the same lotus the waymark carries) in a leaf-shaped tile (round with one sharp corner). */
+const BADGE = `<div class="t-badge logo" aria-hidden="true">${lotusSvg()}</div>`;
 
 function anyPadButton(): boolean {
   const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
