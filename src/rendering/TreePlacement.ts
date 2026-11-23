@@ -2,7 +2,7 @@ import { areaMapFor } from '../core/Areas';
 import { CHUNK, generateTile } from '../core/Generation';
 import type { LayerData, TileData } from '../core/types';
 import { zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
-import type { Species, TreeStage } from './TreeGen';
+import { TREE_VARIANTS, type Species, type TreeStage } from './TreeGen';
 
 /**
  * Phase 5 visual overhaul: which restorable tiles grow a tree, of which species. A pure function of the seed and
@@ -68,11 +68,11 @@ const RULES: Record<string, Rule> = {
   reservoir: { share: 0.14, grove: [['oak', 3], ['willow', 2], ['birch', 1]], shore: [['willow', 6], ['oak', 1]], specimen: [['oak', 3], ['willow', 1]], groves: 0.8, density: 1.8 },
   // the start: a coastal park of broad shade oaks (a pine only as a rare accent), willows on the canal and the odd
   // blossom tree, like the reference coast.
-  // Pacing (owner-approved, P7-E29 #737): the beach had no trees before, so these bring songbirds (20 thriving tree
-  // tiles) about 4x sooner round the start: 975 -> 250 restored tiles in the outward-restore proxy (seeds 7 and 21;
-  // 225 before the jetty sight line kept big crowns back),
-  // and higher early biodiversity (see the commit "P7-E29 pacing record"). TUNING is unchanged by decision.
-  beach: { share: 0.1, grove: [['oak', 6], ['birch', 1], ['cherry', 1], ['pine', 0.4]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 0.75 },
+  // Pacing (owner-approved, P7-E29 #737): the beach had no trees before; now a few specimens and small groves (thinned
+  // by half at the owner's request) bring songbirds (20 thriving tree tiles) about 2x sooner round the start:
+  // 975 -> 450 restored tiles in the outward-restore proxy (seeds 7 and 21; 250 with the first, denser pass). See
+  // the commit "P7-E29 leafy trees restored". TUNING is unchanged by decision.
+  beach: { share: 0.1, grove: [['oak', 6], ['birch', 1], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 0.45, density: 0.6 },
   street: { share: 0.1, planterShare: 0.06, grove: [['birch', 3], ['cherry', 2]], shore: [['willow', 3], ['birch', 1]], specimen: [['cherry', 2], ['birch', 1]], groves: 0.2 },
   plaza: { share: 0.1, planterShare: 0.07, grove: [['birch', 3], ['cherry', 3]], shore: [['willow', 3], ['cherry', 1]], specimen: [['cherry', 2], ['oak', 1]], groves: 0.2 },
   market: { share: 0.08, planterShare: 0.04, grove: [['cherry', 3], ['birch', 3]], shore: [['willow', 3], ['cherry', 1]], specimen: [['cherry', 2], ['oak', 1]], groves: 0.15 },
@@ -110,13 +110,19 @@ export const TREES = {
   /** meadow cells that grow a lone ornamental tree */
   meadowShare: 0.025,
   scale: {
-    grove: [1.3, 1.75] as [number, number],
+    grove: [1.3, 1.6] as [number, number],
     specimen: [2.0, 2.4] as [number, number],
-    shore: [1.35, 1.7] as [number, number],
+    shore: [1.2, 1.6] as [number, number],
     accent: [1.15, 1.4] as [number, number],
     planter: [0.86, 1.08] as [number, number],
     fallback: [1.0, 1.95] as [number, number],
   },
+  /**
+   * grove trees come in size classes, so a grove isn't all one height: [share, scale range] (the rest are `scale.grove`,
+   * the mid trees); specimens are the rare hero trees
+   */
+  groveSmall: [0.3, [1.0, 1.25]] as [number, [number, number]],
+  groveLarge: [0.15, [1.7, 1.95]] as [number, [number, number]],
 };
 
 export interface TreeSpot {
@@ -317,13 +323,20 @@ export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'blocked'> & { roofId?: s
   let scale = s0 + (s1 - s0) * hash01(t.x, t.z, 5);
   // Phase 6: without zones, about a third of the trees are big specimens; the rest stay ornamental
   if (z.role === 'fallback') scale = hash01(t.x, t.z, 6) < 0.34 ? 1.65 + hash01(t.x, t.z, 5) * 0.3 : 1.0 + hash01(t.x, t.z, 5) * 0.25;
-  // a grove's edge trees are a little smaller, so its canopy domes up in the middle
-  if (z.role === 'grove') scale *= 0.88 + 0.12 * Math.min(1, (z.depth ?? 0) * 2);
+  if (z.role === 'grove') {
+    // size classes: small, mid and the odd large tree
+    const c = hash01(t.x, t.z, 8);
+    const [sS, rS] = TREES.groveSmall, [sL, rL] = TREES.groveLarge;
+    const r = c < sS ? rS : c > 1 - sL ? rL : undefined;
+    if (r) scale = r[0] + (r[1] - r[0]) * hash01(t.x, t.z, 5);
+    // a grove's edge trees are a little smaller, so its canopy domes up in the middle
+    scale *= 0.88 + 0.12 * Math.min(1, (z.depth ?? 0) * 2);
+  }
   // near a jetty or bridge, only small trees (the view off the deck stays open)
   if (z.small) scale = Math.min(scale, TREES.deckScale);
   return {
     species: pick(z.mix, hash01(t.x, t.z, 2)),
-    variant: Math.floor(hash01(t.x, t.z, 3) * 4),
+    variant: Math.floor(hash01(t.x, t.z, 3) * TREE_VARIANTS),
     rot: hash01(t.x, t.z, 4) * Math.PI * 2,
     scale,
     planter: z.role === 'planter',

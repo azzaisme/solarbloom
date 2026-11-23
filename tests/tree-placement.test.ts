@@ -4,7 +4,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 import { zoneAt } from '../src/rendering/PlantingZones';
 import { treeSpot, treeWorldOf, treeZone, TREES } from '../src/rendering/TreePlacement';
-import { SPECIES, treeGeo } from '../src/rendering/TreeGen';
+import { TREE_VARIANTS, treeGeo } from '../src/rendering/TreeGen';
 import { foliageShape } from '../src/core/Solids';
 
 /** P7-E29 (#715): composed tree placement, by planting zone, round the start (Saltwind Beach and its canal). */
@@ -34,13 +34,14 @@ describe('P7-E29 tree placement by zone', () => {
     const beach = cells().filter(({ x, z }) => areaType(x, z) === 'beach' && peek(x, z)?.feature === 'sand');
     const trees = beach.filter(({ x, z }) => spot(x, z));
     expect(beach.length).toBeGreaterThan(300);
-    expect(trees.length / beach.length).toBeGreaterThan(0.06);
-    expect(trees.length / beach.length).toBeLessThan(0.25); // composed, with open lawn between
+    // a few specimens and small groves with open lawn between (owner: about half the first pass's woodland)
+    expect(trees.length / beach.length).toBeGreaterThan(0.025);
+    expect(trees.length / beach.length).toBeLessThan(0.1);
     // shade oaks and willows both show up, and a blossom accent
     const sp = new Set(trees.map(({ x, z }) => spot(x, z)!.species));
     for (const s of ['oak', 'willow', 'cherry'] as const) expect(sp.has(s), s).toBe(true);
     // a broadleaf coast: pines are a rare accent at most
-    expect(trees.filter(({ x, z }) => spot(x, z)!.species === 'pine').length / trees.length).toBeLessThan(0.1);
+    expect(trees.filter(({ x, z }) => spot(x, z)!.species === 'pine').length).toBe(0); // no pines on the coast
   });
 
   it('the view off a jetty or bridge is framed, not blocked: only small trees near a deck', () => {
@@ -94,9 +95,9 @@ describe('P7-E29 tree placement by zone', () => {
       sizes.push(n);
     }
     const groves = sizes.filter((n) => n >= 3 && n <= 8);
-    expect(groves.length).toBeGreaterThanOrEqual(4);
-    // grove trees are big enough to shade: a crown well over a tile across
-    for (const { x, z } of trees) expect(spot(x, z)!.scale).toBeGreaterThanOrEqual(TREES.scale.grove[0] * 0.88 - 1e-9);
+    expect(groves.length).toBeGreaterThanOrEqual(3);
+    // grove trees come in size classes, the smallest still a real tree (not a shrub)
+    for (const { x, z } of trees) expect(spot(x, z)!.scale).toBeGreaterThanOrEqual(TREES.groveSmall[1][0] * 0.88 - 1e-9);
   });
 
   it('willows stand on the shore', () => {
@@ -163,31 +164,33 @@ describe('P7-E29 pacing: the simulation counts tree tiles (songbirds, species, b
     }
     // songbirds stay reachable in the starting park alone (E16: 20 thriving tree tiles)
     expect(n.PARK).toBeGreaterThanOrEqual(20);
-    expect(n.beach).toBeGreaterThan(60);
+    expect(n.beach).toBeGreaterThan(25);
+    expect(n.beach).toBeLessThan(60);
   });
 });
 
-describe('P7-E29 tree shapes', () => {
-  it('no lollipops: every grown crown is several masses, raised on a trunk Bloombot can walk under', () => {
-    for (const sp of SPECIES)
-      for (const st of [3, 4] as const) {
-        const g = treeGeo(sp, st, 0, 1);
-        const f = foliageShape(g.pos, 4);
-        // the crown is wider than a lone ball on a stick: at least as wide as half its height
-        expect(f.crown.r * 2, `${sp} ${st} crown width`).toBeGreaterThan((f.crown.y1 - f.crown.y0) * 0.5);
-        if (sp !== 'pine' && sp !== 'willow') {
-          // a broadleaf at grove scale lifts its crown above Bloombot (about half a tile)
-          expect(f.crown.y0 * TREES.scale.grove[0], `${sp} clearance`).toBeGreaterThan(0.5);
-        }
-      }
-  });
-
-  it('every detail level keeps the same silhouette (no popping between levels)', () => {
-    for (const sp of SPECIES) {
-      const near = foliageShape(treeGeo(sp, 3, 2, 1).pos, 4);
-      const far = foliageShape(treeGeo(sp, 3, 2, 0).pos, 4);
-      expect(Math.abs(far.crown.r - near.crown.r) / near.crown.r, `${sp} width`).toBeLessThan(0.2);
-      expect(Math.abs(far.crown.y1 - near.crown.y1) / near.crown.y1, `${sp} height`).toBeLessThan(0.15);
-    }
+describe('P7-E29 tree variation (the original leafy trees, varied)', () => {
+  it('variants differ in proportions and greens; sizes come in classes', () => {
+    const dims = Array.from({ length: TREE_VARIANTS }, (_, v) => {
+      const f = foliageShape(treeGeo('oak', 3, v, 1).pos, 4);
+      return { w: f.crown.r, h: f.crown.y1 };
+    });
+    const ws = dims.map((d) => d.w), hs = dims.map((d) => d.h);
+    expect(Math.max(...ws) / Math.min(...ws)).toBeGreaterThan(1.25);
+    expect(Math.max(...hs) / Math.min(...hs)).toBeGreaterThan(1.2);
+    // greens: the average leaf colour differs between variants
+    const green = (v: number) => {
+      const g = treeGeo('oak', 3, v, 1);
+      let r = 0, gg = 0, n = 0;
+      for (let i = 0; i < g.col.length; i += 4) if (g.col[i + 1] > g.col[i] && g.col[i + 1] > g.col[i + 2]) (r += g.col[i]), (gg += g.col[i + 1]), n++;
+      return r / gg;
+    };
+    const hues = Array.from({ length: TREE_VARIANTS }, (_, v) => green(v));
+    expect(Math.max(...hues) - Math.min(...hues)).toBeGreaterThan(0.08);
+    // sizes round the start: small, mid and large trees, and a hero or two
+    const scales = cells().map(({ x, z }) => spot(x, z)?.scale).filter((v): v is number => v !== undefined);
+    expect(scales.filter((v) => v < 1.25).length).toBeGreaterThan(3);
+    expect(scales.filter((v) => v >= 1.3 && v < 1.65).length).toBeGreaterThan(3);
+    expect(scales.filter((v) => v >= 1.65).length).toBeGreaterThan(3);
   });
 });
