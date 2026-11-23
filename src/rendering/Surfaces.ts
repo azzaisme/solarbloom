@@ -13,7 +13,8 @@ import type { TreeGeo, Lod } from './TreeGen';
 import { PALETTE } from './Materials';
 import type { VPrim } from './Shapes';
 import { grassGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, reedGeo, tintGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
-import { zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
+import { beachDepth, zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
+import { seaCell, surfCell } from '../core/OldCityLayout';
 import { pavingGeo, pavingGaps, PAVING_LAYOUTS, planterGeo, railGeo, clutterGeo, CLUTTER_ALIVE, CLUTTER_DEAD, type RailKind, type ClutterKind } from './Props';
 
 export interface SolidSink {
@@ -160,20 +161,37 @@ function turfCorners(c: DressCtx, t: TileData): number[] {
   const cols: number[] = [];
   for (const [cx, cz] of TURF_CORNERS) {
     let r = 0, g = 0, b = 0, n = 0;
+    // P7-E28: restored beach tiles meeting here bring sand, so beach and lawn blend over a corner, not at a hard line
+    let sr = 0, sg = 0, sb = 0, ns = 0;
     for (const [ox, oz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
       const n2 = ox === 0 && oz === 0 && cx === 0 && cz === 0 ? t : c.peek(t.x + cx + ox, t.z + cz + oz);
       if (!n2 || !isTurf(n2) || c.areaAt(n2.x, n2.z) !== c.area) continue;
+      if ((n2.feature ?? 'lawn') === 'sand' && zoneOf(c, n2.x, n2.z) === 'beach') {
+        const k = lin(pick(PALETTE.beachSand, n2.variant));
+        sr += k[0];
+        sg += k[1];
+        sb += k[2];
+        ns++;
+        continue;
+      }
       const k = turfColour(n2, c.bloom?.(n2));
       r += k[0];
       g += k[1];
       b += k[2];
       n++;
     }
-    const k = n ? [r / n, g / n, b / n] : turfColour(t, c.bloom?.(t));
+    const k = n ? [r / n, g / n, b / n] : ns ? [0, 0, 0] : turfColour(t, c.bloom?.(t));
     // a soft mottling across the lawn, a few tiles wide
     // Phase 6: with no blades shading it, the bare turf is a touch deeper, and the light / dark patches are stronger
     // so a big lawn reads as soft sunlit and shaded areas rather than one flat green
     const m = 0.5 + 0.28 * noise2((t.x + cx) * 0.45, (t.z + cz) * 0.45, 7) + 0.14 * noise2((t.x + cx) * 1.3, (t.z + cz) * 1.3, 8);
+    if (ns) {
+      // sand keeps its light (a gentle mottle only); a corner shared with lawn sits between the two
+      const ms = 0.9 + 0.1 * noise2((t.x + cx) * 0.7, (t.z + cz) * 0.7, 9);
+      const w = n / (n + ns);
+      cols.push(k[0] * m * w + (sr / ns) * ms * (1 - w), k[1] * m * w + (sg / ns) * ms * (1 - w), k[2] * m * w + (sb / ns) * ms * (1 - w));
+      continue;
+    }
     cols.push(k[0] * m, k[1] * m, k[2] * m);
   }
   return cols;
@@ -389,7 +407,9 @@ export function zonedPlanting(c: DressCtx, t: TileData, stage: number, x: number
     const g = flowerGeo(b[0], b[1], open, t.variant + k, lod);
     c.fb.add(b === RARE && zone === 'flower_garden' && k === 0 ? tintGeo(g, PALETTE.flowers.red) : g, px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, size * (0.9 + hash01(t.x, t.z * 3 + k, 29) * 0.3));
   };
-  const want = plan.flowers[st];
+  // P7-E28: lawn bordering the beach is the soft edge (dune grass, then sparse grass, then lawn): no flowers there
+  const byBeach = zone !== 'beach' && SIDES.some(([dx, dz]) => zoneOf(c, t.x + dx, t.z + dz) === 'beach');
+  const want = byBeach ? 0 : plan.flowers[st];
   const n = want ? Math.max(1, Math.round(want * dens)) : 0;
   if (zone === 'path_edge') {
     // ── a neat, low border set back from each path side: one row, small flowers, nothing tall
@@ -476,6 +496,70 @@ export function zonedPlanting(c: DressCtx, t: TileData, stage: number, x: number
   if (st >= 4 && (zone === 'flower_garden' || zone === 'meadow') && hash01(t.x, t.z, 117) < 0.5) {
     const px = x + (hash01(t.x, t.z, 119) - 0.5) * 0.6, pz = z + (hash01(t.x, t.z, 121) - 0.5) * 0.6;
     c.fb.add(flowerGeo('daisy', 1, true, t.variant, lod), px, top, pz, t.variant, 1.1);
+  }
+}
+
+/**
+ * P7-E28: a restored beach tile (the zone `beach`): clean pale sand (its top is the corner-blended quad, so it
+ * melts into the lawn behind), a darker wet band where it meets the sea or surf, a few shells and pebbles, the odd
+ * piece of driftwood, and low dune grass only toward its inner edge. No flowers. Deterministic per tile.
+ */
+export function beachDressing(c: DressCtx, t: TileData, x: number, z: number, top: number) {
+  const depth = beachDepth(t.x, t.z, c as ZoneCtx) ?? 1;
+  const r = (k: number) => hash01(t.x, t.z, 401 + k);
+  // ── the wet band: a gradient quad from the waterline in, on each side facing open sea or surf
+  const wet = lin(PALETTE.beachWet);
+  const dry = lin(pick(PALETTE.beachSand, t.variant));
+  for (const [dx, dz] of SIDES) {
+    const nb = c.peek(t.x + dx, t.z + dz);
+    if (!nb || (nb.feature ?? 'lawn') !== 'water' || !(seaCell(t.x + dx, t.z + dz) || surfCell(t.x + dx, t.z + dz))) continue;
+    const w = 0.42 + (r(dx * 3 + dz) - 0.5) * 0.12;
+    // edge corners (on the water side) and inner corners, counter-clockwise from above
+    const ex = dx > 0 ? t.x + 1 : dx < 0 ? t.x : undefined;
+    const ez = dz > 0 ? t.z + 1 : dz < 0 ? t.z : undefined;
+    const y = top + 0.004;
+    let p: number[];
+    if (ex !== undefined) {
+      const ix = ex - dx * w;
+      p = dx > 0 ? [ix, y, t.z, ix, y, t.z + 1, ex, y, t.z + 1, ex, y, t.z] : [ex, y, t.z, ex, y, t.z + 1, ix, y, t.z + 1, ix, y, t.z];
+      const cw = dx > 0 ? [dry, dry, wet, wet] : [wet, wet, dry, dry];
+      c.b.quad(p, cw.flat());
+    } else if (ez !== undefined) {
+      const iz = ez - dz * w;
+      p = dz > 0 ? [t.x, y, iz, t.x, y, ez, t.x + 1, y, ez, t.x + 1, y, iz] : [t.x, y, ez, t.x, y, iz, t.x + 1, y, iz, t.x + 1, y, ez];
+      const cw = dz > 0 ? [dry, wet, wet, dry] : [wet, dry, dry, wet];
+      c.b.quad(p, cw.flat());
+    }
+  }
+  if (c.lod === 0) return;
+  // ── shells and pebbles: one or two small pieces on about a third of the tiles
+  if (r(10) < 0.34) {
+    const n = 1 + (r(11) < 0.4 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const sx = x + (r(12 + i) - 0.5) * 0.7, sz = z + (r(14 + i) - 0.5) * 0.7;
+      const [px, pz] = c.fit ? c.fit(sx, sz, 0.06) : [sx, sz];
+      const shell = r(16 + i) < 0.55;
+      const s = shell ? 0.07 + r(18 + i) * 0.03 : 0.09 + r(18 + i) * 0.05;
+      c.b.add('sphere', shell ? pick(PALETTE.props.shells, t.variant + i) : i % 2 ? PALETTE.stone.grey : PALETTE.stone.pebble, [px, top + s * 0.2, pz], [s, s * (shell ? 0.35 : 0.6), s * 0.85]);
+    }
+  }
+  // ── the odd bleached log above the wet band
+  if (depth > 0.2 && r(20) < 0.05) {
+    const along = r(21) < 0.5;
+    const len = 0.5 + r(22) * 0.25;
+    const lx = x + (r(23) - 0.5) * 0.3, lz = z + (r(24) - 0.5) * 0.3;
+    for (let i = 0; i < 7; i++) {
+      const k = i / 6 - 0.5;
+      const d = 0.11 - i * 0.006;
+      const px = lx + (along ? k * len : 0), pz = lz + (along ? 0 : k * len);
+      c.b.add('sphere', i === 0 ? PALETTE.props.driftwoodEnd : PALETTE.props.driftwood, [px, top + d * 0.4, pz], along ? [d * 1.6, d * 0.8, d] : [d, d * 0.8, d * 1.6]);
+    }
+  }
+  // ── dune grass toward the inner edge only (none on the open sand by the water)
+  const dune = depth < 0.5 ? 0 : Math.round(((depth - 0.5) / 0.5) * 4 * Math.max(0.5, c.dens));
+  for (let i = 0; i < dune; i++) {
+    const px = x + (r(30 + i) - 0.5) * 0.85, pz = z + (r(40 + i) - 0.5) * 0.85;
+    c.fb.add(grassGeo(i % 3 === 0 ? 1 : 2, t.variant + i, 1), px, top, pz, r(50 + i) * 6.28, 0.9 + r(60 + i) * 0.5);
   }
 }
 
