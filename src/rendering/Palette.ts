@@ -626,6 +626,33 @@ export const PALETTE = {
   botGlowFocus: '#ffd27a',
   botGhost: '#bff5d8',
   nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a', dewStem: '#d9d2c2', dewCap: '#9fb7c9', dewDrop: '#e8f6ff', glass: '#bfe3ef', moth: '#e9e4d8' },
+  /**
+   * P7-E30 (#743, #745, #758): relief and wasteland. Weathered boulders and moss for Saltwind's stepped walls; the
+   * showcase fall's rill, lip and wet face; cracked dead earth, broken path pieces and derelict clean-energy debris
+   * (a toppled panel, a snapped pole); the dead beach's wrack, rope ends and planks. All dull and desaturated.
+   */
+  terrain: {
+    rock: ['#958a79', '#857b6c', '#a89d8a'],
+    rockDark: '#6f6a61',
+    moss: ['#6d8a4b', '#7e9956', '#5f7a43'],
+    mossDry: '#8a8762',
+    wetFace: '#615d55',
+    rillBed: '#77725f',
+    dryBed: '#a19480',
+    lip: '#d2c9b6',
+    crack: '#5e5650',
+    crackDeep: '#45403b',
+    pathPiece: ['#b8afa0', '#a69d8f', '#c2baab'],
+    panelGlass: '#2e3b52',
+    panelCracked: '#56657a',
+    panelFrame: '#8e908c',
+    pole: '#7c7e7b',
+    poleRust: '#875b3e',
+    wire: '#302d2a',
+    wrack: ['#5f5b40', '#6b6447'],
+    rope: '#9f8b63',
+    plank: ['#8a7a63', '#7a6c58'],
+  },
   // ───── legacy names (pre-Look 2), kept as aliases ─────
   concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],
   concreteDark: '#6b6358',

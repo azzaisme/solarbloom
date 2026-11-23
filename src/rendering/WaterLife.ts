@@ -14,8 +14,8 @@ import { waterFade, waterWaves } from './WaterSurface';
  * floats rides the same swell the surface lifts by (`waterWaves`), on the water's own clock, and fades in with a
  * restore. Fish now and then rise and ring the surface (WaterDisturbance, source `fish`).
  */
-export type LifeKind = 'pad0' | 'pad1' | 'flower' | 'leaf0' | 'leaf1' | 'fish' | 'fleck' | 'plant' | 'fall' | 'foam' | 'spray' | 'outlet';
-export const LIFE_KINDS: readonly LifeKind[] = ['pad0', 'pad1', 'flower', 'leaf0', 'leaf1', 'fish', 'fleck', 'plant', 'fall', 'foam', 'spray', 'outlet'];
+export type LifeKind = 'pad0' | 'pad1' | 'flower' | 'leaf0' | 'leaf1' | 'fish' | 'fleck' | 'plant' | 'fall' | 'foam' | 'spray' | 'outlet' | 'sheet';
+export const LIFE_KINDS: readonly LifeKind[] = ['pad0', 'pad1', 'flower', 'leaf0', 'leaf1', 'fish', 'fleck', 'plant', 'fall', 'foam', 'spray', 'outlet', 'sheet'];
 
 export interface LifeSpot {
   kind: LifeKind;
@@ -39,6 +39,12 @@ export interface LifeSpot {
   /** a restore's window (WaterSurface's transition clock): it fades in over it */
   t0: number;
   d: number;
+  /**
+   * P7-E30 (#745) `sheet`: a free-standing sheet of falling water (the showcase fall, its rill): (x, z) is where it
+   * leaves its lip, `y` the foot it lands at, `range` the height from foot to lip, `size` its width and `reach` how
+   * far out from the lip it lands, the way `yaw` points
+   */
+  reach?: number;
 }
 
 /** What `lifeForTile` needs to know about a tile of water. */
@@ -842,6 +848,8 @@ export class WaterLife {
       foam: [foamGeo(), foamMat],
       spray: [sprayGeo(), sprayMat],
       outlet: [outletGeo(L.falls.stone, L.falls.mouth), culvertMat],
+      // P7-E30: the showcase fall and its rill: the streams' own sheets and streaks, at any size
+      sheet: [fallGeo(), this.fallMat],
     };
     const fmt = pc.VertexFormat.getDefaultInstancingFormat(device);
     for (const k of LIFE_KINDS) {
@@ -855,7 +863,7 @@ export class WaterLife {
       mi.cull = false;
       mi.visible = false;
       const e = new pc.Entity(`water-life-${k}`);
-      e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: k !== 'fish' && k !== 'fleck' && k !== 'fall' && k !== 'foam' && k !== 'spray', layers: layer !== undefined ? [layer] : [pc.LAYERID_WORLD] });
+      e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: k !== 'fish' && k !== 'fleck' && k !== 'fall' && k !== 'sheet' && k !== 'foam' && k !== 'spray', layers: layer !== undefined ? [layer] : [pc.LAYERID_WORLD] });
       parent.addChild(e);
       this.slots.set(k, { mi, mat, vb, data: new Float32Array(cap * 16), cap, spots: [] });
     }
@@ -897,7 +905,7 @@ export class WaterLife {
     }
     const t = f.time;
     // the streams' streaks run down
-    if (this.slots.get('fall')!.spots.length) {
+    if (this.slots.get('fall')!.spots.length || this.slots.get('sheet')!.spots.length) {
       // the streaks run down the sheet (its v grows downward): the engine flips a map's v offset (it stores
       // 1 - tiling - offset), so a growing offset moves the pattern down the screen. Checked in motion by
       // shore-shots STRIP_MS (the owner saw it running up with the sign the other way)
@@ -957,6 +965,11 @@ export class WaterLife {
           const fz = -Math.sin(yaw);
           const reach = fallReach() - out + L.falls.culvert * CULVERT.sill * 0.5;
           placeMatrix(m, n * 16, x + fx * out, s.y, z + fz * out, yaw, reach * grow, fallTop(s.range) * grow, s.size * grow);
+          n++;
+          continue;
+        } else if (k === 'sheet') {
+          // P7-E30: from its lip out and down to its foot, as wide as the flow
+          placeMatrix(m, n * 16, x, s.y, z, yaw, (s.reach ?? 0.3) * grow, s.range, s.size * grow);
           n++;
           continue;
         } else if (k === 'foam') {
