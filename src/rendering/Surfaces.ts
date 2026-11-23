@@ -326,6 +326,7 @@ const FAMILIES: Record<PlantingZone, readonly Family[]> = {
   woodland_understory: [{ main: [['wild', 2], ['wild', 0]], accent: ['daisy', 2] }], // bluebells and wood anemones
   open_lawn: [{ main: [['wild', 0], ['daisy', 0]], accent: ['wild', 1] }],
   landmark_clearance: [{ main: [['wild', 0], ['daisy', 0]], accent: ['wild', 1] }],
+  beach: [{ main: [['wild', 0]], accent: ['wild', 0] }], // unused: a beach grows no flowers
 };
 /** The rare special variety: a deep red bloom found in about one garden bed in forty. */
 const RARE: Bloom = ['cosmos', 0];
@@ -343,6 +344,7 @@ const ZONE_PLAN: Record<PlantingZone, { flowers: number[]; tufts: number[]; shru
   woodland_understory: { flowers: [0, 0, 1, 2, 3], tufts: [0, 2, 3, 3, 3], shrub: [0, 0.15, 0.4, 0.6, 0.7] },
   open_lawn: { flowers: [0, 0, 1, 1, 1], tufts: [0, 2, 2, 2, 2], shrub: [0, 0, 0, 0, 0] },
   landmark_clearance: { flowers: [0, 0, 0, 1, 1], tufts: [0, 1, 1, 1, 1], shrub: [0, 0, 0, 0, 0] },
+  beach: { flowers: [0, 0, 0, 0, 0], tufts: [0, 0, 0, 0, 0], shrub: [0, 0, 0, 0, 0] }, // dressed by beachDressing
 };
 
 /** A tile's family: from a noise field a few tiles wide, so a bed spans neighbouring tiles. */

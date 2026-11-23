@@ -92,7 +92,7 @@ describe('P7-E28 planting zones', () => {
     const seen = new Set<PlantingZone>();
     const p = park().ctx;
     for (let z = 0; z < 64; z++) for (let x = 0; x < 64; x++) seen.add(zoneAt(x, z, p));
-    for (const zn of PLANTING_ZONES) expect(seen.has(zn), zn).toBe(true);
+    for (const zn of PLANTING_ZONES) if (zn !== 'beach') expect(seen.has(zn), zn).toBe(true); // beach: Old City sand only (tested below)
   });
 });
 
@@ -148,5 +148,47 @@ describe('P7-E28 zoned planting', () => {
     expect(avg(s3.landmark_clearance)).toBeLessThan(0.8);
     expect(avg(s3.meadow)).toBeGreaterThan(avg(s3.open_lawn));
     expect(avg(s3.flower_garden)).toBeGreaterThan(avg(s3.meadow));
+  });
+});
+
+describe('P7-E28 beach zone (Saltwind)', () => {
+  it('sand along the open sea stays beach in one strip; canal banks stay shoreline; nothing else is beach', async () => {
+    const { createInitialState, GROUND } = await import('../src/core/GameState');
+    const { Sim } = await import('../src/gameplay/Sim');
+    const { LANDING } = await import('../src/data/oldcity');
+    const sim = new Sim(createInitialState(7));
+    const J = LANDING.jetty;
+    const ctxAt = (x: number, z: number): ZoneCtx => {
+      const info = sim.areas.info(sim.areas.map.areaOfCell(x, z));
+      return { peek: (a, b) => sim.grid.get(GROUND, a, b), areaAt: (a, b) => sim.areas.map.areaOfCell(a, b), areaType: info.type, landmark: info.noLandmark ? undefined : info.landmark };
+    };
+    let beach = 0, beachNotSand = 0, canalBeach = 0;
+    const cols: number[] = [];
+    for (let x = J.x - 30; x < J.x + 30; x++) {
+      let n = 0;
+      for (let z = J.z - 30; z < J.z + 8; z++) {
+        const t = sim.grid.get(GROUND, x, z)!;
+        const zn = zoneAt(x, z, ctxAt(x, z));
+        if (zn !== 'beach') continue;
+        beach++;
+        n++;
+        if (t.feature !== 'sand') beachNotSand++;
+        // a canal bank (water, but not the sea) next to it would make it shoreline instead
+      }
+      cols.push(n);
+    }
+    // the canal's own bank cells stay shoreline
+    for (let z = J.z - 20; z < J.z - 4; z++)
+      for (let x = J.x - 12; x < J.x - 6; x++) {
+        const t = sim.grid.get(GROUND, x, z)!;
+        if (t.feature === 'sand' && zoneAt(x, z, ctxAt(x, z)) === 'beach' && [[1, 0], [-1, 0]].some(([dx]) => sim.grid.get(GROUND, x + dx, z)?.feature === 'water' && z < J.z - 8)) canalBeach++;
+      }
+    console.log('beach cells', beach, 'per column', cols.join(' '));
+    expect(beach).toBeGreaterThan(40);
+    expect(beachNotSand).toBe(0);
+    expect(canalBeach).toBe(0);
+    // a continuous strip: columns that have beach have a few rows of it, not a speckle
+    const withBeach = cols.filter((n) => n > 0);
+    expect(withBeach.reduce((a, b) => a + b, 0) / withBeach.length).toBeGreaterThan(2);
   });
 });
