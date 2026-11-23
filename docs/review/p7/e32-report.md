@@ -105,5 +105,14 @@ On the base with E30 (the Falls overlook, the showcase waterfall, the wasteland)
 | A floating far slab | The far band has no procedural land any more. Its pieces sink into haze (`heightFog.far` 0.85 over 12 m) | `mid-golden-shore` |
 | Golden hour reads cool | As `Sky.dusk` rises, the near and mid bands' sun-facing sides take up to 2.4× the warm key (`golden.sun` 1.4), and the cool day ambient eases halfway to neutral. Day (dusk 0) and night are unchanged; nothing global is tinted | `mid-golden-shore`, `mid-golden-third` |
 
-Ruins' own draw calls (High): third-person 7, shore 6, overview 0, out of 16 meshes. Triangles: ~111k for the whole
-set. The shader path and the procedural fallback are unchanged.
+Then the owner's own screenshot, from a raised third-person view looking seaward: the ruins hovered over a pale band,
+and solar frames floated on a mesa.
+
+| Owner's point | Fix | Shot |
+|---|---|---|
+| A white gap between the sea and the ruins from up high | **The sea apron**: a flat ring at sea level under the near band's slices, 110–560 units from the centre. It is wholly haze at its inner edge (where the drawn sea dissolves, ~100 units out) and darkens to the coasts' own fade at their feet. It sits in the ruins' depth band, so the world's sea hides it wherever the sea is drawn. Inland is now judged at the far edge of the drawn world (80–110 units out), so from a raised camera that sees over land to the sea, the coasts keep their feet | `late-day-overlook` (the owner's view: E30's overlook camera, seaward), `mid-day-shore` |
+| Solar frames floating on a mesa | Solar frames never stand on a mesa top (a tower stands there instead), are gone from the near band, and are drawn at 0.6× so their column reads | — |
+
+Ruins' own draw calls (High): third-person 8, shore 6, overview 0, out of 17 meshes (the apron shares the near
+band's slices). Triangles: ~110k for the whole set. The shader path and the procedural fallback are unchanged. No page
+errors in any run.
