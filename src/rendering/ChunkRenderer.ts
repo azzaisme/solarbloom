@@ -28,7 +28,8 @@ import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } 
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
-import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfAt, turfTop, type DressCtx, type SolidSink } from './Surfaces';
+import { areaEdges, beachDressing, buildingDressing, grassTufts, lawnFringe, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
+import { zoneAt, type PlantingZone } from './PlantingZones';
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER } from './Water';
@@ -1644,6 +1645,7 @@ export class ChunkRenderer {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     this.sink = b;
+    const zones = new Map<string, PlantingZone>();
     this.ctx = {
       get b() {
         return self.solidSink();
@@ -1667,6 +1669,14 @@ export class ChunkRenderer {
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
       model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
       bloom: (t) => s.water.bloomShown(t), // E23.4.4: the lawn's colour fades with low water too
+      // P7-E28: planting zones, memoised for this build (a pure function of the cell, so a rebuild matches)
+      landmark: s.areas.info(area).noLandmark ? undefined : s.areas.info(area).landmark,
+      zone: (x, z) => {
+        const k = `${x},${z}`;
+        let zn = zones.get(k);
+        if (!zn) zones.set(k, (zn = zoneAt(x, z, self.ctx)));
+        return zn;
+      },
     };
     // E19.1.5: this chunk's plots and their looks (decided before the tiles, which stay flat under a chosen plot)
     this.plotCells.clear();
@@ -3637,9 +3647,18 @@ export class ChunkRenderer {
         }
       }
       return;
+    } else if (f === 'sand' && zoneOf(c, t.x, t.z) === 'beach') {
+      // P7-E28: the beach by the sea stays sand once restored (clean and pale; it blends into the lawn behind it).
+      // Visual only: the tile is still restored ground with its own feature.
+      this.slab(b, PALETTE.beachSand[((t.variant % 3) + 3) % 3], [x, h, z], [1, 0.16, 1]);
+      turfTop(c, t, top);
+      beachDressing(c, t, x, z, top);
+      if (t.plant) this.plantExtras(t, x, z, top); // what the player's pulse grew still shows
+      return;
     } else {
       this.slab(b, grass, [x, h, z], [1, 0.16, 1]);
       turfTop(c, t, top); // Look 3.3: corner-blended turf, no square seams between lawns
+      lawnFringe(c, t, top); // P7-E28: a ragged grass edge over dead ground next door, not a grid of squares
       this.edges(b, t, x, z, top, false);
       // Look 3.9: some reservoir clay becomes a raised bed
       if (f === 'clay' && stage >= 2 && dhash(t.x, t.z, 221) < 0.25 && !treeSpot(t, this.areaType)) {
@@ -3647,16 +3666,21 @@ export class ChunkRenderer {
         return;
       }
     }
-    grassTufts(c, t, stage, x, z, top, f === 'paving' ? 0.2 : 0.46, f === 'paving' ? 1 : undefined);
-    if (f !== 'paving') flowerDrifts(c, t, stage, x, z, top); // Look 3.4/3.5: species drifts hugging edges
-    if (t.plant && f !== 'paving') this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
-    // Phase 5: a tree tile grows its tree from a sapling (Restored) to Radiant; other Thriving tiles get a seeded mix.
-    if (!this.addTree(t, h, 1) && stage >= 3 && f !== 'paving') thrivingExtras(c, t, x, z, top);
-    else if (stage <= 2 && f !== 'paving' && !treeSpot(t, this.areaType) && dhash(t.x, t.z, 67) < 0.07) {
+    if (f === 'paving') {
+      grassTufts(c, t, stage, x, z, top, 0.2, 1);
+      this.addTree(t, h, 1);
+      return;
+    }
+    // P7-E28 (#714): natural ground is planted by its zone (lawn, meadow, bed, shore, woodland floor, path border,
+    // clearing), in layers that fill in with the bloom stage, instead of the same drifts on every tile
+    const zone = zoneOf(c, t.x, t.z);
+    if (t.plant) this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
+    const tree = this.addTree(t, h, 1);
+    zonedPlanting(c, t, stage, x, z, top, zone, tree || !!t.plant);
+    if (stage <= 2 && !tree && (zone === 'open_lawn' || zone === 'landmark_clearance') && dhash(t.x, t.z, 67) < 0.07) {
       // the odd pebble in young lawns (seeded), so open lawn doesn't repeat exactly
       b.add('sphere', PALETTE.stone.pebble, this.at(x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6, 0.08), [0.16, 0.08, 0.13]);
     }
-    if (stage >= 4) radiantExtras(c, t, x, z, top); // Phase 4 E05: Radiant gold, now golden daisies and sunflowers
   }
 
   /**
