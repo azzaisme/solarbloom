@@ -191,8 +191,8 @@ const TREE_MAIN_END = /* glsl */ `
 			float len = max(length(seg), 1.0);
 			float t = clamp(dot(pc0 - pb, seg) / (len * len), 0.0, 1.0);
 			float d = length(pc0 - (pb + seg * t));
-			// P7-E29: clustered canopies reach about 0.6 of the tree's height out from the trunk; the foot needs less.
-			float r = len * mix(0.16, 0.6, smoothstep(0.0, 0.5, t));
+			// Canopies are roughly 0.42 of the height across (P7-E29: up to ~0.5 for the broad variants); the foot needs less.
+			float r = len * mix(0.18, 0.5, smoothstep(0.0, 0.45, t));
 			float cover = 1.0 - smoothstep(r * 0.85, r * 1.25, d);
 			vVertexColor.a *= 1.0 - 0.72 * cover * uTreeCursor.w;
 		}
