@@ -8,7 +8,7 @@ import { PARK_GROWTH } from '../data/bloombot';
 import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
-import { setTreeWorld, treeSpot, treeStage } from '../rendering/TreePlacement';
+import { treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -386,8 +386,6 @@ export class Game {
     // E23.1.1: one rule set. Every new game is the Old City.
     const state = loaded ?? createInitialState(undefined);
     this.sim = new Sim(state, this.bus);
-    // P7-E29 (#737) hook: tree placement reads planting zones (paths, water, machines round a cell) from this world
-    setTreeWorld({ peek: (x, z) => this.sim.grid.peek(GROUND, x, z), areaAt: (x, z) => this.sim.areas.map.areaOfCell(x, z), info: (a) => this.sim.areas.info(a) });
     // E23.7.1.2: a new game's choice of day (the game's own, or the real clock's); Settings shows the save's
     if (!loaded && opts.realClock) this.sim.clock.real = true;
     this.settings.realClock = this.sim.clock.real;
@@ -890,7 +888,7 @@ export class Game {
         const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: a faded tree sheds like its stage
         if (!stage || stage < 2) continue;
         const area = this.sim.areas.areaOf(t);
-        const spot = area ? treeSpot(t, this.sim.areas.info(area).type) : undefined;
+        const spot = area ? treeSpot(t, this.sim.areas.info(area).type, treeWorldOf(this.sim)) : undefined;
         if (!spot) continue;
         const d = Math.hypot(tx + 0.5 - f.x, tz + 0.5 - f.z);
         if (d >= R) continue;
@@ -3125,7 +3123,7 @@ export class Game {
     if (t.feature === 'building') return 'building';
     if (t.occupantId) return this.sim.occupant(t)?.type === 'core' ? 'landmark' : undefined;
     if (t.blocked) return t.prop && (/^(pile|gate):/.test(t.prop) || t.prop === 'pillar' || t.prop === 'stump') ? 'ruin' : undefined;
-    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z)).type);
+    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z)).type, treeWorldOf(this.sim));
     const stage = treeStage(t);
     return spot && stage && stage >= 3 ? 'tree' : undefined;
   }

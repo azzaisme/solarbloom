@@ -26,7 +26,7 @@ import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
-import { treeSpot, treeStage } from './TreePlacement';
+import { treeSpot, treeStage, treeWorldOf } from './TreePlacement';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, buildingDressing, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
 import { zoneAt, type PlantingZone } from './PlantingZones';
@@ -1946,7 +1946,7 @@ export class ChunkRenderer {
   /** Adds the tile's tree at its stage, unless it's growing on its own right now. True if the tile has one. */
   private addTree(t: TileData, h: number, lod: 0 | 1): boolean {
     if ((t.feature ?? 'lawn') === 'water') return false;
-    const spot = treeSpot(t, this.areaType, zoneOf(this.ctx, t.x, t.z)); // P7-E29: by its (memoised) planting zone
+    const spot = treeSpot(t, this.areaType, treeWorldOf(this.sim)); // P7-E29: from the generated world
     if (!spot) return false;
     const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: trees fade with low water
     if (!stage) return false;
@@ -1979,7 +1979,7 @@ export class ChunkRenderer {
     if (t.roofId !== GROUND || this.reducedMotion || this.growing.size >= ChunkRenderer.MAX_GROWING) return;
     const view = this.views.get(chunkKey(GROUND, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
     if (!view || view.far) return;
-    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.areaOf(t)!).type);
+    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.areaOf(t)!).type, treeWorldOf(this.sim));
     const stage = treeStage(t, this.sim.water.bloomShown(t));
     if (!spot || !stage || (t.feature ?? 'lawn') === 'water') return;
     const old = this.growing.get(t.id);
@@ -3630,7 +3630,7 @@ export class ChunkRenderer {
     if (f === 'paving') {
       // Look 3.2: clean stone slabs, moss and tiny flowers in the gaps; a street tree stands in a stone planter.
       paving(c, t, true, x, z, h);
-      if (treeSpot(t, this.areaType)?.planter) planterBed(c, t, true, x, z, top, 0.62, 0.62);
+      if (treeSpot(t, this.areaType, treeWorldOf(this.sim))?.planter) planterBed(c, t, true, x, z, top, 0.62, 0.62);
       this.edges(b, t, x, z, top, true);
     } else if (f === 'road') {
       // Look 2.5: a restored road keeps its surface (cleaner), with greenery creeping in from the edges.
@@ -3655,7 +3655,7 @@ export class ChunkRenderer {
       turfTop(c, t, top); // Look 3.3: corner-blended turf, no square seams between lawns
       this.edges(b, t, x, z, top, false);
       // Look 3.9: some reservoir clay becomes a raised bed
-      if (f === 'clay' && stage >= 2 && dhash(t.x, t.z, 221) < 0.25 && !treeSpot(t, this.areaType)) {
+      if (f === 'clay' && stage >= 2 && dhash(t.x, t.z, 221) < 0.25 && !treeSpot(t, this.areaType, treeWorldOf(this.sim))) {
         planterBed(c, t, true, x, z, top, 0.9, 0.9);
         return;
       }
@@ -3699,7 +3699,7 @@ export class ChunkRenderer {
       }
       fb.add(leafyShrubGeo(t.variant, 1, true), x, top, z, t.variant, 0.55);
     } else if (t.plant === 'grove') {
-      if (!treeSpot(t, this.areaType)) {
+      if (!treeSpot(t, this.areaType, treeWorldOf(this.sim))) {
         const kinds = ['oak', 'cherry', 'birch'] as const;
         fb.add(treeGeo(kinds[t.variant % kinds.length], 3, t.variant, 1), x + (dhash(t.x, t.z, 921) - 0.5) * 0.2, top, z + (dhash(t.x, t.z, 922) - 0.5) * 0.2, t.variant * 0.7, 0.55);
       }

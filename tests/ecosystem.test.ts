@@ -7,7 +7,7 @@ import { TUNING } from '../src/data/tuning';
 import { biodiversity, type BioCounts, type FaunaId } from '../src/gameplay/Ecosystem';
 import { Sim } from '../src/gameplay/Sim';
 import { unlockAll } from './helpers';
-import { treeSpot } from '../src/rendering/TreePlacement';
+import { treeSpot, treeWorldOf } from '../src/rendering/TreePlacement';
 import { CAT_ANCHOR_CLEARANCE, catSpots, machineRunning, tilesIn, wanderStop } from '../src/rendering/FaunaPlan';
 import { CAT_ANCHORS } from '../src/data/templates';
 import faunaSrc from '../src/rendering/Fauna.ts?raw';
@@ -101,7 +101,7 @@ describe('E16 biodiversity score', () => {
 describe('E16 fauna unlocks', () => {
   it(`butterflies arrive at ${F.butterflies.bloomingTiles} blooming tiles, not one before`, () => {
     const sim = freshSim();
-    const lawn = parkTiles(sim).filter((t) => !treeSpot(t, 'park'));
+    const lawn = parkTiles(sim).filter((t) => !treeSpot(t, 'park', treeWorldOf(sim)));
     let events = 0;
     sim.bus.on('fauna.unlocked', ({ id }) => id === 'butterflies' && events++);
     for (const t of lawn.slice(0, F.butterflies.bloomingTiles - 1)) setBloom(sim, t, 2);
@@ -115,7 +115,7 @@ describe('E16 fauna unlocks', () => {
 
   it(`birds arrive at ${F.birds.thrivingTreeTiles} thriving tree tiles, and the park has enough tree tiles`, () => {
     const sim = freshSim();
-    const trees = parkTiles(sim).filter((t) => treeSpot(t, 'park'));
+    const trees = parkTiles(sim).filter((t) => treeSpot(t, 'park', treeWorldOf(sim)));
     expect(trees.length).toBeGreaterThanOrEqual(F.birds.thrivingTreeTiles); // reachable in the starting park alone
     for (const t of trees.slice(0, F.birds.thrivingTreeTiles - 1)) setBloom(sim, t, 3);
     sim.ecosystem.refresh();

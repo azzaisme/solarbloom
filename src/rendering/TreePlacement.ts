@@ -1,11 +1,16 @@
-import type { TileData } from '../core/types';
+import { areaMapFor } from '../core/Areas';
+import { CHUNK, generateTile } from '../core/Generation';
+import type { LayerData, TileData } from '../core/types';
 import { zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
 import type { Species, TreeStage } from './TreeGen';
 
 /**
- * Phase 5 visual overhaul: which restorable tiles grow a tree, of which species. Looks only: deterministic from
- * the tile's position and the world round it, so a tree never jumps between saves or rebuilds; nothing about it
- * is saved.
+ * Phase 5 visual overhaul: which restorable tiles grow a tree, of which species. A pure function of the seed and
+ * the cell: it reads the world as generated (TreeWorld: generated tiles, the area map), never the live grid, so a
+ * tree never depends on which chunks are loaded, on restoration changing a tile (water filling), or on machines
+ * built nearby, and never jumps between saves or rebuilds. Nothing about it is saved. The simulation reads it
+ * (Ecosystem's thriving trees and species, Wildlife's plant kinds), so the game, headless sims and tests all get
+ * the same trees: every caller passes the world of its own seed (`treeWorldOf(sim)`).
  *
  * P7-E29.4 (#737): trees are composed, not a flat share of tiles. Each cell's planting zone (P7-E28,
  * PlantingZones.zoneAt) decides its role:
@@ -33,7 +38,7 @@ const hash01 = (x: number, z: number, salt: number) => {
 type Mix = [Species, number][];
 
 interface Rule {
-  /** without a world (no zones known): share of natural tiles that grow a tree */
+  /** on roofs (no zones up there): share of natural tiles that grow a tree */
   share: number;
   /** of paved tiles (in planters) */
   planterShare?: number;
@@ -45,13 +50,20 @@ interface Rule {
   specimen: Mix;
   /** how likely a grove centre is in a grid cell (0 none … 1 every cell) */
   groves: number;
+  /** how densely a grove carries on into a flower garden (default 0.5: gardens stay mostly open) */
+  gardenGroves?: number;
+  /**
+   * grove and woodland density factor, calibrated so each area type keeps about as many tree tiles as before
+   * zones (the simulation counts them: Ecosystem's thriving trees and species, Wildlife), tested
+   */
+  density?: number;
 }
 
 const RULES: Record<string, Rule> = {
-  park: { share: 0.16, grove: [['oak', 5], ['birch', 2], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 0.7 },
-  grove: { share: 0.3, grove: [['oak', 4], ['pine', 4], ['birch', 2]], shore: [['willow', 4], ['birch', 1]], specimen: [['oak', 3], ['pine', 1]], groves: 0.9 },
+  park: { share: 0.16, grove: [['oak', 5], ['birch', 2], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 1, gardenGroves: 1, density: 2.4 },
+  grove: { share: 0.3, grove: [['oak', 4], ['pine', 4], ['birch', 2]], shore: [['willow', 4], ['birch', 1]], specimen: [['oak', 3], ['pine', 1]], groves: 0.9, density: 1.4 },
   canal: { share: 0.12, planterShare: 0.05, grove: [['oak', 3], ['birch', 2], ['cherry', 2]], shore: [['willow', 6], ['cherry', 1]], specimen: [['oak', 2], ['cherry', 2]], groves: 0.4 },
-  reservoir: { share: 0.14, grove: [['oak', 3], ['willow', 2], ['birch', 1]], shore: [['willow', 6], ['oak', 1]], specimen: [['oak', 3], ['willow', 1]], groves: 0.45 },
+  reservoir: { share: 0.14, grove: [['oak', 3], ['willow', 2], ['birch', 1]], shore: [['willow', 6], ['oak', 1]], specimen: [['oak', 3], ['willow', 1]], groves: 0.8, density: 1.8 },
   // the start: a beach park of shade oaks and windswept pines, willows on the canal, a blossom tree or two
   beach: { share: 0.1, grove: [['oak', 4], ['pine', 2], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 0.75 },
   street: { share: 0.1, planterShare: 0.06, grove: [['birch', 3], ['cherry', 2]], shore: [['willow', 3], ['birch', 1]], specimen: [['cherry', 2], ['birch', 1]], groves: 0.2 },
@@ -101,25 +113,55 @@ export interface TreeSpot {
   planter: boolean;
 }
 
-/** What placement needs to know about the world (P7-E28 zones and paths): Game binds the live world once. */
+/** The world as generated, which placement reads (P7-E28 zones and paths). Pure: one per seed and ground layer. */
 export interface TreeWorld {
+  /** the generated tile at (x, z): its feature and blocking as the seed made it (never the live state) */
   peek(x: number, z: number): Pick<TileData, 'feature' | 'blocked' | 'occupantId'> | undefined;
   areaAt(x: number, z: number): string;
   info(area: string): { type: string; landmark?: readonly [number, number]; noLandmark?: boolean };
-}
-let world: TreeWorld | undefined;
-/** Binds the world tree placement reads (zones, paths). Without one, placement is a per-tile share (tests). */
-export function setTreeWorld(w: TreeWorld | undefined) {
-  world = w;
+  /** placement per cell, memoised (pure, so it never goes stale) */
+  memo: Map<number, ReturnType<typeof treeZone> | null>;
 }
 
-/** A cell's planting zone in the bound world (undefined without one). */
-function zoneOfCell(x: number, z: number, areaType: string): PlantingZone | undefined {
-  if (!world) return undefined;
-  const w = world;
-  const area = w.areaAt(x, z);
-  const info = w.info(area);
-  const ctx: ZoneCtx = { peek: (px, pz) => w.peek(px, pz), areaAt: (px, pz) => w.areaAt(px, pz), areaType, landmark: info.noLandmark ? undefined : info.landmark };
+const WORLDS = new Map<string, TreeWorld>();
+/** The generated world of a seed's ground layer, shared by everything that asks for it (memoised). */
+export function treeWorldFor(seed: number, layer: LayerData): TreeWorld {
+  const key = `${seed}|${layer.id}|${layer.gen ?? 1}`;
+  let w = WORLDS.get(key);
+  if (w) return w;
+  if (WORLDS.size > 4) WORLDS.clear();
+  const map = areaMapFor(seed, layer.gen ?? 1);
+  const chunks = new Map<number, (TileData | undefined)[]>();
+  const ck = (cx: number, cz: number) => (cx + 0x8000) * 0x10000 + (cz + 0x8000);
+  w = {
+    peek(x, z) {
+      const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+      let c = chunks.get(ck(cx, cz));
+      if (!c) {
+        if (chunks.size > 4096) chunks.clear();
+        c = new Array(CHUNK * CHUNK);
+        for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) c[lz * CHUNK + lx] = generateTile(seed, layer, cx * CHUNK + lx, cz * CHUNK + lz);
+        chunks.set(ck(cx, cz), c);
+      }
+      return c[(z - cz * CHUNK) * CHUNK + (x - cx * CHUNK)];
+    },
+    areaAt: (x, z) => map.areaOfCell(x, z),
+    info: (a) => map.info(a),
+    memo: new Map(),
+  };
+  WORLDS.set(key, w);
+  return w;
+}
+
+/** A sim's (or any game state's) generated world. */
+export function treeWorldOf(sim: { state: { seed: number }; grid: { layer(id: string): LayerData | undefined } }): TreeWorld {
+  return treeWorldFor(sim.state.seed, sim.grid.layer('g')!);
+}
+
+/** A cell's planting zone in the generated world: machines are ignored (P7-E28 `ignoreOccupants`). */
+function zoneOfCell(w: TreeWorld, x: number, z: number, areaType: string): PlantingZone {
+  const info = w.info(w.areaAt(x, z));
+  const ctx: ZoneCtx = { peek: (px, pz) => w.peek(px, pz), areaAt: (px, pz) => w.areaAt(px, pz), areaType, landmark: info.noLandmark ? undefined : info.landmark, ignoreOccupants: true };
   return zoneAt(x, z, ctx);
 }
 
@@ -167,12 +209,12 @@ function distTo(x: number, z: number, max: number, hit: (x: number, z: number) =
   return max + 1;
 }
 /** A route to frame: a path, a road or open water. */
-const route = (x: number, z: number) => {
-  const t = world!.peek(x, z);
+const route = (w: TreeWorld) => (x: number, z: number) => {
+  const t = w.peek(x, z);
   return isHard(t) || isWater(t);
 };
 /** A jetty or bridge deck: paving or road with water beside it. */
-const deck = (x: number, z: number) => isHard(world!.peek(x, z)) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => isWater(world!.peek(x + dx, z + dz)));
+const deck = (w: TreeWorld) => (x: number, z: number) => isHard(w.peek(x, z)) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => isWater(w.peek(x + dx, z + dz)));
 
 /** Whether (x, z) is the specimen candidate of its grid cell. */
 function specimenCell(x: number, z: number): boolean {
@@ -185,25 +227,28 @@ function specimenCell(x: number, z: number): boolean {
 type Role = 'grove' | 'specimen' | 'shore' | 'accent' | 'planter' | 'fallback';
 
 /**
- * P7-E29.4: the one place a cell's tree role is decided (by its planting zone). Undefined: no tree.
- * `zone` may be passed when the caller already knows it (the chunk builder memoises zones per build).
+ * P7-E29.4: the one place a ground cell's tree role is decided (by its planting zone in the generated world).
+ * Undefined: no tree. Roof cells (no zones up there) take a plain per-cell share.
  */
-export function treeZone(t: Pick<TileData, 'x' | 'z' | 'feature' | 'blocked'>, areaType: string, zone = zoneOfCell(t.x, t.z, areaType)): { role: Role; mix: Mix; depth?: number } | undefined {
+export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, roof = false): { role: Role; mix: Mix; depth?: number } | undefined {
   const rule = RULES[areaType] ?? RULES.park;
+  const t = w.peek(x, z);
+  if (!t || t.blocked) return undefined;
   const f = t.feature ?? 'lawn';
   const natural = f === 'lawn' || f === 'litter' || f === 'clay' || f === 'sand';
   if (f === 'paving') {
-    if (!rule.planterShare || hash01(t.x, t.z, 1) >= rule.planterShare) return undefined;
+    if (!rule.planterShare || hash01(x, z, 1) >= rule.planterShare) return undefined;
     // no planters on a jetty or a bridge (paving with water beside it)
-    if (world && deck(t.x, t.z)) return undefined;
+    if (deck(w)(x, z)) return undefined;
     return { role: 'planter', mix: PLANTER };
   }
   if (!natural) return undefined;
-  if (!zone) return hash01(t.x, t.z, 1) < rule.share ? { role: 'fallback', mix: rule.grove } : undefined;
+  if (roof) return hash01(x, z, 1) < rule.share ? { role: 'fallback', mix: rule.grove } : undefined;
+  const zone = zoneOfCell(w, x, z, areaType);
   if (zone === 'path_edge' || zone === 'landmark_clearance') return undefined;
   // keep the jetty landing and bridge ends open: no crowns over the planks or the first steps off them
-  if (world && distTo(t.x, t.z, TREES.deckClear, deck) <= TREES.deckClear) return undefined;
-  const u = hash01(t.x, t.z, 1);
+  if (distTo(x, z, TREES.deckClear, deck(w)) <= TREES.deckClear) return undefined;
+  const u = hash01(x, z, 1);
   switch (zone) {
     case 'shoreline':
       return u < TREES.shoreShare ? { role: 'shore', mix: rule.shore } : undefined;
@@ -212,24 +257,38 @@ export function treeZone(t: Pick<TileData, 'x' | 'z' | 'feature' | 'blocked'>, a
       // path or the water, then the odd ornamental
       const wood = zone === 'woodland_understory';
       const garden = zone === 'flower_garden';
-      const depth = groveDepth(t.x, t.z, wood ? 1 : rule.groves);
-      const p = (depth > 0 ? TREES.groveDensity * (0.45 + 0.55 * depth) : wood ? TREES.woodDensity * 0.5 : 0) * (garden ? 0.5 : 1);
+      const depth = groveDepth(x, z, wood ? 1 : rule.groves);
+      const p = Math.min(0.92, (depth > 0 ? TREES.groveDensity * (0.45 + 0.55 * depth) : wood ? TREES.woodDensity * 0.5 : 0) * (garden ? rule.gardenGroves ?? 0.5 : 1) * (rule.density ?? 1));
       if (u < p) return { role: 'grove', mix: rule.grove, depth };
-      if (!wood && specimenCell(t.x, t.z) && world) {
-        const d = distTo(t.x, t.z, TREES.specimenPath[1], route);
+      if (!wood && specimenCell(x, z)) {
+        const d = distTo(x, z, TREES.specimenPath[1], route(w));
         if (d >= TREES.specimenPath[0] && d <= TREES.specimenPath[1]) return { role: 'specimen', mix: rule.specimen };
       }
       if (garden) return u < TREES.accentShare ? { role: 'accent', mix: [['cherry', 1]] } : undefined;
-      if (zone === 'meadow' && hash01(t.x, t.z, 7) < TREES.meadowShare) return { role: 'accent', mix: [['birch', 2], ['cherry', 1]] };
+      if (zone === 'meadow' && hash01(x, z, 7) < TREES.meadowShare) return { role: 'accent', mix: [['birch', 2], ['cherry', 1]] };
       return undefined;
     }
   }
 }
 
-/** The tree this tile grows, if any (ignores its current state). */
-export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'feature' | 'blocked'>, areaType: string, zone?: PlantingZone): TreeSpot | undefined {
+/**
+ * The tree this tile grows, if any (ignores its current growth). `w`: the world of the tile's seed
+ * (`treeWorldOf(sim)`). A tile blocked now shows no tree, but where trees stand comes from generation alone.
+ */
+export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'blocked'> & { roofId?: string }, areaType: string, w: TreeWorld): TreeSpot | undefined {
   if (t.blocked) return undefined;
-  const z = zone === undefined ? treeZone(t, areaType) : treeZone(t, areaType, zone);
+  const roof = t.roofId !== undefined && t.roofId !== 'g';
+  const key = (t.x + 0x8000) * 0x10000 + (t.z + 0x8000);
+  let z: ReturnType<typeof treeZone> | null | undefined = roof ? undefined : w.memo.get(key);
+  if (z === undefined) {
+    // a ground cell's area type comes from the world itself, so every caller gets the same answer
+    z = (roof ? undefined : treeZone(t.x, t.z, w.info(w.areaAt(t.x, t.z)).type, w)) ?? null;
+    if (!roof) {
+      if (w.memo.size > 200_000) w.memo.clear();
+      w.memo.set(key, z);
+    }
+  }
+  if (roof) z = hash01(t.x, t.z, 1) < (RULES[areaType] ?? RULES.park).share ? { role: 'fallback', mix: (RULES[areaType] ?? RULES.park).grove } : null;
   if (!z) return undefined;
   const [s0, s1] = TREES.scale[z.role];
   let scale = s0 + (s1 - s0) * hash01(t.x, t.z, 5);
