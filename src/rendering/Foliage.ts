@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { SOLID_SINK, foliageShape, geoBounds, type FoliageShape, type GeoBounds } from '../core/Solids';
 import type { TreeGeo } from './TreeGen';
+import { LOOK } from '../data/look';
 
 /**
  * Phase 5 visual overhaul: the foliage material (vertex colours + wind) and a builder that stamps cached tree
@@ -190,6 +191,53 @@ const TREE_MAIN_END = /* glsl */ `
 	#endif
 `;
 
+/**
+ * P7-E29.6 (#739): dappled shade. In the shadow pass only, a crown's leaf masses (the LEAF_FLAG vertices) let light
+ * through in soft, leaf-sized gaps: a world-space value noise discards the shadow where it dips below the dapple
+ * strength, so the ground under a tree shows sun flecks instead of one solid blob. The forward pass keeps the
+ * vertex alpha (the see-through effect) exactly as before. No extra triangles; Low turns it off.
+ * The noise is taken on the plane across the sunlight (LOOK.sun), so gaps line up through a crown's depth.
+ */
+function dappleSun(): number[] {
+  const e = (LOOK.sun.elevation * Math.PI) / 180;
+  const [hx, hz] = LOOK.sun.toward;
+  const h = Math.hypot(hx, hz) || 1;
+  return [(hx / h) * Math.cos(e), -Math.sin(e), (hz / h) * Math.cos(e)];
+}
+const DAPPLE_OPACITY_PS = /* glsl */ `
+uniform float material_alphaDitherScale;
+uniform vec4 uDapple; // gap share (0 off), gap cells per world unit, unused, unused
+uniform vec3 uDappleSun; // the way the sunlight travels (unit)
+float sbDapHash(vec3 p) {
+	return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+}
+float sbDapNoise(vec3 p) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(mix(sbDapHash(i), sbDapHash(i + vec3(1, 0, 0)), f.x), mix(sbDapHash(i + vec3(0, 1, 0)), sbDapHash(i + vec3(1, 1, 0)), f.x), f.y),
+		mix(mix(sbDapHash(i + vec3(0, 0, 1)), sbDapHash(i + vec3(1, 0, 1)), f.x), mix(sbDapHash(i + vec3(0, 1, 1)), sbDapHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+void getOpacity() {
+	dAlpha = 1.0;
+	#ifdef FORWARD_PASS
+		#ifdef STD_OPACITY_VERTEX
+		dAlpha = clamp(vVertexColor.{STD_OPACITY_VERTEX_CHANNEL}, 0.0, 1.0);
+		#endif
+	#else
+		if (vLeaf > 0.5 && uDapple.x > 0.0) {
+			// on the plane across the sunlight, so every face along one ray (a crown's near and far sides, and the
+			// clusters behind) opens the same gap and the light really gets through
+			vec3 p = (vLeafP - uDappleSun * dot(vLeafP, uDappleSun)) * uDapple.y;
+			float n = 0.65 * sbDapNoise(p) + 0.35 * sbDapNoise(p * 2.3 + 7.1);
+			if (n < uDapple.x) discard;
+		}
+	#endif
+}
+`;
+/** Dapple per quality tier: [gap share, gap cells per tile] (P7 config). */
+export const DAPPLE_TIER = { low: [0, 3.2, 0, 0], medium: [0.34, 3.2, 0, 0], high: [0.4, 3.2, 0, 0] } as const;
+
 let material: pc.StandardMaterial | undefined;
 /** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 4 cm leaves) */
 // Phase 6: much softer and larger leaves: at full strength the pattern read as scales (broccoli) at play zoom
@@ -200,6 +248,8 @@ let leafTier: keyof typeof LEAF_TIER = 'high';
 export function setLeafTier(t: keyof typeof LEAF_TIER) {
   leafTier = t;
   material?.setParameter('uLeafParams', [...LEAF_TIER[t]]);
+  material?.setParameter('uDapple', [...DAPPLE_TIER[t]]);
+  material?.setParameter('uDappleSun', dappleSun());
 }
 let windStrength = 1;
 
@@ -216,7 +266,8 @@ export function foliageMaterial(): pc.StandardMaterial {
   m.opacityVertexColor = true;
   m.opacityVertexColorChannel = 'a';
   m.opacityDither = pc.DITHER_BAYER8;
-  m.opacityShadowDither = pc.DITHER_NONE;
+  // P7-E29.6: the shadow pass runs the opacity chunk (DAPPLE_OPACITY_PS) for dappled shade; it never dithers there
+  m.opacityShadowDither = pc.DITHER_BAYER8;
   m.setAttribute('vertex_tree', pc.SEMANTIC_ATTR12);
   try {
     const chunks = m.getShaderChunks(pc.SHADERLANGUAGE_GLSL);
@@ -226,12 +277,15 @@ export function foliageMaterial(): pc.StandardMaterial {
     chunks.set('litUserDeclarationPS', LEAF_DECL_PS);
     chunks.set('diffusePS', LEAF_DIFFUSE_PS);
     chunks.set('normalMapPS', LEAF_NORMAL_PS);
+    chunks.set('opacityPS', DAPPLE_OPACITY_PS);
   } catch {
     /* an engine without per-material chunks: trees simply don't sway or fade */
   }
   m.setParameter('uTreeCursor', [0, 0, 0, 0]);
   m.setParameter('uTreeScreen', [1, 1]);
   m.setParameter('uLeafParams', [...LEAF_TIER[leafTier]]);
+  m.setParameter('uDapple', [...DAPPLE_TIER[leafTier]]);
+  m.setParameter('uDappleSun', dappleSun());
   m.setParameter('uWindTime', 0);
   m.setParameter('uWindStrength', windStrength);
   m.setParameter('uBloomWave', [0, 0, 0, 0]);

@@ -1,8 +1,9 @@
 // P7-E29: a gallery of every tree species at one stage and detail level, beside a Bloombot-sized post, lit by one
 // shadowing sun, so tree shapes can be judged without loading the whole game. tools/tree-gallery/shoot.mjs opens it.
-//   ?stage=3&lod=1&scale=1&view=side|iso|third&variant=0
+//   ?stage=3&lod=1&scale=1&view=side|iso|third|top&variant=0
 import * as pc from 'playcanvas';
 import { foliageMaterial, treeMesh } from '../../src/rendering/Foliage';
+import { LOOK } from '../../src/data/look';
 import { SPECIES, treeGeo, type Lod, type TreeStage } from '../../src/rendering/TreeGen';
 
 const q = new URLSearchParams(location.search);
@@ -25,14 +26,19 @@ camera.camera!.toneMapping = pc.TONEMAP_ACES;
 camera.camera!.gammaCorrection = pc.GAMMA_SRGB;
 const span = SPECIES.length * 3.2;
 if (view === 'iso') camera.setPosition(span / 2 - 1.6, 14, 14);
+else if (view === 'top') camera.setPosition(span / 2 - 1.6, 24, 0.5);
 else if (view === 'third') camera.setPosition(0.5, 1.1, 3.2);
 else camera.setPosition(span / 2 - 1.6, 2.2, 17);
-camera.lookAt(view === 'third' ? 0.5 : span / 2 - 1.6, view === 'third' ? 1.2 : 1.4, 0);
+camera.lookAt(view === 'third' ? 0.5 : span / 2 - 1.6, view === 'third' ? 1.2 : view === 'top' ? 0 : 1.4, view === 'top' ? -1.5 : 0);
 app.root.addChild(camera);
 
 const sun = new pc.Entity('sun');
 sun.addComponent('light', { type: 'directional', color: new pc.Color(1, 0.94, 0.84), intensity: 1.6, castShadows: true, shadowDistance: 40, shadowResolution: 2048, shadowBias: 0.2, normalOffsetBias: 0.05, shadowType: pc.SHADOW_PCF3_32F });
-sun.setEulerAngles(48, 35, 0);
+// the game's sun (data/look.ts LOOK.sun), so shadows and dappled shade fall as they do in the world
+const el = (LOOK.sun.elevation * Math.PI) / 180;
+const [hx, hz] = LOOK.sun.toward;
+const hl = Math.hypot(hx, hz) || 1;
+sun.setRotation(new pc.Quat().setFromDirections(pc.Vec3.DOWN, new pc.Vec3((hx / hl) * Math.cos(el), -Math.sin(el), (hz / hl) * Math.cos(el)).normalize()));
 app.root.addChild(sun);
 
 const ground = new pc.Entity('ground');
