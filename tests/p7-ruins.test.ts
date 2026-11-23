@@ -42,6 +42,7 @@ describe('P7-E32 ruined skyline', () => {
     for (const b of built) {
       const p = b.geo.pos;
       for (let i = 0; i < p.length; i += 3) {
+        if (b.geo.xf[i / 3] > 0) continue; // the sea apron runs under everything (see below)
         const d = Math.hypot(p[i] - RUINS.centre[0], p[i + 2] - RUINS.centre[1]);
         expect(d).toBeGreaterThan(190); // the Old City island reaches ~145 from its centre at the corners
         verts++;
@@ -113,6 +114,7 @@ describe('P7-E32 ruined skyline', () => {
         tris += x.geo.idx.length / 3;
         const p = x.geo.pos;
         for (let i = 0; i < p.length; i += 3) {
+          if (x.geo.xf[i / 3] > 0) continue; // the sea apron
           minD = Math.min(minD, Math.hypot(p[i] - RUINS.centre[0], p[i + 2] - RUINS.centre[1]));
           if (x.layer > 0) {
             const br = bearing(p[i], p[i + 2]);
@@ -138,5 +140,30 @@ describe('P7-E32 polish: inland slices', () => {
     expect(inlandToward(0, 40, 8, -400)).toBe(true); // north across the island
     expect(inlandToward(-3.75, 30.5, -3.75, 500)).toBe(false); // due south over the sea
     expect(inlandToward(-3.75, 30.5, 400, 0)).toBe(true); // east: the island, then the mainland
+  });
+});
+
+describe('P7-E32 polish: the sea apron', () => {
+  it('is a flat ring just under sea level, wholly haze at its inner edge, darkening toward the coasts', () => {
+    const b = new RuinPlanner().build();
+    let n = 0;
+    let inner = 0;
+    for (const x of b)
+      for (let i = 0; i < x.geo.xf.length; i++) {
+        const xf = x.geo.xf[i];
+        if (xf <= 0) continue;
+        n++;
+        expect(x.layer).toBe(2);
+        expect(x.geo.pos[i * 3 + 1]).toBeLessThan(0);
+        expect(xf).toBeLessThanOrEqual(1);
+        const r = Math.hypot(x.geo.pos[i * 3] - RUINS.centre[0], x.geo.pos[i * 3 + 2] - RUINS.centre[1]);
+        if (r < RUINS.apron.radii[0] + 1) {
+          inner++;
+          expect(xf).toBeCloseTo(1, 5);
+        }
+        if (Math.abs(r - RUINS.layers[2].radius[0]) < 1) expect(xf).toBeCloseTo(RUINS.apron.coastFade, 5);
+      }
+    expect(n).toBeGreaterThan(1000);
+    expect(inner).toBeGreaterThan(0);
   });
 });

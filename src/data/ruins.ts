@@ -61,7 +61,7 @@ export const RUINS = {
     // only chunky procedural ones (blocks, solid towers, aqueducts) far out and one turbine now and then mid-distance
     far: { mTower: 3, mDome: 2, mAqueduct: 1, block: 2, tower: 1 },
     mid: { mAqueduct: 3, mTower: 3, mDome: 2, mFrame: 1, turbine: 0.4 },
-    near: { mAqueduct: 3, mTower: 3, mDome: 2, mFrame: 1 },
+    near: { mAqueduct: 3, mTower: 3, mDome: 2 },
   } as Record<'far' | 'mid' | 'near', Partial<Record<RuinKind, number>>>,
   /**
    * The authored cliff mesas the ruins stand on, per band: one every `every`° of coast (`twins` of them in a pair, a
@@ -112,6 +112,14 @@ export const RUINS = {
    * The ruined districts: the structures stand in clusters about `every`° apart (a range), each `width`° wide, with
    * open sky between them; mesas between the districts stand bare
    */
+  /** the solar frames' scale against the band's model scale (their column has to read; owner) */
+  frameScale: 0.6,
+  /**
+   * The sea apron (Ruins: a flat ring at sea level under the coasts): radii from the island's centre, `step`° slices,
+   * its colour, and its extra fade toward the horizon colour: whole at the inner radius (where the drawn sea has
+   * dissolved into the haze), `coastFade` at the near coasts' feet, `farFade` at the outer edge
+   */
+  apron: { radii: [110, 160, 215, 280, 360, 470, 560], step: 5, y: -0.3, colour: '#4d7a93', coastFade: 0.35, farFade: 0.8 },
   districts: { every: [24, 36] as [number, number], width: 11 },
   /**
    * Golden hour: the near and mid bands' sun-facing sides take this much more of the (warm) key light as the dusk

@@ -33,6 +33,21 @@ export class Geo {
   nrm: number[] = [];
   alb: number[] = [];
   lamp: number[] = [];
+  /** P7-E32 polish: extra fade toward the horizon colour per vertex (the sea apron's), 0 for everything else */
+  xf: number[] = [];
+
+  /** A flat, up-facing quad with its own extra fade at each corner (the sea apron). */
+  flat(pts: V3[], xf: number[], col: V3) {
+    const base = this.pos.length / 3;
+    pts.forEach((p, i) => {
+      this.pos.push(p[0], p[1], p[2]);
+      this.nrm.push(0, 1, 0);
+      this.alb.push(col[0], col[1], col[2]);
+      this.lamp.push(0);
+      this.xf.push(xf[i]);
+    });
+    this.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+  }
   idx: number[] = [];
 
   /** A planar (or nearly) convex polygon, wound so it faces away from `inside`. */
@@ -58,6 +73,7 @@ export class Geo {
       this.nrm.push(n[0], n[1], n[2]);
       this.alb.push(col[0], col[1], col[2]);
       this.lamp.push(lamp);
+      this.xf.push(0);
     }
     for (let i = 1; i < pts.length - 1; i++) this.idx.push(base, base + i, base + i + 1);
   }
@@ -127,8 +143,10 @@ const C = {
 
 /**
  * P7-E32 polish: does the view from (x, z) toward (tx, tz) cross inland ground within the world's reach (the Old City's
- * land or the mainland, whose terraces, trees and fogged chunks hide the distant coasts' feet)? Two of three rays across
- * the slice must cross it, sampled every 10 units out to 110 (about where the world stops being drawn).
+ * land or the mainland, whose terraces, trees and fogged chunks hide the distant coasts' feet)? What counts is the far
+ * edge of the drawn world (80–110 units out), where it meets the haze: land there hides the coasts' feet, while sea
+ * there (from a raised camera, even past land nearer by) leads on to the sea apron and the coasts. Two of three rays
+ * across the slice must find land there.
  */
 export function inlandToward(x: number, z: number, tx: number, tz: number): boolean {
   const base = Math.atan2(tx - x, tz - z);
@@ -137,7 +155,7 @@ export function inlandToward(x: number, z: number, tx: number, tz: number): bool
     const a = base + off;
     const dx = Math.sin(a);
     const dz = Math.cos(a);
-    for (let d = 20; d <= 110; d += 10) {
+    for (let d = 80; d <= 110; d += 10) {
       const cx = Math.floor((x + dx * d) / CHUNK);
       const cz = Math.floor((z + dz * d) / CHUNK);
       if (isMainlandChunk(cx) || (inOldCity(cx, cz) && !isSeaChunk(cx, cz))) {
@@ -295,13 +313,36 @@ export class RuinPlanner {
           };
           let kind = this.pickKind(name);
           for (let i = 0; i < 4 && kind === last; i++) kind = this.pickKind(name); // never the same piece side by side
+          // a solar frame's column needs ground under it, never a mesa's rough top
+          if (kind === 'mFrame' && sp.mesa !== undefined) kind = 'mTower';
           last = kind;
           const model = M && MODEL_OF[kind] ? M[MODEL_OF[kind]!] : undefined;
           if (model) {
             const along = kind === 'mAqueduct' || kind === 'mFrame';
-            this.model(g, model, f, L.model * this.range(0.75, 1.3), along ? this.range(-0.4, 0.4) : this.rnd() * Math.PI * 2);
+            const sc = L.model * this.range(0.75, 1.3) * (kind === 'mFrame' ? RUINS.frameScale : 1);
+            this.model(g, model, f, sc, along ? this.range(-0.4, 0.4) : this.rnd() * Math.PI * 2);
             if (kind !== 'mFrame') lamp(f.at(0, model.box[4] * L.model * 0.4, model.box[5] * L.model * 0.8));
           } else this.structure(PROCEDURAL_OF[kind] ?? kind, g, f, L.scale * this.range(0.8, 1.2), lamp);
+        }
+      }
+      // P7-E32 polish (owner): the sea apron, a flat ring at sea level under the near band's slices, from just past the
+      // island out under every coast. Seen from up high, the drawn sea ends ~100 units out and the coasts stand far
+      // beyond; without it a band of the sky's haze showed between them and the ruins hovered. Its inner edge is the
+      // haze itself (where the drawn sea has dissolved), darkening to the coasts' own fade at their feet; the world's
+      // sea hides it wherever the sea is drawn
+      if (name === 'near') {
+        const A = RUINS.apron;
+        const xfAt = (r: number) =>
+          r <= A.radii[0] ? 1 : r <= L.radius[0] ? 1 + (A.coastFade - 1) * ((r - A.radii[0]) / (L.radius[0] - A.radii[0])) : A.coastFade + (A.farFade - A.coastFade) * Math.min(1, (r - L.radius[0]) / (A.radii[A.radii.length - 1] - L.radius[0]));
+        const col = lin(A.colour);
+        for (let d = 0; d < 360; d += A.step) {
+          const e = d + A.step;
+          const pt = (deg: number, r: number): V3 => [cx + r * Math.sin(toRad(deg)), A.y, cz + r * Math.cos(toRad(deg))];
+          for (let k = 0; k < A.radii.length - 1; k++) {
+            const r0 = A.radii[k];
+            const r1 = A.radii[k + 1];
+            geos[sectorOf(d + A.step / 2)].flat([pt(d, r0), pt(e, r0), pt(e, r1), pt(d, r1)], [xfAt(r0), xfAt(r0), xfAt(r1), xfAt(r1)], col);
+          }
         }
       }
       geos.forEach((geo, sector) => out.push({ layer: li, sector, geo, fade: L.fade }));
@@ -335,6 +376,7 @@ export class RuinPlanner {
       g.nrm.push(n[0], n[1], n[2]);
       g.alb.push(m.col[i], m.col[i + 1], m.col[i + 2]);
       g.lamp.push(0);
+      g.xf.push(0);
     }
     // the frame swaps handedness (u along the coast, w inward): flip the winding so the faces still face out
     const flip = dot(cross(f.t, [0, 1, 0]), f.n) < 0;
@@ -630,7 +672,7 @@ vec3 getWorldPosition() {
 export class Ruins {
   readonly layer: pc.Layer;
   readonly root: pc.Entity;
-  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; e: pc.Entity; dir: [number, number]; band: number; at: [number, number]; inland: boolean; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
+  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; e: pc.Entity; dir: [number, number]; band: number; at: [number, number]; inland: boolean; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; xf: Float32Array; fade: number; cols: Uint8Array }[] = [];
   private sig: number[] = [];
   /** E23.7.2: the weather's view (1 clear … less in fog and rain): the ruins fade out with it */
   view = 1;
@@ -718,6 +760,7 @@ export class Ruins {
         alb: Float32Array.from(g.alb),
         y: Float32Array.from({ length: n }, (_, i) => g.pos[i * 3 + 1]),
         lamp: Float32Array.from(g.lamp),
+        xf: Float32Array.from(g.xf),
         fade: b.fade,
         cols: new Uint8Array(n * 4),
       });
@@ -810,7 +853,7 @@ export class Ruins {
       for (let i = 0; i < n; i++) {
         const nd = Math.max(0, m.nrm[i * 3] * sunDir[0] + m.nrm[i * 3 + 1] * sunDir[1] + m.nrm[i * 3 + 2] * sunDir[2]);
         const hf = HF.strength * Math.exp(-Math.max(0, m.y[i]) / HF.height);
-        let f = 1 - (1 - fb) * (1 - hf);
+        let f = 1 - (1 - fb) * (1 - hf) * (1 - m.xf[i]);
         f = 1 - (1 - f) * view * view;
         const lamp = m.lamp[i] * lampOn;
         for (let c = 0; c < 3; c++) {
