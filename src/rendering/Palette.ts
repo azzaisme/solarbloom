@@ -71,7 +71,7 @@ const ground = {
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
   /** the stone edge of dead paving where it stands above the earth beside it */
   pavingKerb: '#a48a72',
-  painted: { sand: ['#d9c79e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
+  painted: { sand: ['#e9dfc2'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   /**
    * E25 (#626): the sandbar out in the sea is wet sand: the painted sand is tinted by `wetSandTint` and its sides take
    * `wetSand`: a little darker than the dry beach.
@@ -121,7 +121,8 @@ const lawn = {
     ['#9cc463', '#a5c96a', '#93bd5c', '#accd72', '#91b75a'],
     ['#77ad3e', '#80b443', '#6da23a', '#87b84a', '#649a37'],
     ['#538f34', '#5c973a', '#4c872f', '#639c3f', '#47802c'],
-    ['#80ae3a', '#8ab440', '#77a636', '#92b946', '#6f9e33'],
+    // P7-E27 (#713): Radiant less yellow (was #80ae3a …): still the warmest stage, but a natural green in the sun
+    ['#74b23c', '#7db842', '#6ca838', '#85bc48', '#669e34'],
   ] as string[][],
   /** tufts: darker base, lighter tips (MeshBuilder.tip) */
   tuft: ['#4a7f2c', '#538a31', '#5f9337'],
@@ -467,17 +468,40 @@ const signal = {
   bad: '#ff6b6b',
   info: '#fff0a0',
   gridLine: '#1d3640',
-  /** E24 (#609): the waymark, a soft shaft of sunlight on the current goal (its ring on the ground, its motes) */
-  waymark: '#ffd88a',
-  waymarkRing: '#fff1bf',
-  /** by day the beam and ring go a deeper amber, or they vanish against pale sky, sand and paving */
-  waymarkDay: '#ffaa2e',
-  waymarkRingDay: '#ffc04f',
-  waymarkMote: '#fff6dc',
-  /** #632: Show me where's trail of glowing dots on the ground */
-  trail: '#ffe6a8',
-  /** by day: a warmer gold, so it reads on pale ground */
-  trailDay: '#ffc24a',
+  /** E24 (#609): the waymark, a tall shaft of mint light on the current goal: its white core, soft glow, ground ring,
+   * the gold ribbon winding up it and the leaves drifting through it (the emblem's colours are in Emblem.ts) */
+  waymarkCore: '#f2fff8',
+  waymarkGlow: '#6ff5c4',
+  waymarkRing: '#b6ffe0',
+  waymarkRibbon: '#ffd25a',
+  waymarkLeaf: '#c9ff9a',
+  waymarkLeafGold: '#ffe9a0',
+  /** the Bloom Pulse's ring racing out over the ground, and its sparks */
+  bloomPulse: '#ffe27a',
+  bloomPulseGreen: '#8dffb4',
+  /** the Solarbloom lotus (Emblem.ts), drawn in outline. In the world: its light (the halo, the glow along its lines
+   * and the bright thread in them, leaves greener), its painted line under the light by day (gold, the leaves green),
+   * and the goal's symbol in the centre petal, painted and glowing (rest in blue and cyan, so low charge stands apart).
+   * As the logo: a gold line and a green one on the paper badge. */
+  emblem: {
+    halo: '#6ff5c4',
+    petalBase: '#fff6d2',
+    petalTip: '#ffd968',
+    leaf: '#5fe8a0',
+    leafHeart: '#c8ffdc',
+    bodyBase: '#e8a62a',
+    bodyLeaf: '#2f8a52',
+    symbol: '#b8700f',
+    symbolGlow: '#fff4cf',
+    rest: '#2a6fd6',
+    restGlow: '#8ff4ff',
+    logoEdge: '#e09a1c',
+    logoLeafEdge: '#4f9e3f',
+  },
+  /** #632: Show me where's trail of glowing dots on the ground: mint, like the waymark's light it leads to */
+  trail: '#c8ffe8',
+  /** by day: a deeper mint, so it reads on pale ground */
+  trailDay: '#3fe0a8',
   /** E19: the build hologram bloombot projects */
   holo: '#a6ff86',
   /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */

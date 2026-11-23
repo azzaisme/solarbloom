@@ -80,6 +80,11 @@ export class DayNight {
     private scene: SceneBuilder,
     private sky: Sky,
   ) {
+    this.reload();
+  }
+
+  /** P7-E27.7: re-reads the light colours from LOOK and DAY_LIGHT (construction, and live tuning via look.apply()). */
+  reload() {
     this.base.sun = color(LOOK.sun.color);
     this.base.low = color(DAY_LIGHT.lowSunColour);
     this.base.moon = color(DAY_LIGHT.moonColour);
@@ -149,7 +154,7 @@ export class DayNight {
     // the sky: night, the warm band at dawn and dusk, and the weather's cloud
     this.sky.night = 1 - day;
     const edge = Math.min(Math.abs(f - DAY.dayShare), f, 1 - f); // distance to the nearer horizon
-    this.sky.dusk = (1 - smooth(edge / (DAY.twilight * 2))) * (1 - oc);
+    this.sky.dusk = (1 - smooth(edge / (DAY.twilight * L.duskSpan))) * (1 - oc);
     this.sky.overcast = oc;
     // the unlit clouds: warm at dusk, dim blue at night, greyer under heavy cloud
     const n = 1 - day;

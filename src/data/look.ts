@@ -14,7 +14,8 @@ export const LOOK = {
     // before tone mapping (most of a beach clipped). Now a sunlit pale surface lands just under white, and the
     // sun is about three times the shade's light, so shadows read
     // P7-E27: a warm near-ivory key (#FFF0D6 family) rather than peach, so ivory stone and pale sand stay ivory
-    color: '#ffe8c6',
+    // P7-E27.2 (#720): the brief's sun, #FFF0D6 (was #ffe8c6, and #ffdcaa before that)
+    color: '#fff0d6',
     intensity: 2.1,
     elevation: 34,
     /**
@@ -75,7 +76,11 @@ export const LOOK = {
    * is 1): `radiusPerView` × the world height in view, clamped, so close-ups get tight contact shadows under
    * bushes and machines and the overview still shows grounding around buildings and trees.
    */
-  ssao: { intensity: 1, power: 2, minAngle: 10, samples: 12, radiusPerView: 0.12, minRadius: 0.6, maxRadius: 2 },
+  // P7-E27.4 (#722): was intensity 1, power 2, radius 0.6–2 tiles: every grass tuft occluded its neighbours, so open
+  // lawn came out ~22% darker and paving ~43% (the dull, flat grass), with near-black halos under props (~54%).
+  // Measured in the shore shot, 0.6 / 0.2–0.5 gave ~10% at a contact and ~5% on open lawn, 0.8 / 0.3–0.8 ~24% and
+  // ~12%; this sits between them, aiming at the brief's 10–20% at contacts with open ground left nearly untouched
+  ssao: { intensity: 0.7, power: 1.5, minAngle: 10, samples: 12, radiusPerView: 0.04, minRadius: 0.25, maxRadius: 0.6 },
   /**
    * Look 1.7: colour grading. `warm` is the restored look; `dead` is the fogged / unrestored mood. The game blends
    * between them by the restoration of the area in view (0 = dead, 1 = warm), so the light comes back as you
@@ -83,7 +88,9 @@ export const LOOK = {
    */
   grade: {
     // E27.1 (#679): saturation 1.32 and vibrance 0.42 pushed the greens fluorescent, and lifted shadows flattened them
-    warm: { brightness: 1.0, contrast: 1.06, saturation: 1.1, tint: '#fff9f0', shadows: 0.0, highlights: -0.15, vibrance: 0.15 },
+    // P7-E27.1 (#719): saturation 1.1 + vibrance 0.15 roughly halved the blue of every warm or green surface (sunlit
+    // grass 70 → 37, timber 74 → 40): lime grass, orange timber and sand. Now neutral saturation, a faint warm tint
+    warm: { brightness: 1.0, contrast: 1.06, saturation: 1.0, tint: '#fffaf2', shadows: 0.0, highlights: -0.15, vibrance: 0.0 },
     dead: { brightness: 0.97, contrast: 1.03, saturation: 0.82, tint: '#e9eef6', shadows: 0.0, highlights: -0.1, vibrance: 0.0 },
     /** High contrast (settings): a flatter grade with no vignette so outlines and text stay readable. */
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
@@ -122,6 +129,25 @@ export const LOOK = {
     strength: 1,
     /** how many degrees of sky above the horizon ease into the haze as the fogged distance shows it (Sky) */
     skyBand: 5,
+  },
+  /**
+   * P7-E27 (owner's idea, 23 Nov 2026): continue the region-gate cloud wall (CloudWall) along every edge where revealed
+   * ground meets the hidden city, so the open island is ringed by cloud instead of fading into grey haze. `rows` of
+   * clouds (the gate walls have 2), each row further in, larger and higher; `size` scales the rows behind the first
+   * two (those keep the gate walls' size, so the big banks stand back from the playable edge). Judged in the fixed
+   * shots (off / 3 × 1.3 / 4 × 1.7); the owner chose 4 rows, taller. On a fresh load 1.7 walled off half the
+   * third-person sky, so the back rows grow 1.3 and fade into the haze as distant banks. The clouds' shape is P7-E32's.
+   */
+  cloudRing: {
+    on: true,
+    rows: 4,
+    size: 1.3,
+    /**
+     * The walls breathe (owner, 23 Nov 2026): `count` small puffs (`parts` of a wall cloud's puffs, `size` of the cloud
+     * they leave) lift off standing clouds within `reach` of the camera's focus, rise `rise` and drift `drift` over a
+     * `life` of seconds while they melt away, then start again elsewhere. One dynamic batch; none with reduced motion.
+     */
+    wisps: { count: 12, parts: 4, size: 0.55, rise: 2.4, drift: 0.8, life: [5, 9] as [number, number], reach: 36 },
   },
   /**
    * Look 1.10: drifting light motes and soft light shafts over restored ground near the camera's focus. Counts per

@@ -61,6 +61,8 @@ const QUICK = [
   'toast-queue',
   // E27.2 (#680): Bloombot gathers from and prunes the plant plots
   'plot-work',
+  // P7-E27 (#713): the Bright Day calibration and the cloud ring
+  'p7-lighting',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

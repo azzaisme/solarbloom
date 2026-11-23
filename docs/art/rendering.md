@@ -35,7 +35,7 @@ pipeline, none do.
 
 | Light | Colour | Intensity | Notes |
 | --- | --- | --- | --- |
-| Sun (key) | `#ffdcaa` | 2.1 | Follows the day's arc (`DayNight`, 8° at the horizon to 50° at noon); light travels toward world (−0.25, 0.97) at its middle, so shadows fall to the lower left of the default view. PCF shadows, cascaded per tier. |
+| Sun (key) | `#fff0d6` (P7-E27; was `#ffdcaa`) | 2.1 | Follows the day's arc (`DayNight`, 8° at the horizon to 50° at noon); light travels toward world (−0.25, 0.97) at its middle, so shadows fall to the lower left of the default view. PCF shadows, cascaded per tier. |
 | Fill | `#d0dcf0` | 0.45 | A soft sky blue from the side opposite the sun, from above; no shadows. |
 | Sky and ground | zenith `#82aae0`, horizon `#dde3ea`, ground `#a08a62` | 0.7 | A 32² cubemap prefiltered into `scene.envAtlas`. It provides all ambient light (the flat ambient is black) and the reflections on glossy materials. The ground's warm bounce keeps the shade side of ivory stone warm. Rebuilt after a lost WebGL context. |
 | Rim | `#ffd35c` | 1.2, power 2.2 | A view-dependent term added to the standard emissive chunk for lit materials, tinted by the surface albedo, stronger on the sun side. |
@@ -70,14 +70,16 @@ offscreen target), then the effects run, then the compose pass applies exposure,
   peak around 1.7 (pale sand), so only emissives (see the emissive budget below) glow. Checked (E27.1): noon on the
   beach with bloom on and off clips 0.6% and 0.4% of the picture.
 - **SSAO (High tier):** CameraFrame SSAO, combined into the final colour, 12 samples, blurred. Its radius is in world
-  units (a tile is 1), set every frame to 0.12 × the world height in view, clamped to 0.6–2: tight contact
-  shadows under bushes, benches and machines up close, soft grounding around buildings and trees at the overview.
+  units (a tile is 1), set every frame to 0.04 × the world height in view, clamped to 0.25–0.6, at intensity 0.7
+  (P7-E27.4, #722). It was 0.12 × clamped to 0.6–2 at intensity 1: every grass tuft occluded its neighbours, so open
+  lawn came out ~22% darker, paving ~43% and the bases of props near black. Now a contact reads ~10–20% darker and
+  open ground is nearly untouched (`docs/review/p7/e27-diagnosis.md`).
   It adds a depth prepass (about +50 draw calls in the park shots). Baked vertex occlusion for phones without SSAO
   is not done yet: it means darkening the bases of tufts, stems and props where `ChunkRenderer` and the foliage
   generators write vertex colours, which the parallel E16 vegetation work is rewriting; it should follow E16.
 - **Grading and vignette:** in the compose pass: contrast, saturation, a tint, and HDR-aware shadows / highlights /
   vibrance (`colorEnhance`). Two looks in `LOOK.grade`: `warm` (restored: warm tint, a little more contrast,
-  highlights held down, saturation 1.1 and vibrance 0.15 so the greens stay natural) and `dead` (cool tint, desaturated). The game blends them by the restoration of the area
+  highlights held down; P7-E27: saturation 1.0 and vibrance 0, since 1.1 / 0.15 halved the blue of greens and timber) and `dead` (cool tint, desaturated). The game blends them by the restoration of the area
   under the camera (`Game.updateMood`: a cleared area is 1, a fogged one rises toward 1 as restored tiles approach
   its landmark's need), easing over 2.5 s, so restoring reads as the light coming back. A soft warm-brown vignette
   (0.32) frames the view. **High contrast** uses a flat grade with lifted shadows and no vignette.
@@ -117,9 +119,18 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
 
 ## Atmosphere (Look 1.10)
 
-- **Haze:** the linear fog is a warm golden `#e9dcc4` (was a flat blue-grey `#bcd9e6`). It still starts and ends at
-  the zoom-dependent distances in `CameraController` (`hazeStart` 6, `hazeEnd` 44 past the target), and the camera
-  clears to it when post is on. The gameplay fog over unrevealed areas is a separate mesh and is unchanged.
+- **Haze:** P7-E27: the linear fog is the sky's horizon colour (`SKY.haze`), a cool pale blue (`#c8d6e0` fogged,
+  `#d6e4ee` clear); the old warm golden `#e9dcc4` was half of the yellow-white veil. It starts and ends at the
+  zoom-dependent distances from `HAZE` (12 → 64 far, 10 → 88 near, past the target), and the camera clears to it
+  when post is on.
+- **Sky dome encoding (P7-E27.3):** the dome's vertex colours are not decoded before lighting-free output, so they
+  are sRGB-encoded once more on the way out: a dome hex lands on screen roughly as its encoding (`#3f86da` shows as
+  about `#8ec3f0`). The approved night was tuned against this, so the day `SKY` values are authored to compensate
+  (each carries its on-screen target) rather than changing the pipeline. `SKY.haze` is written as seen (it is also
+  the fog colour, which the engine decodes).
+- **Cloud ring (P7-E27, `LOOK.cloudRing`):** the region-gate cloud wall continues along every edge where revealed
+  ground meets the hidden city (4 rows, the back two grown 1.3), and every standing wall breathes small wisps that
+  rise and melt away near the camera (one dynamic batch). The gameplay fog over unrevealed areas is a separate mesh and is unchanged.
 - **The horizon (E27.1, after #683 took the skyline away):** from the low follow camera, the whole far sea and the
   far coast squeeze into a few rows of pixels under the horizon, long before the depth fog has caught up, and the
   same haze colour reached the screen two ways: the fog colour is decoded to linear by the engine, while the sky

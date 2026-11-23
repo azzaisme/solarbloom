@@ -419,6 +419,13 @@ export class Sfx {
     this.tone(720, 0.18, { type: 'sawtooth', vol: v * 0.5, glide: 1.3 });
     this.tone(930, 0.35, { type: 'triangle', vol: v, glide: 0.62, delay: 0.12 });
   }
+  /** The waymark's Bloom Pulse (a goal done): a soft swell, a bright rising chord, a shimmer on top. */
+  bloomPulse() {
+    this.tone(196, 0.9, { glide: 2, vol: 0.06, type: 'triangle' });
+    [0, 2, 4, 7].forEach((st, i) => this.tone(this.note(st, 392), 0.9 - i * 0.1, { vol: 0.1, delay: 0.05 + i * 0.07, type: 'triangle' }));
+    this.tone(this.note(9, 392) * 2, 1.1, { vol: 0.04, delay: 0.32 });
+    this.tone(this.note(12, 392) * 2, 0.9, { vol: 0.03, delay: 0.42 });
+  }
   fanfare() {
     [0, 2, 4, 5, 7, 9].forEach((s, i) => this.tone(this.note(s, 392), 0.7, { vol: 0.13, delay: i * 0.12, type: 'triangle' }));
     this.tone(this.note(10, 392), 1.5, { vol: 0.12, delay: 0.8 });

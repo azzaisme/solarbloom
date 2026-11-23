@@ -25,6 +25,8 @@ uniform float projectionFlipY;
 #endif
 uniform float uWindTime;
 uniform float uWindStrength;
+// the waymark's Bloom Pulse: a ring racing out from (x, z) at radius z, pushing the foliage outward by w as it passes
+uniform vec4 uBloomWave;
 // Look 3.7: declared here so every pass that sways the foliage also declares what it writes
 varying float vLeaf;
 varying vec3 vLeafP;
@@ -37,6 +39,13 @@ vec3 windOffset(vec3 posW, float flex) {
 	o += vec3(0.6, 0.0, 0.8) * flex * 0.012 * uWindStrength * sin(uWindTime * 1.9 + posW.y * 3.0 + ph);
 	o += vec3(sin(uWindTime * 6.1 + ph * 13.0), 0.5 * sin(uWindTime * 7.7 + ph * 7.0), cos(uWindTime * 5.3 + ph * 11.0)) * flex * flex * 0.006 * uWindStrength;
 	o.y -= flex * flex * g * g * 0.01;
+	if (uBloomWave.w > 0.0) {
+		vec2 dw = posW.xz - uBloomWave.xy;
+		float dd = max(length(dw), 0.001);
+		float band = exp(-pow((dd - uBloomWave.z) / 0.9, 2.0)) * uBloomWave.w;
+		o.xz += dw / dd * flex * band * 0.12;
+		o.y -= flex * band * 0.03;
+	}
 	return o;
 }
 vec4 evalWorldPosition(vec3 vertexPosition, mat4 modelMatrix) {
@@ -225,6 +234,7 @@ export function foliageMaterial(): pc.StandardMaterial {
   m.setParameter('uLeafParams', [...LEAF_TIER[leafTier]]);
   m.setParameter('uWindTime', 0);
   m.setParameter('uWindStrength', windStrength);
+  m.setParameter('uBloomWave', [0, 0, 0, 0]);
   m.update();
   return (material = m);
 }
@@ -235,6 +245,14 @@ export function updateWind(time: number, strength = windStrength) {
   const m = foliageMaterial();
   m.setParameter('uWindTime', time);
   m.setParameter('uWindStrength', strength);
+}
+
+/**
+ * The waymark's Bloom Pulse ring passing through the grass, flowers and trees: centre (x, z) in world units, its
+ * radius now and how hard it pushes (0: off). Called each frame while a pulse runs, then once with 0.
+ */
+export function setBloomWave(x: number, z: number, radius: number, strength: number) {
+  foliageMaterial().setParameter('uBloomWave', [x, z, radius, strength]);
 }
 
 /**

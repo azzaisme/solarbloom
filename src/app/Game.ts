@@ -284,7 +284,8 @@ export class Game {
   /** Puffy clouds between the camera and the city when zoomed out. */
   private clouds: Clouds;
   /** region unlocks: the wall of clouds around sealed areas */
-  private cloudWall: CloudWall;
+  /** P7-E27: public for the dev lighting panel (it re-syncs the ring when its size changes) */
+  readonly cloudWall: CloudWall;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   /**
@@ -407,6 +408,12 @@ export class Game {
     this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
     this.look = new LookController(this.app, this.scene, this.camera);
     this.dayNight = new DayNight(this.app, this.scene, this.sky);
+    // P7-E27.7: live tuning re-reads every lighting knob: the environment bake, the day/night light and the sky dome
+    this.look.onApply.push(() => {
+      this.scene.buildEnvironment();
+      this.dayNight.reload();
+      this.sky.refresh();
+    });
     this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
@@ -505,6 +512,16 @@ export class Game {
     };
     this.overlays = new Overlays(this.sim, this.scene.world);
     this.waymark = new Waymark(this.sim, this.scene.world);
+    // the waymark's Bloom Pulse as a goal is done: gold and mint sparks, glowing leaves and a chime, at the spot
+    this.waymark.onPulse = (at) => {
+      this.sfx.at(at, (s) => s.bloomPulse());
+      const lift = new pc.Vec3(at.x, at.y + 0.3, at.z);
+      this.vfx.sparkles(lift, 10, this.vfx.reducedMotion);
+      if (this.vfx.reducedMotion) return;
+      this.vfx.burst(lift, 14, { up: 2.6, speed: 1.5, size: 0.06, life: 1.5, gravity: 1.4, hex: PALETTE.signal.bloomPulse, glow: 1 });
+      this.vfx.burst(lift, 10, { up: 2, speed: 1.1, size: 0.07, life: 1.8, gravity: 0.9, hex: PALETTE.signal.bloomPulseGreen, glow: 0.9 });
+      this.vfx.burst(lift, 6, { up: 1.4, speed: 0.8, size: 0.09, life: 2.2, gravity: 0.6, hex: PALETTE.signal.waymarkLeaf, glow: 0.6 });
+    };
     this.trail = new Trail(this.sim, this.scene.world);
 
     this.hud = new Hud(
@@ -4167,6 +4184,15 @@ export class Game {
     const b = this.bus;
     const s = this.sim;
     for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    // the waymark's Bloom Pulse: the game's own deeds finish the goal it stands on (never just the goal moving on)
+    // a pile stays the goal until it is dug out: only its last dig blooms
+    b.on('pile.salvaged', ({ x, z, left }) => left === 0 && this.waymark.done(['pile'], { x, z }));
+    b.on('gate.opened', () => this.waymark.done(['gate']));
+    b.on('fountain.delivered', () => this.waymark.done(['fountain']));
+    b.on('landmark.woken', () => this.waymark.done(['landmark']));
+    for (const ev of ['keeper.step', 'keeper.gift', 'keeper.friend'] as const) b.on(ev, () => this.waymark.done(['keeper']));
+    b.on('tile.restored', ({ tile }) => this.waymark.done(['park', 'spot'], tile));
+    b.on('machine.built', ({ machine }) => this.waymark.done(['machine', 'spot'], machine));
     // Phase 5: trees grow into their next stage with a bounce (restored → sapling, then with each bloom stage).
     b.on('tile.restored', ({ tile }) => this.chunks.growTree(tile, 0));
     b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
@@ -5247,6 +5273,7 @@ export class Game {
       }
       this.minimap?.update(dt, this.bot.pose, this.goal);
       this.waymark.reducedMotion = !!this.settings.reducedMotion;
+      this.waymark.held = this.cinematic;
       const marked = this.wayMarked();
       const shown = !this.cinematic && !this.photo.active && !this.building() && (!this.settings.potter || marked);
       this.waymark.update(dt, this.goal, shown, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
@@ -5279,7 +5306,7 @@ export class Game {
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-      this.cloudWall.update(wdt);
+      this.cloudWall.update(wdt, this.camera.target);
       this.clouds.update(wdt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);

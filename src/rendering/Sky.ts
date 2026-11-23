@@ -376,6 +376,11 @@ export class Sky {
     this.builtOvercast = this.overcast;
   }
 
+  /** P7-E27.7: rebuilds the dome's colours on the next update (live tuning of SKY via look.apply()). */
+  refresh() {
+    this.builtClarity = -1;
+  }
+
   /** Follow the camera; recolour when the progress tint or the light moves. */
   update(dt: number, cam: pc.Vec3, farClip: number) {
     this.time += dt;
