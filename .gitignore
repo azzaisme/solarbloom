@@ -10,3 +10,4 @@ scratch-images/
 
 # Claude Code agent worktrees (local only)
 .claude/worktrees/
+dist-base/
