@@ -25,18 +25,31 @@ Branch `p7-e28-vegetation` (on top of final P7-E27, `p7-e27-lighting` @ 86d8aa40
 - **Deterministic (#727)**: everything seeded by cell; nothing saved or read by the sim; a rebuild draws identical
   plants (unit test). Barren tiles untouched.
 
+## Owner / lead follow-ups (same branch)
+
+- **Beach zone** (`'beach'` from `zoneAt`, `beachDepth`): Old City sand within a wavy ~2–4.4 tile band of open sea or
+  surf stays clean pale sand once restored (`PALETTE.beachSand`): a wet gradient band at the waterline, a few shells and
+  pebbles, the odd bleached log, dune grass only on the inner part; no flowers, no trees. Beach and lawn blend through
+  shared turf corners, and lawn bordering the beach grows no flowers (dune grass → sparse grass → lawn). Visual only.
+  Canal and pond banks stay `shoreline`.
+- **Lime lawn fixed**: the lawn greens (tones, sunlit, shadow, stages 1–3) are pulled to a natural mid-green
+  (R×0.85, G×0.91, B×1.3 kept under R); Radiant is pulled less and stays the warm, bright stage. On screen the late
+  third-person lawn averages (139, 188, 72), inside the brief's lit range (110–140, 165–190, 65–85).
+- **Ragged restored edge**: `Surfaces.lawnFringe` spills turf over same-level dead natural ground as a wavy strip
+  (world-noise outline, continuous across tiles) with young tufts, instead of tile squares.
+
 ## Metrics (day)
 
 | Shot | Draw calls | Clipped % | Mean sat |
 |---|---|---|---|
-| mid-day-third | 1098 → 1093 (-0%) | 0.02 → 0.04 | 0.513 → 0.495 |
-| mid-day-iso | 1056 → 1159 (+10%) | 0 → 0 | 0.161 → 0.162 |
-| mid-day-shore | 807 → 719 (-11%) | 0 → 0.01 | 0.468 → 0.468 |
-| late-day-third | 1673 → 1677 (+0%) | 0.03 → 0.04 | 0.562 → 0.549 |
-| late-day-iso | 1485 → 1492 (+0%) | 0 → 0 | 0.292 → 0.296 |
-| late-day-shore | 1309 → 1074 (-18%) | 0 → 0 | 0.505 → 0.501 |
+| mid-day-third | 1098 → 1092 (-1%) | 0.02 → 0.05 | 0.513 → 0.417 |
+| mid-day-iso | 1056 → 1072 (+2%) | 0 → 0 | 0.161 → 0.142 |
+| mid-day-shore | 807 → 619 (-23%) | 0 → 0 | 0.468 → 0.438 |
+| late-day-third | 1673 → 1690 (+1%) | 0.03 → 0.05 | 0.562 → 0.452 |
+| late-day-iso | 1485 → 1485 (+0%) | 0 → 0 | 0.292 → 0.28 |
+| late-day-shore | 1309 → 1307 (-0%) | 0 → 0 | 0.505 → 0.464 |
 
-Draw calls within the +25% budget everywhere (mid iso +10%; the shore camera drops, fewer foliage pieces).
+Draw calls within the +25% budget everywhere (largest +2%; the mid shore camera drops 23%).
 
 ## Tests
 
@@ -45,9 +58,10 @@ Draw calls within the +25% budget everywhere (mid iso +10%; the shore camera dro
 
 ## What still looks wrong
 
-- **Lime lawn**: with the carpet gone the turf shows; it probes at ~(140–150, 188–207, 53–64) on screen, at the top of
-  the brief's green range and a little low in blue. Turf colour is E27's calibration (stageGrass); flagging, not
-  changed here.
+- Restored beach vs dead sand: the clean sand is warmer and tidier and the wet band and dune grass help, but at a
+  glance the two sands are closer than lawn vs dead ground. If it needs more, the next lever is a little more dune
+  grass or a lighter, cleaner tone (the dead painted sand belongs to E27's calibration).
+
 - From the iso camera beds read only as faint speckle: the zones work at player height, but from far up the restored
   ground is mostly flat lawn. Trees (P7-E29) are what should break it up there.
 - The near foreground right of the jetty is meadow/shoreline by zone, so it is mostly grass and reeds at the start
