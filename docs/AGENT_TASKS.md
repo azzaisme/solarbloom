@@ -6,7 +6,7 @@ Work is tracked on GitHub: umbrella issue #712, one epic each with its stories a
 |---|---|---|---|
 | P7-E27 Lighting correction and image calibration | #713 | #719–#725 | 🟢 calibrated on `p7-e27-lighting`; shots and numbers in `docs/review/p7/e27-report.md` |
 | P7-E28 Vegetation composition and readable landscaping | #714 | #726–#733 | ⬜ |
-| P7-E29 Tree canopy and vertical silhouettes | #715 | #734–#740 | ⬜ |
+| P7-E29 Tree canopy and vertical silhouettes | #715 | #734–#740 | 🟡 on `p7-e29-trees`: clustered crowns, beach trees, zoned placement, dapple, LOD; shots in `docs/review/p7/e29/` |
 | P7-E30 Terrain elevation, banks and waterfalls | #716 | #741–#747 | ⬜ |
 | P7-E31 Environmental landmarks and guided exploration | #717 | #748–#754 | ⬜ |
 | P7-E32 Atmospheric world, skyline and distant ruins | #718 | #755–#762 | ⬜ |

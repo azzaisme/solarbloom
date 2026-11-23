@@ -10,7 +10,7 @@ import { TUNING } from '../data/tuning';
 import { DIVERSITY } from '../data/farmExtras';
 import { isBuilt } from '../data/machines';
 // Pure, deterministic placement (type-only imports from TreeGen): the same tree tiles the renderer draws.
-import { treeSpot } from '../rendering/TreePlacement';
+import { treeSpot, treeWorldOf } from '../rendering/TreePlacement';
 import type { Sim } from './Sim';
 
 /**
@@ -278,7 +278,7 @@ export class EcosystemSystem {
       return;
     }
     if (!type || t.occupantId) return;
-    const spot = treeSpot(t, type);
+    const spot = treeSpot(t, type, treeWorldOf(this.sim));
     if (!spot) return;
     if (stage >= 2) out.species |= SPECIES_BIT[spot.species] ?? 0;
     if (stage >= 3) out.thrivingTrees++;
