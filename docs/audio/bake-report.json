@@ -1,0 +1,354 @@
+{
+ "ambience/barren/wind-dry": {
+  "file": "assets/audio/ambience/barren/wind-dry.ogg",
+  "src": "atmos/city-wind.ogg",
+  "seconds": 75.0,
+  "peak_dbfs": -15.76,
+  "bytes": 1084634,
+  "lufs": -24.0,
+  "seam": 0.77,
+  "length_kept": true
+ },
+ "ambience/restored/leaves": {
+  "file": "assets/audio/ambience/restored/leaves.ogg",
+  "src": "atmos/aspen-leaves.mp3",
+  "seconds": 80.0,
+  "peak_dbfs": -8.72,
+  "bytes": 1473421,
+  "lufs": -25.2,
+  "seam": 0.86,
+  "length_kept": true
+ },
+ "ambience/restored/meadow": {
+  "file": "assets/audio/ambience/restored/meadow.ogg",
+  "src": "atmos/morning-kresiek.ogg",
+  "seconds": 58.0,
+  "peak_dbfs": -5.58,
+  "bytes": 975413,
+  "lufs": -25.1,
+  "seam": 0.69,
+  "length_kept": true
+ },
+ "ambience/restored/night-insects": {
+  "file": "assets/audio/ambience/restored/night-insects.ogg",
+  "src": "atmos/night-cevennes.mp3",
+  "seconds": 90.0,
+  "peak_dbfs": -18.31,
+  "bytes": 1768720,
+  "lufs": -26.3,
+  "seam": 0.89,
+  "length_kept": true
+ },
+ "ambience/water/brook": {
+  "file": "assets/audio/ambience/water/brook.ogg",
+  "src": "atmos/brook.wav",
+  "seconds": 27.0,
+  "peak_dbfs": -5.25,
+  "bytes": 171753,
+  "lufs": -21.6,
+  "seam": 0.97,
+  "length_kept": true
+ },
+ "ambience/water/shore": {
+  "file": "assets/audio/ambience/water/shore.ogg",
+  "src": "atmos/lake-shore.mp3",
+  "seconds": 100.0,
+  "peak_dbfs": -1.59,
+  "bytes": 937204,
+  "lufs": -28.8,
+  "seam": 0.26,
+  "length_kept": true
+ },
+ "ambience/wildlife/bird-01": {
+  "file": "assets/audio/ambience/wildlife/bird-01.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -5.68,
+  "bytes": 12538
+ },
+ "ambience/wildlife/bird-02": {
+  "file": "assets/audio/ambience/wildlife/bird-02.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -5.58,
+  "bytes": 12608
+ },
+ "ambience/wildlife/bird-03": {
+  "file": "assets/audio/ambience/wildlife/bird-03.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -5.9,
+  "bytes": 12974
+ },
+ "ambience/wildlife/bird-04": {
+  "file": "assets/audio/ambience/wildlife/bird-04.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -6.06,
+  "bytes": 12937
+ },
+ "ambience/wildlife/bird-05": {
+  "file": "assets/audio/ambience/wildlife/bird-05.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -6.58,
+  "bytes": 12597
+ },
+ "ambience/wildlife/bird-06": {
+  "file": "assets/audio/ambience/wildlife/bird-06.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -6.08,
+  "bytes": 12692
+ },
+ "ambience/wildlife/bird-07": {
+  "file": "assets/audio/ambience/wildlife/bird-07.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -6.46,
+  "bytes": 12844
+ },
+ "ambience/wildlife/bird-08": {
+  "file": "assets/audio/ambience/wildlife/bird-08.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -5.14,
+  "bytes": 12629
+ },
+ "music/bach-sarabande-harp": {
+  "file": "assets/audio/music/bach-sarabande-harp.ogg",
+  "src": "music/bach-bwv825-sarabande-harp.flac",
+  "seconds": 153.5,
+  "peak_dbfs": -4.13,
+  "bytes": 2360690,
+  "lufs": -20.0
+ },
+ "music/dvorak-romanza-quartet": {
+  "file": "assets/audio/music/dvorak-romanza-quartet.ogg",
+  "src": "music/dvorak-op51-romanza-quartet.mp3",
+  "seconds": 367.128,
+  "peak_dbfs": -1.31,
+  "bytes": 5126517,
+  "lufs": -21.5
+ },
+ "music/haydn-lark-adagio-quartet": {
+  "file": "assets/audio/music/haydn-lark-adagio-quartet.ogg",
+  "src": "music/haydn-op64no5-adagio-quartet.mp3",
+  "seconds": 291.758,
+  "peak_dbfs": -2.63,
+  "bytes": 4010772,
+  "lufs": -20.0
+ },
+ "music/schubert-andante-piano": {
+  "file": "assets/audio/music/schubert-andante-piano.ogg",
+  "src": "music/schubert-d664-andante-piano.mp3",
+  "seconds": 290.84,
+  "peak_dbfs": -1.37,
+  "bytes": 3823747,
+  "lufs": -22.1
+ },
+ "music/tournier-calme-harp": {
+  "file": "assets/audio/music/tournier-calme-harp.ogg",
+  "src": "music/tournier-sonatine-calme-harp.flac",
+  "seconds": 256.0,
+  "peak_dbfs": -4.95,
+  "bytes": 3884826,
+  "lufs": -20.0
+ },
+ "sfx/events/meow-01": {
+  "file": "assets/audio/sfx/events/meow-01.ogg",
+  "src": "sfx/cat/cat_softmew.wav",
+  "seconds": 1.4,
+  "peak_dbfs": -4.15,
+  "bytes": 14699
+ },
+ "sfx/events/meow-02": {
+  "file": "assets/audio/sfx/events/meow-02.ogg",
+  "src": "sfx/cat/cat_mewfood.wav",
+  "seconds": 1.034,
+  "peak_dbfs": -4.1,
+  "bytes": 12459
+ },
+ "sfx/events/meow-03": {
+  "file": "assets/audio/sfx/events/meow-03.ogg",
+  "src": "sfx/cat/cat_mewpurr.wav",
+  "seconds": 1.354,
+  "peak_dbfs": -4.04,
+  "bytes": 15702
+ },
+ "sfx/player/step-dirt-01": {
+  "file": "assets/audio/sfx/player/step-dirt-01.ogg",
+  "src": "sfx/steps/gravel.ogg",
+  "seconds": 0.446,
+  "peak_dbfs": -8.55,
+  "bytes": 9159
+ },
+ "sfx/player/step-dirt-02": {
+  "file": "assets/audio/sfx/player/step-dirt-02.ogg",
+  "src": "sfx/steps/mud02.ogg",
+  "seconds": 0.256,
+  "peak_dbfs": -8.17,
+  "bytes": 6423
+ },
+ "sfx/player/step-grass-01": {
+  "file": "assets/audio/sfx/player/step-grass-01.ogg",
+  "src": "sfx/steps/leaves01.ogg",
+  "seconds": 0.387,
+  "peak_dbfs": -8.26,
+  "bytes": 7882
+ },
+ "sfx/player/step-grass-02": {
+  "file": "assets/audio/sfx/player/step-grass-02.ogg",
+  "src": "sfx/steps/leaves02.ogg",
+  "seconds": 0.446,
+  "peak_dbfs": -8.96,
+  "bytes": 8346
+ },
+ "sfx/player/step-grass-03": {
+  "file": "assets/audio/sfx/player/step-grass-03.ogg",
+  "src": "sfx/steps/Fantozzi-SandL1.ogg",
+  "seconds": 0.474,
+  "peak_dbfs": -8.01,
+  "bytes": 8340
+ },
+ "sfx/player/step-grass-04": {
+  "file": "assets/audio/sfx/player/step-grass-04.ogg",
+  "src": "sfx/steps/Fantozzi-SandR2.ogg",
+  "seconds": 0.362,
+  "peak_dbfs": -8.8,
+  "bytes": 7029
+ },
+ "sfx/player/step-sand-01": {
+  "file": "assets/audio/sfx/player/step-sand-01.ogg",
+  "src": "sfx/steps/Fantozzi-SandL2.ogg",
+  "seconds": 0.309,
+  "peak_dbfs": -9.81,
+  "bytes": 6915
+ },
+ "sfx/player/step-sand-02": {
+  "file": "assets/audio/sfx/player/step-sand-02.ogg",
+  "src": "sfx/steps/Fantozzi-SandL3.ogg",
+  "seconds": 0.294,
+  "peak_dbfs": -9.17,
+  "bytes": 6611
+ },
+ "sfx/player/step-sand-03": {
+  "file": "assets/audio/sfx/player/step-sand-03.ogg",
+  "src": "sfx/steps/Fantozzi-SandR1.ogg",
+  "seconds": 0.39,
+  "peak_dbfs": -9.64,
+  "bytes": 7549
+ },
+ "sfx/player/step-sand-04": {
+  "file": "assets/audio/sfx/player/step-sand-04.ogg",
+  "src": "sfx/steps/Fantozzi-SandR3.ogg",
+  "seconds": 0.318,
+  "peak_dbfs": -9.23,
+  "bytes": 7037
+ },
+ "sfx/player/step-stone-01": {
+  "file": "assets/audio/sfx/player/step-stone-01.ogg",
+  "src": "sfx/steps/stone01.ogg",
+  "seconds": 0.245,
+  "peak_dbfs": -8.23,
+  "bytes": 6090
+ },
+ "sfx/player/step-stone-02": {
+  "file": "assets/audio/sfx/player/step-stone-02.ogg",
+  "src": "sfx/steps/Fantozzi-StoneL1.ogg",
+  "seconds": 0.369,
+  "peak_dbfs": -7.67,
+  "bytes": 7098
+ },
+ "sfx/player/step-stone-03": {
+  "file": "assets/audio/sfx/player/step-stone-03.ogg",
+  "src": "sfx/steps/Fantozzi-StoneL2.ogg",
+  "seconds": 0.358,
+  "peak_dbfs": -8.19,
+  "bytes": 6810
+ },
+ "sfx/player/step-stone-04": {
+  "file": "assets/audio/sfx/player/step-stone-04.ogg",
+  "src": "sfx/steps/Fantozzi-StoneL3.ogg",
+  "seconds": 0.324,
+  "peak_dbfs": -8.59,
+  "bytes": 6718
+ },
+ "sfx/player/step-stone-05": {
+  "file": "assets/audio/sfx/player/step-stone-05.ogg",
+  "src": "sfx/steps/Fantozzi-StoneR1.ogg",
+  "seconds": 0.386,
+  "peak_dbfs": -8.77,
+  "bytes": 7201
+ },
+ "sfx/player/step-stone-06": {
+  "file": "assets/audio/sfx/player/step-stone-06.ogg",
+  "src": "sfx/steps/Fantozzi-StoneR2.ogg",
+  "seconds": 0.303,
+  "peak_dbfs": -8.35,
+  "bytes": 6606
+ },
+ "sfx/player/step-wood-01": {
+  "file": "assets/audio/sfx/player/step-wood-01.ogg",
+  "src": "sfx/steps/wood01.ogg",
+  "seconds": 0.225,
+  "peak_dbfs": -7.47,
+  "bytes": 6001
+ },
+ "sfx/player/step-wood-02": {
+  "file": "assets/audio/sfx/player/step-wood-02.ogg",
+  "src": "sfx/steps/wood02.ogg",
+  "seconds": 0.204,
+  "peak_dbfs": -7.11,
+  "bytes": 5946
+ },
+ "sfx/player/step-wood-03": {
+  "file": "assets/audio/sfx/player/step-wood-03.ogg",
+  "src": "sfx/steps/wood03.ogg",
+  "seconds": 0.292,
+  "peak_dbfs": -6.72,
+  "bytes": 6549
+ },
+ "sfx/restoration/leaf-01": {
+  "file": "assets/audio/sfx/restoration/leaf-01.ogg",
+  "src": "sfx/rustle/rustle10.flac",
+  "seconds": 0.406,
+  "peak_dbfs": -6.29,
+  "bytes": 7882
+ },
+ "sfx/restoration/leaf-02": {
+  "file": "assets/audio/sfx/restoration/leaf-02.ogg",
+  "src": "sfx/rustle/rustle09.flac",
+  "seconds": 0.658,
+  "peak_dbfs": -6.09,
+  "bytes": 9605
+ },
+ "sfx/restoration/leaf-03": {
+  "file": "assets/audio/sfx/restoration/leaf-03.ogg",
+  "src": "sfx/rustle/rustle12.flac",
+  "seconds": 0.745,
+  "peak_dbfs": -6.1,
+  "bytes": 11189
+ },
+ "sfx/restoration/leaf-04": {
+  "file": "assets/audio/sfx/restoration/leaf-04.ogg",
+  "src": "sfx/rustle/rustle17.flac",
+  "seconds": 0.796,
+  "peak_dbfs": -5.58,
+  "bytes": 10709
+ },
+ "sfx/restoration/leaf-05": {
+  "file": "assets/audio/sfx/restoration/leaf-05.ogg",
+  "src": "sfx/rustle/rustle02.flac",
+  "seconds": 0.83,
+  "peak_dbfs": -7.12,
+  "bytes": 11058
+ },
+ "sfx/restoration/leaf-06": {
+  "file": "assets/audio/sfx/restoration/leaf-06.ogg",
+  "src": "sfx/rustle/rustle18.flac",
+  "seconds": 0.796,
+  "peak_dbfs": -7.51,
+  "bytes": 10836
+ }
+}

@@ -55,9 +55,19 @@ export class Pause {
  * the player is away goes it quiet: the page hidden (another tab, minimised), like a closed game, or the device asleep.
  * It fades back in on return. The Sound and Music on/off settings are applied separately and still win.
  */
-export function volumesFor(settings: { sfxVolume?: number; musicVolume?: number }, pause: Pause): { sfx: number; music: number } {
-  if (pause.has('hidden') || pause.has('sleep')) return { sfx: 0, music: 0 };
-  return { sfx: (settings.sfxVolume ?? 100) / 100, music: (settings.musicVolume ?? 100) / 100 };
+export interface Volumes {
+  sfx: number;
+  music: number;
+  master: number;
+  ambience: number;
+  ui: number;
+}
+export function volumesFor(settings: { sfxVolume?: number; musicVolume?: number; masterVolume?: number; ambienceVolume?: number; uiVolume?: number }, pause: Pause): Volumes {
+  const v = (x: number | undefined) => (x ?? 100) / 100;
+  const set = { sfx: v(settings.sfxVolume), music: v(settings.musicVolume), ambience: v(settings.ambienceVolume), ui: v(settings.uiVolume) };
+  // Phase 8: away, the master goes quiet (every bus with it) and fades back in on return
+  if (pause.has('hidden') || pause.has('sleep')) return { ...set, master: 0 };
+  return { ...set, master: v(settings.masterVolume) };
 }
 
 /** What the frame loop owes the simulation (Game keeps one; tests drive it directly). */

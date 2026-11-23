@@ -127,9 +127,9 @@ describe('#673: the sound plays on through a pause', () => {
       const pause = new Pause();
       pause.set(r);
       expect(pause.paused).toBe(true);
-      expect(volumesFor(SET, pause), r).toEqual({ sfx: 0.7, music: 0.4 });
+      expect(volumesFor(SET, pause), r).toEqual({ sfx: 0.7, music: 0.4, ambience: 1, ui: 1, master: 1 });
     }
-    expect(volumesFor({}, new Pause())).toEqual({ sfx: 1, music: 1 });
+    expect(volumesFor({}, new Pause())).toEqual({ sfx: 1, music: 1, ambience: 1, ui: 1, master: 1 });
   });
 
   it('only a hidden page or a sleeping device goes quiet, and the sound comes back on return', () => {
@@ -137,9 +137,10 @@ describe('#673: the sound plays on through a pause', () => {
       const pause = new Pause();
       pause.set('menu');
       pause.set(r);
-      expect(volumesFor(SET, pause), r).toEqual({ sfx: 0, music: 0 });
+      // Phase 8: the master goes quiet (every bus with it), the player's own levels are kept for the return
+      expect(volumesFor(SET, pause), r).toMatchObject({ master: 0 });
       pause.clear(r);
-      expect(volumesFor(SET, pause), r).toEqual({ sfx: 0.7, music: 0.4 });
+      expect(volumesFor(SET, pause), r).toEqual({ sfx: 0.7, music: 0.4, ambience: 1, ui: 1, master: 1 });
     }
   });
 
@@ -158,7 +159,7 @@ describe('#673: the sound plays on through a pause', () => {
   it('the game sets volumes from volumesFor on every reason change, and nothing else turns the sound down for a pause', () => {
     const game = readFileSync('src/app/Game.ts', 'utf8');
     expect(game).toMatch(/this\.pause\.onReasons = \(\) => this\.applyVolumes\(\)/);
-    expect(game).toMatch(/const v = volumesFor\(this\.settings, this\.pause\);\s*this\.sfx\.setVolumes\(v\.sfx, v\.music\);/);
+    expect(game).toMatch(/const v = volumesFor\(this\.settings, this\.pause\);\s*this\.sfx\.setVolumes\(v\);/);
     expect(game).not.toMatch(/quiet \? 0\.3/);
     // the frame loop still drives the sound while paused
     expect(game).toMatch(/this\.sfx\.update\(realDt\)/);

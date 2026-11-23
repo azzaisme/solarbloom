@@ -305,6 +305,9 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
     const KEY = 'an internal key (a type, event, model, icon or fauna id), never shown';
     const FOUND = 'shown only once a cat has been found (cat.found / sim.cat.known)';
     const ALLOWED: Record<string, Record<string, string>> = {
+      // Phase 8: sound family and asset ids (the hint meow plays only once a cat is known, E23.12.3)
+      'src/audio/AudioMath.ts': { cat: KEY },
+      'src/audio/Sfx.ts': { cat: KEY, meow: KEY, 'sfx/events/meow': KEY },
       'src/app/EventBus.ts': { 'cat.spawned': KEY, 'cat.found': KEY, 'cat.moved': KEY, 'cat.goldenRelay': KEY },
       'src/app/Game.ts': {
         cat: KEY,
