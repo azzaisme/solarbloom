@@ -9,15 +9,15 @@ which has no trees). Base was taken on E27 work in progress, so part of the lumi
 |---|---|---|---|---|
 | mid third | 1090 → 1097 | 258k → 444k | 164.6 → 150.1 | 0.04 → 0.04 |
 | mid iso | 1102 → 1096 | 118k → 260k | 195.7 → 193 | 0 → 0 |
-| mid shore | 808 → 718 | 265k → 445k | 175.8 → 154.3 | 0 → 0 |
-| late third | 1674 → 1684 | 1095k → 1497k | 157 → 141.2 | 0.04 → 0.05 |
+| mid shore | 808 → 904 | 265k → 439k | 175.8 → 156.6 | 0 → 0 |
+| late third | 1674 → 1674 | 1095k → 1493k | 157 → 140.2 | 0.04 → 0.05 |
 | late iso | 1487 → 1492 | 582k → 963k | 183.2 → 182.5 | 0 → 0 |
 | late shore | 1310 → 1309 | 1102k → 1503k | 171.2 → 154.4 | 0.01 → 0 |
 
 Early (nothing restored, no trees): 1040 / 1042 / 800 draw calls, 14–25k foliage triangles.
 
-Draw calls stay within +5% (trees merge into each chunk's foliage mesh; the shore view drops because the canopy
-hides chunks behind it). Foliage triangles rise 28–98% with the new canopy: per tree, normal detail is
+Draw calls stay within +12% (trees merge into each chunk's foliage mesh; budget +25%). mid shore and late third
+were re-shot after the polish pass (softer sunlit tops, no fade speckle). Foliage triangles rise 28–98% with the new canopy: per tree, normal detail is
 636–4.4k (pine–oak), far 296–480.
 Mean luminance falls in the third-person and shore views because shade now falls on the restored ground.
 
