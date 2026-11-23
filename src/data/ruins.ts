@@ -39,7 +39,7 @@ export const RUINS = {
   layers: [
     // P7-E32 (lead review): the bands step back in value (near clearly darker and bluer than the sky, far faint), and
     // stand on real land: low coasts rising to mesas, highest under the near band
-    { name: 'far', radius: [470, 520] as [number, number], fade: 0.5, scale: 1.0, model: 0.9, density: 0.8, land: [2, 12] as [number, number] },
+    { name: 'far', radius: [470, 520] as [number, number], fade: 0.5, scale: 1.0, model: 0.9, density: 0.8, land: [0, 0] as [number, number] },
     { name: 'mid', radius: [330, 370] as [number, number], fade: 0.3, scale: 0.75, model: 0.7, density: 0.8, land: [2, 11] as [number, number] },
     { name: 'near', radius: [215, 240] as [number, number], fade: 0.1, scale: 0.62, model: 0.6, density: 0.3, land: [2, 13] as [number, number] },
   ],
@@ -57,8 +57,10 @@ export const RUINS = {
   kinds: {
     // `m…` are the authored models (RuinModels: aqueduct, twin tower, broken dome, solar frame), the rest procedural.
     // Fewer, bigger, more distinctive pieces up close; long or thin procedural pieces only in the middle distance
-    far: { mTower: 1, mDome: 1, tower: 2, block: 3, spire: 2, aqueduct: 2 },
-    mid: { mAqueduct: 2, mTower: 2, mDome: 1, mFrame: 1, viaduct: 1, turbine: 1, spire: 1, aqueduct: 1 },
+    // P7-E32 polish (owner): no fence of thin sticks once the ring clears: the authored pieces carry the skyline, with
+    // only chunky procedural ones (blocks, solid towers, aqueducts) far out and one turbine now and then mid-distance
+    far: { mTower: 3, mDome: 2, mAqueduct: 1, block: 2, tower: 1 },
+    mid: { mAqueduct: 3, mTower: 3, mDome: 2, mFrame: 1, turbine: 0.4 },
     near: { mAqueduct: 3, mTower: 3, mDome: 2, mFrame: 1 },
   } as Record<'far' | 'mid' | 'near', Partial<Record<RuinKind, number>>>,
   /**
@@ -95,7 +97,27 @@ export const RUINS = {
    * feet melt into the sea haze and the towers stand clear of it. `strength` is the extra fade at sea level, easing
    * off with height over `height` units.
    */
-  heightFog: { strength: 0.25, height: 3 },
+  heightFog: {
+    near: { strength: 0.25, height: 3 },
+    mid: { strength: 0.35, height: 5 },
+    // P7-E32 polish: the far band has no land of its own any more (its plateau floated); its feet sink into the haze
+    far: { strength: 0.85, height: 12 },
+    /**
+     * Toward inland ground (the island's own terraces and trees, or the mainland, between the camera and the slice):
+     * there the world hides the coasts, so the ruins' feet sink into the haze instead of hanging over the treeline
+     */
+    inland: { strength: 0.9, height: 16 },
+  } as Record<'far' | 'mid' | 'near' | 'inland', { strength: number; height: number }>,
+  /**
+   * The ruined districts: the structures stand in clusters about `every`° apart (a range), each `width`° wide, with
+   * open sky between them; mesas between the districts stand bare
+   */
+  districts: { every: [24, 36] as [number, number], width: 11 },
+  /**
+   * Golden hour: the near and mid bands' sun-facing sides take this much more of the (warm) key light as the dusk
+   * comes in (Sky.dusk), and the cool day ambient eases this far toward neutral. Day and night are untouched
+   */
+  golden: { sun: 1.4, ambient: 0.5 },
   /** by night the bands fade less (dark blue silhouettes against the moonlit sky) */
   nightFade: 0.55,
   /** a few tiny warm lights on the near and mid ruins by night (not every structure lit) */

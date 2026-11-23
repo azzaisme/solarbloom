@@ -92,3 +92,18 @@ So the ruins draw right after the world's opaque pass, and depth-test against it
 - The fog-of-war over hidden areas is untouched (the owner's decision). In the overview it is still the flat grey slabs.
 - The waterfalls are simple sheets. They read at the near band's distance, but there's no animation.
 - Draw-call totals in the cloud container are noisy (chunk streaming); the ruins' own count is the reliable figure.
+
+## Polish pass (owner, 23 Nov)
+
+On the base with E30 (the Falls overlook, the showcase waterfall, the wasteland) merged. Shots: `e32-polish/`
+(`late-day-wide` and `late-day-overlook` are E30's `p7-falls-shots.mjs` framings).
+
+| Owner's point | Fix | Shot |
+|---|---|---|
+| Ruins hang over the inland treeline | Each frame, `inlandToward` checks whether two of three rays across a slice cross island or mainland ground within the world's reach (~110 units). If so, that slice is rebaked with strong height fog (`heightFog.inland`: 0.9 over 16 m), so the feet sink into the haze. Over open sea the coasts keep their grounded mesas | `late-day-wide`, `late-day-overlook` |
+| Late skyline too busy | No thin procedural pieces left (no spires, frames or viaducts; a rare turbine mid-distance). The authored models carry the skyline. Ruins stand only in **districts**, clusters ~11° wide every 24–36°, with open sky between; mesas between districts stand bare | `late-day-third` |
+| A floating far slab | The far band has no procedural land any more. Its pieces sink into haze (`heightFog.far` 0.85 over 12 m) | `mid-golden-shore` |
+| Golden hour reads cool | As `Sky.dusk` rises, the near and mid bands' sun-facing sides take up to 2.4× the warm key (`golden.sun` 1.4), and the cool day ambient eases halfway to neutral. Day (dusk 0) and night are unchanged; nothing global is tinted | `mid-golden-shore`, `mid-golden-third` |
+
+Ruins' own draw calls (High): third-person 7, shore 6, overview 0, out of 16 meshes. Triangles: ~111k for the whole
+set. The shader path and the procedural fallback are unchanged.

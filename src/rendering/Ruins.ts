@@ -1,4 +1,7 @@
 import * as pc from 'playcanvas';
+import { CHUNK } from '../core/Hash';
+import { isMainlandChunk } from '../core/Mainland';
+import { inOldCity, isSeaChunk } from '../core/OldCityLayout';
 import { LOOK } from '../data/look';
 import { RUINS, type RuinKind, type RuinLayerName } from '../data/ruins';
 import { loadRuinModels, type RuinModel, type RuinModelName } from './RuinModels';
@@ -122,6 +125,30 @@ const C = {
   mist: lin(RUINS.falls.mist),
 };
 
+/**
+ * P7-E32 polish: does the view from (x, z) toward (tx, tz) cross inland ground within the world's reach (the Old City's
+ * land or the mainland, whose terraces, trees and fogged chunks hide the distant coasts' feet)? Two of three rays across
+ * the slice must cross it, sampled every 10 units out to 110 (about where the world stops being drawn).
+ */
+export function inlandToward(x: number, z: number, tx: number, tz: number): boolean {
+  const base = Math.atan2(tx - x, tz - z);
+  let hits = 0;
+  for (const off of [-0.3, 0, 0.3]) {
+    const a = base + off;
+    const dx = Math.sin(a);
+    const dz = Math.cos(a);
+    for (let d = 20; d <= 110; d += 10) {
+      const cx = Math.floor((x + dx * d) / CHUNK);
+      const cz = Math.floor((z + dz * d) / CHUNK);
+      if (isMainlandChunk(cx) || (inOldCity(cx, cz) && !isSeaChunk(cx, cz))) {
+        hits++;
+        break;
+      }
+    }
+  }
+  return hits >= 2;
+}
+
 /** Which authored model each model kind uses, and the procedural piece standing in when the models aren't loaded. */
 const MODEL_OF: Partial<Record<RuinKind, RuinModelName>> = { mAqueduct: 'aqueduct', mTower: 'tower', mDome: 'dome', mFrame: 'solarframe' };
 const PROCEDURAL_OF: Partial<Record<RuinKind, RuinKind>> = { mAqueduct: 'aqueduct', mTower: 'tower', mDome: 'dome', mFrame: 'frame' };
@@ -177,6 +204,9 @@ export class RuinPlanner {
       const sectorOf = (deg: number) => Math.floor((((deg % 360) + 360) % 360) / (360 / S)) % S;
       const toRad = (d: number) => (d * Math.PI) / 180;
       let falls = 0;
+      // P7-E32 polish: the band's ruined districts (cluster centres, bearings)
+      const districts: number[] = [];
+      for (let c = this.rnd() * RUINS.districts.every[1]; c < 360; c += this.range(RUINS.districts.every[0], RUINS.districts.every[1])) districts.push(c);
       for (const [a0, a1] of RUINS.coasts[name]) {
         // the coast's shape along its arc: an uneven shoreline and a plateau that eases down at both headlands
         const ph = [this.rnd() * 6.3, this.rnd() * 6.3, this.rnd() * 6.3];
@@ -189,7 +219,7 @@ export class RuinPlanner {
           return (L.land[0] + (L.land[1] - L.land[0]) * Math.min(1, 0.2 * Math.max(0, wav) + 0.8 * mesa)) * end;
         };
         const step = 2.5;
-        for (let d = a0; d < a1 - 1e-6; d += step) {
+        for (let d = a0; L.land[1] > 0 && d < a1 - 1e-6; d += step) {
           const e = Math.min(a1, d + step);
           const p = (deg: number, r: number): V2 => [cx + r * Math.sin(toRad(deg)), cz + r * Math.cos(toRad(deg))];
           const depth = 70;
@@ -240,6 +270,8 @@ export class RuinPlanner {
         spots.sort((p1, p2) => p2.r - p1.r);
         let last: RuinKind | undefined;
         for (const sp of spots) {
+          const inDistrict = districts.some((c) => Math.abs(((sp.deg - c + 540) % 360) - 180) <= RUINS.districts.width / 2);
+          if (!inDistrict && sp.mesa === undefined) continue; // open sky between the districts
           const th = toRad(sp.deg);
           const T: V3 = [Math.cos(th), 0, -Math.sin(th)];
           const N: V3 = [-Math.sin(th), 0, -Math.cos(th)];
@@ -255,7 +287,7 @@ export class RuinPlanner {
               falls++;
               this.waterfall(g, at(0), M.cliff.box[5] * sm * 0.9, ground);
             }
-            if (this.rnd() > mesas!.ruined) continue; // a bare mesa now and then
+            if (!inDistrict || this.rnd() > mesas!.ruined) continue; // bare between the districts, and now and then
           }
           const f = at(ground);
           const lamp = (p: V3) => {
@@ -598,7 +630,7 @@ vec3 getWorldPosition() {
 export class Ruins {
   readonly layer: pc.Layer;
   readonly root: pc.Entity;
-  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; e: pc.Entity; dir: [number, number]; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
+  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; e: pc.Entity; dir: [number, number]; band: number; at: [number, number]; inland: boolean; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
   private sig: number[] = [];
   /** E23.7.2: the weather's view (1 clear … less in fog and rain): the ruins fade out with it */
   view = 1;
@@ -679,6 +711,9 @@ export class Ruins {
         mi,
         e,
         dir: [sx / sl, sz / sl],
+        band: b.layer,
+        at: [RUINS.centre[0] + sx / (g.pos.length / 3), RUINS.centre[1] + sz / (g.pos.length / 3)],
+        inland: false,
         nrm: Float32Array.from(g.nrm),
         alb: Float32Array.from(g.alb),
         y: Float32Array.from({ length: n }, (_, i) => g.pos[i * 3 + 1]),
@@ -726,10 +761,20 @@ export class Ruins {
     const seen = Math.cos(((360 / RUINS.sectors / 2 + 48) * Math.PI) / 180);
     for (const m of this.meshes) m.e.enabled = fl < 0.2 || (m.dir[0] * forward.x + m.dir[1] * forward.z) / fl > seen;
 
+    // P7-E32 polish: which slices lie beyond inland ground from here (their feet hidden behind the world)
+    let inlandChanged = false;
+    for (const m of this.meshes) {
+      if (!m.e.enabled) continue;
+      const inland = inlandToward(cam.x, cam.z, m.at[0], m.at[1]);
+      if (inland !== m.inland) inlandChanged = true;
+      m.inland = inland;
+    }
+
     const s = this.sun.up;
     const lc = this.sun.light?.color ?? new pc.Color(1, 1, 1);
     const haze = this.sky.horizonSeen();
-    const sig = [s.x, s.y, s.z, lc.r, lc.g, lc.b, ...haze, this.sky.night, this.sky.clarity, this.view];
+    const sig = [s.x, s.y, s.z, lc.r, lc.g, lc.b, ...haze, this.sky.night, this.sky.clarity, this.view, this.sky.dusk];
+    if (inlandChanged) this.sig = [];
     if (this.sig.length && sig.every((v, i) => Math.abs(v - this.sig[i]) < 0.004)) return;
     this.sig = sig;
     this.recolour([s.x, s.y, s.z], [lc.r, lc.g, lc.b], haze);
@@ -742,15 +787,22 @@ export class Ruins {
     const norm = (c: V3) => c.map((v) => v / Math.max(...c, 1e-3)) as V3;
     const day = norm(lin(L.dayTint));
     const nt = norm(lin(L.nightTint));
+    // golden hour: the cool day ambient eases toward neutral as the dusk comes in (day and night untouched)
+    const dusk = Math.min(1, Math.max(0, this.sky.dusk)) * (1 - night);
+    const G = RUINS.golden;
+    const dayG = day.map((d) => d + (1 - d) * G.ambient * dusk) as V3;
     const amb = L.ambient + (L.ambientNight - L.ambient) * night;
-    const ambC = day.map((d, i) => amb * (d + (nt[i] - d) * night)) as V3;
+    const ambC = dayG.map((d, i) => amb * (d + (nt[i] - d) * night)) as V3;
     const sunK = L.sun * (1 - 0.4 * night);
-    const sl: V3 = sunCol.map((c) => (c ** 2.2) * sunK) as V3;
+    const slBase: V3 = sunCol.map((c) => (c ** 2.2) * sunK) as V3;
     const lampC = lin(RUINS.lamps.colour);
     const lampOn = smooth((night - RUINS.lamps.from) / (1 - RUINS.lamps.from));
-    const HF = RUINS.heightFog;
     const view = Math.min(1, Math.max(0, this.view));
     for (const m of this.meshes) {
+      const name = RUINS.layers[m.band].name as RuinLayerName;
+      const HF = m.inland ? RUINS.heightFog.inland : RUINS.heightFog[name];
+      // the near and mid bands' sun-facing sides take more of the warm key at golden hour
+      const sl = (name === 'far' ? slBase : slBase.map((c) => c * (1 + G.sun * dusk))) as V3;
       let fb = m.fade * (1 + (RUINS.nightFade - 1) * night);
       fb += (1 - fb) * RUINS.foggedFade * (1 - this.sky.clarity);
       const n = m.y.length;
