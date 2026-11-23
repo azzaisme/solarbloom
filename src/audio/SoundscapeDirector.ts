@@ -90,7 +90,8 @@ export class SoundscapeDirector {
     this.levels = bedLevels(s);
     if (this.beds) for (const k of Object.keys(this.levels) as (keyof BedLevels)[]) this.beds[k]?.setLevel(this.levels[k], 3);
     this.brook?.setLevel(this.brookLevel, 1.5);
-    this.sea?.setLevel(this.seaLevel, 2);
+    // the sea by dead land is a still, distant wash; by restored shore it laps up fuller (it is never "life" alone)
+    this.sea?.setLevel(this.seaLevel * (0.45 + 0.55 * Math.min(1, this.area.life / 0.6)), 2);
     this.schedule(dt, s);
   }
 
