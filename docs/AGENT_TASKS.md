@@ -1,27 +1,27 @@
 # Phase 7 task tracker
 
-Status: ⬜ not started · 🟡 in progress · ✅ done and verified in shots · ⚠️ done with caveats · ❌ dropped
+Work is tracked on GitHub: umbrella issue #712, one epic each with its stories as sub-issues. This file maps them.
 
-| # | Stream / story | Owner | Branch | Status | Notes |
-|---|---|---|---|---|---|
-| 0 | Audit, plan, baseline shots, shot script | Lead | `claude/trusting-fermi-cgucwe` | 🟡 | `tests/e2e/p7-shots.mjs`, `docs/review/p7/before/` |
-| 1 | P7-E27 lighting: sun/fill tint, cool sky + haze, haze distance, motes/shafts, pale sand, grade tint | Lead (Agent A) | main branch | 🟡 | config in `data/look.ts`, `data/sky.ts`; guarded by `tests/sunlit-look.test.ts` |
-| 2 | P7-E28 planting zones (calm lawn / meadow / beds / shoreline / path edge / clearance) | Agent B | worktree | 🟡 | |
-| 3 | P7-E29 tree canopy: beach trees, groves, bigger layered crowns | Agent B | worktree | 🟡 | |
-| 4 | P7-E32 ruined skyline layers + cohesive clouds | Agent E | worktree | 🟡 | must differ from the skyline removed in #681 |
-| 5 | P7-E30 relief, banks, showcase waterfall | Agent C/D | worktree | 🟡 | playable walk heights unchanged unless tested |
-| 6 | P7-E31 landmark focal point | Lead, after CP2 | — | ⬜ | improve an existing landmark first |
-| 7 | Integration, regression, scorecard, final shots | Lead (Agent F role) | main branch | ⬜ | |
+| Epic | Issue | Stories | Status |
+|---|---|---|---|
+| P7-E27 Lighting correction and image calibration | #713 | #719–#725 | 🟡 WIP values in fd2a8502 (unit tests pass; no in-game after shots yet) |
+| P7-E28 Vegetation composition and readable landscaping | #714 | #726–#733 | ⬜ |
+| P7-E29 Tree canopy and vertical silhouettes | #715 | #734–#740 | ⬜ |
+| P7-E30 Terrain elevation, banks and waterfalls | #716 | #741–#747 | ⬜ |
+| P7-E31 Environmental landmarks and guided exploration | #717 | #748–#754 | ⬜ |
+| P7-E32 Atmospheric world, skyline and distant ruins | #718 | #755–#762 | ⬜ |
+| Bug: Tide's garden pond at the bottom of the park stairs | #763 | — | ⬜ |
 
-## Integration checkpoints
+Baseline: `docs/review/p7/before/` (3 cameras × early/mid/late, with and without HUD, `metrics.json`). High-tier
+draw calls in the baseline: 980–1,040 early, 1,030–1,050 mid, 1,270–1,615 late.
 
-- **CP1** E27 values committed; agents told to rebase.
-- **CP2** B, E, C/D merged; typecheck, unit suite, p7-shots all stages with no page errors.
-- **CP3** polish, golden hour + night, scorecard, documentation.
+## Working rules
 
-## Coordination rules
-
+- Each workstream runs in its own chat/session on its own issue, in build order (E27 first).
 - One owner per file; shared files (`ChunkRenderer.ts`, `Game.ts`) only in the owner's named functions or a
-  minimal marked hook. The lead resolves merge conflicts.
+  minimal marked hook.
 - Nothing cosmetic is saved or read by the simulation.
-- Every agent reports files changed, shots, draw calls/triangles before→after, tests, and what still looks wrong.
+- In the cloud container, serialise heavy jobs (shot runs, the full unit suite) with
+  `flock /tmp/sb-heavy.lock <command>`: 4 cores, and software GL renders High at ~1 fps.
+- Each PR lists files changed, before/after shots from `tests/e2e/p7-shots.mjs`, draw calls before→after, tests,
+  and what still looks wrong.
