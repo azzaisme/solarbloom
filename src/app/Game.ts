@@ -5310,7 +5310,7 @@ export class Game {
     this.ruins.view = this.weatherVisuals?.view ?? 1;
     this.syncView();
     // P7-E32: the ruins stand where the fogged distance (set by syncView) has gone to haze
-    this.ruins.update(this.camera.entity.getPosition(), this.camera.entity.forward, this.app.scene.fog.start, this.app.scene.fog.end);
+    this.ruins.update(this.camera.entity.getPosition(), this.camera.entity.forward, this.app.scene.fog.start, this.app.scene.fog.end, this.camera.cam.fov);
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;

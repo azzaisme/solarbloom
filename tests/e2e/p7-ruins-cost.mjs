@@ -28,8 +28,10 @@ try {
       await page.waitForTimeout(6000); // a few frames at software GL's ~1 fps
       const r = await page.evaluate(() => {
         const g = window.solarbloom;
-        const mis = g.ruins.root.findComponents('render').flatMap((c) => c.meshInstances);
-        const out = { ruinsDrawn: mis.filter((m) => m.visibleThisFrame).length, ruinsMeshes: mis.length, drawCalls: g.app.stats.drawCalls?.total ?? 0 };
+        // a slice switched off keeps its last visibleThisFrame, so count only the enabled ones
+        const slices = g.ruins.root.children;
+        const drawn = !g.ruins.root.enabled ? 0 : slices.filter((e) => e.enabled && e.render?.meshInstances.some((m) => m.visibleThisFrame)).length;
+        const out = { ruinsDrawn: drawn, ruinsMeshes: slices.length, drawCalls: g.app.stats.drawCalls?.total ?? 0 };
         g.app.autoRender = false;
         return out;
       });

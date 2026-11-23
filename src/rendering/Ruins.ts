@@ -705,9 +705,11 @@ export class Ruins {
    * that plane hides the ruins; the haze-coloured distance behind it (it reads as sky) doesn't. `fogStart`/`fogEnd`
    * are the scene fog's, as view depths.
    */
-  update(cam: pc.Vec3, forward: pc.Vec3, fogStart: number, fogEnd: number) {
-    this.root.enabled = RUINS.on;
-    if (!RUINS.on) return;
+  update(cam: pc.Vec3, forward: pc.Vec3, fogStart: number, fogEnd: number, fovDeg = 90) {
+    // looking down so steeply that the horizon is above the top of the view (the overview), there's nothing to draw
+    const above = Math.asin(Math.max(-1, Math.min(1, -forward.y))) * (180 / Math.PI) > fovDeg / 2 + 3;
+    this.root.enabled = RUINS.on && !above;
+    if (!this.root.enabled) return;
     const H = LOOK.horizon;
     const full = H.strength >= 0.99 ? fogStart + (fogEnd - fogStart) * H.reach : fogEnd;
     const D = Math.max(1, full * RUINS.depth);
