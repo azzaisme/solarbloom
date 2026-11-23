@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
 import { RUINS, type RuinKind, type RuinLayerName } from '../data/ruins';
+import { loadRuinModels, type RuinModel, type RuinModelName } from './RuinModels';
 import type { Sky } from './Sky';
 
 type V3 = [number, number, number];
@@ -21,6 +22,7 @@ const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const scl = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k];
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 /** One mesh's worth of flat-shaded convex pieces, with what the recolour needs per vertex. */
 export class Geo {
@@ -117,7 +119,12 @@ const C = {
   cliff: lin(RUINS.colours.cliff),
   moss: lin(RUINS.colours.moss),
   water: lin(RUINS.falls.colour),
+  mist: lin(RUINS.falls.mist),
 };
+
+/** Which authored model each model kind uses, and the procedural piece standing in when the models aren't loaded. */
+const MODEL_OF: Partial<Record<RuinKind, RuinModelName>> = { mAqueduct: 'aqueduct', mTower: 'tower', mDome: 'dome', mFrame: 'solarframe' };
+const PROCEDURAL_OF: Partial<Record<RuinKind, RuinKind>> = { mAqueduct: 'aqueduct', mTower: 'tower', mDome: 'dome', mFrame: 'frame' };
 
 export interface Built {
   layer: number;
@@ -133,6 +140,8 @@ export interface Built {
  */
 export class RuinPlanner {
   private seed: number = RUINS.seed;
+  /** `models`: the authored ruin pieces (RuinModels); without them every piece is procedural */
+  constructor(private models?: Record<RuinModelName, RuinModel>) {}
   reach = 0;
   /** the thinnest a part may be in this band (world units): thinner reads as a crossbar floating in the sky */
   private thin = 1;
@@ -188,12 +197,14 @@ export class RuinPlanner {
           const hd = hAt(d);
           const he = hAt(e);
           const lean = RUINS.slope[name];
+          // with the authored mesas standing on it, the procedural coast is only a low shore
+          const low = this.models && RUINS.mesas[name] ? RUINS.mesas[name]!.shore : 1;
           const top = [p(d, rIn(d) + 2 + hd * lean), p(e, rIn(e) + 2 + he * lean), p(e, rIn(e) + depth), p(d, rIn(d) + depth)];
           const geo = geos[sectorOf((d + e) / 2)];
-          geo.frustum(bot, top, 0, [hd, he, he, hd], this.rnd() < 0.4 ? C.stoneDark : C.cliff, this.rnd() < (name === 'near' ? 0.6 : 0.35) ? C.moss : C.landTop);
+          geo.frustum(bot, top, 0, [hd * low, he * low, he * low, hd * low], this.rnd() < 0.4 ? C.stoneDark : C.cliff, this.rnd() < (name === 'near' ? 0.6 : 0.35) ? C.moss : C.landTop);
           // a waterfall off the near band's high cliffs, now and then
           const F = RUINS.falls;
-          if (name === 'near' && falls < F.count && Math.min(hd, he) >= F.minHeight && this.rnd() < 0.35) {
+          if (!this.models && name === 'near' && falls < F.count && Math.min(hd, he) >= F.minHeight && this.rnd() < 0.35) {
             falls++;
             const m = (d + e) / 2;
             const th = toRad(m);
@@ -203,22 +214,62 @@ export class RuinPlanner {
           }
         }
         // the structures, deeper inland first (drawn first: they stand behind the nearer ones)
+        type Spot = { deg: number; r: number; ground: number; mesa?: number };
+        const spots: Spot[] = [];
+        const M = this.models;
+        const mesas = M ? RUINS.mesas[name] : undefined;
+        if (mesas && M) {
+          // P7-E32 (#756): authored cliff mesas along the coast, in ones and twos (a twin makes a headland), the
+          // ruins standing on their flat tops; a waterfall off a few of the high ones
+          const Mr = Math.max(M.cliff.box[3], M.cliff.box[5]);
+          for (let d = a0 + mesas.every * 0.4; d < a1 - 2; d += mesas.every * this.range(0.8, 1.2)) {
+            const twin = this.rnd() < mesas.twins;
+            for (let k = 0; k < (twin ? 2 : 1); k++) {
+              const sm = this.range(mesas.scale[0], mesas.scale[1]) * (k ? 0.8 : 1);
+              const deg = d + (k ? this.range(1.2, 2.2) * (this.rnd() < 0.5 ? -1 : 1) : 0);
+              spots.push({ deg, r: rIn(deg) + Mr * sm * (k ? 1.5 : 0.85), ground: 0, mesa: sm });
+            }
+          }
+        }
         const count = Math.max(1, Math.round(((a1 - a0) / 10) * L.density));
-        const spots: { deg: number; r: number }[] = [];
         for (let i = 0; i < count; i++) {
           const deg = a0 + 3 + (a1 - a0 - 6) * ((i + 0.2 + this.rnd() * 0.6) / count);
-          spots.push({ deg, r: rIn(deg) + this.range(6, 40) });
+          const r = rIn(deg) + this.range(6, 40);
+          spots.push({ deg, r, ground: hAt(deg) - 1 });
         }
-        spots.sort((a, b) => b.r - a.r);
-        for (const s of spots) {
-          const th = toRad(s.deg);
-          const ground = hAt(s.deg);
-          const f = new Frame([cx + s.r * Math.sin(th), ground - 1, cz + s.r * Math.cos(th)], [Math.cos(th), 0, -Math.sin(th)], [-Math.sin(th), 0, -Math.cos(th)]);
-          const g = geos[sectorOf(s.deg)];
-          const lamp = (at: V3) => {
-            if (li > 0) lampSpots.push({ geo: g, at, n: f.n });
+        spots.sort((p1, p2) => p2.r - p1.r);
+        let last: RuinKind | undefined;
+        for (const sp of spots) {
+          const th = toRad(sp.deg);
+          const T: V3 = [Math.cos(th), 0, -Math.sin(th)];
+          const N: V3 = [-Math.sin(th), 0, -Math.cos(th)];
+          const g = geos[sectorOf(sp.deg)];
+          const at = (y: number): Frame => new Frame([cx + sp.r * Math.sin(th), y, cz + sp.r * Math.cos(th)], T, N);
+          let ground = sp.ground;
+          if (sp.mesa !== undefined && M) {
+            const sm = sp.mesa;
+            this.model(g, M.cliff, at(0), sm, this.rnd() * Math.PI * 2);
+            ground = M.cliff.box[4] * sm * 0.95;
+            const F = RUINS.falls;
+            if (name === 'near' && falls < F.count && ground >= F.minHeight && this.rnd() < 0.5) {
+              falls++;
+              this.waterfall(g, at(0), M.cliff.box[5] * sm * 0.9, ground);
+            }
+            if (this.rnd() > mesas!.ruined) continue; // a bare mesa now and then
+          }
+          const f = at(ground);
+          const lamp = (p: V3) => {
+            if (li > 0) lampSpots.push({ geo: g, at: p, n: f.n });
           };
-          this.structure(this.pickKind(name), g, f, L.scale * this.range(0.8, 1.2), lamp);
+          let kind = this.pickKind(name);
+          for (let i = 0; i < 4 && kind === last; i++) kind = this.pickKind(name); // never the same piece side by side
+          last = kind;
+          const model = M && MODEL_OF[kind] ? M[MODEL_OF[kind]!] : undefined;
+          if (model) {
+            const along = kind === 'mAqueduct' || kind === 'mFrame';
+            this.model(g, model, f, L.model * this.range(0.75, 1.3), along ? this.range(-0.4, 0.4) : this.rnd() * Math.PI * 2);
+            if (kind !== 'mFrame') lamp(f.at(0, model.box[4] * L.model * 0.4, model.box[5] * L.model * 0.8));
+          } else this.structure(PROCEDURAL_OF[kind] ?? kind, g, f, L.scale * this.range(0.8, 1.2), lamp);
         }
       }
       geos.forEach((geo, sector) => out.push({ layer: li, sector, geo, fade: L.fade }));
@@ -234,6 +285,40 @@ export class RuinPlanner {
       s.geo.box(add(s.at, scl(s.n, 0.4)), scl(t, h), [0, h * 1.3, 0], scl(s.n, 0.3), C.stoneDark, 1);
     }
     return out;
+  }
+
+  /** An authored model at frame `f` (base centre on its origin), scaled `s`, turned `yaw` about the vertical. */
+  private model(g: Geo, m: RuinModel, f: Frame, s: number, yaw: number) {
+    const c = Math.cos(yaw);
+    const sn = Math.sin(yaw);
+    const base = g.pos.length / 3;
+    for (let i = 0; i < m.pos.length; i += 3) {
+      const x = m.pos[i];
+      const z = m.pos[i + 2];
+      const p = f.at((x * c - z * sn) * s, m.pos[i + 1] * s, (x * sn + z * c) * s);
+      g.pos.push(p[0], p[1], p[2]);
+      const nx = m.nrm[i];
+      const nz = m.nrm[i + 2];
+      const n = f.dir(nx * c - nz * sn, m.nrm[i + 1], nx * sn + nz * c);
+      g.nrm.push(n[0], n[1], n[2]);
+      g.alb.push(m.col[i], m.col[i + 1], m.col[i + 2]);
+      g.lamp.push(0);
+    }
+    // the frame swaps handedness (u along the coast, w inward): flip the winding so the faces still face out
+    const flip = dot(cross(f.t, [0, 1, 0]), f.n) < 0;
+    for (let i = 0; i < m.idx.length; i += 3) {
+      if (flip) g.idx.push(base + m.idx[i], base + m.idx[i + 2], base + m.idx[i + 1]);
+      else g.idx.push(base + m.idx[i], base + m.idx[i + 1], base + m.idx[i + 2]);
+    }
+  }
+
+  /** A waterfall down a mesa's face toward the island: a pale sheet from its top to the sea and a mist at its foot. */
+  private waterfall(g: Geo, f: Frame, out: number, h: number) {
+    const N = f.n;
+    const T = f.t;
+    const at = (w: number, y: number): V3 => f.at(0, y, w);
+    g.box(at(out, h / 2), scl(T, 1.8), [0, h / 2, 0], scl(N, 0.6), C.water);
+    g.box(at(out + 2.5, 1.4), scl(T, 5), [0, 1.4, 0], scl(N, 2.2), C.mist);
   }
 
   /** One structure at frame `f`, size `s`; `lamp` offers a window spot for the night lights. */
@@ -462,25 +547,30 @@ export class RuinPlanner {
 /**
  * P7-E32 (#756, #761, #762): the distant ruined city. Three bands of coast round the island (far, mid, near), each
  * with broken stone towers, solarpunk spires with ring platforms and panel fins, aqueduct arches, viaducts, lattice
- * frames, derelict wind turbines and ruined blocks, generated once from RUINS.seed.
+ * frames, derelict wind turbines and ruined blocks, generated once from RUINS.seed. Where the authored models
+ * (RuinModels: aqueduct, twin tower, broken dome, solar frame, cliff mesa) have loaded, the near and mid bands stand
+ * them on cliff mesas along the coast, with waterfalls off a few of the near ones.
  *
- * Drawn in its own layer right after the world's opaque pass, depth-tested but writing no depth; within it the bands
- * draw far to near (manual order). Each frame every vertex is slid along its ray from the camera onto a plane
- * where the distance has gone to haze (see update and data/ruins.ts): on screen each silhouette is exactly where the real one would be.
+ * Drawn in its own layer right after the world's opaque pass, depth-tested, and writing depth only inside its own
+ * thin band where the distance has gone to haze. Each frame every vertex is slid along its ray from the camera into
+ * that band (see update and data/ruins.ts): on screen each silhouette is exactly where the real one would be.
  * Light and distance fade are baked into vertex colours and rebaked only when the sun, the haze or the night move.
  * One mesh per band and azimuth slice, so the camera culls what's behind it: a handful of draw calls.
  */
 export class Ruins {
   readonly layer: pc.Layer;
   readonly root: pc.Entity;
-  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; base: Float32Array; drawn: Float32Array; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
+  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; e: pc.Entity; dir: [number, number]; stale: boolean; base: Float32Array; drawn: Float32Array; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
   private sig: number[] = [];
   private viewSig: number[] = [];
   /** E23.7.2: the weather's view (1 clear … less in fog and rain): the ruins fade out with it */
   view = 1;
 
+  /** resolves once the authored models have loaded (or failed) and the ruins are built */
+  readonly ready: Promise<void>;
+
   constructor(
-    app: pc.AppBase,
+    private app: pc.AppBase,
     private sky: Sky,
     private sun: pc.Entity,
   ) {
@@ -500,12 +590,24 @@ export class Ruins {
     mat.diffuse = new pc.Color(0, 0, 0);
     mat.emissive = new pc.Color(1, 1, 1);
     mat.emissiveVertexColor = true;
-    mat.depthWrite = false;
+    // depth-tested against the world, and writing depth among themselves (the authored pieces aren't convex), all
+    // inside a thin band of depth where the distance has gone to haze (see update)
+    mat.depthWrite = true;
     mat.depthTest = true;
     mat.cull = pc.CULLFACE_BACK;
     mat.update();
+    this.mat = mat;
+    // the authored pieces are fetched first; the ruins appear once they're in (procedural if they fail)
+    this.ready = loadRuinModels().then((models) => this.create(new RuinPlanner(models).build()));
+  }
 
-    const built = new RuinPlanner().build();
+  private mat: pc.StandardMaterial;
+
+  private create(built: Built[]) {
+    const mat = this.mat;
+    const app = this.app;
+    this.viewSig = [];
+    this.sig = [];
     for (const b of built) {
       const g = b.geo;
       if (!g.idx.length) continue;
@@ -520,9 +622,20 @@ export class Ruins {
       e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
       this.root.addChild(e);
       const n = g.pos.length / 3;
+      // which way this slice lies from the island's middle (for skipping the ones behind the camera)
+      let sx = 0;
+      let sz = 0;
+      for (let i = 0; i < g.pos.length; i += 3) {
+        sx += g.pos[i] - RUINS.centre[0];
+        sz += g.pos[i + 2] - RUINS.centre[1];
+      }
+      const sl = Math.hypot(sx, sz) || 1;
       this.meshes.push({
         mesh,
         mi,
+        e,
+        dir: [sx / sl, sz / sl],
+        stale: true,
         base: Float32Array.from(g.pos),
         drawn: Float32Array.from(g.pos),
         nrm: Float32Array.from(g.nrm),
@@ -543,9 +656,10 @@ export class Ruins {
   /**
    * Places the ruins for this frame's camera and rebakes their colours when the light, haze or night move.
    *
-   * Every vertex is slid along its own ray from the camera onto a plane `D` deep, so on screen each silhouette is
-   * exactly where the real one, hundreds of units out, would be; but by depth the ruins stand where the distance
-   * above the horizon has gone wholly to haze: the horizon haze (LookShaders `lookHorizonFog`, LOOK.horizon) is full
+   * Every vertex is slid along its own ray from the camera into a thin band of depth (its real distance mapped, in
+   * order, onto `D` … `D + RUINS.depthBand` of it), so on screen each silhouette is exactly where the real one,
+   * hundreds of units out, would be, and the ruins still hide one another in the right order; but by depth they stand
+   * where the distance above the horizon has gone wholly to haze: the horizon haze (LookShaders `lookHorizonFog`, LOOK.horizon) is full
    * from `start + reach × (end − start)` of the scene fog, well before the fog's end. The visible world in front of
    * that plane hides the ruins; the haze-coloured distance behind it (it reads as sky) doesn't. `fogStart`/`fogEnd`
    * are the scene fog's, as view depths.
@@ -556,10 +670,23 @@ export class Ruins {
     const H = LOOK.horizon;
     const full = H.strength >= 0.99 ? fogStart + (fogEnd - fogStart) * H.reach : fogEnd;
     const D = Math.max(1, full * RUINS.depth);
+    const band = full * RUINS.depthBand;
+    const [t0, t1] = RUINS.depthRange;
     const vs = [cam.x, cam.y, cam.z, forward.x, forward.y, forward.z, D];
-    if (!this.viewSig.length || vs.some((v, i) => Math.abs(v - this.viewSig[i]) > 1e-4)) {
-      this.viewSig = vs;
+    const moved = !this.viewSig.length || vs.some((v, i) => Math.abs(v - this.viewSig[i]) > 1e-4);
+    this.viewSig = vs;
+    // slices behind the camera are switched off and not re-placed (a slice spans 60°, the view about 80° across)
+    const fl = Math.hypot(forward.x, forward.z);
+    {
       for (const m of this.meshes) {
+        const seen = fl < 0.2 || (m.dir[0] * forward.x + m.dir[1] * forward.z) / fl > -0.2;
+        m.e.enabled = seen;
+        if (!seen) {
+          m.stale = true;
+          continue;
+        }
+        if (!moved && !m.stale) continue;
+        m.stale = false;
         const b = m.base;
         const o = m.drawn;
         for (let i = 0; i < b.length; i += 3) {
@@ -570,7 +697,7 @@ export class Ruins {
           let t = dx * forward.x + dy * forward.y + dz * forward.z;
           const r = Math.hypot(dx, dy, dz);
           if (t < r * 0.2) t = r;
-          const k = D / t;
+          const k = (D + band * Math.min(1, Math.max(0, (t - t0) / (t1 - t0)))) / t;
           o[i] = cam.x + dx * k;
           o[i + 1] = cam.y + dy * k;
           o[i + 2] = cam.z + dz * k;

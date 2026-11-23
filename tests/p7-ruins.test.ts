@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { RUINS } from '../src/data/ruins';
+import { readFileSync } from 'node:fs';
 import { RuinPlanner } from '../src/rendering/Ruins';
+import { parseRuinGlb, RUIN_MODEL_NAMES, type RuinModel, type RuinModelName } from '../src/rendering/RuinModels';
 
 // P7-E32 (#756, #762): the distant ruined city is generated once, deterministically, in a few meshes, and stays out
 // of the playable island and the open sea south of the start.
@@ -78,5 +80,54 @@ describe('P7-E32 ruined skyline', () => {
   it('fades blue, not milky: no band is mixed all the way into the haze, and night keeps silhouettes', () => {
     for (const l of RUINS.layers) expect(l.fade).toBeLessThan(0.75);
     expect(RUINS.nightFade).toBeLessThan(1);
+  });
+
+  describe('with the authored models', () => {
+    const models = Object.fromEntries(
+      RUIN_MODEL_NAMES.map((n) => {
+        const b = readFileSync(`assets/raw/models/ruins/ruin-${n}.glb`);
+        return [n, parseRuinGlb(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength))];
+      }),
+    ) as Record<RuinModelName, RuinModel>;
+
+    it('parses each: ~1,500 triangles, base at y 0, the README heights, vertex colours in 0–1', () => {
+      const heights: Record<RuinModelName, number> = { aqueduct: 12, tower: 30, dome: 14, solarframe: 18, cliff: 22 };
+      for (const n of RUIN_MODEL_NAMES) {
+        const m = models[n];
+        expect(m.idx.length / 3, n).toBeGreaterThan(1200);
+        expect(m.idx.length / 3, n).toBeLessThan(1800);
+        expect(m.box[1], n).toBeCloseTo(0, 1);
+        expect(m.box[4], n).toBeCloseTo(heights[n], 0);
+        for (const c of m.col) expect(c >= 0 && c <= 1).toBe(true);
+      }
+    });
+
+    it('stands them on cliff mesas, deterministically, still clear of the island and the open sea due south', () => {
+      const a = new RuinPlanner(models).build();
+      const b = new RuinPlanner(models).build();
+      expect(a.map((x) => x.geo.pos.length)).toEqual(b.map((x) => x.geo.pos.length));
+      let tris = 0;
+      let minD = Infinity;
+      let south = 0;
+      for (const x of a) {
+        tris += x.geo.idx.length / 3;
+        const p = x.geo.pos;
+        for (let i = 0; i < p.length; i += 3) {
+          minD = Math.min(minD, Math.hypot(p[i] - RUINS.centre[0], p[i + 2] - RUINS.centre[1]));
+          if (x.layer > 0) {
+            const br = bearing(p[i], p[i + 2]);
+            if (!(br > 15 && br < 345)) south++;
+          }
+        }
+      }
+      expect(minD).toBeGreaterThan(190);
+      expect(south).toBe(0);
+      console.log(`ruins with models: ${tris} triangles`);
+      // the near band is built from the models: far more triangles than its procedural boxes, still a modest total
+      const near = a.filter((x) => x.layer === 2).reduce((s2, x) => s2 + x.geo.idx.length / 3, 0);
+      expect(near).toBeGreaterThan(models.cliff.idx.length / 3 * 4);
+      expect(tris).toBeLessThan(250000);
+      expect(a.filter((x) => x.geo.idx.length).length).toBeLessThanOrEqual(RUINS.layers.length * RUINS.sectors);
+    });
   });
 });
