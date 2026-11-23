@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { LOOK } from '../src/data/look';
-import { HAZE, SKY } from '../src/data/sky';
+import { readFileSync } from 'node:fs';
+import { DAY_LIGHT, HAZE, LIGHT_PRESETS, SKY } from '../src/data/sky';
+import { daylightAt, sunHeightAt } from '../src/gameplay/Clock';
 
 // P7-E27 (#713): the Bright Day calibration lives in data/look.ts and data/sky.ts. These pin the brief's targets
 // (docs/VISUAL_DIRECTION.md) so a later retune can't quietly bring back the yellow-white veil.
@@ -77,5 +79,28 @@ describe('P7-E27 cloud ring (owner, 23 Nov 2026)', () => {
     expect(W.life[0]).toBeGreaterThan(1);
     expect(W.life[1]).toBeGreaterThan(W.life[0]);
     expect(W.reach).toBeGreaterThan(0);
+  });
+});
+
+describe('P7-E27.6 lighting presets (#724)', () => {
+  const el = (f: number) => DAY_LIGHT.sunLow + (DAY_LIGHT.sunHigh - DAY_LIGHT.sunLow) * sunHeightAt(f);
+  it('Bright Day: full daylight with the sun 35–50° up', () => {
+    const f = LIGHT_PRESETS.brightDay.f;
+    expect(daylightAt(f)).toBe(1);
+    expect(el(f)).toBeGreaterThanOrEqual(35);
+    expect(el(f)).toBeLessThanOrEqual(50);
+  });
+  it('Golden Hour: still daylight, with the sun low enough to turn warm', () => {
+    const f = LIGHT_PRESETS.goldenHour.f;
+    expect(daylightAt(f)).toBeGreaterThan(0.5);
+    expect(sunHeightAt(f)).toBeLessThan(DAY_LIGHT.warmBelow);
+  });
+  it('Moonlit Garden: night', () => {
+    expect(daylightAt(LIGHT_PRESETS.moonlitGarden.f)).toBeLessThan(0.05);
+  });
+  it('the fixed-camera shots use the same three moments', () => {
+    const src = readFileSync('tests/e2e/lib/p7-scene.mjs', 'utf8');
+    const m = /TIMES = \{ day: ([\d.]+), golden: ([\d.]+), night: ([\d.]+) \}/.exec(src)!;
+    expect(m.slice(1).map(Number)).toEqual([LIGHT_PRESETS.brightDay.f, LIGHT_PRESETS.goldenHour.f, LIGHT_PRESETS.moonlitGarden.f]);
   });
 });

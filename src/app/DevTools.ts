@@ -8,6 +8,8 @@ import { TUNING } from '../data/tuning';
 import { MATERIAL_IDS, TIERS } from '../data/salvage';
 import { roadPlanFor } from '../core/RoadPlan';
 import { drawRoadOverview } from './RoadDebug';
+import { goToPreset, toggleLightPanel } from './LightPanel';
+import type { LightPresetName } from '../data/sky';
 
 /**
  * Phase 4 E00.5: debug helpers for repeatable testing. Loaded only by the Vite dev server
@@ -27,6 +29,8 @@ import { drawRoadOverview } from './RoadDebug';
  *   sbDev.decor(5)             E19.2: decorate every 5th restored free tile in the revealed city (sbDev.decor(null) clears)
  *   sbDev.roads(12)            toggle the City 16 road-network overview, 12 chunks round the camera
  *   sbDev.water(14)            restore the water tiles within 14 tiles of the view (to hear the 3D brook)
+ *   sbDev.light()              P7-E27: toggle the lighting panel (live sliders over look.cfg / data/sky.ts, presets)
+ *   sbDev.lightPreset('goldenHour') jump to a lighting preset (brightDay, goldenHour, moonlitGarden), weather sunny
  */
 export type PresetName = 'fresh' | 'screenshot' | 'rich';
 
@@ -170,6 +174,15 @@ export function installDevTools(game: Game) {
     /** E19.2: decorate every n-th restored free tile of the revealed city with every decoration in turn; null clears. */
     decor(every?: number | null) {
       return `${game.fillDecor(every === undefined ? 5 : every)} decorations stand`;
+    },
+    /** P7-E27.7 (#725): the lighting panel (dev only, nothing saved). */
+    light() {
+      return toggleLightPanel(game);
+    },
+    /** P7-E27.6 (#724): jump to a named lighting preset, the weather held sunny. */
+    lightPreset(name: LightPresetName = 'brightDay') {
+      goToPreset(game, name);
+      return `lighting preset: ${name}`;
     },
     /** Drone redesign D03: preview an expression on every drone. */
     face(name?: FaceName) {

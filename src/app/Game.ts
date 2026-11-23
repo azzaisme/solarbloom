@@ -284,7 +284,8 @@ export class Game {
   /** Puffy clouds between the camera and the city when zoomed out. */
   private clouds: Clouds;
   /** region unlocks: the wall of clouds around sealed areas */
-  private cloudWall: CloudWall;
+  /** P7-E27: public for the dev lighting panel (it re-syncs the ring when its size changes) */
+  readonly cloudWall: CloudWall;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   /**

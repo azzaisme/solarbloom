@@ -88,6 +88,20 @@ export const NIGHT_SKY_LIGHTS = {
 } as const;
 
 /**
+ * P7-E27.6 (#724): the three named lighting presets, as moments of the existing day/night cycle (DayNight, DAY_LIGHT,
+ * NIGHT_SKY) rather than a system of their own. Each is an authored look: Bright Day is the benchmark (the sun near
+ * the top of its arc, 35–50° up); Golden Hour is the low warm sun (DAY_LIGHT.lowSunColour below warmBelow, the dusk
+ * sky band); Moonlit Garden is the approved moonlit night (#685). `f` is the day fraction; the fixed-camera shots
+ * (tests/e2e/lib/p7-scene.mjs TIMES) and the dev lighting panel use the same moments.
+ */
+export const LIGHT_PRESETS = {
+  brightDay: { label: 'Bright Day', f: 0.3 },
+  goldenHour: { label: 'Golden Hour', f: 0.6 },
+  moonlitGarden: { label: 'Moonlit Garden', f: 0.83 },
+} as const;
+export type LightPresetName = keyof typeof LIGHT_PRESETS;
+
+/**
  * E23.7.1: the light through the day. The key light follows the sun's arc by day (from low in the east to low in
  * the west, never overhead, so the golden-hour look holds most of the day) and becomes a cool moon by night.
  * Shares are of LOOK's values (1 = the golden-hour look as tuned).
