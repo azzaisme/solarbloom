@@ -4,7 +4,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 import { zoneAt } from '../src/rendering/PlantingZones';
 import { treeSpot, treeWorldOf, treeZone, TREES } from '../src/rendering/TreePlacement';
-import { TREE_VARIANTS, treeGeo } from '../src/rendering/TreeGen';
+import { FORM_SPECIES, TREE_VARIANTS, treeGeo, type Form } from '../src/rendering/TreeGen';
 import { foliageShape } from '../src/core/Solids';
 
 /** P7-E29 (#715): composed tree placement, by planting zone, round the start (Saltwind Beach and its canal). */
@@ -200,3 +200,42 @@ describe('P7-E29 tree variation (the original leafy trees, varied)', () => {
     expect(scales.filter((v) => v >= 1.65).length).toBeGreaterThan(3);
   });
 });
+
+describe('P7-E29 tree forms (umbrella, columnar, fruit, coastal), in the leafy style', () => {
+  it('each form keeps the original per-tree budget at every detail level', () => {
+    for (const [form, sp] of Object.entries(FORM_SPECIES) as [Form, typeof FORM_SPECIES.umbrella][])
+      for (const st of [2, 3] as const)
+        for (let v = 0; v < TREE_VARIANTS; v++) {
+          expect(treeGeo(sp, st, v, 0, form).tris, `${form} far`).toBeLessThanOrEqual(260);
+          expect(treeGeo(sp, st, v, 1, form).tris, `${form} normal`).toBeLessThanOrEqual(4500);
+          expect(treeGeo(sp, st, v, 2, form).tris, `${form} near`).toBeLessThanOrEqual(8500);
+        }
+  });
+
+  it('round the start every form shows up, none dominates, and each stands where it belongs', () => {
+    const W2 = treeWorldOf(sim);
+    const all = cells().map(({ x, z }) => ({ x, z, s: spot(x, z) })).filter((c) => c.s && !c.s.planter);
+    const by = (f: Form) => all.filter((c) => c.s!.form === f);
+    for (const f of ['umbrella', 'columnar', 'fruit', 'coastal'] as const) expect(by(f).length, f).toBeGreaterThan(0);
+    for (const f of ['umbrella', 'columnar', 'fruit', 'coastal'] as const) expect(by(f).length / all.length, f).toBeLessThan(0.25);
+    // the species stays what the simulation counts
+    for (const c of all) if (c.s!.form !== 'standard') expect(c.s!.species).toBe(FORM_SPECIES[c.s!.form as Exclude<Form, 'standard'>]);
+    // columnar trees stand two cells off a path, a road or a canal
+    const route = (x: number, z: number) => {
+      const t = W2.peek(x, z);
+      return !!t && (t.feature === 'water' || (!t.blocked && (t.feature === 'paving' || t.feature === 'road')));
+    };
+    for (const c of by('columnar')) {
+      let near = false;
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) near ||= route(c.x + dx, c.z + dz);
+      expect(near, `columnar at ${c.x},${c.z}`).toBe(true);
+    }
+    // coastal trees lean away from the water: their +x (the lean) points away from the nearest water
+    for (const c of by('coastal')) {
+      let wx = 0, wz = 0;
+      for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) if (W2.peek(c.x + dx, c.z + dz)?.feature === 'water') (wx += dx / (dx * dx + dz * dz)), (wz += dz / (dx * dx + dz * dz));
+      expect(Math.cos(c.s!.rot) * wx + Math.sin(c.s!.rot) * wz, `coastal at ${c.x},${c.z}`).toBeLessThan(0);
+    }
+  });
+});
+

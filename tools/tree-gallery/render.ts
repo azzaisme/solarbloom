@@ -4,7 +4,7 @@
 import * as pc from 'playcanvas';
 import { foliageMaterial, treeMesh } from '../../src/rendering/Foliage';
 import { LOOK } from '../../src/data/look';
-import { SPECIES, treeGeo, type Lod, type TreeStage } from '../../src/rendering/TreeGen';
+import { SPECIES, treeGeo, type Form, type Lod, type Species, type TreeStage } from '../../src/rendering/TreeGen';
 
 const q = new URLSearchParams(location.search);
 const stage = +(q.get('stage') ?? 3) as TreeStage;
@@ -12,6 +12,8 @@ const lod = +(q.get('lod') ?? 1) as Lod;
 const scale = +(q.get('scale') ?? 1.8);
 const variant = +(q.get('variant') ?? 0);
 const view = q.get('view') ?? 'side';
+// forms=1: the P7-E29 forms (umbrella, columnar, fruit, coastal) and the willow, instead of the five species
+const items: [Species, Form][] = q.get('forms') ? [['oak', 'umbrella'], ['birch', 'columnar'], ['cherry', 'fruit'], ['oak', 'coastal'], ['willow', 'standard']] : SPECIES.map((sp) => [sp, 'standard']);
 const W = 1600, H = 700;
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -56,8 +58,8 @@ bm.diffuse = new pc.Color(0.95, 0.95, 0.92);
 bm.update();
 const mat = foliageMaterial();
 let tris = 0;
-SPECIES.forEach((sp, i) => {
-  const g = treeGeo(sp, stage, variant, lod);
+items.forEach(([sp, form], i) => {
+  const g = treeGeo(sp, stage, variant, lod, form);
   tris += g.tris;
   const e = new pc.Entity(sp);
   e.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(app.graphicsDevice, g), mat)], castShadows: true, receiveShadows: true });
@@ -70,7 +72,7 @@ SPECIES.forEach((sp, i) => {
   bot.setPosition(i * 3.2 + 1.0, 0.25, 0.6);
   app.root.addChild(bot);
   (window as unknown as { treeInfo: Record<string, number> }).treeInfo ??= {};
-  (window as unknown as { treeInfo: Record<string, number> }).treeInfo[sp] = g.tris;
+  (window as unknown as { treeInfo: Record<string, number> }).treeInfo[form === 'standard' ? sp : form] = g.tris;
 });
 app.start();
 let frames = 0;

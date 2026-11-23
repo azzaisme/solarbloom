@@ -2,7 +2,7 @@ import { areaMapFor } from '../core/Areas';
 import { CHUNK, generateTile } from '../core/Generation';
 import type { LayerData, TileData } from '../core/types';
 import { beachDepth, zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
-import { TREE_VARIANTS, type Species, type TreeStage } from './TreeGen';
+import { FORM_SPECIES, TREE_VARIANTS, type Form, type Species, type TreeStage } from './TreeGen';
 
 /**
  * Phase 5 visual overhaul: which restorable tiles grow a tree, of which species. A pure function of the seed and
@@ -69,9 +69,9 @@ const RULES: Record<string, Rule> = {
   // the start: a coastal park of broad shade oaks (a pine only as a rare accent), willows on the canal and the odd
   // blossom tree, like the reference coast.
   // Pacing (owner-approved, P7-E29 #737): the beach had no trees before; now a few specimens and small groves inland
-  // (thinned by half, and none on the open sand by the sea, at the owner's request) bring songbirds (20 thriving tree
-  // tiles) sooner round the start: 975 -> 550 restored tiles in the outward-restore proxy (seeds 7 and 21; 250 with
-  // the first, denser pass). See the commit "P7-E29: open beach". TUNING is unchanged by decision.
+  // (thinned by half, none on the open sand by the sea) and the odd row of columnar trees bring songbirds (20 thriving
+  // tree tiles) sooner round the start: 975 -> 450 restored tiles in the outward-restore proxy (seeds 7 and 21; 250
+  // with the first, denser pass). See the commit "P7-E29 tree forms". TUNING is unchanged by decision.
   beach: { share: 0.1, grove: [['oak', 6], ['birch', 1], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 0.45, density: 0.6 },
   street: { share: 0.1, planterShare: 0.06, grove: [['birch', 3], ['cherry', 2]], shore: [['willow', 3], ['birch', 1]], specimen: [['cherry', 2], ['birch', 1]], groves: 0.2 },
   plaza: { share: 0.1, planterShare: 0.07, grove: [['birch', 3], ['cherry', 3]], shore: [['willow', 3], ['cherry', 1]], specimen: [['cherry', 2], ['oak', 1]], groves: 0.2 },
@@ -116,7 +116,21 @@ export const TREES = {
     accent: [1.15, 1.4] as [number, number],
     planter: [0.86, 1.08] as [number, number],
     fallback: [1.0, 1.95] as [number, number],
+    row: [1.05, 1.3] as [number, number],
   },
+  /**
+   * columnar trees in rows two cells off a path or canal: where the row field (smooth noise, cells of `rowScale`) is
+   * above `rowField`, every third cell along
+   */
+  rowScale: 7,
+  rowField: 0.62,
+  /** specimens: shares of umbrella and coastal forms by the sea (within 4 of water or next to the beach) and inland */
+  coastForms: { coastal: 0.5, umbrella: 0.3 },
+  inlandForms: { umbrella: 0.35 },
+  /** a grove's large oaks that are umbrellas */
+  groveUmbrella: 0.4,
+  /** garden accents that are fruit trees */
+  fruitShare: 0.6,
   /**
    * grove trees come in size classes, so a grove isn't all one height: [share, scale range] (the rest are `scale.grove`,
    * the mid trees); specimens are the rare hero trees
@@ -127,6 +141,8 @@ export const TREES = {
 
 export interface TreeSpot {
   species: Species;
+  /** P7-E29: the tree's shape (TreeGen `Form`; the species stays what the simulation counts) */
+  form: Form;
   variant: number;
   rot: number;
   scale: number;
@@ -244,6 +260,31 @@ const route = (w: TreeWorld) => (x: number, z: number) => {
 /** A jetty or bridge deck: paving or road with water beside it. */
 const deck = (w: TreeWorld) => (x: number, z: number) => isHard(w.peek(x, z)) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => isWater(w.peek(x + dx, z + dz)));
 
+/** Smooth value noise for the columnar rows (0…1). */
+function rowNoise(x: number, z: number) {
+  const s = TREES.rowScale;
+  const fx = x / s, fz = z / s;
+  const x0 = Math.floor(fx), z0 = Math.floor(fz);
+  const tx = fx - x0, tz = fz - z0;
+  const sx = tx * tx * (3 - 2 * tx), sz = tz * tz * (3 - 2 * tz);
+  const a = hash01(x0, z0, 61), b = hash01(x0 + 1, z0, 61), c = hash01(x0, z0 + 1, 61), d = hash01(x0 + 1, z0 + 1, 61);
+  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
+}
+
+/** The way from (x, z) to the nearest open water within `r` cells (unit x, z), if any. */
+function seaward(w: TreeWorld, x: number, z: number, r: number): [number, number] | undefined {
+  let vx = 0, vz = 0;
+  for (let dz = -r; dz <= r; dz++)
+    for (let dx = -r; dx <= r; dx++) {
+      if (!isWater(w.peek(x + dx, z + dz))) continue;
+      const d2 = dx * dx + dz * dz;
+      vx += dx / d2;
+      vz += dz / d2;
+    }
+  const l = Math.hypot(vx, vz);
+  return l > 1e-6 ? [vx / l, vz / l] : undefined;
+}
+
 /** Whether (x, z) is the specimen candidate of its grid cell. */
 function specimenCell(x: number, z: number): boolean {
   const C = TREES.specimenCell;
@@ -252,7 +293,7 @@ function specimenCell(x: number, z: number): boolean {
   return Math.floor(gx * C + hash01(gx, gz, 52) * C) === x && Math.floor(gz * C + hash01(gx, gz, 53) * C) === z;
 }
 
-type Role = 'grove' | 'specimen' | 'shore' | 'accent' | 'planter' | 'fallback';
+type Role = 'grove' | 'specimen' | 'shore' | 'accent' | 'planter' | 'fallback' | 'row';
 
 /**
  * P7-E29.4: the one place a ground cell's tree role is decided (by its planting zone in the generated world).
@@ -306,6 +347,8 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
         // just inland of the beach, the odd coastal specimen frames it
         if (nearBeach(w, x, z, areaType, 2)) return { small, role: 'specimen', mix: rule.specimen };
       }
+      // columnar trees in short rows along paths and canals
+      if (!wood && rowNoise(x, z) > TREES.rowField && (((x * 7 + z * 13) % 3) + 3) % 3 === 0 && distTo(x, z, 2, route(w)) === 2) return { small, role: 'row', mix: [['birch', 1]] };
       if (garden) return u < TREES.accentShare ? { small, role: 'accent', mix: [['cherry', 1]] } : undefined;
       if (zone === 'meadow' && hash01(x, z, 7) < TREES.meadowShare) return { small, role: 'accent', mix: [['birch', 2], ['cherry', 1]] };
       return undefined;
@@ -347,10 +390,30 @@ export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'blocked'> & { roofId?: s
   }
   // near a jetty or bridge, only small trees (the view off the deck stays open)
   if (z.small) scale = Math.min(scale, TREES.deckScale);
+  let species = pick(z.mix, hash01(t.x, t.z, 2));
+  let rot = hash01(t.x, t.z, 4) * Math.PI * 2;
+  // P7-E29: the shape. Specimens are umbrella or coastal trees now and then (coastal ones by the sea, leaning away
+  // from it), garden accents mostly fruit trees, rows columnar; everything else the species' own shape
+  let form: Form = 'standard';
+  const f = hash01(t.x, t.z, 9);
+  if (z.role === 'row') form = 'columnar';
+  // a grove's large trees are sometimes umbrellas, standing over the rest
+  else if (z.role === 'grove' && scale >= TREES.groveLarge[1][0] * 0.88 && species === 'oak' && f < TREES.groveUmbrella) form = 'umbrella';
+  else if (z.role === 'accent' && species === 'cherry' && f < TREES.fruitShare) form = 'fruit';
+  else if (z.role === 'specimen') {
+    const sea = seaward(w, t.x, t.z, 6);
+    if (sea && f < TREES.coastForms.coastal) {
+      form = 'coastal';
+      // the template leans toward +x; turn it so it leans away from the sea (FoliageBuilder turns +x to (cos, sin))
+      rot = Math.atan2(-sea[1], -sea[0]) + (hash01(t.x, t.z, 10) - 0.5) * 0.5;
+    } else if (f < (sea ? TREES.coastForms.coastal + TREES.coastForms.umbrella : TREES.inlandForms.umbrella)) form = 'umbrella';
+  }
+  if (form !== 'standard') species = FORM_SPECIES[form];
   return {
-    species: pick(z.mix, hash01(t.x, t.z, 2)),
+    species,
+    form,
     variant: Math.floor(hash01(t.x, t.z, 3) * TREE_VARIANTS),
-    rot: hash01(t.x, t.z, 4) * Math.PI * 2,
+    rot,
     scale,
     planter: z.role === 'planter',
   };

@@ -1953,7 +1953,7 @@ export class ChunkRenderer {
     if (this.growing.has(t.id)) return true;
     // Look 3.7: close-up trees at near zoom on High; the single-clump version at mid zoom and below
     const tl: Lod = lod === 1 && this.band >= 2 && this.detail === 'high' ? (this.band === 3 ? 3 : 2) : lod;
-    this.fb.add(treeGeo(spot.species, stage, spot.variant, tl), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
+    this.fb.add(treeGeo(spot.species, stage, spot.variant, tl, spot.form), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
     return true;
   }
 
@@ -1985,7 +1985,7 @@ export class ChunkRenderer {
     const old = this.growing.get(t.id);
     old?.e.destroy();
     const e = new pc.Entity(`grow-${t.id}`);
-    e.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, treeGeo(spot.species, stage, spot.variant, 1)), foliageMaterial())], castShadows: true, receiveShadows: true });
+    e.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, treeGeo(spot.species, stage, spot.variant, 1, spot.form)), foliageMaterial())], castShadows: true, receiveShadows: true });
     const h = this.sim.grid.layer(GROUND)!.height;
     e.setLocalPosition(t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5);
     e.setLocalEulerAngles(0, (-spot.rot * 180) / Math.PI, 0);

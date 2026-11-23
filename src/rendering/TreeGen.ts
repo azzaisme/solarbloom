@@ -16,6 +16,18 @@ import { PALETTE } from './Palette';
 
 export type Species = 'oak' | 'cherry' | 'birch' | 'pine' | 'willow';
 export const SPECIES: Species[] = ['oak', 'cherry', 'birch', 'pine', 'willow'];
+/**
+ * P7-E29: tree shapes beyond each species' own, in the same leafy style (limbs, twigs, leaf sprays). A form changes
+ * only the look; the species (what the simulation counts) stays: an umbrella or coastal tree is an oak, a columnar
+ * one a birch (a poplar's shape), a fruit tree a cherry.
+ *   umbrella  a wide, flat crown on a tall bare trunk (a stone pine's or acacia's shape)
+ *   columnar  tall and narrow, leafy from low on the trunk to the top (a poplar's)
+ *   fruit     short and multi-stemmed, a dense round crown dotted with fruit
+ *   coastal   two or three stems leaning one way, the crown swept after them (the template leans toward +x)
+ */
+export type Form = 'standard' | 'umbrella' | 'columnar' | 'fruit' | 'coastal';
+/** the species each form belongs to */
+export const FORM_SPECIES: Record<Exclude<Form, 'standard'>, Species> = { umbrella: 'oak', columnar: 'birch', fruit: 'cherry', coastal: 'oak' };
 /** Tile stages that carry a tree: 1 sapling (Restored), 2 young (Blooming), 3 full (Thriving), 4 Radiant. */
 export type TreeStage = 1 | 2 | 3 | 4;
 export type Lod = 0 | 1 | 2 | 3; // 0 far (one blob) · 1 normal · 2 close-up (leaf clusters) · 3 super close (leaves on the clusters)
@@ -537,7 +549,7 @@ const GLOW = hex(PALETTE.glow.honey);
  * Builds one tree. `variant` changes the branching and crown layout; `stage` its growth; `lod` its detail.
  * Units are tiles: a full-grown tree is about 1.1–1.5 tiles tall and fits a tile's footprint.
  */
-export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: Lod = 1): TreeGeo {
+export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: Lod = 1, form: Form = 'standard'): TreeGeo {
   const B = new Buf();
   const R = rng((variant + 1) * 7919 + SPECIES.indexOf(sp) * 104729 + stage * 13);
   const bark = BARK[sp];
@@ -548,6 +560,10 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
   const S = (stage === 2 ? 0.62 : stage === 4 ? 1.08 : 1) * 1.12; // overall size
   const sh = shapeOf(variant);
   const pal = leafPalette(sp, R, stage, sh);
+  if (form !== 'standard') {
+    formTree(B, form, R, S, form === 'fruit' ? leafPalette('oak', R, stage, sh) : pal, bark, barkDark, stage, lod);
+    return proportion(B, sh, variant).done();
+  }
   if (lod === 0) return proportion(farTree(B, sp, R, S, pal, bark), sh, variant).done();
 
   if (sp === 'pine') pine(B, R, S, pal, bark, det, big, lod);
@@ -632,6 +648,114 @@ function farTree(B: Buf, sp: Species, R: () => number, S: number, pal: Palette, 
     spray(B, R, { p, dir: u }, 1, 0.02, (sp === 'pine' || sp === 'willow' ? 0.3 : 0.26) * S, crown, 0.6, sp === 'pine' ? 0.4 : sp === 'willow' ? 0.35 : 0.7, sp === 'willow' ? 0.9 : 0.25);
   }
   return B;
+}
+
+/** P7-E29: the far tree of a form: a trunk (leaning by `lean`), and a few dozen big leaves over its crown. */
+function farForm(B: Buf, R: () => number, S: number, pal: Palette, bark: C, th: number, cr: number, ch: number, lean = 0, narrow = 0.7) {
+  const top: V = [lean * th * S, th * S + ch * S * 0.5, 0];
+  tube(B, [[0, 0, 0], top], [0.07 * S, 0.04 * S], 4, [scaleC(bark, 0.75), bark], [0, 0.1], false);
+  const heart: V = [lean * th * S * 1.2, th * S + ch * S * 0.8, 0];
+  const crown: Crown = { heart, r: cr * S, pal };
+  for (let i = 0; i < 44; i++) {
+    const u = norm([R() * 2 - 1, R() * 1.7 - 0.6, R() * 2 - 1]);
+    const p: V = [heart[0] + u[0] * cr * S * 0.7, heart[1] + u[1] * ch * S * 0.8, heart[2] + u[2] * cr * S * 0.7];
+    spray(B, R, { p, dir: u }, 1, 0.02, 0.26 * S, crown, 0.6, narrow, 0.25);
+  }
+}
+
+/** P7-E29: the forms (see `Form`), built like the broadleaves: trunk, limbs, twigs and sprays of leaves. */
+function formTree(B: Buf, form: Exclude<Form, 'standard'> | Form, R: () => number, S: number, pal: Palette, bark: C, barkDark: C, stage: TreeStage, lod: Lod) {
+  const young = stage === 2;
+  const [n, k] = LEAVES[lod];
+  const tips: Tip[] = [];
+  if (form === 'umbrella') {
+    if (lod === 0) return farForm(B, R, S, pal, bark, 0.95, 0.78, 0.2, 0, 0.75);
+    // a tall bare trunk, then limbs that fan out almost level into a wide, flat-topped crown
+    const trunkH = (young ? 0.75 : 0.95) * S;
+    const trunkR = 0.08 * S;
+    const top = trunk(B, R, trunkH, trunkR, bark, barkDark, 5, 7);
+    const crown: Crown = { heart: [top[0], top[1] + 0.12 * S, top[2]], r: 0.8 * S, pal };
+    const o: LimbOpts = { upturn: 0.12, kids: young ? [2] : [3, 2], fork: 0.85, shrink: 0.66, bark, sides: 6 };
+    const arms = young ? 4 : 5;
+    const a0 = R() * Math.PI * 2;
+    for (let i = 0; i < arms; i++) {
+      const a = a0 + (i / arms) * Math.PI * 2 + (R() - 0.5) * 0.4;
+      limb(B, R, [top[0], top[1] - (i % 2) * 0.06 * S, top[2]], norm([Math.cos(a), 0.32 + R() * 0.12, Math.sin(a)]), 0.4 * S * (0.9 + R() * 0.2), trunkR * 0.6, 0, young ? 1 : 2, 0.14, o, tips);
+    }
+    // leaves lie flat on top: sprays reach outward and droop a little at the rim
+    for (const t of tips) spray(B, R, { p: t.p, dir: norm([t.dir[0], 0.25, t.dir[2]]) }, n, 0.2 * S, 0.1 * S * k, crown, 0.7, 0.62, 0.3);
+    return;
+  }
+  if (form === 'columnar') {
+    if (lod === 0) return farForm(B, R, S, pal, bark, 0.25, 0.24, 0.78, 0, 0.55);
+    // tall and narrow: a straight leader, short upswept limbs all the way up, leaves close in
+    const H = (young ? 1.15 : 1.6) * S;
+    const trunkR = 0.05 * S;
+    const top = trunk(B, R, H * 0.92, trunkR, bark, barkDark, 6, 6, true);
+    const crown: Crown = { heart: [top[0] * 0.6, H * 0.6, top[2] * 0.6], r: 0.34 * S, pal };
+    const o: LimbOpts = { upturn: 1.1, kids: [2], fork: 0.5, shrink: 0.65, bark, sides: 4 };
+    const m = young ? 8 : lod >= 2 ? 16 : 13;
+    for (let i = 0; i < m; i++) {
+      const kk = 0.1 + 0.86 * (i / (m - 1));
+      const a = i * 2.4 + R() * 0.5;
+      const from: V = [top[0] * kk, H * 0.92 * kk, top[2] * kk];
+      // a spindle: limbs longest a third of the way up, short at the foot and the tip
+      const reach = 0.1 + 0.18 * Math.sin(Math.PI * Math.min(1, kk * 1.15));
+      limb(B, R, from, norm([Math.cos(a) * 0.55, 1, Math.sin(a) * 0.55]), reach * S * (0.9 + R() * 0.2), trunkR * 0.45, 0, 1, 0.2 + 0.3 * kk, o, tips);
+    }
+    tips.push({ p: [top[0], H, top[2]], dir: [0, 1, 0] });
+    for (const t of tips) spray(B, R, t, Math.max(4, Math.round(n * 0.75)), 0.12 * S, 0.105 * S * k, crown, 0.75, 0.55, 0.1);
+    return;
+  }
+  if (form === 'fruit') {
+    if (lod === 0) return farForm(B, R, S, pal, bark, 0.3, 0.42, 0.36, 0, 0.7);
+    // short and multi-stemmed: three stems splay from the ground into one dense, round crown, dotted with fruit
+    const stems = 3;
+    const crown: Crown = { heart: [0, 0.62 * S, 0], r: 0.46 * S, pal };
+    const o: LimbOpts = { upturn: 0.5, kids: [3], fork: 0.8, shrink: 0.7, bark, sides: 5 };
+    const a0 = R() * Math.PI * 2;
+    for (let i = 0; i < stems; i++) {
+      const a = a0 + (i / stems) * Math.PI * 2;
+      limb(B, R, [Math.cos(a) * 0.02 * S, 0, Math.sin(a) * 0.02 * S], norm([Math.cos(a) * 0.4, 1, Math.sin(a) * 0.4]), 0.46 * S, 0.05 * S, 0, 1, 0.08, o, tips);
+    }
+    for (const t of tips) spray(B, R, t, Math.round(n * 1.2), 0.2 * S, 0.11 * S * k, crown, 0.7, 0.62, 0.2);
+    if (!young) {
+      const fruit = PALETTE.cozy.fruit.map(hex);
+      const col = fruit[Math.floor(R() * fruit.length)];
+      const dots = lod >= 2 ? 14 : 9;
+      for (let i = 0; i < dots; i++) {
+        // fruit hangs among the leaves, a little below the twig ends
+        const t = tips[i % tips.length];
+        const c: V = add(t.p, [(R() - 0.5) * 0.16 * S, -0.04 * S - R() * 0.06 * S, (R() - 0.5) * 0.16 * S]);
+        puff(B, { c, r: [0.026, 0.026, 0.026], base: col, light: mix(col, [1, 1, 1], 0.3), dark: scaleC(col, 0.7), flex: 0.9, seed: i, detail: 0, lump: 0 });
+      }
+    }
+    return;
+  }
+  // coastal: two or three stems leaning toward +x, the crown swept after them
+  if (lod === 0) return farForm(B, R, S, pal, bark, 0.58, 0.55, 0.32, 0.4, 0.7);
+  const crown: Crown = { heart: [0.34 * S, 0.82 * S, 0], r: 0.6 * S, pal };
+  const o: LimbOpts = { upturn: 0.3, kids: young ? [2] : [2, 2], fork: 0.8, shrink: 0.66, bark, sides: 5 };
+  const stems = young ? 2 : 3;
+  for (let i = 0; i < stems; i++) {
+    const side = (i - (stems - 1) / 2) * 0.35;
+    const L = (0.62 - 0.08 * i) * S;
+    const d = norm([0.36 + R() * 0.12, 1, side]);
+    const pts: V[] = [[side * 0.03 * S, 0, side * 0.05 * S]];
+    for (let j = 1; j <= 4; j++) {
+      const kk = j / 4;
+      // a stem that bends further over as it climbs
+      pts.push(add(pts[0], [d[0] * L * kk * (0.6 + 0.6 * kk), d[1] * L * kk, d[2] * L * kk]));
+    }
+    const rad = (0.075 - 0.015 * i) * S;
+    tube(B, pts, pts.map((_, j) => rad * (1 - 0.45 * (j / 4)) * (j === 0 ? 1.5 : 1)), 6, pts.map((_, j) => mix(barkDark, bark, j / 4)), pts.map((_, j) => (j / 4) * 0.12), false);
+    const top = pts[4];
+    for (let a = 0; a < 2; a++) {
+      const ang = (R() - 0.5) * 2.2 + (a ? 0.4 : -0.4);
+      limb(B, R, top, norm([0.7 + Math.cos(ang) * 0.4, 0.55, Math.sin(ang)]), 0.3 * S, rad * 0.55, 0, young ? 1 : 2, 0.16, o, tips);
+    }
+  }
+  for (const t of tips) spray(B, R, t, n, 0.18 * S, 0.1 * S * k, crown, 0.7, 0.62, 0.25);
 }
 
 function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette, bark: C, barkDark: C, _det: number, _big: number, stage: TreeStage, lod: Lod = 1) {
@@ -727,7 +851,7 @@ function willow(B: Buf, R: () => number, S: number, pal: Palette, bark: C, barkD
     spray(B, R, { p: p2, dir: out }, Math.round(n * 0.6), 0.12 * S, 0.11 * S * k, crown, 0.6, 0.3, 0.5);
     // hanging strands: thin stems that fall from the arch, leaves pointing down along them
     for (const from of [p2, p3, add(mul(add(p1, p2), 0.5), [0, 0, 0])]) {
-      const Ls = (0.3 + R() * 0.22) * S;
+      const Ls = (0.42 + R() * 0.22) * S; // P7-E29: longer, so it reads as weeping
       const sway: V = [(R() - 0.5) * 0.08 * S, 0, (R() - 0.5) * 0.08 * S];
       const mid = add(from, add(mul(sway, 0.5), [0, -Ls * 0.5, 0]));
       const end = add(from, add(sway, [0, -Ls, 0]));
@@ -820,10 +944,10 @@ export function buildShrub(variant: number, lod: Lod = 1, flowering?: boolean, b
 const cache = new Map<string, TreeGeo>();
 /** P7-E29: six variants (proportions and greens, SHAPES), was four */
 export const TREE_VARIANTS = 6;
-export function treeGeo(sp: Species, stage: TreeStage, variant: number, lod: Lod = 1): TreeGeo {
-  const key = `${sp}|${stage}|${variant % TREE_VARIANTS}|${lod}`;
+export function treeGeo(sp: Species, stage: TreeStage, variant: number, lod: Lod = 1, form: Form = 'standard'): TreeGeo {
+  const key = `${sp}|${stage}|${variant % TREE_VARIANTS}|${lod}|${form}`;
   let g = cache.get(key);
-  if (!g) cache.set(key, (g = buildTree(sp, stage, variant % TREE_VARIANTS, lod)));
+  if (!g) cache.set(key, (g = buildTree(sp, stage, variant % TREE_VARIANTS, lod, form)));
   return g;
 }
 export function shrubGeo(variant: number, lod: Lod = 1): TreeGeo {
@@ -848,6 +972,13 @@ export function* warmTemplates(): Generator<void> {
       for (const st of [1, 2, 3, 4] as const)
         for (let v = 0; v < TREE_VARIANTS; v++) {
           treeGeo(sp, st, v, lod);
+          yield;
+        }
+    // P7-E29: the forms (grown stages; a sapling is the species' own)
+    for (const [form, sp] of Object.entries(FORM_SPECIES) as [Form, Species][])
+      for (const st of [2, 3, 4] as const)
+        for (let v = 0; v < TREE_VARIANTS; v++) {
+          treeGeo(sp, st, v, lod, form);
           yield;
         }
     for (let v = 0; v < 6; v++) {
