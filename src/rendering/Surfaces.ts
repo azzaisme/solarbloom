@@ -12,7 +12,8 @@ import type { BuildingPlot } from '../core/Generation';
 import type { TreeGeo, Lod } from './TreeGen';
 import { PALETTE } from './Materials';
 import type { VPrim } from './Shapes';
-import { grassGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
+import { grassGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, reedGeo, tintGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
+import { zoneAt, type PlantingZone, type ZoneCtx } from './PlantingZones';
 import { pavingGeo, pavingGaps, PAVING_LAYOUTS, planterGeo, railGeo, clutterGeo, CLUTTER_ALIVE, CLUTTER_DEAD, type RailKind, type ClutterKind } from './Props';
 
 export interface SolidSink {
@@ -55,7 +56,14 @@ export interface DressCtx {
    * is dressed is fitted already; this is for solid pieces. Defaults to (x, z).
    */
   fit?(x: number, z: number, r: number): [number, number];
+  /** P7-E28: the area's landmark anchor (its 2×2 footprint), for planting zones */
+  landmark?: readonly [number, number];
+  /** P7-E28: a cell's planting zone (the renderer memoises it per build). Defaults to `zoneAt(x, z, ctx)`. */
+  zone?(x: number, z: number): PlantingZone;
 }
+
+/** P7-E28: a cell's planting zone through the context (memoised when the renderer provides it). */
+export const zoneOf = (c: DressCtx, x: number, z: number): PlantingZone => (c.zone ? c.zone(x, z) : zoneAt(x, z, c as ZoneCtx));
 
 /**
  * Look 3.19: clutter kinds drawn as hand-built models, with the scale that fits each to the procedural prop's size
@@ -283,6 +291,187 @@ export function radiantExtras(c: DressCtx, t: TileData, x: number, z: number, to
     const pz = z + (hash01(t.x, t.z * 13 + i, 79) - 0.5) * 0.6;
     const sp: FlowerSpecies = i === 0 ? 'sunflower' : 'daisy';
     c.fb.add(flowerGeo(sp, sp === 'daisy' ? 2 : 0, true, t.variant + i, 1), px, top, pz, hash01(t.x, t.z, 83 + i) * 6.28, 1.1);
+  }
+}
+
+// ───────────── P7-E28: planting by zone ─────────────
+
+/** A flower: species and colour index into FLOWER_COLOURS. */
+type Bloom = readonly [FlowerSpecies, number];
+/**
+ * P7-E28.4 / E28.8 (#729, #733): a plant family: 2–3 primary flowers that make up a bed, one contrasting accent
+ * (about one clump in twelve) and, rarely, a special variety for discovery. Neighbouring tiles share a family.
+ */
+interface Family {
+  main: readonly Bloom[];
+  accent: Bloom;
+}
+const FAMILIES: Record<PlantingZone, readonly Family[]> = {
+  flower_garden: [
+    { main: [['cosmos', 0], ['cosmos', 2], ['daisy', 0]], accent: ['lavender', 2] }, // pinks and white, purple
+    { main: [['lavender', 0], ['lavender', 1], ['daisy', 0]], accent: ['cosmos', 1] }, // lavenders and white, magenta
+    { main: [['sunflower', 0], ['daisy', 1], ['wild', 1]], accent: ['lavender', 2] }, // golds, purple
+    { main: [['cosmos', 3], ['daisy', 1], ['daisy', 0]], accent: ['wild', 2] }, // apricot and cream, blue
+  ],
+  meadow: [
+    { main: [['wild', 0], ['daisy', 0], ['wild', 1]], accent: ['wild', 2] }, // white and yellow, blue
+    { main: [['wild', 2], ['lavender', 0], ['daisy', 0]], accent: ['wild', 1] }, // blue and white, yellow
+    { main: [['daisy', 0], ['daisy', 1], ['wild', 3]], accent: ['lavender', 2] }, // cream and rose, purple
+  ],
+  path_edge: [
+    { main: [['daisy', 0], ['wild', 0]], accent: ['lavender', 0] },
+    { main: [['lavender', 0], ['daisy', 0]], accent: ['wild', 1] },
+  ],
+  shoreline: [{ main: [['wild', 0], ['wild', 2]], accent: ['daisy', 0] }],
+  woodland_understory: [{ main: [['wild', 2], ['wild', 0]], accent: ['daisy', 2] }], // bluebells and wood anemones
+  open_lawn: [{ main: [['wild', 0], ['daisy', 0]], accent: ['wild', 1] }],
+  landmark_clearance: [{ main: [['wild', 0], ['daisy', 0]], accent: ['wild', 1] }],
+};
+/** The rare special variety: a deep red bloom found in about one garden bed in forty. */
+const RARE: Bloom = ['cosmos', 0];
+
+/**
+ * P7-E28.3 / E28.7 (#728, #732): how much each zone plants at each bloom stage (index 1 Restored … 4 Radiant).
+ * Stages 1–2 are mostly grass; density and diversity rise by zone. `flowers`: clumps on the tile; `tufts`: grass
+ * clumps; `shrub`: chance of a medium bush; `reeds`: reed clumps along each water side.
+ */
+const ZONE_PLAN: Record<PlantingZone, { flowers: number[]; tufts: number[]; shrub: number[]; reeds?: number[] }> = {
+  flower_garden: { flowers: [0, 2, 5, 8, 9], tufts: [0, 2, 1, 1, 1], shrub: [0, 0, 0.1, 0.3, 0.35] },
+  meadow: { flowers: [0, 0, 2, 4, 4], tufts: [0, 3, 3, 3, 3], shrub: [0, 0, 0, 0.08, 0.1] },
+  path_edge: { flowers: [0, 0, 2, 3, 3], tufts: [0, 1, 1, 1, 1], shrub: [0, 0, 0, 0, 0] },
+  shoreline: { flowers: [0, 0, 0, 1, 1], tufts: [0, 2, 2, 2, 2], shrub: [0, 0, 0, 0.08, 0.1], reeds: [0, 1, 2, 2, 3] },
+  woodland_understory: { flowers: [0, 0, 1, 2, 3], tufts: [0, 2, 3, 3, 3], shrub: [0, 0.15, 0.4, 0.6, 0.7] },
+  open_lawn: { flowers: [0, 0, 1, 1, 1], tufts: [0, 2, 2, 2, 2], shrub: [0, 0, 0, 0, 0] },
+  landmark_clearance: { flowers: [0, 0, 0, 1, 1], tufts: [0, 1, 1, 1, 1], shrub: [0, 0, 0, 0, 0] },
+};
+
+/** A tile's family: from a noise field a few tiles wide, so a bed spans neighbouring tiles. */
+function familyAt(zone: PlantingZone, x: number, z: number): Family {
+  const fs = FAMILIES[zone];
+  return fs[Math.min(fs.length - 1, Math.floor(noise2(x / 5, z / 5, 301) * fs.length))];
+}
+/** One bloom from a family at a point: drifts of each primary (a field ~1.5 tiles wide), the odd accent. */
+function bloomAt(f: Family, px: number, pz: number, stage: number, salt: number): Bloom {
+  if (hash01(Math.floor(px * 8), Math.floor(pz * 8), salt) < 0.08) return f.accent;
+  const b = f.main[Math.min(f.main.length - 1, Math.floor(noise2(px / 1.5, pz / 1.5, 303) * f.main.length))];
+  // sunflowers wait for Thriving (they're the tall statement); before that the bed shows a daisy
+  return b[0] === 'sunflower' && stage < 3 ? ['daisy', 1] : b;
+}
+
+/** Positions on a 3×3 bed grid (−0.3, 0, 0.3), in a seeded order per tile. */
+const BED: [number, number][] = [[0, 0], [-1, -1], [1, 1], [1, -1], [-1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]];
+
+/**
+ * P7-E28 (#714): the dressing of a restored natural tile by its planting zone, in layers (#731): the turf (drawn
+ * by the caller), sparse grass clumps, medium bushes, flowering masses and the odd statement piece, all scaled by
+ * the bloom stage (#732). `tree`: the tile grows a tree, so it keeps its ground low (no bush or statement).
+ * Deterministic per tile; nothing is saved.
+ */
+export function zonedPlanting(c: DressCtx, t: TileData, stage: number, x: number, z: number, top: number, zone: PlantingZone, tree = false) {
+  if (stage < 1) return;
+  const plan = ZONE_PLAN[zone];
+  const st = Math.max(1, Math.min(4, stage));
+  const lod: Lod = c.lod === 2 ? 1 : 0;
+  const dens = Math.max(0.35, c.dens);
+  // ── sparse grass clumps (young grass is light; tufts keep low on paths and clearings)
+  const tufts = Math.round(plan.tufts[st] * dens);
+  for (let i = 0; i < tufts; i++) {
+    const px = x + (hash01(t.x * 7 + i, t.z, 11) - 0.5) * 0.86;
+    const pz = z + (hash01(t.x, t.z * 7 + i, 13) - 0.5) * 0.86;
+    const sc = zone === 'meadow' || zone === 'woodland_understory' ? 0.95 + hash01(t.x, t.z + i, 19) * 0.4 : 0.6 + hash01(t.x, t.z + i, 19) * 0.3;
+    c.fb.add(grassGeo(st, t.variant + i, c.lod === 2 && c.dens > 0.99 ? 2 : 1), px, top, pz, hash01(t.x + i, t.z, 17) * 6.28, sc);
+  }
+  const fam = familyAt(zone, t.x + 0.5, t.z + 0.5);
+  const plant = (b: Bloom, px: number, pz: number, k: number, size: number, open: boolean) => {
+    const g = flowerGeo(b[0], b[1], open, t.variant + k, lod);
+    c.fb.add(b === RARE && zone === 'flower_garden' && k === 0 ? tintGeo(g, PALETTE.flowers.red) : g, px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, size * (0.9 + hash01(t.x, t.z * 3 + k, 29) * 0.3));
+  };
+  const want = plan.flowers[st];
+  const n = want ? Math.max(1, Math.round(want * dens)) : 0;
+  if (zone === 'path_edge') {
+    // ── a neat, low border set back from each path side: one row, small flowers, nothing tall
+    const sides = SIDES.filter(([dx, dz]) => {
+      const nb = c.peek(t.x + dx, t.z + dz);
+      const f = nb?.feature ?? 'lawn';
+      return !!nb && !nb.blocked && (f === 'paving' || f === 'road');
+    });
+    let k = 0;
+    for (const [dx, dz] of sides)
+      for (let i = 0; i < n; i++) {
+        const along = (i + 0.5) / n - 0.5 + (hash01(t.x * 5 + i, t.z + dz, 41) - 0.5) * 0.12;
+        const px = x + dx * 0.3 + (dz ? along * 0.85 : 0);
+        const pz = z + dz * 0.3 + (dx ? along * 0.85 : 0);
+        plant(bloomAt(fam, px, pz, st, 43), px, pz, k++, 0.85, st >= 3 || hash01(t.x + i, t.z, 45) < 0.5);
+      }
+  } else if (zone === 'flower_garden') {
+    // ── a flowering mass on a staggered grid; the bed stops short on sides that border lawn, so beds keep a shape
+    const open: boolean[] = SIDES.map(([dx, dz]) => zoneOf(c, t.x + dx, t.z + dz) === 'flower_garden');
+    const start = Math.floor(hash01(t.x, t.z, 47) * BED.length);
+    let k = 0;
+    for (let j = 0; j < BED.length && k < n; j++) {
+      const [gx, gz] = BED[(start + j) % BED.length];
+      // SIDES order: +x, −x, +z, −z
+      if ((gx === 1 && !open[0]) || (gx === -1 && !open[1]) || (gz === 1 && !open[2]) || (gz === -1 && !open[3])) continue;
+      const px = x + gx * 0.3 + (hash01(t.x * 11 + j, t.z, 53) - 0.5) * 0.14;
+      const pz = z + gz * 0.3 + (hash01(t.x, t.z * 11 + j, 59) - 0.5) * 0.14;
+      const rare = st >= 3 && k === 0 && hash01(t.x, t.z, 49) < 0.025;
+      plant(rare ? RARE : bloomAt(fam, px, pz, st, 61), px, pz, k++, 1.25, st >= 3 || hash01(t.x + j, t.z, 63) < 0.4);
+    }
+  } else if (n) {
+    // ── loose drifts: meadow, woodland floor, shore and lawn flowers (small, so open lawn stays calm)
+    const size = zone === 'meadow' ? 1.05 : zone === 'woodland_understory' ? 0.85 : 0.7;
+    for (let i = 0; i < n; i++) {
+      const px = x + (hash01(t.x * 13 + i, t.z, 67) - 0.5) * 0.8;
+      const pz = z + (hash01(t.x, t.z * 13 + i, 71) - 0.5) * 0.8;
+      // on open lawn and in clearings only a few tiles carry a flower at all
+      if ((zone === 'open_lawn' || zone === 'landmark_clearance') && hash01(t.x + i, t.z, 73) > 0.35) continue;
+      plant(bloomAt(fam, px, pz, st, 79), px, pz, i, size, st >= 3 || hash01(t.x, t.z + i, 83) < 0.5);
+    }
+  }
+  // ── shoreline: reeds toward the water and rounded wet stones on the bank
+  if (plan.reeds) {
+    const r = plan.reeds[st];
+    let k = 0;
+    for (const [dx, dz] of SIDES) {
+      if ((c.peek(t.x + dx, t.z + dz)?.feature ?? 'lawn') !== 'water') continue;
+      for (let i = 0; i < r; i++) {
+        const along = (hash01(t.x * 17 + i, t.z + dx, 87) - 0.5) * 0.8;
+        const px = x + dx * 0.36 + (dz ? along : 0);
+        const pz = z + dz * 0.36 + (dx ? along : 0);
+        c.fb.add(reedGeo(t.variant + k, lod), px, top, pz, hash01(t.x, t.z, 89 + k) * 6.28, 0.8 + hash01(t.x + k, t.z, 91) * 0.5);
+        k++;
+      }
+    }
+    if (hash01(t.x, t.z, 93) < 0.35) {
+      const sx = x + (hash01(t.x, t.z, 95) - 0.5) * 0.5, sz = z + (hash01(t.x, t.z, 97) - 0.5) * 0.5;
+      const [rx, rz] = c.fit ? c.fit(sx, sz, 0.13) : [sx, sz];
+      const s2 = 0.75 + hash01(t.x, t.z, 99) * 0.5;
+      c.b.add('sphere', pick(PALETTE.wetStone, t.variant), [rx, top + 0.035 * s2, rz], [0.24 * s2, 0.12 * s2, 0.2 * s2]);
+    }
+  }
+  if (tree) return;
+  // ── medium bushes (gardens, woodland floor, the odd one in a meadow or on a bank)
+  if (hash01(t.x, t.z, 103) < plan.shrub[st]) {
+    const flowering = zone === 'flower_garden' && hash01(t.x, t.z, 105) < 0.5;
+    const sx = x + (hash01(t.x, t.z, 107) - 0.5) * 0.3, sz = z + (hash01(t.x, t.z, 109) - 0.5) * 0.3;
+    c.fb.add(leafyShrubGeo(t.variant, lod, flowering), sx, top, sz, t.variant * 1.7, zone === 'woodland_understory' ? 0.85 + hash01(t.x, t.z, 111) * 0.3 : 0.8);
+  }
+  // ── the odd statement piece: a sunflower stand in a gold bed, a mossy rock in a meadow or on the lawn
+  if (st >= 3) {
+    const h = hash01(t.x, t.z, 113);
+    if (zone === 'flower_garden' && fam.main[0][0] === 'sunflower' && h < 0.18) {
+      for (let i = 0; i < 3; i++) c.fb.add(flowerGeo('sunflower', i % 2, true, t.variant + i, lod), x + (i - 1) * 0.14, top, z + (hash01(t.x + i, t.z, 115) - 0.5) * 0.2, i * 2.1, 1.35);
+    } else if ((zone === 'meadow' || zone === 'open_lawn' || zone === 'woodland_understory') && h < 0.035) {
+      const sx = x + (hash01(t.x, t.z, 69) - 0.5) * 0.4, sz = z + (hash01(t.x, t.z, 71) - 0.5) * 0.4;
+      const [rx, rz] = c.fit ? c.fit(sx, sz, 0.17) : [sx, sz];
+      c.b.add('sphere', PALETTE.rock, [rx, top + 0.06, rz], [0.34, 0.2, 0.28]);
+      c.b.add('sphere', PALETTE.rockMoss, [rx, top + 0.13, rz], [0.24, 0.07, 0.2]);
+    }
+  }
+  // ── Radiant: the golden grass carries the stage; beds and meadows add a luminous gold daisy or two
+  if (st >= 4 && (zone === 'flower_garden' || zone === 'meadow') && hash01(t.x, t.z, 117) < 0.5) {
+    const px = x + (hash01(t.x, t.z, 119) - 0.5) * 0.6, pz = z + (hash01(t.x, t.z, 121) - 0.5) * 0.6;
+    c.fb.add(flowerGeo('daisy', 1, true, t.variant, lod), px, top, pz, t.variant, 1.1);
   }
 }
 

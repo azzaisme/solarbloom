@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PLANTING_ZONES, ZONE_DENSITY, zoneAt, type PlantingZone, type ZoneCtx } from '../src/rendering/PlantingZones';
 import type { TileData } from '../src/core/types';
+import { zonedPlanting, zoneOf, type DressCtx } from '../src/rendering/Surfaces';
 
 type T = Pick<TileData, 'feature' | 'blocked' | 'occupantId'>;
 
@@ -82,5 +83,60 @@ describe('P7-E28 planting zones', () => {
     const p = park().ctx;
     for (let z = 0; z < 64; z++) for (let x = 0; x < 64; x++) seen.add(zoneAt(x, z, p));
     for (const zn of PLANTING_ZONES) expect(seen.has(zn), zn).toBe(true);
+  });
+});
+
+describe('P7-E28 zoned planting', () => {
+  // a recording dressing context over the sample park: every piece placed, in order
+  const record = (stage: number) => {
+    const { cells, ctx } = park();
+    const log: string[] = [];
+    let flowers = 0;
+    const r = (v: number) => v.toFixed(4);
+    const c: DressCtx = {
+      b: { grey: 0, add: (type, hex, p) => log.push(`b ${type} ${hex} ${p.map(r)}`), addGeo: () => log.push('geo'), quad: () => log.push('quad') },
+      fb: {
+        add: (g, x, y, z, rot, s) => {
+          log.push(`f ${g.tris} ${r(x)} ${r(y)} ${r(z)} ${r(rot)} ${r(s)}`);
+          if (g.tris > 60) flowers++;
+        },
+      },
+      dens: 1,
+      lod: 2,
+      area: 'a',
+      areaType: 'park',
+      level: 4,
+      landmark: ctx.landmark,
+      peek: (x, z) => ({ ...(cells.get(`${x},${z}`) ?? { feature: 'lawn', blocked: false }), x, z, ground: 'restored', bloom: stage, variant: x * 31 + z * 17, pollution: 0, id: '', roofId: '0', growthRemainingSec: 0 }) as TileData,
+      areaAt: () => 'a',
+    };
+    const perZone: Record<string, number[]> = {};
+    for (let z = 0; z < 64; z++)
+      for (let x = 0; x < 64; x++) {
+        const t = c.peek(x, z)!;
+        if (t.feature !== 'lawn' || t.occupantId) continue;
+        const zone = zoneOf(c, x, z);
+        const before = flowers;
+        zonedPlanting(c, t, stage, x + 0.5, z + 0.5, 0.08, zone);
+        (perZone[zone] ??= []).push(flowers - before);
+      }
+    return { log, perZone };
+  };
+
+  it('a rebuild draws exactly the same plants (deterministic, nothing saved)', () => {
+    expect(record(3).log).toEqual(record(3).log);
+    expect(record(1).log).toEqual(record(1).log);
+  });
+
+  it('stages 1–2 are mostly grass; gardens fill in by Thriving while open lawn stays calm', () => {
+    const avg = (a: number[] = []) => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
+    const s1 = record(1).perZone, s3 = record(3).perZone;
+    const all1 = Object.values(s1).flat();
+    expect(avg(all1)).toBeLessThan(0.6);
+    expect(avg(s3.flower_garden)).toBeGreaterThan(4);
+    expect(avg(s3.open_lawn)).toBeLessThan(0.8);
+    expect(avg(s3.landmark_clearance)).toBeLessThan(0.8);
+    expect(avg(s3.meadow)).toBeGreaterThan(avg(s3.open_lawn));
+    expect(avg(s3.flower_garden)).toBeGreaterThan(avg(s3.meadow));
   });
 });
