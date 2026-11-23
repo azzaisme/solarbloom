@@ -1,30 +1,33 @@
 # P7-E29 tree canopy: before / after
 
-`base/`: P7-E27 lighting + P7-E28 zones, old trees (`p7-e29-trees` before tree work, mid/late, day, no HUD).
-`after/`: `p7-e29-trees` after the lead's review, on the final P7-E27 (@86d8aa40) (mid/late; early from the run before,
-which has no trees). Base was taken on E27 work in progress, so part of the luminance change is E27's. Both from `tests/e2e/p7-shots.mjs`
-(High tier, software GL); `foliageTris` is `ChunkRenderer.foliageTris()` (all foliage: trees, shrubs, grass, flowers).
+`base/`: P7-E27 (work in progress) + P7-E28 zones, the original leafy trees, no beach trees (mid/late, day, no HUD).
+`after/`: `p7-e29-trees` on the final P7-E27 and P7-E28 (with its open `beach` zone). The third-person and shore
+shots are the final leafy-tree version; the iso and early shots are from earlier passes (iso: the clustered crowns
+the owner rejected). All from `tests/e2e/p7-shots.mjs` (High tier, software GL); `foliageTris` is
+`ChunkRenderer.foliageTris()` (all foliage: trees, shrubs, grass, flowers).
 
-| shot | draw calls | foliage triangles | mean lum | clip % |
-|---|---|---|---|---|
-| mid third | 1090 → 1097 | 258k → 444k | 164.6 → 150.1 | 0.04 → 0.04 |
-| mid iso | 1102 → 1096 | 118k → 260k | 195.7 → 193 | 0 → 0 |
-| mid shore | 808 → 904 | 265k → 439k | 175.8 → 156.6 | 0 → 0 |
-| late third | 1674 → 1674 | 1095k → 1493k | 157 → 140.2 | 0.04 → 0.05 |
-| late iso | 1487 → 1492 | 582k → 963k | 183.2 → 182.5 | 0 → 0 |
-| late shore | 1310 → 1309 | 1102k → 1503k | 171.2 → 154.4 | 0.01 → 0 |
+| shot | draw calls | foliage triangles | mean lum |
+|---|---|---|---|
+| mid third | 1090 → 1099 | 258k → 475k | 164.6 → 171.9 |
+| mid shore | 808 → 598 | 265k → 470k | 175.8 → 165.6 |
+| late third | 1674 → 1740 | 1095k → 1562k | 157 → 165.1 |
+| late shore | 1310 → 867 | 1102k → 1308k | 171.2 → 162.1 |
 
-Early (nothing restored, no trees): 1040 / 1042 / 800 draw calls, 14–25k foliage triangles.
+Draw calls stay within the +25% budget (late third +4%; the shore views drop because the canopy and terrain hide
+chunks behind them). No page errors.
 
-Draw calls stay within +12% (trees merge into each chunk's foliage mesh; budget +25%). mid shore and late third
-were re-shot after the polish pass (softer sunlit tops, no fade speckle). Foliage triangles rise 28–98% with the new canopy: per tree, normal detail is
-636–4.4k (pine–oak), far 296–480.
-Mean luminance falls in the third-person and shore views because shade now falls on the restored ground.
+What the epic ended with (owner's direction):
+- the original leafy trees (`TreeGen.ts` as on the base branch: limbs, twigs, leaf sprays, original LODs), varied:
+  six variants with their own proportions (crown width 0.84–1.22×, height 0.86–1.18×, a gentle lean) and natural
+  greens (olive, mid, deeper, soft yellow-green); size classes (small, mid, large, rare hero specimens);
+- placement by planting zone (P7-E28, machines ignored), a pure function of seed and cell: groves, specimens framing
+  paths and water, willows on shores, blossom accents; none on path edges, round landmarks or near jetties and
+  bridges (only small trees within 6 cells of a deck);
+- Saltwind Beach: trees inland, thinned to a few specimens and small groves, no pines on the coast, and none on the
+  open sand by the sea (P7-E28 `beach` zone);
+- dappled shade (shadow pass) and a near-camera fade.
 
-After review: crowns have scalloped leaf-cluster rims, a darker cooler heart and warm tops; each template variant
-has its own green (olive … yellow-green); the beach is a broadleaf coast (pines <10%); only small trees within 6
-cells of the jetty or a bridge, so the opening view frames the island.
+Pacing (owner-approved): songbirds after 550 restored tiles round the start (975 before P7-E29); see the commit
+"P7-E29: open beach".
 
-Still looks wrong / next:
-- Up close the crowns are still soft masses, not individual leaves like the reference's foreground oak.
-- Stage-2 (young) trees are small clustered versions of the grown shape. They could look more distinct.
+Still open: young (stage-2) trees are small versions of the grown ones.
