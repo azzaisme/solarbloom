@@ -159,6 +159,9 @@ export class BloombotVisuals {
   private turnAxes = { right: new pc.Vec3(), up: new pc.Vec3() };
   /** #671: the movement drawn with more life (BotMoves), what the controller tells it each frame, the run clip's layer */
   readonly moves = new BotMoves();
+  /** Phase 8 A05: called on each foot plant of the walk (Game plays a footstep for the ground under it) */
+  onFootfall?: () => void;
+  private swingSign = 0;
   private moveIn: MoveIn = { pace: 0, accel: 0, walk: 2.6, run: 4.6, climb: 0, wading: false, still: 0, reduced: false };
   private runLayer?: pc.AnimComponentLayer;
   /** each foot's place along its front last frame (the clip's), to tell which one swings forward */
@@ -623,6 +626,12 @@ export class BloombotVisuals {
         const d = (zl - this.footWas.l - (zr - this.footWas.r)) / dt;
         swingL = smooth(d / 0.6);
         swingR = smooth(-d / 0.6);
+        // Phase 8 A05: a foot plants when the feet stop swinging apart (the swing changes sign), walking only
+        const sign = d > 0.25 ? 1 : d < -0.25 ? -1 : 0;
+        if (sign && sign !== this.swingSign) {
+          if (this.swingSign && this.loop === 'walk' && !this.act && this.moveIn.pace > 0.3) this.onFootfall?.();
+          this.swingSign = sign;
+        }
       }
       this.footWas = { l: zl, r: zr, ok: true };
     }

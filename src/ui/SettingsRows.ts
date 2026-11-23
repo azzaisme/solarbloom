@@ -59,10 +59,15 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
       ];
     case 'sound':
       return [
-        { kind: 'check', key: 'sound', label: 'Sound effects' },
-        { kind: 'range', key: 'sfxVolume', label: 'Effects volume', min: 0, max: 100, step: 5, fallback: 100, unit: ' percent' },
+        { kind: 'range', key: 'masterVolume', label: 'Master volume', min: 0, max: 100, step: 5, fallback: 100, unit: ' percent' },
         { kind: 'check', key: 'music', label: 'Music' },
         { kind: 'range', key: 'musicVolume', label: 'Music volume', min: 0, max: 100, step: 5, fallback: 100, unit: ' percent' },
+        // Phase 8: the world's own sound (wind, leaves, water, birds) has its own level, apart from the effects
+        { kind: 'range', key: 'ambienceVolume', label: 'World sounds volume', min: 0, max: 100, step: 5, fallback: 100, unit: ' percent' },
+        { kind: 'check', key: 'sound', label: 'Sound effects' },
+        { kind: 'range', key: 'sfxVolume', label: 'Effects volume', min: 0, max: 100, step: 5, fallback: 100, unit: ' percent' },
+        { kind: 'range', key: 'uiVolume', label: 'Menu sounds volume', min: 0, max: 100, step: 5, fallback: 100, unit: ' percent' },
+        { kind: 'check', key: 'reducedRepetitive', label: 'Fewer repeated sounds', hint: 'Sparser birdsong, and chains, drones and clicks sound less often' },
       ];
     case 'access':
       return [
