@@ -1,0 +1,50 @@
+{
+  "early-day-beach": {
+    "clipPct": 0,
+    "meanLum": 190.6,
+    "meanSat": 0.177,
+    "drawCalls": 1023,
+    "triangles": 0,
+    "foliageTris": 36728
+  },
+  "early-day-wide": {
+    "clipPct": 0.04,
+    "meanLum": 202.7,
+    "meanSat": 0.16,
+    "drawCalls": 759,
+    "triangles": 0,
+    "foliageTris": 31406
+  },
+  "early-day-waste": {
+    "clipPct": 0.06,
+    "meanLum": 161.3,
+    "meanSat": 0.327,
+    "drawCalls": 1049,
+    "triangles": 0,
+    "foliageTris": 29114
+  },
+  "late-day-beach": {
+    "clipPct": 0.07,
+    "meanLum": 149.5,
+    "meanSat": 0.482,
+    "drawCalls": 1877,
+    "triangles": 0,
+    "foliageTris": 1604490
+  },
+  "late-day-wide": {
+    "clipPct": 0.07,
+    "meanLum": 125.3,
+    "meanSat": 0.589,
+    "drawCalls": 1759,
+    "triangles": 0,
+    "foliageTris": 1598466
+  },
+  "late-day-overlook": {
+    "clipPct": 0,
+    "meanLum": 131.2,
+    "meanSat": 0.628,
+    "drawCalls": 1588,
+    "triangles": 0,
+    "foliageTris": 1591147
+  }
+}

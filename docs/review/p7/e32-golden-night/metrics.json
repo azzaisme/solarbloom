@@ -1,0 +1,56 @@
+{
+  "mid-golden-third": {
+    "clipPct": 0.26,
+    "meanLum": 121.6,
+    "meanSat": 0.538,
+    "drawCalls": 1124,
+    "triangles": 0,
+    "foliageTris": 482383,
+    "pitch": 16
+  },
+  "mid-golden-iso": {
+    "clipPct": 0,
+    "meanLum": 169.1,
+    "meanSat": 0.173,
+    "drawCalls": 1090,
+    "triangles": 0,
+    "foliageTris": 232494,
+    "pitch": 42
+  },
+  "mid-golden-shore": {
+    "clipPct": 0,
+    "meanLum": 100.6,
+    "meanSat": 0.621,
+    "drawCalls": 661,
+    "triangles": 0,
+    "foliageTris": 488589,
+    "pitch": 16
+  },
+  "mid-night-third": {
+    "clipPct": 1.53,
+    "meanLum": 100.7,
+    "meanSat": 0.447,
+    "drawCalls": 1263,
+    "triangles": 0,
+    "foliageTris": 484463,
+    "pitch": 16
+  },
+  "mid-night-iso": {
+    "clipPct": 0.01,
+    "meanLum": 43.1,
+    "meanSat": 0.831,
+    "drawCalls": 1115,
+    "triangles": 0,
+    "foliageTris": 232970,
+    "pitch": 42
+  },
+  "mid-night-shore": {
+    "clipPct": 0.14,
+    "meanLum": 52.7,
+    "meanSat": 0.804,
+    "drawCalls": 823,
+    "triangles": 0,
+    "foliageTris": 489515,
+    "pitch": 16
+  }
+}

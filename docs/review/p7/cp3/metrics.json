@@ -1,0 +1,26 @@
+{
+  "late-day-overlook": {
+    "clipPct": 0,
+    "meanLum": 162,
+    "meanSat": 0.502,
+    "drawCalls": 1456,
+    "triangles": 0,
+    "foliageTris": 1533902
+  },
+  "late-day-wide": {
+    "clipPct": 0.09,
+    "meanLum": 126.7,
+    "meanSat": 0.582,
+    "drawCalls": 1294,
+    "triangles": 0,
+    "foliageTris": 1508195
+  },
+  "late-day-beach": {
+    "clipPct": 0.08,
+    "meanLum": 154,
+    "meanSat": 0.471,
+    "drawCalls": 1797,
+    "triangles": 0,
+    "foliageTris": 1513633
+  }
+}

@@ -8,7 +8,7 @@ import { PARK_GROWTH } from '../data/bloombot';
 import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
-import { treeSpot, treeStage } from '../rendering/TreePlacement';
+import { treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -43,6 +43,7 @@ import { bloomGetsHeart, heartBox, type Rect } from '../rendering/HeartFlight';
 import { BIRD_HEART } from '../data/birdHeart';
 import { Clouds } from '../rendering/Clouds';
 import { CloudWall } from '../rendering/CloudWall';
+import { Ruins } from '../rendering/Ruins';
 import { Fauna } from '../rendering/Fauna';
 import { createModels } from '../rendering/Models';
 import { CameraController } from '../rendering/CameraController';
@@ -284,7 +285,10 @@ export class Game {
   /** Puffy clouds between the camera and the city when zoomed out. */
   private clouds: Clouds;
   /** region unlocks: the wall of clouds around sealed areas */
-  private cloudWall: CloudWall;
+  /** P7-E27: public for the dev lighting panel (it re-syncs the ring when its size changes) */
+  readonly cloudWall: CloudWall;
+  /** P7-E32 (#756): the distant ruined city round the island */
+  readonly ruins: Ruins;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   /**
@@ -404,9 +408,17 @@ export class Game {
     this.camera = new CameraController(this.app, this.tweens);
     // Look 4.7: the sky behind everything (its own layer, drawn first).
     this.sky = new Sky(this.app, this.scene.sun);
-    this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
+    // P7-E32 (#756): the distant ruined city, in its own layer between the sky and the world
+    this.ruins = new Ruins(this.app, this.sky, this.scene.sun);
+    this.camera.cam.layers = [this.sky.layer.id, this.ruins.layer.id, ...this.camera.cam.layers];
     this.look = new LookController(this.app, this.scene, this.camera);
     this.dayNight = new DayNight(this.app, this.scene, this.sky);
+    // P7-E27.7: live tuning re-reads every lighting knob: the environment bake, the day/night light and the sky dome
+    this.look.onApply.push(() => {
+      this.scene.buildEnvironment();
+      this.dayNight.reload();
+      this.sky.refresh();
+    });
     this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
@@ -881,7 +893,7 @@ export class Game {
         const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: a faded tree sheds like its stage
         if (!stage || stage < 2) continue;
         const area = this.sim.areas.areaOf(t);
-        const spot = area ? treeSpot(t, this.sim.areas.info(area).type) : undefined;
+        const spot = area ? treeSpot(t, this.sim.areas.info(area).type, treeWorldOf(this.sim)) : undefined;
         if (!spot) continue;
         const d = Math.hypot(tx + 0.5 - f.x, tz + 0.5 - f.z);
         if (d >= R) continue;
@@ -3116,7 +3128,7 @@ export class Game {
     if (t.feature === 'building') return 'building';
     if (t.occupantId) return this.sim.occupant(t)?.type === 'core' ? 'landmark' : undefined;
     if (t.blocked) return t.prop && (/^(pile|gate):/.test(t.prop) || t.prop === 'pillar' || t.prop === 'stump') ? 'ruin' : undefined;
-    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z)).type);
+    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z)).type, treeWorldOf(this.sim));
     const stage = treeStage(t);
     return spot && stage && stage >= 3 ? 'tree' : undefined;
   }
@@ -5295,11 +5307,14 @@ export class Game {
     // takes its own night in waterFrame)
     this.transitions?.setSeaNight(1 - this.dayNight.daylight);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
+    this.ruins.view = this.weatherVisuals?.view ?? 1;
     this.syncView();
+    // P7-E32: the ruins stand where the fogged distance (set by syncView) has gone to haze
+    this.ruins.update(this.camera.entity.getPosition(), this.camera.entity.forward, this.app.scene.fog.start, this.app.scene.fog.end, this.camera.cam.fov);
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-      this.cloudWall.update(wdt);
+      this.cloudWall.update(wdt, this.camera.target);
       this.clouds.update(wdt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);

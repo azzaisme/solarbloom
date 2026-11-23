@@ -5,6 +5,7 @@
 import type { AbilityId, MaterialId } from '../core/types';
 import type { AreaType } from './city';
 import type { MaterialCost, PileSize } from './salvage';
+import { TERRAIN } from './terrain';
 
 /**
  * The Old City is an island inside chunks −6…6 on both axes (13 × 13 chunks, 208 × 208 tiles). Every chunk outside
@@ -271,8 +272,9 @@ export const REGIONS: RegionDef[] = [
     material: 'timber',
     landmark: { kind: 'sealock', name: 'The Sea Lock', x: -6, z: 40 },
     keeper: 'tide',
-    // E23.5.4.6: a freshwater rock pool above the tide line beside the Keeper's garden: it fills once restored, and waters the beds
-    ponds: [{ x: 7, z: 16, w: 2, d: 3 }],
+    // E23.5.4.6: a freshwater rock pool above the tide line beside the Keeper's garden: it fills once restored, and waters the beds.
+    // #763: just east of Tide (10, 19), clear of the park's beach steps (x 6–9, z 14–15), which used to land in it at x 7–8, z 16
+    ponds: [{ x: 12, z: 18, w: 2, d: 3 }],
     seam: { name: 'the Driftline', x: -12, z: 28 },
     // The boat lands here, so the beach is open from the start. The Sea Lock stands across the canal that runs down
     // to the bay; the barricade blocks the boardwalk bridge over it.
@@ -387,8 +389,13 @@ export const REGIONS: RegionDef[] = [
     lookout: { id: 'l-elderGrove', x: -15, z: -3 },
     level: 1,
     // the Elder Tree on a hill, reached by a ramp from the south; its lookout on the east edge faces the park
-    stamps: [{ x: -26, z: -10, w: 12, d: 12, level: 2 }],
-    ramps: [{ x: -21, z: 2, w: 3, d: 3, dir: 'n', from: 1, to: 2, kind: 'ramp' }],
+    // P7-E30 (#743, #745): the Falls overlook, a low bluff over the head of Saltwind's canal (two levels above the
+    // beach), reached by a stair from the grove; the showcase waterfall pours off its south lip into the canal
+    stamps: [{ x: -26, z: -10, w: 12, d: 12, level: 2 }, { ...TERRAIN.overlook }],
+    ramps: [
+      { x: -21, z: 2, w: 3, d: 3, dir: 'n', from: 1, to: 2, kind: 'ramp' },
+      { ...TERRAIN.overlookStair, dir: 's', from: 1, to: 2, kind: 'stair' },
+    ],
     ladders: [],
     perches: [],
     piles: [

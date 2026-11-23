@@ -366,10 +366,26 @@ export class Sim {
  * whose spot already holds something the player built (a machine or a decoration) stays dry land in that save (`dryPonds` on the ground layer), and its Keeper's garden is
  * watered by rain or pipes as any other. Nothing the player made ends up under water.
  */
+/**
+ * The Keeper ponds' layout version (data/oldcity `ponds`), stored in the ground layer's `pondsChecked` once a save has
+ * been checked against it. Bump it when a pond moves, and list the moved regions under the new version.
+ */
+export const PONDS_LAYOUT = 2;
+/** Regions whose pond moved in each layout version (#763: Tide's rock pool left the foot of the park's beach steps). */
+export const PONDS_MOVED: Record<number, string[]> = { 2: ['saltwind'] };
+
 export function dryOccupiedPonds(state: GameState) {
   const ground = state.layers.find((l) => l.kind === 'ground');
-  if (!ground || ground.pondsChecked) return; // once per save: later builds can't stand on a pond (BuildSystem)
-  ground.pondsChecked = true;
+  if (!ground) return;
+  // Once per pond layout: later builds can't stand on a pond (BuildSystem). `true` is a save checked against layout 1.
+  const done = ground.pondsChecked === true ? 1 : (ground.pondsChecked || 0);
+  if (done >= PONDS_LAYOUT) return;
+  ground.pondsChecked = PONDS_LAYOUT;
+  // a region whose pond moved since this save was checked is judged afresh at its new spot (its old spot is plain land now)
+  if (done) {
+    for (let v = done + 1; v <= PONDS_LAYOUT; v++) for (const id of PONDS_MOVED[v] ?? []) ground.dryPonds = ground.dryPonds?.filter((r) => r !== id);
+    if (ground.dryPonds && !ground.dryPonds.length) delete ground.dryPonds;
+  }
   const cells: { x: number; z: number }[] = [];
   for (const m of state.machines) if (m.roofId === ground.id) for (let dx = 0; dx < m.size; dx++) for (let dz = 0; dz < m.size; dz++) cells.push({ x: m.x + dx, z: m.z + dz });
   for (const k of Object.keys(state.cozy?.decor ?? {})) {

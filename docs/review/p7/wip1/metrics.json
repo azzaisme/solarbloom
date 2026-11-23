@@ -1,0 +1,26 @@
+{
+  "mid-day-third": {
+    "clipPct": 0.02,
+    "meanLum": 149.1,
+    "meanSat": 0.61,
+    "drawCalls": 1084,
+    "triangles": 0,
+    "pitch": 16
+  },
+  "mid-day-iso": {
+    "clipPct": 0,
+    "meanLum": 187.6,
+    "meanSat": 0.191,
+    "drawCalls": 1154,
+    "triangles": 0,
+    "pitch": 42
+  },
+  "mid-day-shore": {
+    "clipPct": 0,
+    "meanLum": 156.5,
+    "meanSat": 0.564,
+    "drawCalls": 803,
+    "triangles": 0,
+    "pitch": 16
+  }
+}

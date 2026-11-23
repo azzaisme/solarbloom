@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { type GfxTier, LOOK } from '../data/look';
+import { DAY_LIGHT, HAZE, NIGHT_SKY, SKY, SKY_BANDS } from '../data/sky';
 import type { CameraController } from './CameraController';
 import { Atmosphere } from './Atmosphere';
 import { installLookShaders, setLookHorizon, setLookRim } from './LookShaders';
@@ -15,6 +16,17 @@ import type { SceneBuilder } from './SceneBuilder';
 export class LookController {
   /** The live tuning object (dev: edit, then call apply()). */
   readonly cfg = LOOK;
+  /**
+   * P7-E27.7: the rest of the lighting configuration (data/sky.ts), so one handle reaches every lighting knob:
+   * edit `look.sky.zenith`, `look.haze.end`, `look.day.sunHigh` … then call apply().
+   */
+  readonly sky = SKY;
+  readonly skyBands = SKY_BANDS;
+  readonly skyNight = NIGHT_SKY;
+  readonly haze = HAZE;
+  readonly day = DAY_LIGHT;
+  /** Called at the end of apply(): Game hooks the day/night light and the sky dome here so they re-read the config. */
+  readonly onApply: (() => void)[] = [];
   private toSun = new pc.Vec3();
   private rimColour = new pc.Color();
   readonly post: PostFx;
@@ -99,6 +111,7 @@ export class LookController {
     this.scene.sunDirection(this.toSun).mulScalar(-1);
     this.app.scene.fog.color = color(LOOK.haze.color);
     this.setTier(this.tier);
+    for (const f of this.onApply) f();
   }
 
   update(dt: number) {
