@@ -71,7 +71,7 @@ const ground = {
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
   /** the stone edge of dead paving where it stands above the earth beside it */
   pavingKerb: '#a48a72',
-  painted: { sand: ['#e9dfc2'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
+  painted: { sand: ['#d8d0bd'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   /**
    * E25 (#626): the sandbar out in the sea is wet sand: the painted sand is tinted by `wetSandTint` and its sides take
    * `wetSand`: a little darker than the dry beach.
@@ -692,7 +692,7 @@ export const PALETTE = {
   reed: ['#3f6b2e', '#8fae5a'],
   reedHead: '#6e4a2a',
   /** P7-E28: restored beach sand (clean, pale and warmer than the greyed dead sand, so the change reads) and its wet band */
-  beachSand: ['#f6e2ad', '#f3dea5', '#f8e7b8'],
+  beachSand: ['#fbe6ac', '#f8e1a2', '#fdeab8'],
   beachWet: '#bfa57a',
   /** P7-E28: rounded wet bank stones (darker than the dry rock) */
   wetStone: ['#7d7a70', '#8d8a7d'],

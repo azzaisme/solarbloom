@@ -556,7 +556,8 @@ export function zonedPlanting(c: DressCtx, t: TileData, stage: number, x: number
 /**
  * P7-E28: a restored beach tile (the zone `beach`): clean pale sand (its top is the corner-blended quad, so it
  * melts into the lawn behind), a darker wet band where it meets the sea or surf, a few shells and pebbles, the odd
- * piece of driftwood, and low dune grass only toward its inner edge. No flowers. Deterministic per tile.
+ * piece of driftwood, sparse low dune grass thickening toward the lawn, and the odd sea thrift near the inner edge.
+ * Deterministic per tile.
  */
 export function beachDressing(c: DressCtx, t: TileData, x: number, z: number, top: number) {
   const depth = beachDepth(t.x, t.z, c as ZoneCtx) ?? 1;
@@ -609,11 +610,17 @@ export function beachDressing(c: DressCtx, t: TileData, x: number, z: number, to
       c.b.add('sphere', i === 0 ? PALETTE.props.driftwoodEnd : PALETTE.props.driftwood, [px, top + d * 0.4, pz], along ? [d * 1.6, d * 0.8, d] : [d, d * 0.8, d * 1.6]);
     }
   }
-  // ── dune grass toward the inner edge only (none on the open sand by the water)
-  const dune = depth < 0.4 ? 0 : Math.round(((depth - 0.4) / 0.6) * 5 * Math.max(0.5, c.dens));
+  // ── sparse low dune grass across the whole strip, thicker toward the lawn (none right at the waterline)
+  const want = depth < 0.12 ? 0 : 0.7 + depth * 4.3;
+  const dune = Math.floor(want * Math.max(0.5, c.dens) + r(29));
   for (let i = 0; i < dune; i++) {
     const px = x + (r(30 + i) - 0.5) * 0.85, pz = z + (r(40 + i) - 0.5) * 0.85;
-    c.fb.add(grassGeo(i % 3 === 0 ? 1 : 2, t.variant + i, 1), px, top, pz, r(50 + i) * 6.28, 0.9 + r(60 + i) * 0.5);
+    c.fb.add(grassGeo(i % 3 === 0 ? 1 : 2, t.variant + i, 1), px, top, pz, r(50 + i) * 6.28, (0.55 + depth * 0.5) * (0.85 + r(60 + i) * 0.4));
+  }
+  // ── the odd tuft of sea thrift (tiny pink heads) near the inner edge only
+  if (depth > 0.6 && r(70) < 0.22) {
+    const px = x + (r(71) - 0.5) * 0.6, pz = z + (r(72) - 0.5) * 0.6;
+    c.fb.add(flowerGeo('wild', 3, true, t.variant, 1), px, top, pz, r(73) * 6.28, 0.6);
   }
 }
 
