@@ -583,7 +583,7 @@ interface Cluster {
 /** Per detail level: cluster sphere detail, fringe leaves per cluster (per unit of cluster size), fringe leaf length. */
 const CROWN: Record<Lod, { detail: number; fringe: number; leaf: number; limbSides: number }> = {
   0: { detail: 1, fringe: 0, leaf: 0, limbSides: 0 },
-  1: { detail: 2, fringe: 15, leaf: 1.25, limbSides: 5 },
+  1: { detail: 2, fringe: 22, leaf: 1.3, limbSides: 5 },
   2: { detail: 2, fringe: 34, leaf: 0.8, limbSides: 6 },
   3: { detail: 2, fringe: 52, leaf: 0.7, limbSides: 6 },
 };
@@ -744,20 +744,58 @@ function pine(B: Buf, R: () => number, S: number, pal: Palette, bark: C, lod: Lo
   const H = 1.55 * S;
   const trunkR = 0.07 * S;
   tube(B, [[0, 0, 0], [0, H * 0.45, 0], [0, H * 0.95, 0]], [trunkR * 1.35, trunkR * 0.8, trunkR * 0.2], lod === 0 ? 5 : 7, [scaleC(bark, 0.75), bark, bark], [0, 0.15, 0.4], false);
-  const cr: Crown = { heart: [0, H * 0.5, 0], r: 0.62 * S, pal };
-  const cl: Cluster[] = [];
-  const tiers = 6;
+  const heart: V = [0, H * 0.5, 0];
+  const tiers = 5;
+  const sides = lod === 0 ? 8 : lod === 1 ? 16 : 22;
   for (let w = 0; w < tiers; w++) {
     const k = w / (tiers - 1);
-    const y = H * (0.22 + 0.66 * k);
-    const reach = (0.52 - 0.4 * k) * S;
-    // each tier a drooping skirt of needles with a lumpy rim, sitting low on the tier below so the layers read as
-    // one tapering spire
-    const off = (R() - 0.5) * 0.04 * S;
-    cl.push({ c: [off, y, -off], r: [reach * 0.95, (0.17 - 0.04 * k) * S, reach * 0.95], tone: k * 0.8 - 0.5 + (R() - 0.5) * 0.3, lobes: 9 });
+    // each tier a drooping skirt: from the trunk it slopes down and out to a ragged rim of needle tips, and its top
+    // tucks up under the tier above, so the tiers read as one layered spire
+    const y = H * (0.2 + 0.6 * k);
+    const reach = (0.56 - 0.38 * k) * S * (0.92 + R() * 0.16);
+    const h = (0.36 - 0.1 * k) * S;
+    skirt(B, R, y, reach, h, sides, shiftPal(pal, k * 0.8 - 0.45 + (R() - 0.5) * 0.25), heart, 0.62 * S, 0.3 + 0.5 * k);
   }
-  cl.push({ c: [0, H * 0.97, 0], r: [0.07 * S, 0.14 * S, 0.07 * S], tone: 0.5 });
-  drawCrown(B, R, cl, cr, bark, lod, { narrow: 0.28, leafL: 0.12 * S, droop: 0.6 });
+  // the leader: a small last tuft
+  skirt(B, R, H * 0.94, 0.08 * S, 0.2 * S, Math.max(6, sides / 2), shiftPal(pal, 0.4), heart, 0.62 * S, 0.9);
+}
+
+/**
+ * One pine tier: a cone of needles from (0, y + h) at the trunk down to a ragged rim `reach` out near height y, its
+ * edge notched into drooping points; a shallow underside back to the trunk. Lit with the crown's shading and drawn
+ * with the foliage shader's leaves (LEAF_FLAG).
+ */
+function skirt(B: Buf, R: () => number, y: number, reach: number, h: number, sides: number, pal0: Palette, heart: V, crownR: number, flex: number) {
+  const pal = shade(pal0);
+  const base = B.n;
+  const phase = R() * Math.PI * 2;
+  const tips = 5 + Math.floor(R() * 3);
+  // rings: tip at the trunk, upper slope, rim (ragged), underside
+  const rings: [number, number, number][] = []; // [radius share, height share, droop weight]
+  rings.push([0.02, 1, 0], [0.45, 0.62, 0.2], [1, 0, 1], [0.55, 0.12, 0.4]);
+  for (const [rk, hk, dk] of rings)
+    for (let i = 0; i < sides; i++) {
+      const a = (i / sides) * Math.PI * 2;
+      // notched rim: points that reach further and droop lower
+      const pt = Math.pow(0.5 + 0.5 * Math.cos(a * tips + phase), 3);
+      const rr = reach * rk * (1 + dk * (0.18 * pt - 0.08 + (R() - 0.5) * 0.08));
+      const yy = y + h * hk - dk * h * 0.22 * pt;
+      const p: V = [Math.cos(a) * rr, yy, Math.sin(a) * rr];
+      const up = hk >= 0.5 ? 1 : hk > 0.05 ? -0.6 : 0.15;
+      const n = norm([Math.cos(a) * (hk > 0.05 && hk < 0.5 ? 0.3 : 0.7), up, Math.sin(a) * (hk > 0.05 && hk < 0.5 ? 0.3 : 0.7)]);
+      const k = clamp(0.5 + 0.5 * n[1], 0, 1);
+      let col = k < 0.5 ? mix(pal.dark, pal.base, k * 2) : mix(pal.base, pal.light, Math.pow((k - 0.5) * 2, 1.4) * 0.7);
+      col = mix(col, pal.light, Math.pow(clamp(dot(n, SUN), 0, 1), 3) * 0.3);
+      const out = clamp(len(sub(p, heart)) / crownR, 0, 1.1);
+      col = scaleC(col, (0.62 + 0.4 * out) * (0.9 + 0.2 * pt * dk));
+      B.v(p, n, col, flex * (0.6 + 0.4 * rk) + LEAF_FLAG);
+    }
+  for (let r = 0; r < rings.length - 1; r++)
+    for (let i = 0; i < sides; i++) {
+      const a0 = base + r * sides + i, b0 = base + r * sides + ((i + 1) % sides), c0 = a0 + sides, d0 = b0 + sides;
+      B.tri(a0, b0, c0);
+      B.tri(b0, d0, c0);
+    }
 }
 
 /**
