@@ -1,0 +1,50 @@
+{
+  "mid-golden-third": {
+    "clipPct": 0.12,
+    "meanLum": 110.5,
+    "meanSat": 0.669,
+    "drawCalls": 1067,
+    "triangles": 0,
+    "pitch": 16
+  },
+  "mid-golden-iso": {
+    "clipPct": 0,
+    "meanLum": 161.4,
+    "meanSat": 0.176,
+    "drawCalls": 1164,
+    "triangles": 0,
+    "pitch": 42
+  },
+  "mid-golden-shore": {
+    "clipPct": 0.01,
+    "meanLum": 103.2,
+    "meanSat": 0.639,
+    "drawCalls": 632,
+    "triangles": 0,
+    "pitch": 16
+  },
+  "mid-night-third": {
+    "clipPct": 1.48,
+    "meanLum": 95.5,
+    "meanSat": 0.563,
+    "drawCalls": 1183,
+    "triangles": 0,
+    "pitch": 16
+  },
+  "mid-night-iso": {
+    "clipPct": 0.02,
+    "meanLum": 40.8,
+    "meanSat": 0.856,
+    "drawCalls": 1159,
+    "triangles": 0,
+    "pitch": 42
+  },
+  "mid-night-shore": {
+    "clipPct": 0.14,
+    "meanLum": 54.8,
+    "meanSat": 0.775,
+    "drawCalls": 602,
+    "triangles": 0,
+    "pitch": 16
+  }
+}
