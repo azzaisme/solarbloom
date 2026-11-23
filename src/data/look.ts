@@ -448,7 +448,7 @@ export const LOOK = {
   waterLife: {
     /** drawn within this many tiles of where the camera looks (nearest first, up to `max` of each kind) */
     radius: 20,
-    max: { pad: 480, flower: 120, leaf: 96, fish: 120, fleck: 160, plant: 240, fall: 12, foam: 24, spray: 12, outlet: 12 },
+    max: { pad: 480, flower: 120, leaf: 96, fish: 120, fleck: 160, plant: 240, fall: 12, foam: 24, spray: 12, outlet: 12, sheet: 6 },
     /**
      * lily pads, on restored fresh water (pools, ponds, canals; not the sea), gathered in patches (`patches` of the
      * water within `reach` of a bank, in patches about `patch` tiles across): `perTile` (+1 from `crowdFrom` bloom),

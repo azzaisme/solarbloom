@@ -13,7 +13,7 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
-import { inSurfBand, moveLandAt, onJetty, pileById, pondCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
+import { inSurfBand, moveLandAt, onJetty, pileById, pondCell, regionOfCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
@@ -33,6 +33,8 @@ import { zoneAt, type PlantingZone } from './PlantingZones';
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER } from './Water';
+import { FALL_ANCHOR, fallFlow, fallLip, rockyWall, showcaseFall, wasteland } from './Terrain';
+import { TERRAIN } from '../data/terrain';
 import { deckOf, deckShade, jettyDeck, jettyLandEnd, jettyPosts, plankBridgeTiles, plankPost, wetLine, type Post, type Rect } from './Bridges';
 import { alongRun, bankHeight, bankPoint, bankSize, bankStrip, leanGeo, runLength, shoreHash, shoreRuns, waterlineAt, type BankColours, type BankGeo, type ShoreRoom } from './Shore';
 import { encodeWater, WATER_CLARITY, WATER_ENC, waterMaterial } from './WaterSurface';
@@ -732,6 +734,13 @@ export class ChunkRenderer {
         const n = this.views.get(chunkKey(GROUND, Math.floor((t.x + dx) / CHUNK), Math.floor((t.z + dz) / CHUNK)));
         if (n) n.fogDirty = true;
       }
+    // P7-E30 (#743): a wall over this tile is drawn by the higher tile beside it, in its own chunk: rebuild that one
+    // when this tile's restoration changes how the wall is dressed
+    if ((lx === 0 || lz === 0 || lx === CHUNK - 1 || lz === CHUNK - 1) && t.level !== undefined && this.rockyRegion(t))
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const n = this.views.get(chunkKey(GROUND, Math.floor((t.x + dx) / CHUNK), Math.floor((t.z + dz) / CHUNK)));
+        if (n && n !== v && wallDrop(t.x + dx, t.z + dz, -dx, -dz) !== undefined) n.dirty = true;
+      }
     // E28.W01: the water's clarity blends across tile corners, so a water tile on a chunk's edge reaches into the
     // chunks round it (diagonals too): rebuild those
     if ((lx === 0 || lz === 0 || lx === CHUNK - 1 || lz === CHUNK - 1) && (t.feature === 'water' || this.overWater(t)))
@@ -1029,6 +1038,15 @@ export class ChunkRenderer {
     return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
+  private rockyRegion(t: TileData): boolean {
+    return TERRAIN.rockyWall.regions.includes(regionOfCell(t.x, t.z)?.id ?? '');
+  }
+
+  /** P7-E30 (#743): is this the restored, open ground of a region whose walls turn rocky (Saltwind Beach)? */
+  private rockyBelow(n: TileData): boolean {
+    return n.ground === 'restored' && n.feature !== 'water' && !n.blocked && !n.ramp && TERRAIN.rockyWall.regions.includes(regionOfCell(n.x, n.z)?.id ?? '');
+  }
+
   /** A canal dropping a level over this edge: its water falls over it instead of a wall. */
   private weir = (x: number, z: number, dx: number, dz: number): boolean =>
     this.sim.grid.peek(GROUND, x, z)?.feature === 'water' && this.sim.grid.peek(GROUND, x + dx, z + dz)?.feature === 'water';
@@ -1232,8 +1250,10 @@ export class ChunkRenderer {
       // E28.W03 (#696): a wall standing in water (the causeway, the old pier, an avenue over a canal) is wet at its foot
       const below = this.sim.grid.peek(t.roofId, t.x + dx, t.z + dz);
       if (below && this.standsInWater(below)) this.wallWet(b, wx, wz, dx, dz, ground, alive, end0, end1);
-      // ivy and hanging plants once the ground above is restored
-      if (t.ground === 'restored') {
+      // P7-E30 hook (#743): over restored beach, the wall turns stepped, rocky and mossy
+      if (below && this.rockyBelow(below) && !this.rockyRegion(t) && !moveLandAt(t.x, t.z) && !fallLip(t.x, t.z, dx, dz)) rockyWall(b, t.x, t.z, dx, dz, ground, top, end0, end1);
+      // ivy and hanging plants once the ground above is restored (P7-E30: none through the showcase fall)
+      if (t.ground === 'restored' && !fallLip(t.x, t.z, dx, dz) && !(below && this.rockyBelow(below) && !this.rockyRegion(t) && !moveLandAt(t.x, t.z))) {
         const n = 2 + (t.variant % 3);
         for (let i = 0; i < n; i++) {
           const along = ((t.variant >> (i * 2)) % 10) / 10 - 0.45;
@@ -1702,6 +1722,12 @@ export class ChunkRenderer {
       // E21.24: an Old City tile stands at its terrace's height; cliff faces drop to lower neighbours
       const th = t.level !== undefined ? h + levelY(t.level) : h;
       if (t.level !== undefined) this.terrace(b, t, h, th);
+      // P7-E30 hook (#745): the showcase fall off the Falls overlook, drawn from its anchor cell (its water to WaterLife)
+      if (t.level !== undefined && !v.far && !v.sunk && t.x === FALL_ANCHOR.x && t.z === FALL_ANCHOR.z) {
+        const fall = showcaseFall(b, h, fallFlow((x, z) => s.grid.peek(GROUND, x, z)));
+        this.life.push(...fall.life);
+        this.rocks.push(...fall.rocks);
+      }
       if (!v.far) this.moveLand(b, t, h, th);
       if (t.ramp) {
         yield;
@@ -2466,6 +2492,8 @@ export class ChunkRenderer {
           if (f === 'litter') for (let i = 0; i < 2; i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], this.at(x + r.range(-0.35, 0.35), top + 0.016, z + r.range(-0.35, 0.35), 0.08), [0.16, 0.03, 0.1]);
           if (f !== 'sand' && r.next() < (f === 'paving' ? 0.15 : 0.35)) this.scatter.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1);
           if (t.variant % 7 === 0) this.scatter.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 0.8);
+          // P7-E30 hook (#758): the wasteland's cracks, broken path and derelict debris; a dead beach's litter
+          if (!t.prop && !t.occupantId && !moveLandAt(t.x, t.z)) wasteland(this.solidSink(), t.x, t.z, top, f === 'sand' ? 'sand' : f === 'paving' ? 'paving' : 'earth');
           break;
         }
         this.slab(b, shade, [x, h, z], [1, 0.16, 1]);
@@ -3014,6 +3042,8 @@ export class ChunkRenderer {
       const n = g.peek(t.roofId, t.x + dx, t.z + dz);
       const o = g.peek(t.roofId, t.x - dx, t.z - dz);
       if (!n || n.level === undefined || this.bankless(n) || n.level <= t.level || !o || !this.bankless(o)) continue;
+      // P7-E30 (#745): the showcase fall pours here instead (unless the overlook is hidden behind a facade)
+      if (fallLip(n.x, n.z, -dx, -dz) && !this.facadeOn(t, n)) continue;
       const drop = h + levelY(n.level) + 0.08 - y;
       // on the wall's face (in front of its courses and its wet band), in the middle of the tile's edge; the water
       // lies away from it. While the ground above is in a hidden area in another chunk, this chunk stands a facade on

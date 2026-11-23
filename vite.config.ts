@@ -68,6 +68,7 @@ const QUICK = [
   'planting-zones',
   // P7-E29 (#715): tree placement by zone, and the tree shapes' budgets and silhouettes
   'tree-placement',
+  'p7-terrain',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

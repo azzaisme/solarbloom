@@ -48,7 +48,7 @@ function strip(rows: number, over: Partial<LifeTile> = {}) {
   return out;
 }
 
-const big = { pad: 1e4, flower: 1e4, leaf: 1e4, fish: 1e4, fleck: 1e4, plant: 1e4, fall: 1e4, foam: 1e4, spray: 1e4, outlet: 1e4 };
+const big = { pad: 1e4, flower: 1e4, leaf: 1e4, fish: 1e4, fleck: 1e4, plant: 1e4, fall: 1e4, foam: 1e4, spray: 1e4, outlet: 1e4, sheet: 1e4 };
 
 describe('LOOK.waterLife', () => {
   it('keeps every kind small, sparse and soft', () => {
@@ -344,8 +344,14 @@ describe('the chunks feed it from the real world', () => {
 
   it('the canal under a dead shore has none', () => {
     const life = build(false);
-    const near = [...life.values()].flat().filter((s) => s.x > -4 && s.x < -1 && s.z > 14 && s.z < 36);
+    // P7-E30 (#745): only the showcase fall's trickle off the Falls overlook (its source is dead too)
+    const fallFoot = (s: LifeSpot) => s.kind === 'sheet' || ((s.kind === 'foam' || s.kind === 'spray') && s.z > 15.9 && s.z < 17.2);
+    const near = [...life.values()].flat().filter((s) => s.x > -4 && s.x < -1 && s.z > 14 && s.z < 36 && !fallFoot(s));
     expect(near).toEqual([]);
+    // (the chunk registers its own life as well as the test's copy: count distinct sheets)
+    const sheets = [...new Map(life.get('sheet')!.map((q) => [JSON.stringify(q), q])).values()];
+    expect(sheets.length).toBe(1); // no rill while the source is dead: the sheet alone, a trickle
+    expect(sheets[0].size).toBeLessThan(0.3);
   });
 
   it("restored, the canal lives: pads and fish, none on the sea; an outlet only at the canal's head", () => {
@@ -355,17 +361,16 @@ describe('the chunks feed it from the real world', () => {
     expect(pads.filter(canal).length).toBeGreaterThan(5);
     for (const p of pads) expect(seaCell(Math.floor(p.x), Math.floor(p.z)) || surfCell(Math.floor(p.x), Math.floor(p.z))).toBe(false);
     expect(life.get('fish')!.filter(canal).length).toBeGreaterThan(0);
-    const outlets = life.get('outlet')!;
-    expect(outlets.length).toBeGreaterThan(0);
-    for (const o of outlets) {
-      expect(o.x).toBeGreaterThan(-3.01);
-      expect(o.x).toBeLessThan(-0.99);
-      // on the wall's face, in front of its courses: a little out over the water from the tile edge at z 16
-      expect(o.z).toBeCloseTo(16 + LOOK.wall.thick / 2 + LOOK.wall.courseProud + 0.012);
-    }
-    expect(life.get('fall')!.length).toBe(outlets.length);
-    expect(life.get('foam')!.length).toBe(outlets.length);
-    expect(life.get('spray')!.length).toBe(outlets.length);
+    // P7-E30 (#745): the canal's head is the showcase fall now, not a culvert: its sheet pours off the overlook's lip
+    // (two levels up) onto the canal, centred on it, in front of the wall's face
+    expect(life.get('outlet')!.filter(canal)).toEqual([]);
+    expect(life.get('fall')!.filter(canal)).toEqual([]);
+    const sheet = life.get('sheet')!.find((q) => q.range > 1)!;
+    expect(sheet).toBeDefined();
+    expect(sheet.x).toBeCloseTo(-2);
+    expect(sheet.z).toBeCloseTo(16 + LOOK.wall.thick / 2 + LOOK.wall.courseProud + 0.006);
+    expect(sheet.range).toBeGreaterThan(2.3);
+    expect(life.get('foam')!.filter(canal).length).toBeGreaterThan(0);
   });
 
   it("while Elder Grove is hidden, the outlet sits on the face of the facade its edge gets (Look 4.9), not behind it", () => {

@@ -14,6 +14,7 @@
  */
 import type { TileData } from '../core/types';
 import { seaCell, surfCell } from '../core/OldCityLayout';
+import { fallClearing } from '../data/terrain';
 
 export type PlantingZone = 'open_lawn' | 'meadow' | 'flower_garden' | 'shoreline' | 'woodland_understory' | 'path_edge' | 'landmark_clearance' | 'beach';
 
@@ -181,6 +182,8 @@ export function zoneAt(x: number, z: number, ctx: ZoneCtx): PlantingZone {
     }
   const dest = Math.min(lmd, machine);
   if (dest <= ZONES.clearance) return 'landmark_clearance';
+  // P7-E30 hook (#745): the showcase fall's rill and the Falls overlook's lip stay low and open
+  if (t && t.level !== undefined && fallClearing(x, z)) return 'landmark_clearance';
   if (beachDepth(x, z, ctx) !== undefined) return 'beach';
   if (water) return 'shoreline';
   if (edge) return 'path_edge';
