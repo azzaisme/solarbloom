@@ -1,0 +1,83 @@
+{
+  "early-day-third": {
+    "clipPct": 0.01,
+    "meanLum": 178,
+    "meanSat": 0.264,
+    "drawCalls": 1040,
+    "triangles": 0,
+    "foliageTris": 18044,
+    "pitch": 16
+  },
+  "early-day-iso": {
+    "clipPct": 0,
+    "meanLum": 191.5,
+    "meanSat": 0.133,
+    "drawCalls": 1042,
+    "triangles": 0,
+    "foliageTris": 14006,
+    "pitch": 42
+  },
+  "early-day-shore": {
+    "clipPct": 0,
+    "meanLum": 192.7,
+    "meanSat": 0.222,
+    "drawCalls": 800,
+    "triangles": 0,
+    "foliageTris": 25454,
+    "pitch": 16
+  },
+  "mid-day-third": {
+    "clipPct": 0.04,
+    "meanLum": 135.1,
+    "meanSat": 0.635,
+    "drawCalls": 1107,
+    "triangles": 0,
+    "foliageTris": 409499,
+    "pitch": 16
+  },
+  "mid-day-iso": {
+    "clipPct": 0,
+    "meanLum": 192.5,
+    "meanSat": 0.166,
+    "drawCalls": 1153,
+    "triangles": 0,
+    "foliageTris": 232558,
+    "pitch": 42
+  },
+  "mid-day-shore": {
+    "clipPct": 0,
+    "meanLum": 155.5,
+    "meanSat": 0.609,
+    "drawCalls": 615,
+    "triangles": 0,
+    "foliageTris": 415561,
+    "pitch": 16
+  },
+  "late-day-third": {
+    "clipPct": 0.04,
+    "meanLum": 128.5,
+    "meanSat": 0.679,
+    "drawCalls": 1677,
+    "triangles": 0,
+    "foliageTris": 1399302,
+    "pitch": 16
+  },
+  "late-day-iso": {
+    "clipPct": 0,
+    "meanLum": 182.2,
+    "meanSat": 0.307,
+    "drawCalls": 1490,
+    "triangles": 0,
+    "foliageTris": 889182,
+    "pitch": 42
+  },
+  "late-day-shore": {
+    "clipPct": 0,
+    "meanLum": 155.4,
+    "meanSat": 0.617,
+    "drawCalls": 1309,
+    "triangles": 0,
+    "foliageTris": 1405974,
+    "pitch": 16
+  }
+}
