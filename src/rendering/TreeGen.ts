@@ -581,6 +581,8 @@ interface Cluster {
 }
 
 /** Per detail level: cluster sphere detail, fringe leaves per cluster (per unit of cluster size), fringe leaf length. */
+/** Far off (lod 0), only the four biggest masses keep the rounder sphere; the rest drop to the plain icosahedron
+ * (P7-E29.7, see drawCrown). */
 const CROWN: Record<Lod, { detail: number; fringe: number; leaf: number; limbSides: number }> = {
   0: { detail: 1, fringe: 0, leaf: 0, limbSides: 0 },
   1: { detail: 2, fringe: 22, leaf: 1.3, limbSides: 5 },
@@ -608,10 +610,12 @@ function drawCrown(B: Buf, R: () => number, cl: Cluster[], cr: Crown, bark: C, l
         const end = add(k.c, [0, -k.r[1] * 0.35, 0]);
         bough(B, R, k.from, end, k.rad, q.limbSides, bark, 0.14, 0.45);
       }
+  // far off, the four biggest masses (the silhouette) keep the rounder sphere
+  const bigFar = new Set(cl.map((k, i) => [k.r[0] * k.r[1] * k.r[2], i]).sort((a, b) => b[0] - a[0]).slice(0, 4).map(([, i]) => i));
   for (let i = 0; i < cl.length; i++) {
     const k = cl[i];
     const pal = shade(shiftPal(cr.alt && (i * 0.618) % 1 < cr.alt.share ? cr.alt.pal : cr.pal, k.tone));
-    puff(B, { c: k.c, r: k.r, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.55 + 0.3 * clamp(len(sub(k.c, cr.heart)) / cr.r, 0, 1), seed: i * 31 + 7, detail: q.detail, clusters: k.lobes ?? 6, crown: cr.heart, crownR: cr.r, leafy: true });
+    puff(B, { c: k.c, r: k.r, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.55 + 0.3 * clamp(len(sub(k.c, cr.heart)) / cr.r, 0, 1), seed: i * 31 + 7, detail: lod === 0 && !bigFar.has(i) ? 0 : q.detail, clusters: k.lobes ?? 6, crown: cr.heart, crownR: cr.r, leafy: true });
     if (!q.fringe) continue;
     const size = (k.r[0] + k.r[2]) / 2;
     fringe(B, R, k, Math.round(q.fringe * clamp(size / 0.3, 0.6, 1.6)), pal, cr, o.leafL * q.leaf, o.narrow, o.droop ?? 0.35);
