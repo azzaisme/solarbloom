@@ -64,6 +64,8 @@ const QUICK = [
   // P7-E27 (#713): the Bright Day calibration and the cloud ring
   'p7-lighting',
   'planting-zones',
+  // P7-E29 (#715): tree placement by zone, and the tree shapes' budgets and silhouettes
+  'tree-placement',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

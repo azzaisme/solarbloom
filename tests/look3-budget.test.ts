@@ -42,7 +42,9 @@ describe('Look 3 detail budget', () => {
       const near = treeGeo(sp, 3, 1, 2).tris;
       const close = treeGeo(sp, 3, 1, 3).tris;
       console.log(sp, 'triangles', far, normal, near, close);
-      expect(far, `${sp} far`).toBeLessThanOrEqual(260);
+      // P7-E29.7: far trees keep the near crown's cluster layout (low-detail masses), so a tree keeps its silhouette
+      // when its chunk changes level; that costs more than the old few dozen loose leaves (260 before)
+      expect(far, `${sp} far`).toBeLessThanOrEqual(760);
       // Phase 6 (desktop target): real leaves on twigs cost more than lumpy clumps did (3200 / 5000 / 8000 before)
       expect(normal, `${sp} normal`).toBeLessThanOrEqual(4500);
       expect(near, `${sp} near`).toBeLessThanOrEqual(8500);

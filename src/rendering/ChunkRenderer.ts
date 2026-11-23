@@ -1946,7 +1946,7 @@ export class ChunkRenderer {
   /** Adds the tile's tree at its stage, unless it's growing on its own right now. True if the tile has one. */
   private addTree(t: TileData, h: number, lod: 0 | 1): boolean {
     if ((t.feature ?? 'lawn') === 'water') return false;
-    const spot = treeSpot(t, this.areaType);
+    const spot = treeSpot(t, this.areaType, zoneOf(this.ctx, t.x, t.z)); // P7-E29: by its (memoised) planting zone
     if (!spot) return false;
     const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: trees fade with low water
     if (!stage) return false;
@@ -1969,7 +1969,7 @@ export class ChunkRenderer {
   }
 
   /** Trees growing to a new stage right now: a pooled entity bounces up while the chunk leaves the tree out. */
-  private growing = new Map<string, { e: pc.Entity; t: number; from: number; to: number; tile: TileData }>();
+  private growing = new Map<string, { e: pc.Entity; t: number; from: number; to: number; tile: TileData; dur: number; lift: number }>();
   static readonly GROW_SECONDS = 0.9;
   static readonly MAX_GROWING = 24;
 
@@ -1993,7 +1993,10 @@ export class ChunkRenderer {
     // Relative size of the previous stage, so a young tree swells into a full one rather than popping from zero.
     const SIZE = [0, 0.32, 0.62, 1, 1.08];
     const from = prevStage >= 1 ? SIZE[prevStage] / SIZE[stage] : 0.05;
-    this.growing.set(t.id, { e, t: 0, from, to: spot.scale, tile: t });
+    // P7-E29.5 (#738): a specimen (a big lone tree) reaching Thriving or Radiant is a restoration moment: it swells
+    // in slower, overshoots further and stretches up before it settles
+    const special = spot.scale >= 2 && stage >= 3;
+    this.growing.set(t.id, { e, t: 0, from, to: spot.scale, tile: t, dur: special ? ChunkRenderer.GROW_SECONDS * 2.2 : ChunkRenderer.GROW_SECONDS, lift: special ? 0.16 : 0.06 });
     e.setLocalScale(from * spot.scale, from * spot.scale, from * spot.scale);
     view.dirty = true;
   }
@@ -2001,11 +2004,11 @@ export class ChunkRenderer {
   private tickGrowing(dt: number) {
     for (const [id, g] of this.growing) {
       g.t += dt;
-      const k = Math.min(1, g.t / ChunkRenderer.GROW_SECONDS);
+      const k = Math.min(1, g.t / g.dur);
       // ease-out with a soft overshoot: the tree springs up and settles
       const e = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
       const sc = g.to * (g.from + (1 - g.from) * e);
-      g.e.setLocalScale(sc, sc * (1 + 0.06 * Math.sin(k * Math.PI)), sc);
+      g.e.setLocalScale(sc, sc * (1 + g.lift * Math.sin(k * Math.PI)), sc);
       if (k >= 1) {
         this.growing.delete(id);
         this.markTile(g.tile); // the chunk takes the tree back…

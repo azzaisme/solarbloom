@@ -8,7 +8,7 @@ import { PARK_GROWTH } from '../data/bloombot';
 import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
-import { treeSpot, treeStage } from '../rendering/TreePlacement';
+import { setTreeWorld, treeSpot, treeStage } from '../rendering/TreePlacement';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -386,6 +386,8 @@ export class Game {
     // E23.1.1: one rule set. Every new game is the Old City.
     const state = loaded ?? createInitialState(undefined);
     this.sim = new Sim(state, this.bus);
+    // P7-E29 (#737) hook: tree placement reads planting zones (paths, water, machines round a cell) from this world
+    setTreeWorld({ peek: (x, z) => this.sim.grid.peek(GROUND, x, z), areaAt: (x, z) => this.sim.areas.map.areaOfCell(x, z), info: (a) => this.sim.areas.info(a) });
     // E23.7.1.2: a new game's choice of day (the game's own, or the real clock's); Settings shows the save's
     if (!loaded && opts.realClock) this.sim.clock.real = true;
     this.settings.realClock = this.sim.clock.real;

@@ -511,7 +511,8 @@ const GLOW = hex(PALETTE.glow.honey);
 
 /**
  * Builds one tree. `variant` changes the branching and crown layout; `stage` its growth; `lod` its detail.
- * Units are tiles: a full-grown tree is about 1.1–1.5 tiles tall and fits a tile's footprint.
+ * Units are tiles: a full-grown template is about 1.4–1.8 tiles tall (pine the tallest) with a crown about two tiles
+ * across; placement scales it (TreePlacement.TREES.scale), so a grove tree stands four to six Bloombots tall.
  */
 export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: Lod = 1): TreeGeo {
   const B = new Buf();
@@ -582,7 +583,7 @@ interface Cluster {
 /** Per detail level: cluster sphere detail, fringe leaves per cluster (per unit of cluster size), fringe leaf length. */
 const CROWN: Record<Lod, { detail: number; fringe: number; leaf: number; limbSides: number }> = {
   0: { detail: 1, fringe: 0, leaf: 0, limbSides: 0 },
-  1: { detail: 2, fringe: 18, leaf: 1.2, limbSides: 5 },
+  1: { detail: 2, fringe: 15, leaf: 1.25, limbSides: 5 },
   2: { detail: 2, fringe: 34, leaf: 0.8, limbSides: 6 },
   3: { detail: 2, fringe: 52, leaf: 0.7, limbSides: 6 },
 };
@@ -676,7 +677,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
   const birch = sp === 'birch';
   const cherry = sp === 'cherry';
   const young = stage === 2;
-  const trunkH = (birch ? 0.86 : cherry ? 0.4 : 0.52) * S;
+  const trunkH = (birch ? 0.86 : cherry ? 0.46 : 0.52) * S;
   const trunkR = (birch ? 0.045 : cherry ? 0.082 : 0.1) * S;
   const top = trunkAt(B, R, lod, trunkH, trunkR, bark, barkDark, birch, cherry ? 0.3 : 0.14);
   const cl: Cluster[] = [];
@@ -691,7 +692,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
       const k = i / (n - 1);
       const a = i * 2.4 + R() * 0.5;
       const w = (0.22 + 0.14 * Math.sin(Math.PI * (0.25 + 0.75 * k))) * S;
-      const y = top[1] - 0.28 * S + k * 0.62 * S;
+      const y = top[1] - 0.16 * S + k * 0.56 * S;
       const off = (0.14 + 0.06 * R()) * S * (1 - 0.6 * k);
       const from: V = [top[0] * (y / top[1]) * 0.9, Math.min(y - 0.1 * S, top[1]), top[2] * (y / top[1]) * 0.9];
       cl.push({ c: [top[0] + Math.cos(a) * off, y, top[2] + Math.sin(a) * off], r: [w * 0.9, w * 0.85, w * 0.9], from, rad: trunkR * 0.45, tone: R() * 2 - 1 });
@@ -702,7 +703,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
     // the outer ring: one cluster per main limb
     const ring = young ? 3 : cherry ? 5 : 5 + Math.floor(R() * 2);
     const reach = (cherry ? 0.56 : 0.5) * S;
-    const rise = (cherry ? 0.16 : 0.26) * S;
+    const rise = (cherry ? 0.24 : 0.26) * S;
     heart = [top[0], top[1] + (cherry ? 0.2 : 0.3) * S, top[2]];
     crownR = (cherry ? 0.78 : 0.74) * S;
     const a0 = R() * Math.PI * 2;
@@ -783,7 +784,7 @@ function willow(B: Buf, R: () => number, S: number, pal: Palette, bark: C, barkD
   cl.push({ c: add(top, [0, 0.42 * S, 0]), r: [0.3 * S, 0.18 * S, 0.3 * S], from: top, rad: 0.05 * S, tone: 0.5 });
   drawCrown(B, R, cl, cr, bark, lod, { narrow: 0.3, leafL: 0.1 * S });
   // the curtain: far off, a few long hanging masses; nearer, strands of leaves on thin falling stems
-  const strands = lod === 0 ? 0 : lod === 1 ? 5 : 7;
+  const strands = lod === 0 ? 0 : lod === 1 ? 5 : 6;
   for (let i = 0; i < tips.length; i++) {
     const { p, out } = tips[i];
     const pal2 = shiftPal(pal, (i % 3) * 0.3 - 0.3);
@@ -800,7 +801,7 @@ function willow(B: Buf, R: () => number, S: number, pal: Palette, bark: C, barkD
       const mid = add(from, add(mul(sway, 0.5), [0, -Ls * 0.5, 0]));
       const end = add(from, add(sway, [0, -Ls, 0]));
       tube(B, [from, mid, end], [0.004 * S, 0.003 * S, 0.002 * S], 3, [pal2.dark, pal2.dark, pal2.base], [0.6, 0.9, 1.15], false);
-      const per = lod === 1 ? 3 : 5;
+      const per = lod === 1 ? 3 : 4;
       for (let j = 0; j < per; j++) {
         const kk = (j + 0.5) / per;
         const q = add(from, add(mul(sway, kk), [0, -Ls * kk, 0]));
