@@ -46,6 +46,13 @@ describe('P7-E29 tree placement by zone', () => {
       const t = peek(x, z)!;
       if (!spot(x, z) || t.feature === 'paving') continue;
       expect(['path_edge', 'landmark_clearance']).not.toContain(zone(x, z));
+      // landmarks read from a distance: no crown within 2–3 cells of the 2×2 footprint
+      const info = sim.areas.info(sim.areas.map.areaOfCell(x, z));
+      if (!info.noLandmark && info.landmark) {
+        const [lx, lz] = info.landmark;
+        const d = Math.max(x < lx ? lx - x : x > lx + 1 ? x - lx - 1 : 0, z < lz ? lz - z : z > lz + 1 ? z - lz - 1 : 0);
+        expect(d, `tree at ${x},${z} by the landmark`).toBeGreaterThan(2);
+      }
       for (let dz = -TREES.deckClear; dz <= TREES.deckClear; dz++)
         for (let dx = -TREES.deckClear; dx <= TREES.deckClear; dx++) expect(deck(x + dx, z + dz), `tree at ${x},${z} by a deck`).toBe(false);
     }

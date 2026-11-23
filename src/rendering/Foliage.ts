@@ -163,11 +163,20 @@ const TREE_USER_CODE = /* glsl */ `
 attribute vec4 vertex_tree;
 uniform vec4 uTreeCursor; // cursor in NDC (x, y), view depth of the ground under it, strength 0..1
 uniform vec2 uTreeScreen; // canvas size in pixels
+uniform vec2 uNearFade; // view depth where a tree is gone, and where it is whole again
 `;
 
-/** Fades the vertex's alpha when its tree covers the cursor (forward pass; shadows ignore opacity). */
+/**
+ * Fades the vertex's alpha when its tree covers the cursor (forward pass; shadows ignore opacity).
+ * P7-E29.3 (#736): and a tree's leaves and limbs right in front of the camera (a crown the follow camera backs into)
+ * dither away by view depth, so a crown never fills the screen; the tree's foot and its shadow stay.
+ */
 const TREE_MAIN_END = /* glsl */ `
 	#ifdef VERTEX_COLOR
+	if (vertex_tree.w > 0.6) {
+		float vd = (matrix_viewProjection * vec4(dPositionW, 1.0)).w;
+		vVertexColor.a *= smoothstep(uNearFade.x, uNearFade.y, vd);
+	}
 	if (uTreeCursor.w > 0.001 && vertex_tree.w > 0.0) {
 		vec4 b = dModelMatrix * vec4(vertex_tree.xyz, 1.0);
 		float h = vertex_tree.w * length(dModelMatrix[1].xyz);
@@ -238,6 +247,9 @@ void getOpacity() {
 /** Dapple per quality tier: [gap share, gap cells per tile] (P7 config). */
 export const DAPPLE_TIER = { low: [0, 3.2, 0, 0], medium: [0.34, 3.2, 0, 0], high: [0.4, 3.2, 0, 0] } as const;
 
+/** P7-E29.3: trees nearer the camera than this (view depth, tiles) fade out: [gone at, whole from] */
+export const NEAR_FADE = [0.9, 2.2] as const;
+
 let material: pc.StandardMaterial | undefined;
 /** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 4 cm leaves) */
 // Phase 6: much softer and larger leaves: at full strength the pattern read as scales (broccoli) at play zoom
@@ -283,6 +295,7 @@ export function foliageMaterial(): pc.StandardMaterial {
   }
   m.setParameter('uTreeCursor', [0, 0, 0, 0]);
   m.setParameter('uTreeScreen', [1, 1]);
+  m.setParameter('uNearFade', [...NEAR_FADE]);
   m.setParameter('uLeafParams', [...LEAF_TIER[leafTier]]);
   m.setParameter('uDapple', [...DAPPLE_TIER[leafTier]]);
   m.setParameter('uDappleSun', dappleSun());

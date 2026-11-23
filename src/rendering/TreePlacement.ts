@@ -57,10 +57,12 @@ interface Rule {
    * zones (the simulation counts them: Ecosystem's thriving trees and species, Wildlife), tested
    */
   density?: number;
+  /** cells kept clear round the landmark (default TREES.landmarkClear) */
+  landmarkClear?: number;
 }
 
 const RULES: Record<string, Rule> = {
-  park: { share: 0.16, grove: [['oak', 5], ['birch', 2], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 1, gardenGroves: 1, density: 2.4 },
+  park: { share: 0.16, grove: [['oak', 5], ['birch', 2], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 1, gardenGroves: 1, density: 2.4, landmarkClear: 2 },
   grove: { share: 0.3, grove: [['oak', 4], ['pine', 4], ['birch', 2]], shore: [['willow', 4], ['birch', 1]], specimen: [['oak', 3], ['pine', 1]], groves: 0.9, density: 1.4 },
   canal: { share: 0.12, planterShare: 0.05, grove: [['oak', 3], ['birch', 2], ['cherry', 2]], shore: [['willow', 6], ['cherry', 1]], specimen: [['oak', 2], ['cherry', 2]], groves: 0.4 },
   reservoir: { share: 0.14, grove: [['oak', 3], ['willow', 2], ['birch', 1]], shore: [['willow', 6], ['oak', 1]], specimen: [['oak', 3], ['willow', 1]], groves: 0.8, density: 1.8 },
@@ -92,6 +94,8 @@ export const TREES = {
   specimenChance: 0.7,
   /** cells kept clear round a jetty or bridge deck */
   deckClear: 2,
+  /** cells kept clear of trees round an area's landmark (its 2×2 footprint), so it reads from a distance */
+  landmarkClear: 3,
   /** shoreline cells that grow a willow */
   shoreShare: 0.2,
   /** flower-garden cells that grow a blossom tree */
@@ -251,6 +255,13 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
   if (zone === 'path_edge' || zone === 'landmark_clearance') return undefined;
   // keep the jetty landing and bridge ends open: no crowns over the planks or the first steps off them
   if (distTo(x, z, TREES.deckClear, deck(w)) <= TREES.deckClear) return undefined;
+  // and the landmark: no crown hides it (P7-E28's clearance is one cell, for flowers)
+  const info = w.info(w.areaAt(x, z));
+  if (!info.noLandmark && info.landmark) {
+    const [lx, lz] = info.landmark;
+    const d = Math.max(x < lx ? lx - x : x > lx + 1 ? x - lx - 1 : 0, z < lz ? lz - z : z > lz + 1 ? z - lz - 1 : 0);
+    if (d <= (rule.landmarkClear ?? TREES.landmarkClear)) return undefined;
+  }
   const u = hash01(x, z, 1);
   switch (zone) {
     case 'shoreline':
