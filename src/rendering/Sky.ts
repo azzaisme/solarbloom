@@ -162,7 +162,7 @@ export class Sky {
   }
 
   /** A soft disc (fan) facing the centre at direction `d`, angular radius `r` (radians), stretched by `sx`. */
-  private fan(pos: number[], idx: number[], d: pc.Vec3, r: number, sx: number, sy: number, seg: number, onCentre: () => void, onRim: () => void) {
+  private fan(pos: number[], idx: number[], d: pc.Vec3, r: number, sx: number, sy: number, seg: number, onCentre: () => void, onRim: () => void, floor = Infinity) {
     const up = Math.abs(d.y) > 0.98 ? new pc.Vec3(1, 0, 0) : new pc.Vec3(0, 1, 0);
     const right = new pc.Vec3().cross(up, d).normalize();
     const u = new pc.Vec3().cross(d, right).normalize();
@@ -172,7 +172,7 @@ export class Sky {
     for (let i = 0; i < seg; i++) {
       const a = (i / seg) * Math.PI * 2;
       const x = Math.cos(a) * r * sx;
-      const y = Math.sin(a) * r * sy;
+      const y = Math.max(-floor, Math.sin(a) * r * sy); // P7-E32.6: `floor` cuts a fan off flat below its centre
       const p = new pc.Vec3(d.x + right.x * x + u.x * y, d.y + right.y * x + u.y * y, d.z + right.z * x + u.z * y).normalize();
       pos.push(p.x, p.y, p.z);
       onRim();
@@ -180,26 +180,34 @@ export class Sky {
     for (let i = 0; i < seg; i++) idx.push(base, base + 1 + i, base + 1 + ((i + 1) % seg));
   }
 
-  /** Clouds: clusters of soft puffs low over the horizon all around (seeded, so every load looks the same). */
+  /**
+   * Clouds: clusters of soft puffs low over the horizon all around (seeded, so every load looks the same).
+   * P7-E32.6 (#760): each cluster is a cumulus bank, not a row of balls: a long shaded base cut off flat underneath,
+   * lobes along it that are biggest in the middle (a domed profile) and all sit on that same flat floor, each with a
+   * shaded lower half and a lit crown.
+   */
   private buildClouds() {
     const pos: number[] = [];
     const idx: number[] = [];
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let c = 0; c < 14; c++) {
-      const az = (c / 14) * Math.PI * 2 + rnd() * 0.3;
-      const el = (4 + rnd() * 13) * (Math.PI / 180);
-      const puffs = 3 + Math.floor(rnd() * 3);
-      const w = 0.06 + rnd() * 0.06;
-      for (let p = 0; p < puffs; p++) {
-        const da = (p - (puffs - 1) / 2) * w * 0.9 + (rnd() - 0.5) * 0.02;
-        const de = Math.abs(p - (puffs - 1) / 2) * -0.006 + rnd() * 0.012;
-        const d = new pc.Vec3(Math.cos(el + de) * Math.sin(az + da), Math.sin(el + de), Math.cos(el + de) * Math.cos(az + da));
-        const r = w * (0.75 + rnd() * 0.5);
-        // A shaded base and a lit top, both soft at the rim.
-        this.fan(pos, idx, d, r, 1.25, 0.55, 12, () => this.cloudCols.push({ lit: false, a: 0.75 }), () => this.cloudCols.push({ lit: false, a: 0 }));
-        const top = new pc.Vec3(d.x, d.y + r * 0.22, d.z).normalize();
-        this.fan(pos, idx, top, r * 0.8, 1.2, 0.6, 12, () => this.cloudCols.push({ lit: true, a: 0.95 }), () => this.cloudCols.push({ lit: true, a: 0 }));
+    const N = 11;
+    for (let c = 0; c < N; c++) {
+      const az = (c / N) * Math.PI * 2 + rnd() * 0.35;
+      const el = (3 + rnd() * 11) * (Math.PI / 180);
+      const lobes = 5 + Math.floor(rnd() * 4);
+      const w = 0.045 + rnd() * 0.035;
+      const half = ((lobes - 1) / 2) * w * 0.85;
+      const at = (da: number, de: number) => new pc.Vec3(Math.cos(el + de) * Math.sin(az + da), Math.sin(el + de), Math.cos(el + de) * Math.cos(az + da));
+      // the base: one long, low, shaded strip with a flat underside
+      this.fan(pos, idx, at(0, w * 0.15), half + w, 1, 0.22, 16, () => this.cloudCols.push({ lit: false, a: 0.8 }), () => this.cloudCols.push({ lit: false, a: 0 }), w * 0.12);
+      for (let p = 0; p < lobes; p++) {
+        const x = (p - (lobes - 1) / 2) / Math.max(1, (lobes - 1) / 2); // −1 … 1 along the bank
+        const r = w * (0.55 + 0.6 * (1 - x * x) + rnd() * 0.25);
+        const da = x * half + (rnd() - 0.5) * w * 0.3;
+        const lift = r * 0.5; // the lobe's centre sits this far above the bank's floor
+        this.fan(pos, idx, at(da, lift), r, 1.15, 0.75, 14, () => this.cloudCols.push({ lit: false, a: 0.85 }), () => this.cloudCols.push({ lit: false, a: 0 }), lift);
+        this.fan(pos, idx, at(da, lift + r * 0.28), r * 0.78, 1.1, 0.7, 14, () => this.cloudCols.push({ lit: true, a: 0.95 }), () => this.cloudCols.push({ lit: true, a: 0 }), lift);
       }
     }
     this.cloudMesh.setPositions(pos);

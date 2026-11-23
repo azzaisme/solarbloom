@@ -34,6 +34,9 @@ interface Wisp {
   drift: [number, number];
 }
 
+/** P7-E32.6: how far each wall cloud is drawn out along its edge (1 = round) */
+const WALL_STRETCH = 1.4;
+
 export class CloudWall {
   private walls = new Map<string, Wall>();
   private wisps: Wisp[] = [];
@@ -134,7 +137,9 @@ export class CloudWall {
             // E21.24: on the Old City's terraces the wall stands on the higher of the two grounds it divides
             const lift = s.grid.terraced(GROUND) ? Math.max(levelY(levelAt(Math.floor(x), Math.floor(z))), levelY(levelAt(Math.floor(x - (along === 'z' ? inward * 2 : 0)), Math.floor(z - (along === 'x' ? inward * 2 : 0))))) : 0;
             const cy = y - 0.15 + 0.5 * row * g + lift;
-            this.cloud(root, x, cy, z, size, h * 360);
+            // P7-E32.6 (#760): each cloud lies along its edge and is drawn out along it, so neighbours merge into one
+            // long bank rather than a row of balls
+            this.cloud(root, x, cy, z, size, (along === 'x' ? 0 : 90) + (h - 0.5) * 30, WALL_STRETCH);
             anchors.push([x, cy, z, size]);
           }
         }
@@ -143,11 +148,11 @@ export class CloudWall {
     return root;
   }
 
-  private cloud(parent: pc.Entity, x: number, y: number, z: number, size: number, rot: number, parts = this.parts.meshes, group = this.group) {
+  private cloud(parent: pc.Entity, x: number, y: number, z: number, size: number, rot: number, stretch = 1, parts = this.parts.meshes, group = this.group) {
     const c = new pc.Entity('wallCloud');
     c.setLocalPosition(x, y, z);
     c.setLocalEulerAngles(0, rot, 0);
-    c.setLocalScale(size, size * 0.95, size);
+    c.setLocalScale(size * stretch, size * 0.95, size);
     parent.addChild(c);
     for (const p of parts) {
       const e = new pc.Entity();
@@ -186,7 +191,7 @@ export class CloudWall {
     const W = LOOK.cloudRing.wisps;
     const want = this.reducedMotion ? 0 : W.count;
     while (this.wisps.length < want) {
-      const e = this.cloud(this.root, 0, -1000, 0, 0.001, this.rnd() * 360, this.parts.meshes.slice(0, W.parts), this.wispGroup);
+      const e = this.cloud(this.root, 0, -1000, 0, 0.001, this.rnd() * 360, 1, this.parts.meshes.slice(0, W.parts), this.wispGroup);
       // spread the first ones through their lives so they don't all rise together
       this.wisps.push({ e, from: [0, -1000, 0, 0], age: -this.rnd() * W.life[1], life: 1, drift: [0, 0] });
     }
@@ -217,7 +222,7 @@ export class CloudWall {
   /** Takes a wall out of the static batch (so it can move) and starts it dissolving. */
   private leave(w: Wall) {
     w.leaving = 0;
-    w.sizes = w.root.children.map((c) => (c as pc.Entity).getLocalScale().x);
+    w.sizes = w.root.children.map((c) => (c as pc.Entity).getLocalScale().z);
     for (const c of w.root.children) for (const p of c.children) if ((p as pc.Entity).render) (p as pc.Entity).render!.batchGroupId = -1;
   }
 
@@ -231,7 +236,7 @@ export class CloudWall {
       w.root.setLocalPosition(0, k * k * 3, 0);
       w.root.children.forEach((c, i) => {
         const s = (w.sizes?.[i] ?? 1) * (1 - 0.9 * k);
-        (c as pc.Entity).setLocalScale(s, s * 0.95, s);
+        (c as pc.Entity).setLocalScale(s * WALL_STRETCH, s * 0.95, s);
       });
       if (k >= 1) {
         w.root.destroy();

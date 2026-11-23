@@ -1,6 +1,7 @@
 # P7-E32 distant ruins (Meshy set)
 
-Pending, not loaded by the game yet (`MODELS` reads `final/` only). For the ruined skyline (#756), to replace the
+The five finished `.glb`s now live in `assets/raw/models/ruins/`, loaded by `src/rendering/RuinModels.ts` for the ruined
+skyline (`Ruins.ts`); the previews, the raw Meshy meshes and this README stay here. For the ruined skyline (#756), to replace the
 procedural pieces in `Ruins.ts` that read as thin pale sticks. Contact sheet: `ruins-sheet.png`.
 
 | Model | What | Height | Palette | Meshy task |

@@ -39,22 +39,28 @@ interface Puff {
 /**
  * One cloud: a wide soft base with round puffs bunched around and on top of it, front to back, so it is a real
  * 3D blob. Local frame: +z faces the camera (horizontally), +y up.
+ *
+ * P7-E32.6 (#760): a cumulus bank rather than a ball: a long flat-bottomed base (every puff is cut off at
+ * CLOUD_FLOOR, so the cloud sits on one level, shaded underside), lobes of different sizes and heights along it and a
+ * crown off-centre. The first 8 make a whole bank on their own (the cloud walls use only those).
  */
 const PUFFS: Puff[] = [
-  { pos: [0, 0.05, 0], r: [1.3, 0.48, 0.9] }, // base
-  { pos: [0, 0.52, 0.22], r: [0.66, 0.66, 0.66] }, // the big front puff
-  { pos: [0.18, 0.8, -0.32], r: [0.6, 0.6, 0.6] }, // crown, behind
-  { pos: [-0.62, 0.62, -0.18], r: [0.42, 0.42, 0.42] },
-  { pos: [-0.8, 0.32, 0.18], r: [0.5, 0.5, 0.5] },
-  { pos: [0.84, 0.36, 0.12], r: [0.53, 0.53, 0.53] },
-  { pos: [0.62, 0.66, -0.12], r: [0.36, 0.36, 0.36] },
-  { pos: [-0.5, 0.4, -0.55], r: [0.45, 0.45, 0.45] },
-  { pos: [0.7, 0.3, -0.58], r: [0.42, 0.42, 0.42] },
-  { pos: [-1.32, 0.12, -0.02], r: [0.32, 0.32, 0.32] },
-  { pos: [1.38, 0.16, -0.08], r: [0.3, 0.3, 0.3] },
-  { pos: [0.35, 0.22, 0.6], r: [0.38, 0.38, 0.38] },
-  { pos: [-0.38, 0.2, 0.58], r: [0.34, 0.34, 0.34] },
+  { pos: [0, 0.12, 0], r: [1.5, 0.42, 0.85] }, // base
+  { pos: [0.1, 0.5, 0.16], r: [0.7, 0.6, 0.62] }, // the big front lobe
+  { pos: [-0.28, 0.82, -0.18], r: [0.6, 0.56, 0.55] }, // crown, off-centre and behind
+  { pos: [-0.88, 0.4, 0.04], r: [0.52, 0.44, 0.46] },
+  { pos: [0.84, 0.46, -0.04], r: [0.56, 0.5, 0.5] },
+  { pos: [0.48, 0.76, -0.26], r: [0.42, 0.38, 0.38] },
+  { pos: [-1.34, 0.22, -0.04], r: [0.4, 0.3, 0.34] },
+  { pos: [1.4, 0.24, 0.0], r: [0.38, 0.3, 0.32] },
+  { pos: [-0.56, 0.62, -0.5], r: [0.46, 0.42, 0.42] },
+  { pos: [0.76, 0.4, -0.56], r: [0.44, 0.4, 0.4] },
+  { pos: [0.32, 0.28, 0.6], r: [0.4, 0.34, 0.36] },
+  { pos: [-0.42, 0.26, 0.58], r: [0.38, 0.32, 0.34] },
+  { pos: [1.06, 0.66, 0.22], r: [0.32, 0.3, 0.3] },
 ];
+/** P7-E32.6: the level (cloud frame) every puff is cut off at: one flat, shaded underside for the whole bank */
+const CLOUD_FLOOR = 0.02;
 
 const hexLin = (hex: string) => {
   const c = new pc.Color();
@@ -94,10 +100,15 @@ function puffMesh(device: pc.GraphicsDevice, p: Puff, sunWorld: pc.Vec3, bands: 
     pos[i * 3 + 1] = y * p.r[1];
     pos[i * 3 + 2] = z * p.r[2];
     nrm.set(x / p.r[0], y / p.r[1], z / p.r[2]).normalize();
+    // P7-E32.6: cut off flat at the bank's floor, and shaded as a downward face there
+    if (p.pos[1] + pos[i * 3 + 1] < CLOUD_FLOOR) {
+      pos[i * 3 + 1] = CLOUD_FLOOR - p.pos[1];
+      nrm.set(nrm.x * 0.35, -1, nrm.z * 0.35).normalize();
+    }
     const d = nrm.dot(sun);
     const lit = smooth(-0.55, 0.85, d);
     // Height in the cloud: bellies are cool, crowns bright.
-    const h = pc.math.clamp((p.pos[1] + y * p.r[1] + 0.25) / 1.6, 0, 1);
+    const h = pc.math.clamp((p.pos[1] + pos[i * 3 + 1] + 0.25) / 1.6, 0, 1);
     let c = mix(cShade, cLit, pc.math.clamp(lit * 0.8 + h * 0.35, 0, 1));
     c = mix(c, cSun, smooth(0.45, 1, d) * 0.55);
     c = mix(c, cBelly, smooth(-0.2, -0.85, nrm.y) * 0.6);
@@ -304,7 +315,7 @@ export class Clouds {
       );
       c.root.setPosition(this.pos);
       c.root.setLocalEulerAngles(0, cam.yaw, 0);
-      c.root.setLocalScale(s, s, s);
+      c.root.setLocalScale(s * 1.3, s * 0.85, s); // P7-E32.6: drawn out into a low bank, not a ball
 
       // Shadow: where the cloud sits over the ground on screen, nudged toward the camera (down the screen) and a
       // little to the side, so it peeks out below the cloud like the shadow of something floating overhead.

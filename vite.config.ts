@@ -63,6 +63,8 @@ const QUICK = [
   'plot-work',
   // P7-E27 (#713): the Bright Day calibration and the cloud ring
   'p7-lighting',
+  // P7-E32 (#756): the ruined skyline's plan
+  'p7-ruins',
   'planting-zones',
   // P7-E29 (#715): tree placement by zone, and the tree shapes' budgets and silhouettes
   'tree-placement',
