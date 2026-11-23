@@ -1,9 +1,9 @@
 {
   "mid-day-third": {
     "clipPct": 0.05,
-    "meanLum": 176.4,
+    "meanLum": 176.5,
     "meanSat": 0.417,
-    "drawCalls": 1092,
+    "drawCalls": 1090,
     "triangles": 0,
     "pitch": 16
   },
@@ -25,9 +25,9 @@
   },
   "late-day-third": {
     "clipPct": 0.05,
-    "meanLum": 169.9,
-    "meanSat": 0.452,
-    "drawCalls": 1690,
+    "meanLum": 169.8,
+    "meanSat": 0.457,
+    "drawCalls": 1705,
     "triangles": 0,
     "pitch": 16
   },
@@ -44,6 +44,14 @@
     "meanLum": 170,
     "meanSat": 0.464,
     "drawCalls": 1307,
+    "triangles": 0,
+    "pitch": 16
+  },
+  "early-day-third": {
+    "clipPct": 0.01,
+    "meanLum": 176.3,
+    "meanSat": 0.254,
+    "drawCalls": 1039,
     "triangles": 0,
     "pitch": 16
   }

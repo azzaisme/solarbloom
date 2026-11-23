@@ -38,6 +38,14 @@ Branch `p7-e28-vegetation` (on top of final P7-E27, `p7-e27-lighting` @ 86d8aa40
 - **Ragged restored edge**: `Surfaces.lawnFringe` spills turf over same-level dead natural ground as a wavy strip
   (world-noise outline, continuous across tiles) with young tufts, instead of tile squares.
 
+- **Restored vs dead beach** (final lead review): restored beach is a warmer, lighter cream-gold with sparse low dune
+  grass across the strip (thicker toward the lawn) and the odd sea thrift near the inner edge. **Dead sand was adjusted
+  (E27-final, with the lead's OK)**: `GroundTex.paintSand` desaturated toward a dusty grey-beige with drab wrack lines
+  and grit specks, and `PALETTE.ground.painted.sand` (its average) `#e9dfc2` → `#d8d0bd`; `sunlit-look` still passes.
+  `early-day-third` (all dead) still reads as a beach, dull and abandoned. Third-person early/mid/late re-shot for this
+  (draw calls 1039 / 1090 / 1705; clip ≤ 0.05%). Extra litter/cracks on dead tiles were not added: that dressing is
+  in ChunkRenderer's dead-tile branch, outside this epic's functions.
+
 ## Metrics (day)
 
 | Shot | Draw calls | Clipped % | Mean sat |
@@ -57,10 +65,6 @@ Draw calls within the +25% budget everywhere (largest +2%; the mid shore camera 
 `tsc --noEmit` clean. Palette lint passes (new swatches `reed`, `reedHead`, `wetStone`).
 
 ## What still looks wrong
-
-- Restored beach vs dead sand: the clean sand is warmer and tidier and the wet band and dune grass help, but at a
-  glance the two sands are closer than lawn vs dead ground. If it needs more, the next lever is a little more dune
-  grass or a lighter, cleaner tone (the dead painted sand belongs to E27's calibration).
 
 - From the iso camera beds read only as faint speckle: the zones work at player height, but from far up the restored
   ground is mostly flat lawn. Trees (P7-E29) are what should break it up there.
