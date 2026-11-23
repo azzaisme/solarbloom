@@ -610,7 +610,7 @@ export function beachDressing(c: DressCtx, t: TileData, x: number, z: number, to
     }
   }
   // ── dune grass toward the inner edge only (none on the open sand by the water)
-  const dune = depth < 0.5 ? 0 : Math.round(((depth - 0.5) / 0.5) * 4 * Math.max(0.5, c.dens));
+  const dune = depth < 0.4 ? 0 : Math.round(((depth - 0.4) / 0.6) * 5 * Math.max(0.5, c.dens));
   for (let i = 0; i < dune; i++) {
     const px = x + (r(30 + i) - 0.5) * 0.85, pz = z + (r(40 + i) - 0.5) * 0.85;
     c.fb.add(grassGeo(i % 3 === 0 ? 1 : 2, t.variant + i, 1), px, top, pz, r(50 + i) * 6.28, 0.9 + r(60 + i) * 0.5);

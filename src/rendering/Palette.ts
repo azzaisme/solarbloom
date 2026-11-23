@@ -691,9 +691,9 @@ export const PALETTE = {
   /** P7-E28 (#714): shoreline reeds and rushes: blade base, tip, and the brown seed heads */
   reed: ['#3f6b2e', '#8fae5a'],
   reedHead: '#6e4a2a',
-  /** P7-E28: restored beach sand (clean, pale, warmer than dead sand) and its wet band at the waterline */
-  beachSand: ['#efe0b8', '#ebdbb0', '#f2e5c3'],
-  beachWet: '#c8b28a',
+  /** P7-E28: restored beach sand (clean, pale and warmer than the greyed dead sand, so the change reads) and its wet band */
+  beachSand: ['#f6e2ad', '#f3dea5', '#f8e7b8'],
+  beachWet: '#bfa57a',
   /** P7-E28: rounded wet bank stones (darker than the dry rock) */
   wetStone: ['#7d7a70', '#8d8a7d'],
   sunflowerDisc: flowers.sunflowerCore,

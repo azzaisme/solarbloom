@@ -65,8 +65,8 @@ export const ZONES = {
   copse: 0.76,
   copseScale: 9,
   /** the beach: sand within this many tiles of the open sea or surf stays sand, its inner edge wavy by `beachWobble` */
-  beach: 3.6,
-  beachWobble: 1.4,
+  beach: 3.2,
+  beachWobble: 1.2,
   beachScale: 6,
 };
 
