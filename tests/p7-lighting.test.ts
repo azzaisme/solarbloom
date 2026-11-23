@@ -3,6 +3,7 @@ import { LOOK } from '../src/data/look';
 import { readFileSync } from 'node:fs';
 import { DAY_LIGHT, HAZE, LIGHT_PRESETS, SKY } from '../src/data/sky';
 import { daylightAt, sunHeightAt } from '../src/gameplay/Clock';
+import { DAY } from '../src/data/time';
 
 // P7-E27 (#713): the Bright Day calibration lives in data/look.ts and data/sky.ts. These pin the brief's targets
 // (docs/VISUAL_DIRECTION.md) so a later retune can't quietly bring back the yellow-white veil.
@@ -104,6 +105,13 @@ describe('P7-E27.6 lighting presets (#724)', () => {
     const f = LIGHT_PRESETS.goldenHour.f;
     expect(daylightAt(f)).toBeGreaterThan(0.5);
     expect(sunHeightAt(f)).toBeLessThan(DAY_LIGHT.warmBelow);
+    // an authored look, not a filter: the key light is well into its warm colour and the sky's dusk band has begun
+    const sm = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+    expect(1 - sm(sunHeightAt(f) / DAY_LIGHT.warmBelow)).toBeGreaterThan(0.4);
+    const edge = Math.min(Math.abs(f - DAY.dayShare), f, 1 - f);
+    expect(1 - sm(edge / (DAY.twilight * DAY_LIGHT.duskSpan))).toBeGreaterThan(0.25);
+    // Bright Day has neither
+    expect(1 - sm(sunHeightAt(LIGHT_PRESETS.brightDay.f) / DAY_LIGHT.warmBelow)).toBe(0);
   });
   it('Moonlit Garden: night', () => {
     expect(daylightAt(LIGHT_PRESETS.moonlitGarden.f)).toBeLessThan(0.05);

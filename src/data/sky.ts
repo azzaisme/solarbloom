@@ -123,8 +123,16 @@ export const DAY_LIGHT = {
   moonIntensity: 1.02,
   /** how fast the key light swings from the sun's side to the moon's as daylight goes (higher = later, quicker) */
   moonBlend: 1.6,
-  /** the sun is warm (`lowSunColour`) below this height (0 horizon … 1 noon), easing to LOOK's colour above it */
-  warmBelow: 0.45,
+  /**
+   * the sun is warm (`lowSunColour`) below this height (0 horizon … 1 noon), easing to LOOK's colour above it.
+   * P7-E27.6 (#724): 0.45 → 0.6, so Golden Hour (LIGHT_PRESETS) has a golden key light, not a pale one
+   */
+  warmBelow: 0.6,
+  /**
+   * P7-E27.6 (#724): how far from the horizon (in twilight lengths, DAY.twilight) the sky's warm dusk band reaches
+   * (was a fixed 2, so Golden Hour's sky stayed noon-blue). Night's colours are untouched: they follow the daylight
+   */
+  duskSpan: 3,
   /** the sun's colour when low (dawn and dusk) */
   lowSunColour: '#ffb27a',
   /** night's fill light and ambient environment strengths */
