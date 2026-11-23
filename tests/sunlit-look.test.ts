@@ -209,7 +209,7 @@ describe('E27.1 the sea: clear aqua by day, the approved moonlit sea by night', 
 });
 
 describe('E27.1 a sunny sky, not an overcast one', () => {
-  it('the follow camera (about 15° of sky) sees the blue, with the warm haze hugging the horizon', () => {
+  it('the follow camera (about 15° of sky) sees the blue, with the pale haze hugging the horizon', () => {
     expect(SKY_BANDS.glow).toBeLessThanOrEqual(4);
     expect(SKY_BANDS.upper).toBeLessThanOrEqual(12);
     expect(SKY_BANDS.zenith).toBeGreaterThan(SKY_BANDS.upper);
@@ -217,14 +217,23 @@ describe('E27.1 a sunny sky, not an overcast one', () => {
     expect(SKY_BANDS_NIGHT).toEqual({ glow: 4, upper: 25, zenith: 90 });
   });
 
-  it('blue overhead and warm low down, even in a new game under the fog (and clearer once restored)', () => {
+  // P7-E27 (#713): the low band is pale blue, not cream (the cream band was half of the yellow-white veil); the only
+  // warmth in the day sky is the glow toward the sun
+  it('blue overhead, pale blue low down and warm only toward the sun, even in a new game under the fog (and clearer once restored)', () => {
     for (const i of [0, 1]) {
       const up = lin(SKY.upper[i]);
       const zen = lin(SKY.zenith[i]);
       const glow = lin(SKY.glow[i]);
+      const haze = lin(SKY.haze[i]);
+      const sun = lin(SKY.sunGlow[i]);
       expect(up.b, `upper ${i}`).toBeGreaterThan(up.r * 1.3);
       expect(zen.b, `zenith ${i}`).toBeGreaterThan(zen.r * 1.6);
-      expect(glow.r, `glow ${i}`).toBeGreaterThanOrEqual(glow.b);
+      expect(glow.b, `glow ${i}`).toBeGreaterThan(glow.r);
+      expect(haze.b, `haze ${i}`).toBeGreaterThan(haze.r);
+      expect(sun.r, `sunGlow ${i}`).toBeGreaterThanOrEqual(sun.b);
+      // each band paler than the one above it
+      expect(glow.r + glow.g + glow.b, `glow ${i} paler than upper`).toBeGreaterThan(up.r + up.g + up.b);
+      expect(up.r + up.g + up.b, `upper ${i} paler than zenith`).toBeGreaterThan(zen.r + zen.g + zen.b);
     }
     // restoring the city still clears the sky toward a deeper blue
     expect(lin(SKY.zenith[1]).b / lin(SKY.zenith[1]).r).toBeGreaterThan(lin(SKY.zenith[0]).b / lin(SKY.zenith[0]).r);

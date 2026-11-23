@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { SOLID_SINK, foliageShape, geoBounds, type FoliageShape, type GeoBounds } from '../core/Solids';
 import type { TreeGeo } from './TreeGen';
+import { LOOK } from '../data/look';
 
 /**
  * Phase 5 visual overhaul: the foliage material (vertex colours + wind) and a builder that stamps cached tree
@@ -25,6 +26,8 @@ uniform float projectionFlipY;
 #endif
 uniform float uWindTime;
 uniform float uWindStrength;
+// the waymark's Bloom Pulse: a ring racing out from (x, z) at radius z, pushing the foliage outward by w as it passes
+uniform vec4 uBloomWave;
 // Look 3.7: declared here so every pass that sways the foliage also declares what it writes
 varying float vLeaf;
 varying vec3 vLeafP;
@@ -37,6 +40,13 @@ vec3 windOffset(vec3 posW, float flex) {
 	o += vec3(0.6, 0.0, 0.8) * flex * 0.012 * uWindStrength * sin(uWindTime * 1.9 + posW.y * 3.0 + ph);
 	o += vec3(sin(uWindTime * 6.1 + ph * 13.0), 0.5 * sin(uWindTime * 7.7 + ph * 7.0), cos(uWindTime * 5.3 + ph * 11.0)) * flex * flex * 0.006 * uWindStrength;
 	o.y -= flex * flex * g * g * 0.01;
+	if (uBloomWave.w > 0.0) {
+		vec2 dw = posW.xz - uBloomWave.xy;
+		float dd = max(length(dw), 0.001);
+		float band = exp(-pow((dd - uBloomWave.z) / 0.9, 2.0)) * uBloomWave.w;
+		o.xz += dw / dd * flex * band * 0.12;
+		o.y -= flex * band * 0.03;
+	}
 	return o;
 }
 vec4 evalWorldPosition(vec3 vertexPosition, mat4 modelMatrix) {
@@ -153,11 +163,24 @@ const TREE_USER_CODE = /* glsl */ `
 attribute vec4 vertex_tree;
 uniform vec4 uTreeCursor; // cursor in NDC (x, y), view depth of the ground under it, strength 0..1
 uniform vec2 uTreeScreen; // canvas size in pixels
+uniform vec2 uNearFade; // a tree nearer than x + y × its height (view depth) is left out
 `;
 
-/** Fades the vertex's alpha when its tree covers the cursor (forward pass; shadows ignore opacity). */
+/**
+ * Fades the vertex's alpha when its tree covers the cursor (forward pass; shadows ignore opacity).
+ * P7-E29.3 (#736): and a tree right in front of the camera (a crown the follow camera backs into, or that fills a
+ * fixed view) is left out whole: decided per tree (its base and crown's view depth, against a distance that grows
+ * with its height), so it goes cleanly in one frame instead of dithering into a screen of holes; its shadow stays.
+ */
 const TREE_MAIN_END = /* glsl */ `
 	#ifdef VERTEX_COLOR
+	if (vertex_tree.w > 0.6) {
+		vec4 nb = dModelMatrix * vec4(vertex_tree.xyz, 1.0);
+		float nh = vertex_tree.w * length(dModelMatrix[1].xyz);
+		float d0 = (matrix_viewProjection * nb).w;
+		float d1 = (matrix_viewProjection * vec4(nb.xyz + vec3(0.0, nh * 0.65, 0.0), 1.0)).w;
+		if (min(d0, d1) < uNearFade.x + uNearFade.y * nh) vVertexColor.a = 0.0;
+	}
 	if (uTreeCursor.w > 0.001 && vertex_tree.w > 0.0) {
 		vec4 b = dModelMatrix * vec4(vertex_tree.xyz, 1.0);
 		float h = vertex_tree.w * length(dModelMatrix[1].xyz);
@@ -172,14 +195,67 @@ const TREE_MAIN_END = /* glsl */ `
 			float len = max(length(seg), 1.0);
 			float t = clamp(dot(pc0 - pb, seg) / (len * len), 0.0, 1.0);
 			float d = length(pc0 - (pb + seg * t));
-			// Canopies are roughly 0.42 of the height across; the trunk's foot needs less.
-			float r = len * mix(0.18, 0.42, smoothstep(0.0, 0.45, t));
+			// Canopies are roughly 0.42 of the height across (P7-E29: up to ~0.5 for the broad variants); the foot needs less.
+			float r = len * mix(0.18, 0.5, smoothstep(0.0, 0.45, t));
 			float cover = 1.0 - smoothstep(r * 0.85, r * 1.25, d);
 			vVertexColor.a *= 1.0 - 0.72 * cover * uTreeCursor.w;
 		}
 	}
 	#endif
 `;
+
+/**
+ * P7-E29.6 (#739): dappled shade. In the shadow pass only, a crown's leaf masses (the LEAF_FLAG vertices) let light
+ * through in soft, leaf-sized gaps: a world-space value noise discards the shadow where it dips below the dapple
+ * strength, so the ground under a tree shows sun flecks instead of one solid blob. The forward pass keeps the
+ * vertex alpha (the see-through effect) exactly as before. No extra triangles; Low turns it off.
+ * The noise is taken on the plane across the sunlight (LOOK.sun), so gaps line up through a crown's depth.
+ */
+function dappleSun(): number[] {
+  const e = (LOOK.sun.elevation * Math.PI) / 180;
+  const [hx, hz] = LOOK.sun.toward;
+  const h = Math.hypot(hx, hz) || 1;
+  return [(hx / h) * Math.cos(e), -Math.sin(e), (hz / h) * Math.cos(e)];
+}
+const DAPPLE_OPACITY_PS = /* glsl */ `
+uniform float material_alphaDitherScale;
+uniform vec4 uDapple; // gap share (0 off), gap cells per world unit, unused, unused
+uniform vec3 uDappleSun; // the way the sunlight travels (unit)
+float sbDapHash(vec3 p) {
+	return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+}
+float sbDapNoise(vec3 p) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(mix(sbDapHash(i), sbDapHash(i + vec3(1, 0, 0)), f.x), mix(sbDapHash(i + vec3(0, 1, 0)), sbDapHash(i + vec3(1, 1, 0)), f.x), f.y),
+		mix(mix(sbDapHash(i + vec3(0, 0, 1)), sbDapHash(i + vec3(1, 0, 1)), f.x), mix(sbDapHash(i + vec3(0, 1, 1)), sbDapHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+void getOpacity() {
+	dAlpha = 1.0;
+	#ifdef FORWARD_PASS
+		#ifdef STD_OPACITY_VERTEX
+		dAlpha = clamp(vVertexColor.{STD_OPACITY_VERTEX_CHANNEL}, 0.0, 1.0);
+		// a nearly gone tree is gone: the ordered dither keeps 1 pixel in 64 at any alpha above zero, which left a
+		// speckle where a faded crown stood in front of the camera
+		if (dAlpha < 0.08) discard;
+		#endif
+	#else
+		if (vLeaf > 0.5 && uDapple.x > 0.0) {
+			// on the plane across the sunlight, so every face along one ray (a crown's near and far sides, and the
+			// clusters behind) opens the same gap and the light really gets through
+			vec3 p = (vLeafP - uDappleSun * dot(vLeafP, uDappleSun)) * uDapple.y;
+			float n = 0.65 * sbDapNoise(p) + 0.35 * sbDapNoise(p * 2.3 + 7.1);
+			if (n < uDapple.x) discard;
+		}
+	#endif
+}
+`;
+/** Dapple per quality tier: [gap share, gap cells per tile] (P7 config). */
+export const DAPPLE_TIER = { low: [0, 3.2, 0, 0], medium: [0.34, 3.2, 0, 0], high: [0.4, 3.2, 0, 0] } as const;
+
+/** P7-E29.3: a tree whose base or crown is nearer the camera than [a + b × its height] (view depth, tiles) is left out */
+export const NEAR_FADE = [0.7, 0.55] as const;
 
 let material: pc.StandardMaterial | undefined;
 /** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 4 cm leaves) */
@@ -191,6 +267,8 @@ let leafTier: keyof typeof LEAF_TIER = 'high';
 export function setLeafTier(t: keyof typeof LEAF_TIER) {
   leafTier = t;
   material?.setParameter('uLeafParams', [...LEAF_TIER[t]]);
+  material?.setParameter('uDapple', [...DAPPLE_TIER[t]]);
+  material?.setParameter('uDappleSun', dappleSun());
 }
 let windStrength = 1;
 
@@ -207,7 +285,8 @@ export function foliageMaterial(): pc.StandardMaterial {
   m.opacityVertexColor = true;
   m.opacityVertexColorChannel = 'a';
   m.opacityDither = pc.DITHER_BAYER8;
-  m.opacityShadowDither = pc.DITHER_NONE;
+  // P7-E29.6: the shadow pass runs the opacity chunk (DAPPLE_OPACITY_PS) for dappled shade; it never dithers there
+  m.opacityShadowDither = pc.DITHER_BAYER8;
   m.setAttribute('vertex_tree', pc.SEMANTIC_ATTR12);
   try {
     const chunks = m.getShaderChunks(pc.SHADERLANGUAGE_GLSL);
@@ -217,14 +296,19 @@ export function foliageMaterial(): pc.StandardMaterial {
     chunks.set('litUserDeclarationPS', LEAF_DECL_PS);
     chunks.set('diffusePS', LEAF_DIFFUSE_PS);
     chunks.set('normalMapPS', LEAF_NORMAL_PS);
+    chunks.set('opacityPS', DAPPLE_OPACITY_PS);
   } catch {
     /* an engine without per-material chunks: trees simply don't sway or fade */
   }
   m.setParameter('uTreeCursor', [0, 0, 0, 0]);
   m.setParameter('uTreeScreen', [1, 1]);
+  m.setParameter('uNearFade', [...NEAR_FADE]);
   m.setParameter('uLeafParams', [...LEAF_TIER[leafTier]]);
+  m.setParameter('uDapple', [...DAPPLE_TIER[leafTier]]);
+  m.setParameter('uDappleSun', dappleSun());
   m.setParameter('uWindTime', 0);
   m.setParameter('uWindStrength', windStrength);
+  m.setParameter('uBloomWave', [0, 0, 0, 0]);
   m.update();
   return (material = m);
 }
@@ -235,6 +319,14 @@ export function updateWind(time: number, strength = windStrength) {
   const m = foliageMaterial();
   m.setParameter('uWindTime', time);
   m.setParameter('uWindStrength', strength);
+}
+
+/**
+ * The waymark's Bloom Pulse ring passing through the grass, flowers and trees: centre (x, z) in world units, its
+ * radius now and how hard it pushes (0: off). Called each frame while a pulse runs, then once with 0.
+ */
+export function setBloomWave(x: number, z: number, radius: number, strength: number) {
+  foliageMaterial().setParameter('uBloomWave', [x, z, radius, strength]);
 }
 
 /**

@@ -71,7 +71,7 @@ const ground = {
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
   /** the stone edge of dead paving where it stands above the earth beside it */
   pavingKerb: '#a48a72',
-  painted: { sand: ['#e2bf7e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
+  painted: { sand: ['#d8d0bd'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   /**
    * E25 (#626): the sandbar out in the sea is wet sand: the painted sand is tinted by `wetSandTint` and its sides take
    * `wetSand`: a little darker than the dry beach.
@@ -106,11 +106,13 @@ const roof = {
 };
 
 const lawn = {
+  /** P7-E28 (#714): every lawn green below pulled toward a natural mid-green (less yellow, a touch bluer, a little
+   * darker: R ×0.85, G ×0.91, B ×1.3 but kept under R), so open lawn no longer reads lime once the flower carpet is gone. */
   /** Look 2.2: slightly golden, less saturated greens (palette.md). Fresh restored grass, picked per tile by noise. */
-  tones: ['#77ad3e', '#80b443', '#6da23a', '#87b84a', '#649a37'],
+  tones: ['#659d53', '#6da459', '#5d934c', '#73a75e', '#558c46'],
   /** large sunlit / shaded patches pull the tile tone toward these */
-  sunlit: '#8dba48',
-  shadow: '#376a2e',
+  sunlit: '#78a962',
+  shadow: '#2f6027',
   dryTip: '#b7c25c',
   /**
    * Grass by bloom stage: index 1 Restored … 4 Radiant. Each stage keeps its own brightness so stages read apart:
@@ -118,10 +120,12 @@ const lawn = {
    */
   stage: [
     [],
-    ['#9cc463', '#a5c96a', '#93bd5c', '#accd72', '#91b75a'],
-    ['#77ad3e', '#80b443', '#6da23a', '#87b84a', '#649a37'],
-    ['#538f34', '#5c973a', '#4c872f', '#639c3f', '#47802c'],
-    ['#80ae3a', '#8ab440', '#77a636', '#92b946', '#6f9e33'],
+    ['#85b26d', '#8cb773', '#7dac66', '#92bb78', '#7ba765'],
+    ['#659d53', '#6da459', '#5d934c', '#73a75e', '#558c46'],
+    ['#47823a', '#4e8940', '#417b35', '#548e45', '#3c7431'],
+    // P7-E27 (#713): Radiant less yellow (was #80ae3a …): still the warmest stage, but a natural green in the sun.
+    // P7-E28: pulled less than the other stages, so it stays the warm, bright one
+    ['#6ba949', '#73af50', '#63a044', '#7ab357', '#5e9640'],
   ] as string[][],
   /** tufts: darker base, lighter tips (MeshBuilder.tip) */
   tuft: ['#4a7f2c', '#538a31', '#5f9337'],
@@ -467,17 +471,40 @@ const signal = {
   bad: '#ff6b6b',
   info: '#fff0a0',
   gridLine: '#1d3640',
-  /** E24 (#609): the waymark, a soft shaft of sunlight on the current goal (its ring on the ground, its motes) */
-  waymark: '#ffd88a',
-  waymarkRing: '#fff1bf',
-  /** by day the beam and ring go a deeper amber, or they vanish against pale sky, sand and paving */
-  waymarkDay: '#ffaa2e',
-  waymarkRingDay: '#ffc04f',
-  waymarkMote: '#fff6dc',
-  /** #632: Show me where's trail of glowing dots on the ground */
-  trail: '#ffe6a8',
-  /** by day: a warmer gold, so it reads on pale ground */
-  trailDay: '#ffc24a',
+  /** E24 (#609): the waymark, a tall shaft of mint light on the current goal: its white core, soft glow, ground ring,
+   * the gold ribbon winding up it and the leaves drifting through it (the emblem's colours are in Emblem.ts) */
+  waymarkCore: '#f2fff8',
+  waymarkGlow: '#6ff5c4',
+  waymarkRing: '#b6ffe0',
+  waymarkRibbon: '#ffd25a',
+  waymarkLeaf: '#c9ff9a',
+  waymarkLeafGold: '#ffe9a0',
+  /** the Bloom Pulse's ring racing out over the ground, and its sparks */
+  bloomPulse: '#ffe27a',
+  bloomPulseGreen: '#8dffb4',
+  /** the Solarbloom lotus (Emblem.ts), drawn in outline. In the world: its light (the halo, the glow along its lines
+   * and the bright thread in them, leaves greener), its painted line under the light by day (gold, the leaves green),
+   * and the goal's symbol in the centre petal, painted and glowing (rest in blue and cyan, so low charge stands apart).
+   * As the logo: a gold line and a green one on the paper badge. */
+  emblem: {
+    halo: '#6ff5c4',
+    petalBase: '#fff6d2',
+    petalTip: '#ffd968',
+    leaf: '#5fe8a0',
+    leafHeart: '#c8ffdc',
+    bodyBase: '#e8a62a',
+    bodyLeaf: '#2f8a52',
+    symbol: '#b8700f',
+    symbolGlow: '#fff4cf',
+    rest: '#2a6fd6',
+    restGlow: '#8ff4ff',
+    logoEdge: '#e09a1c',
+    logoLeafEdge: '#4f9e3f',
+  },
+  /** #632: Show me where's trail of glowing dots on the ground: mint, like the waymark's light it leads to */
+  trail: '#c8ffe8',
+  /** by day: a deeper mint, so it reads on pale ground */
+  trailDay: '#3fe0a8',
   /** E19: the build hologram bloombot projects */
   holo: '#a6ff86',
   /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
@@ -599,6 +626,33 @@ export const PALETTE = {
   botGlowFocus: '#ffd27a',
   botGhost: '#bff5d8',
   nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a', dewStem: '#d9d2c2', dewCap: '#9fb7c9', dewDrop: '#e8f6ff', glass: '#bfe3ef', moth: '#e9e4d8' },
+  /**
+   * P7-E30 (#743, #745, #758): relief and wasteland. Weathered boulders and moss for Saltwind's stepped walls; the
+   * showcase fall's rill, lip and wet face; cracked dead earth, broken path pieces and derelict clean-energy debris
+   * (a toppled panel, a snapped pole); the dead beach's wrack, rope ends and planks. All dull and desaturated.
+   */
+  terrain: {
+    rock: ['#958a79', '#857b6c', '#a89d8a'],
+    rockDark: '#6f6a61',
+    moss: ['#6d8a4b', '#7e9956', '#5f7a43'],
+    mossDry: '#8a8762',
+    wetFace: '#615d55',
+    rillBed: '#77725f',
+    dryBed: '#a19480',
+    lip: '#d2c9b6',
+    crack: '#5e5650',
+    crackDeep: '#45403b',
+    pathPiece: ['#b8afa0', '#a69d8f', '#c2baab'],
+    panelGlass: '#2e3b52',
+    panelCracked: '#56657a',
+    panelFrame: '#8e908c',
+    pole: '#7c7e7b',
+    poleRust: '#875b3e',
+    wire: '#302d2a',
+    wrack: ['#5f5b40', '#6b6447'],
+    rope: '#9f8b63',
+    plank: ['#8a7a63', '#7a6c58'],
+  },
   // ───── legacy names (pre-Look 2), kept as aliases ─────
   concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],
   concreteDark: '#6b6358',
@@ -661,6 +715,14 @@ export const PALETTE = {
   flowerSunflower: [flowers.sunflower, flowers.yellow],
   flowerWild: [flowers.white, flowers.yellow, flowers.blue, flowers.rose],
   flowerCentre: flowers.core,
+  /** P7-E28 (#714): shoreline reeds and rushes: blade base, tip, and the brown seed heads */
+  reed: ['#3f6b2e', '#8fae5a'],
+  reedHead: '#6e4a2a',
+  /** P7-E28: restored beach sand (clean, pale and warmer than the greyed dead sand, so the change reads) and its wet band */
+  beachSand: ['#fbe6ac', '#f8e1a2', '#fdeab8'],
+  beachWet: '#bfa57a',
+  /** P7-E28: rounded wet bank stones (darker than the dry rock) */
+  wetStone: ['#7d7a70', '#8d8a7d'],
   sunflowerDisc: flowers.sunflowerCore,
   bud: '#5aa045',
   stemDark: '#2f6e2b',

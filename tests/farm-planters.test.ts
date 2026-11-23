@@ -384,10 +384,10 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
     expect(sim.farm.look(a).unmet).toContain('fertiliser');
     sow(sim, b, 'beans');
     expect(sim.farm.look(a).unmet).not.toContain('fertiliser');
-    const c = planter(sim, 12, 19);
+    const c = planter(sim, 12, 22); // #763: clear of Tide's rock pool (12–13, 18–20)
     sow(sim, c, 'radish');
     const before = sim.farm.look(c).rate;
-    const d = planter(sim, 14, 19);
+    const d = planter(sim, 14, 22);
     sow(sim, d, 'herbs');
     expect(sim.farm.look(c).rate).toBeCloseTo(before * PLANTER.pollinatorBoost);
   });
@@ -395,7 +395,7 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
   it('fertiliser speeds any crop by the general boost, except a crop that likes it (data), which gets it through the like', () => {
     const sim = farm();
     const r = planter(sim, 12, 16);
-    const p = planter(sim, 12, 19);
+    const p = planter(sim, 12, 22); // #763: clear of Tide's rock pool
     sow(sim, r, 'radish');
     sow(sim, p, 'pumpkin');
     expect(CROPS.pumpkin.likes).toContain('fertiliser');

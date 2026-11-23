@@ -166,21 +166,21 @@ describe('E23.4.4: land fades around low water', () => {
 
   it('#574: the park pond drained fades its bank; Tide’s rock pool, once restored and full, keeps only its own side green', () => {
     const { sim, body } = park();
-    const bank = sim.grid.get(GROUND, 6, 11)!; // water-shots' bank tile
+    const bank = sim.grid.get(GROUND, 8, 13)!; // the top of the park's beach steps, within reach of Tide's rock pool (#763)
     const far = sim.grid.get(GROUND, 1, 5)!; // the pond's other side, out of the rock pool's reach
     for (const t of [bank, far]) Object.assign(t, { ground: 'restored', pollution: 0, bloom: LUSH, feature: t.feature === 'water' ? t.feature : 'lawn', blocked: false });
     for (const t of [bank, far]) sim.grid.touch(t);
     // Tide's Keeper pond (E23.5.4.6) lies in Saltwind, not the park, and starts silted: no water to drink yet
-    const pool = sim.grid.get(GROUND, 7, 16)!;
-    expect(sim.areas.map.areaOfCell(7, 16)).not.toBe(PARK);
+    const pool = sim.grid.get(GROUND, 12, 18)!;
+    expect(sim.areas.map.areaOfCell(12, 18)).not.toBe(PARK);
     expect(sim.water.isFresh(pool)).toBe(false);
     sim.water.draw(body.id, 1e9);
     expect(sim.water.fadeAt(bank)).toBe(WATER_NET.fadeSteps);
     expect(sim.water.fadeAt(far)).toBe(WATER_NET.fadeSteps);
     expect(sim.water.isLow(PARK)).toBe(true);
     // restored, the rock pool is full fresh water within `fadeReach` of the bank: the fullest water in reach decides
-    for (let x = 7; x <= 8; x++)
-      for (let z = 16; z <= 18; z++) {
+    for (let x = 12; x <= 13; x++)
+      for (let z = 18; z <= 20; z++) {
         const t = sim.grid.get(GROUND, x, z)!;
         Object.assign(t, { ground: 'restored', pollution: 0 });
         sim.grid.touch(t);

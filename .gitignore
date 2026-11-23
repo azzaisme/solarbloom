@@ -7,3 +7,7 @@ release/
 
 assets/raw/bloombot/meshy-parts/
 scratch-images/
+
+# Claude Code agent worktrees (local only)
+.claude/worktrees/
+dist-base/

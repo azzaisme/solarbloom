@@ -219,6 +219,35 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
   return buildShrub(variant, lod, flowering, hex(PALETTE.bougainvillea[variant % PALETTE.bougainvillea.length]));
 }
 
+// ───────────── reeds (P7-E28) ─────────────
+
+/**
+ * P7-E28 (#714): a clump of reeds and rushes for a bank: tall narrow blades standing almost upright, a few with a
+ * brown seed head. About 0.22–0.4 tall, so they read at the water's edge without walling off the path.
+ */
+export function buildReeds(variant: number, lod: Lod): TreeGeo {
+  const B = new Buf();
+  const R = rng(variant * 6151 + 77);
+  const n = lod === 2 ? 11 : lod === 1 ? 8 : 4;
+  const base = hex(PALETTE.reed[0]), tip = hex(PALETTE.reed[1]), headC = hex(PALETTE.reedHead);
+  for (let i = 0; i < n; i++) {
+    const a = R() * Math.PI * 2;
+    const d = R() * 0.07;
+    const p: V = [Math.cos(a) * d, 0, Math.sin(a) * d];
+    const h = 0.22 + R() * 0.18;
+    const lean = 0.08 + R() * 0.16;
+    const tipP: V = [p[0] + Math.cos(a) * h * lean, h, p[2] + Math.sin(a) * h * lean];
+    const k = 0.88 + R() * 0.24;
+    blade(B, p, tipP, 0.014 + R() * 0.008, norm([-Math.sin(a), 0, Math.cos(a)]), scaleC(base, k), mix(scaleC(tip, k), base, R() * 0.2), 0.3 + h * 2.5);
+    // a seed head on every third stem, just under its tip
+    if (lod > 0 && i % 3 === 0) {
+      const hp: V = [p[0] + (tipP[0] - p[0]) * 0.8, h * 0.8, p[2] + (tipP[2] - p[2]) * 0.8];
+      blade(B, hp, [hp[0], hp[1] + 0.06, hp[2]], 0.026, norm([-Math.sin(a + 1.2), 0, Math.cos(a + 1.2)]), headC, scaleC(headC, 1.1), 0.5 + h * 2.5);
+    }
+  }
+  return B.done();
+}
+
 // ───────────── vines and ivy (3.8) ─────────────
 
 /**
@@ -386,6 +415,7 @@ export const grassGeo = (stage: number, variant: number, lod: Lod) => get(`g|${s
 export const turfGeo = (stage: number, variant: number, lod: Lod) => get(`t|${stage}|${pmod(variant, FLORA_VARIANTS)}|${lod}`, () => buildTurf(stage, pmod(variant, FLORA_VARIANTS), lod));
 export const flowerGeo = (sp: FlowerSpecies, colour: number, open: boolean, variant: number, lod: Lod) =>
   get(`f|${sp}|${pmod(colour, FLOWER_COLOURS[sp].length)}|${open}|${pmod(variant, 3)}|${lod}`, () => buildFlowers(sp, pmod(colour, FLOWER_COLOURS[sp].length), open, pmod(variant, 3), lod));
+export const reedGeo = (variant: number, lod: Lod) => get(`r|${pmod(variant, FLORA_VARIANTS)}|${lod}`, () => buildReeds(pmod(variant, FLORA_VARIANTS), lod));
 export const leafyShrubGeo = (variant: number, lod: Lod, flowering = false) => get(`s|${pmod(variant, 6)}|${lod}|${flowering}`, () => buildLeafyShrub(pmod(variant, 6), lod, flowering));
 export const vineGeo = (stage: number, hang: number, variant: number, lod: Lod) => {
   const hq = Math.max(1, Math.min(6, Math.round(hang * 4))) / 4; // hang in quarter tiles
@@ -406,6 +436,8 @@ export function* warmFlora(): Generator<void> {
         flowerGeo(sp, c, false, v, 1);
         yield;
       }
+  for (let v = 0; v < FLORA_VARIANTS; v++) reedGeo(v, 1);
+  yield;
   for (let v = 0; v < 6; v++) {
     leafyShrubGeo(v, 1);
     leafyShrubGeo(v, 1, true);

@@ -6,19 +6,25 @@
  * low down, so a new game reads as a hazy sunny day, not an overcast one; the full clear blue comes with restoration.
  */
 export const SKY = {
-  /** straight up */
-  zenith: ['#86a5c8', '#78afe6'],
-  /** about 12° up (SKY_BANDS) */
-  upper: ['#a6bdd3', '#a4cdee'],
-  /** a warm band just above the horizon */
-  glow: ['#d6d2c6', '#f6e2c0'],
-  /** the horizon and the distance (scene fog colour) */
-  haze: ['#c3c8c8', '#e6e2d4'],
-  /** extra warmth in the sky toward the sun */
-  sunGlow: ['#d8d4c8', '#ffe0a8'],
+  // P7-E27.3 (#721): the dome's vertex colours are encoded to sRGB once more on output (they are not decoded first, as
+  // material colours are), so a dome hex lands on screen roughly as its sRGB encoding: #3f86da shows as about
+  // #8ec3f0. The night sky was approved against this, so the day values are authored to compensate (target on
+  // screen in each comment) rather than changing the pipeline. `haze` is the exception: it is also the scene fog,
+  // which the engine decodes, and Sky.horizonSeen decodes it for the dome, so it is written as seen.
+  /** straight up (on screen ~#5e9ee6 clear, a touch greyer while fogged) */
+  zenith: ['#2a5fb8', '#1d59cb'],
+  /** about 8° up (SKY_BANDS) (on screen ~#8ec3f0) */
+  upper: ['#4a86cc', '#3f86da'],
+  /** a pale band just above the horizon (on screen ~#c4dbef: blue, not cream) */
+  glow: ['#8aaccc', '#8fb7dd'],
+  /** the horizon and the distance (scene fog colour; as seen) */
+  // P7-E27: cool pale blue haze (atmospheric perspective), not cream: the distance fades blue and the near scene stays clean
+  haze: ['#c8d6e0', '#d6e4ee'],
+  /** extra warmth in the sky toward the sun (on screen a soft warm ivory near the sun only) */
+  sunGlow: ['#c9ccc4', '#ffe0af'],
   sunCore: '#fff7e2',
   cloudLit: ['#e7e9ea', '#ffffff'],
-  cloudShade: ['#b4bac0', '#dde3ee'],
+  cloudShade: ['#c4cdd8', '#d6e0ee'],
 } as const;
 
 /**
@@ -26,7 +32,8 @@ export const SKY = {
  * so of sky, and with the blue starting at 25° all it showed was the warm glow band, which tone mapping turned a flat
  * grey-white: an overcast look on a sunny day. Now the warm band hugs the horizon and the sky is blue by about 12°.
  */
-export const SKY_BANDS = { glow: 3, upper: 12, zenith: 60 };
+// P7-E27: blue from lower down (upper 12° → 8°, zenith 60° → 45°): the low follow camera sees only ~17° of sky
+export const SKY_BANDS = { glow: 3, upper: 8, zenith: 45 };
 /** The bands the approved moonlit night was tuned with: the dome eases back to these as night falls. */
 export const SKY_BANDS_NIGHT = { glow: 4, upper: 25, zenith: 90 };
 
@@ -35,8 +42,10 @@ export const SKY_BANDS_NIGHT = { glow: 4, upper: 25, zenith: 90 };
  * up it reaches far enough that the real city's buildings carry out toward the horizon.
  */
 export const HAZE = {
-  start: [8, 6],
-  end: [56, 76],
+  // P7-E27.5: the haze starts and completes further out (was 8/6 → 56/76), so the playable island near the camera stays
+  // crisp and only the distance fades
+  start: [12, 10],
+  end: [64, 88],
 };
 
 /**
@@ -79,6 +88,20 @@ export const NIGHT_SKY_LIGHTS = {
 } as const;
 
 /**
+ * P7-E27.6 (#724): the three named lighting presets, as moments of the existing day/night cycle (DayNight, DAY_LIGHT,
+ * NIGHT_SKY) rather than a system of their own. Each is an authored look: Bright Day is the benchmark (the sun near
+ * the top of its arc, 35–50° up); Golden Hour is the low warm sun (DAY_LIGHT.lowSunColour below warmBelow, the dusk
+ * sky band); Moonlit Garden is the approved moonlit night (#685). `f` is the day fraction; the fixed-camera shots
+ * (tests/e2e/lib/p7-scene.mjs TIMES) and the dev lighting panel use the same moments.
+ */
+export const LIGHT_PRESETS = {
+  brightDay: { label: 'Bright Day', f: 0.3 },
+  goldenHour: { label: 'Golden Hour', f: 0.6 },
+  moonlitGarden: { label: 'Moonlit Garden', f: 0.83 },
+} as const;
+export type LightPresetName = keyof typeof LIGHT_PRESETS;
+
+/**
  * E23.7.1: the light through the day. The key light follows the sun's arc by day (from low in the east to low in
  * the west, never overhead, so the golden-hour look holds most of the day) and becomes a cool moon by night.
  * Shares are of LOOK's values (1 = the golden-hour look as tuned).
@@ -100,8 +123,16 @@ export const DAY_LIGHT = {
   moonIntensity: 1.02,
   /** how fast the key light swings from the sun's side to the moon's as daylight goes (higher = later, quicker) */
   moonBlend: 1.6,
-  /** the sun is warm (`lowSunColour`) below this height (0 horizon … 1 noon), easing to LOOK's colour above it */
-  warmBelow: 0.45,
+  /**
+   * the sun is warm (`lowSunColour`) below this height (0 horizon … 1 noon), easing to LOOK's colour above it.
+   * P7-E27.6 (#724): 0.45 → 0.6, so Golden Hour (LIGHT_PRESETS) has a golden key light, not a pale one
+   */
+  warmBelow: 0.6,
+  /**
+   * P7-E27.6 (#724): how far from the horizon (in twilight lengths, DAY.twilight) the sky's warm dusk band reaches
+   * (was a fixed 2, so Golden Hour's sky stayed noon-blue). Night's colours are untouched: they follow the daylight
+   */
+  duskSpan: 3,
   /** the sun's colour when low (dawn and dusk) */
   lowSunColour: '#ffb27a',
   /** night's fill light and ambient environment strengths */

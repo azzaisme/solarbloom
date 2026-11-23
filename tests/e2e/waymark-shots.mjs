@@ -97,14 +97,78 @@ try {
   });
   await stand(8.5, 9.5, Math.PI);
   await shot('day-barricade');
+  // walking in: the shaft fades from `far` cells and is gone by `close`; the emblem settles onto the spot
+  await stand(7.5, 5, Math.PI);
+  await shot('day-barricade-near');
+  await stand(7.5, 1.5, Math.PI);
+  await shot('day-arrived', { pin: false });
+  const wm = () => page.evaluate(() => window.solarbloom.waymark.state);
+  console.log(`  arrived: ${JSON.stringify(await wm())}`);
+  if ((await wm()).glows) fail('a Bloom Pulse before the goal was done');
+  // the goal done while bloombot stands there (the barricade pried open, as the Interact would): the seal's Bloom
+  // Pulse, then the soft glow it leaves
+  await page.evaluate(() => {
+    const g = window.solarbloom;
+    const gate = g.sim.gates.gateAt(g.goal.cell.x, g.goal.cell.z);
+    g.sim.gates.open(gate.id, true);
+  });
+  await page.waitForFunction(() => window.solarbloom.waymark.state.glows > 0, null, { timeout: 20_000 }).catch(() => fail('no Bloom Pulse when the barricade opened'));
+  // opening a way in plays a vista: the pulse waits for the camera to come back, then plays where the player sees it
+  await page.waitForTimeout(500);
+  await page.waitForFunction(() => !window.solarbloom.cinematic, null, { timeout: 30_000 });
+  const frames = async (tag) => {
+    for (const [ms, name] of [[120, 'gather'], [300, 'release'], [300, 'wave'], [900, 'settle']]) {
+      await page.waitForTimeout(ms);
+      await page.screenshot({ path: `${dir}/${tag}-${name}.png` });
+      console.log(`  ✓ ${dir}/${tag}-${name}.png ${JSON.stringify(await wm())}`);
+    }
+  };
+  await frames('day-gate-pulse');
+  await page.waitForTimeout(3000);
+  await shot('day-glow-next-beam');
+  // a pile dug where the waymark stands: no vista, the pulse plays at once
+  const pile = await page.evaluate(() => {
+    const g = window.solarbloom;
+    return g.goal?.kind === 'pile' ? { x: g.goal.x, z: g.goal.z, cx: g.goal.cell.x, cz: g.goal.cell.z } : undefined;
+  });
+  if (!pile) fail('the next goal is not a pile');
+  else {
+    // stand on an open side of the pile, a few cells off, facing it
+    const side = await page.evaluate(({ cx, cz }) => {
+      const s = window.solarbloom.sim;
+      const open = (x, z) => {
+        for (let k = 1; k <= 4; k++) {
+          const t = s.grid.get('g', x * k + cx, z * k + cz);
+          if (!t || t.blocked) return false;
+        }
+        return true;
+      };
+      for (const [dx, dz, facing] of [[0, 1, Math.PI], [0, -1, 0], [1, 0, -Math.PI / 2], [-1, 0, Math.PI / 2]]) if (open(dx, dz)) return { dx, dz, facing };
+      return { dx: 0, dz: 1, facing: Math.PI };
+    }, pile);
+    await stand(pile.x + side.dx * 2.2, pile.z + side.dz * 2.2, side.facing, 3000);
+    await shot('day-pile-arrived', { pin: false });
+    console.log(`  at the pile: ${JSON.stringify(await wm())}`);
+    // dig it out (the last dig is the goal done)
+    await page.evaluate(({ cx, cz }) => {
+      const s = window.solarbloom.sim;
+      const p = s.salvage.pileAt(cx, cz);
+      for (let i = 0; i < 40 && s.salvage.pileAt(cx, cz); i++) {
+        s.inventory.take?.('copper', 99);
+        s.salvage.salvage(p.id);
+      }
+    }, pile);
+    await frames('day-pile-pulse');
+  }
+  // dusk, then night, from across the park towards the next goal
+  await clock(0.54);
+  await stand(8.5, 21.5, Math.PI);
+  await shot('dusk-far');
   await clock(0.83);
   await page.waitForTimeout(3000);
-  await shot('night-barricade');
-  await stand(8.5, 21.5, Math.PI);
-  await shot('night-barricade-far');
-  // arrived: the light fades and the pin tucks under bloombot
-  await stand(7.5, 0.5, Math.PI);
-  await shot('night-arrived', { pin: false, light: false });
+  await shot('night-far');
+  await stand(8.5, 9.5, Math.PI);
+  await shot('night-near');
 
   if (errors.length) fail(`page errors:\n${errors.join('\n')}`);
 } finally {

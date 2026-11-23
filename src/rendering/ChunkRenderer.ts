@@ -13,7 +13,7 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
-import { inSurfBand, moveLandAt, onJetty, pileById, pondCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
+import { inSurfBand, moveLandAt, onJetty, pileById, pondCell, regionOfCell, regionWater, seaCell, setPieceAt, shallowSea, surfCell } from '../core/OldCityLayout';
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
@@ -26,12 +26,15 @@ import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
-import { treeSpot, treeStage } from './TreePlacement';
+import { treeSpot, treeStage, treeWorldOf } from './TreePlacement';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
-import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfAt, turfTop, type DressCtx, type SolidSink } from './Surfaces';
+import { areaEdges, beachDressing, buildingDressing, grassTufts, lawnFringe, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
+import { zoneAt, type PlantingZone } from './PlantingZones';
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER } from './Water';
+import { FALL_ANCHOR, fallFlow, fallLip, rockyWall, showcaseFall, wasteland } from './Terrain';
+import { TERRAIN } from '../data/terrain';
 import { deckOf, deckShade, jettyDeck, jettyLandEnd, jettyPosts, plankBridgeTiles, plankPost, wetLine, type Post, type Rect } from './Bridges';
 import { alongRun, bankHeight, bankPoint, bankSize, bankStrip, leanGeo, runLength, shoreHash, shoreRuns, waterlineAt, type BankColours, type BankGeo, type ShoreRoom } from './Shore';
 import { encodeWater, WATER_CLARITY, WATER_ENC, waterMaterial } from './WaterSurface';
@@ -731,6 +734,13 @@ export class ChunkRenderer {
         const n = this.views.get(chunkKey(GROUND, Math.floor((t.x + dx) / CHUNK), Math.floor((t.z + dz) / CHUNK)));
         if (n) n.fogDirty = true;
       }
+    // P7-E30 (#743): a wall over this tile is drawn by the higher tile beside it, in its own chunk: rebuild that one
+    // when this tile's restoration changes how the wall is dressed
+    if ((lx === 0 || lz === 0 || lx === CHUNK - 1 || lz === CHUNK - 1) && t.level !== undefined && this.rockyRegion(t))
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const n = this.views.get(chunkKey(GROUND, Math.floor((t.x + dx) / CHUNK), Math.floor((t.z + dz) / CHUNK)));
+        if (n && n !== v && wallDrop(t.x + dx, t.z + dz, -dx, -dz) !== undefined) n.dirty = true;
+      }
     // E28.W01: the water's clarity blends across tile corners, so a water tile on a chunk's edge reaches into the
     // chunks round it (diagonals too): rebuild those
     if ((lx === 0 || lz === 0 || lx === CHUNK - 1 || lz === CHUNK - 1) && (t.feature === 'water' || this.overWater(t)))
@@ -1028,6 +1038,15 @@ export class ChunkRenderer {
     return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
+  private rockyRegion(t: TileData): boolean {
+    return TERRAIN.rockyWall.regions.includes(regionOfCell(t.x, t.z)?.id ?? '');
+  }
+
+  /** P7-E30 (#743): is this the restored, open ground of a region whose walls turn rocky (Saltwind Beach)? */
+  private rockyBelow(n: TileData): boolean {
+    return n.ground === 'restored' && n.feature !== 'water' && !n.blocked && !n.ramp && TERRAIN.rockyWall.regions.includes(regionOfCell(n.x, n.z)?.id ?? '');
+  }
+
   /** A canal dropping a level over this edge: its water falls over it instead of a wall. */
   private weir = (x: number, z: number, dx: number, dz: number): boolean =>
     this.sim.grid.peek(GROUND, x, z)?.feature === 'water' && this.sim.grid.peek(GROUND, x + dx, z + dz)?.feature === 'water';
@@ -1231,8 +1250,10 @@ export class ChunkRenderer {
       // E28.W03 (#696): a wall standing in water (the causeway, the old pier, an avenue over a canal) is wet at its foot
       const below = this.sim.grid.peek(t.roofId, t.x + dx, t.z + dz);
       if (below && this.standsInWater(below)) this.wallWet(b, wx, wz, dx, dz, ground, alive, end0, end1);
-      // ivy and hanging plants once the ground above is restored
-      if (t.ground === 'restored') {
+      // P7-E30 hook (#743): over restored beach, the wall turns stepped, rocky and mossy
+      if (below && this.rockyBelow(below) && !this.rockyRegion(t) && !moveLandAt(t.x, t.z) && !fallLip(t.x, t.z, dx, dz)) rockyWall(b, t.x, t.z, dx, dz, ground, top, end0, end1);
+      // ivy and hanging plants once the ground above is restored (P7-E30: none through the showcase fall)
+      if (t.ground === 'restored' && !fallLip(t.x, t.z, dx, dz) && !(below && this.rockyBelow(below) && !this.rockyRegion(t) && !moveLandAt(t.x, t.z))) {
         const n = 2 + (t.variant % 3);
         for (let i = 0; i < n; i++) {
           const along = ((t.variant >> (i * 2)) % 10) / 10 - 0.45;
@@ -1644,6 +1665,7 @@ export class ChunkRenderer {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     this.sink = b;
+    const zones = new Map<string, PlantingZone>();
     this.ctx = {
       get b() {
         return self.solidSink();
@@ -1667,6 +1689,14 @@ export class ChunkRenderer {
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
       model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
       bloom: (t) => s.water.bloomShown(t), // E23.4.4: the lawn's colour fades with low water too
+      // P7-E28: planting zones, memoised for this build (a pure function of the cell, so a rebuild matches)
+      landmark: s.areas.info(area).noLandmark ? undefined : s.areas.info(area).landmark,
+      zone: (x, z) => {
+        const k = `${x},${z}`;
+        let zn = zones.get(k);
+        if (!zn) zones.set(k, (zn = zoneAt(x, z, self.ctx)));
+        return zn;
+      },
     };
     // E19.1.5: this chunk's plots and their looks (decided before the tiles, which stay flat under a chosen plot)
     this.plotCells.clear();
@@ -1692,6 +1722,12 @@ export class ChunkRenderer {
       // E21.24: an Old City tile stands at its terrace's height; cliff faces drop to lower neighbours
       const th = t.level !== undefined ? h + levelY(t.level) : h;
       if (t.level !== undefined) this.terrace(b, t, h, th);
+      // P7-E30 hook (#745): the showcase fall off the Falls overlook, drawn from its anchor cell (its water to WaterLife)
+      if (t.level !== undefined && !v.far && !v.sunk && t.x === FALL_ANCHOR.x && t.z === FALL_ANCHOR.z) {
+        const fall = showcaseFall(b, h, fallFlow((x, z) => s.grid.peek(GROUND, x, z)));
+        this.life.push(...fall.life);
+        this.rocks.push(...fall.rocks);
+      }
       if (!v.far) this.moveLand(b, t, h, th);
       if (t.ramp) {
         yield;
@@ -1936,14 +1972,14 @@ export class ChunkRenderer {
   /** Adds the tile's tree at its stage, unless it's growing on its own right now. True if the tile has one. */
   private addTree(t: TileData, h: number, lod: 0 | 1): boolean {
     if ((t.feature ?? 'lawn') === 'water') return false;
-    const spot = treeSpot(t, this.areaType);
+    const spot = treeSpot(t, this.areaType, treeWorldOf(this.sim)); // P7-E29: from the generated world
     if (!spot) return false;
     const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: trees fade with low water
     if (!stage) return false;
     if (this.growing.has(t.id)) return true;
     // Look 3.7: close-up trees at near zoom on High; the single-clump version at mid zoom and below
     const tl: Lod = lod === 1 && this.band >= 2 && this.detail === 'high' ? (this.band === 3 ? 3 : 2) : lod;
-    this.fb.add(treeGeo(spot.species, stage, spot.variant, tl), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
+    this.fb.add(treeGeo(spot.species, stage, spot.variant, tl, spot.form), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
     return true;
   }
 
@@ -1959,7 +1995,7 @@ export class ChunkRenderer {
   }
 
   /** Trees growing to a new stage right now: a pooled entity bounces up while the chunk leaves the tree out. */
-  private growing = new Map<string, { e: pc.Entity; t: number; from: number; to: number; tile: TileData }>();
+  private growing = new Map<string, { e: pc.Entity; t: number; from: number; to: number; tile: TileData; dur: number; lift: number }>();
   static readonly GROW_SECONDS = 0.9;
   static readonly MAX_GROWING = 24;
 
@@ -1969,13 +2005,13 @@ export class ChunkRenderer {
     if (t.roofId !== GROUND || this.reducedMotion || this.growing.size >= ChunkRenderer.MAX_GROWING) return;
     const view = this.views.get(chunkKey(GROUND, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
     if (!view || view.far) return;
-    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.areaOf(t)!).type);
+    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.areaOf(t)!).type, treeWorldOf(this.sim));
     const stage = treeStage(t, this.sim.water.bloomShown(t));
     if (!spot || !stage || (t.feature ?? 'lawn') === 'water') return;
     const old = this.growing.get(t.id);
     old?.e.destroy();
     const e = new pc.Entity(`grow-${t.id}`);
-    e.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, treeGeo(spot.species, stage, spot.variant, 1)), foliageMaterial())], castShadows: true, receiveShadows: true });
+    e.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, treeGeo(spot.species, stage, spot.variant, 1, spot.form)), foliageMaterial())], castShadows: true, receiveShadows: true });
     const h = this.sim.grid.layer(GROUND)!.height;
     e.setLocalPosition(t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5);
     e.setLocalEulerAngles(0, (-spot.rot * 180) / Math.PI, 0);
@@ -1983,7 +2019,10 @@ export class ChunkRenderer {
     // Relative size of the previous stage, so a young tree swells into a full one rather than popping from zero.
     const SIZE = [0, 0.32, 0.62, 1, 1.08];
     const from = prevStage >= 1 ? SIZE[prevStage] / SIZE[stage] : 0.05;
-    this.growing.set(t.id, { e, t: 0, from, to: spot.scale, tile: t });
+    // P7-E29.5 (#738): a specimen (a big lone tree) reaching Thriving or Radiant is a restoration moment: it swells
+    // in slower, overshoots further and stretches up before it settles
+    const special = spot.scale >= 2 && stage >= 3;
+    this.growing.set(t.id, { e, t: 0, from, to: spot.scale, tile: t, dur: special ? ChunkRenderer.GROW_SECONDS * 2.2 : ChunkRenderer.GROW_SECONDS, lift: special ? 0.16 : 0.06 });
     e.setLocalScale(from * spot.scale, from * spot.scale, from * spot.scale);
     view.dirty = true;
   }
@@ -1991,11 +2030,11 @@ export class ChunkRenderer {
   private tickGrowing(dt: number) {
     for (const [id, g] of this.growing) {
       g.t += dt;
-      const k = Math.min(1, g.t / ChunkRenderer.GROW_SECONDS);
+      const k = Math.min(1, g.t / g.dur);
       // ease-out with a soft overshoot: the tree springs up and settles
       const e = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
       const sc = g.to * (g.from + (1 - g.from) * e);
-      g.e.setLocalScale(sc, sc * (1 + 0.06 * Math.sin(k * Math.PI)), sc);
+      g.e.setLocalScale(sc, sc * (1 + g.lift * Math.sin(k * Math.PI)), sc);
       if (k >= 1) {
         this.growing.delete(id);
         this.markTile(g.tile); // the chunk takes the tree back…
@@ -2453,6 +2492,8 @@ export class ChunkRenderer {
           if (f === 'litter') for (let i = 0; i < 2; i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], this.at(x + r.range(-0.35, 0.35), top + 0.016, z + r.range(-0.35, 0.35), 0.08), [0.16, 0.03, 0.1]);
           if (f !== 'sand' && r.next() < (f === 'paving' ? 0.15 : 0.35)) this.scatter.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1);
           if (t.variant % 7 === 0) this.scatter.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 0.8);
+          // P7-E30 hook (#758): the wasteland's cracks, broken path and derelict debris; a dead beach's litter
+          if (!t.prop && !t.occupantId && !moveLandAt(t.x, t.z)) wasteland(this.solidSink(), t.x, t.z, top, f === 'sand' ? 'sand' : f === 'paving' ? 'paving' : 'earth');
           break;
         }
         this.slab(b, shade, [x, h, z], [1, 0.16, 1]);
@@ -3001,6 +3042,8 @@ export class ChunkRenderer {
       const n = g.peek(t.roofId, t.x + dx, t.z + dz);
       const o = g.peek(t.roofId, t.x - dx, t.z - dz);
       if (!n || n.level === undefined || this.bankless(n) || n.level <= t.level || !o || !this.bankless(o)) continue;
+      // P7-E30 (#745): the showcase fall pours here instead (unless the overlook is hidden behind a facade)
+      if (fallLip(n.x, n.z, -dx, -dz) && !this.facadeOn(t, n)) continue;
       const drop = h + levelY(n.level) + 0.08 - y;
       // on the wall's face (in front of its courses and its wet band), in the middle of the tile's edge; the water
       // lies away from it. While the ground above is in a hidden area in another chunk, this chunk stands a facade on
@@ -3617,7 +3660,7 @@ export class ChunkRenderer {
     if (f === 'paving') {
       // Look 3.2: clean stone slabs, moss and tiny flowers in the gaps; a street tree stands in a stone planter.
       paving(c, t, true, x, z, h);
-      if (treeSpot(t, this.areaType)?.planter) planterBed(c, t, true, x, z, top, 0.62, 0.62);
+      if (treeSpot(t, this.areaType, treeWorldOf(this.sim))?.planter) planterBed(c, t, true, x, z, top, 0.62, 0.62);
       this.edges(b, t, x, z, top, true);
     } else if (f === 'road') {
       // Look 2.5: a restored road keeps its surface (cleaner), with greenery creeping in from the edges.
@@ -3637,26 +3680,40 @@ export class ChunkRenderer {
         }
       }
       return;
+    } else if (f === 'sand' && zoneOf(c, t.x, t.z) === 'beach') {
+      // P7-E28: the beach by the sea stays sand once restored (clean and pale; it blends into the lawn behind it).
+      // Visual only: the tile is still restored ground with its own feature.
+      this.slab(b, PALETTE.beachSand[((t.variant % 3) + 3) % 3], [x, h, z], [1, 0.16, 1]);
+      turfTop(c, t, top);
+      beachDressing(c, t, x, z, top);
+      if (t.plant) this.plantExtras(t, x, z, top); // what the player's pulse grew still shows
+      return;
     } else {
       this.slab(b, grass, [x, h, z], [1, 0.16, 1]);
       turfTop(c, t, top); // Look 3.3: corner-blended turf, no square seams between lawns
+      lawnFringe(c, t, top); // P7-E28: a ragged grass edge over dead ground next door, not a grid of squares
       this.edges(b, t, x, z, top, false);
       // Look 3.9: some reservoir clay becomes a raised bed
-      if (f === 'clay' && stage >= 2 && dhash(t.x, t.z, 221) < 0.25 && !treeSpot(t, this.areaType)) {
+      if (f === 'clay' && stage >= 2 && dhash(t.x, t.z, 221) < 0.25 && !treeSpot(t, this.areaType, treeWorldOf(this.sim))) {
         planterBed(c, t, true, x, z, top, 0.9, 0.9);
         return;
       }
     }
-    grassTufts(c, t, stage, x, z, top, f === 'paving' ? 0.2 : 0.46, f === 'paving' ? 1 : undefined);
-    if (f !== 'paving') flowerDrifts(c, t, stage, x, z, top); // Look 3.4/3.5: species drifts hugging edges
-    if (t.plant && f !== 'paving') this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
-    // Phase 5: a tree tile grows its tree from a sapling (Restored) to Radiant; other Thriving tiles get a seeded mix.
-    if (!this.addTree(t, h, 1) && stage >= 3 && f !== 'paving') thrivingExtras(c, t, x, z, top);
-    else if (stage <= 2 && f !== 'paving' && !treeSpot(t, this.areaType) && dhash(t.x, t.z, 67) < 0.07) {
+    if (f === 'paving') {
+      grassTufts(c, t, stage, x, z, top, 0.2, 1);
+      this.addTree(t, h, 1);
+      return;
+    }
+    // P7-E28 (#714): natural ground is planted by its zone (lawn, meadow, bed, shore, woodland floor, path border,
+    // clearing), in layers that fill in with the bloom stage, instead of the same drifts on every tile
+    const zone = zoneOf(c, t.x, t.z);
+    if (t.plant) this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
+    const tree = this.addTree(t, h, 1);
+    zonedPlanting(c, t, stage, x, z, top, zone, tree || !!t.plant);
+    if (stage <= 2 && !tree && (zone === 'open_lawn' || zone === 'landmark_clearance') && dhash(t.x, t.z, 67) < 0.07) {
       // the odd pebble in young lawns (seeded), so open lawn doesn't repeat exactly
       b.add('sphere', PALETTE.stone.pebble, this.at(x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6, 0.08), [0.16, 0.08, 0.13]);
     }
-    if (stage >= 4) radiantExtras(c, t, x, z, top); // Phase 4 E05: Radiant gold, now golden daisies and sunflowers
   }
 
   /**
@@ -3681,7 +3738,7 @@ export class ChunkRenderer {
       }
       fb.add(leafyShrubGeo(t.variant, 1, true), x, top, z, t.variant, 0.55);
     } else if (t.plant === 'grove') {
-      if (!treeSpot(t, this.areaType)) {
+      if (!treeSpot(t, this.areaType, treeWorldOf(this.sim))) {
         const kinds = ['oak', 'cherry', 'birch'] as const;
         fb.add(treeGeo(kinds[t.variant % kinds.length], 3, t.variant, 1), x + (dhash(t.x, t.z, 921) - 0.5) * 0.2, top, z + (dhash(t.x, t.z, 922) - 0.5) * 0.2, t.variant * 0.7, 0.55);
       }
