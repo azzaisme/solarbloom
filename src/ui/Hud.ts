@@ -76,6 +76,12 @@ export interface Settings {
   /** Phase 4 E03.4 / E11.5: volumes 0..100 (sound and music still have their on/off switches). */
   sfxVolume?: number;
   musicVolume?: number;
+  /** Phase 8 A02: master, ambience (the world's own sound) and interface volumes 0..100 */
+  masterVolume?: number;
+  ambienceVolume?: number;
+  uiVolume?: number;
+  /** Phase 8: fewer repeated sounds (sparser wildlife, longer cooldowns on chains, drones and clicks) */
+  reducedRepetitive?: boolean;
   /** Phase 4 E11.5: stronger outlines and text contrast. */
   highContrast?: boolean;
   /** Look 1.11: graphics quality (Auto picks a tier from the device and steps down if frames stay slow). */

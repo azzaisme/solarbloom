@@ -38,6 +38,8 @@ const QUICK = [
   'e23-gentle-failure', 'jetty-ropes',
   // E23 polish (#596): shaders warm behind the loading screen
   'shader-warmup',
+  // Phase 8: audio (the dead-to-living soundscape, mix, music, manifest)
+  'audio',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
   'clear-path', 'goal-reachable', 'bloombot-levels', 'bloombot-page', 'park-growth', 'knacks', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
   'first-time-text',

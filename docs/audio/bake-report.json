@@ -1,0 +1,88 @@
+{
+ "ambience/barren/wind-dry": {
+  "file": "assets/audio/ambience/barren/wind-dry.ogg",
+  "src": "atmos/city-wind.ogg",
+  "seconds": 75.0,
+  "peak_dbfs": -15.76,
+  "bytes": 1084634,
+  "lufs": -24.0,
+  "seam": 0.77,
+  "length_kept": true
+ },
+ "ambience/restored/night-insects": {
+  "file": "assets/audio/ambience/restored/night-insects.ogg",
+  "src": "atmos/crickets.mp3",
+  "seconds": 15.5,
+  "peak_dbfs": -12.75,
+  "bytes": 194545,
+  "lufs": -26.2,
+  "seam": 1.04,
+  "length_kept": true
+ },
+ "ambience/water/brook": {
+  "file": "assets/audio/ambience/water/brook.ogg",
+  "src": "atmos/brook.wav",
+  "seconds": 27.0,
+  "peak_dbfs": -5.25,
+  "bytes": 171753,
+  "lufs": -21.6,
+  "seam": 0.97,
+  "length_kept": true
+ },
+ "ambience/wildlife/bird-01": {
+  "file": "assets/audio/ambience/wildlife/bird-01.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -5.68,
+  "bytes": 12538
+ },
+ "ambience/wildlife/bird-02": {
+  "file": "assets/audio/ambience/wildlife/bird-02.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -5.58,
+  "bytes": 12608
+ },
+ "ambience/wildlife/bird-03": {
+  "file": "assets/audio/ambience/wildlife/bird-03.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -5.9,
+  "bytes": 12974
+ },
+ "ambience/wildlife/bird-04": {
+  "file": "assets/audio/ambience/wildlife/bird-04.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -6.06,
+  "bytes": 12937
+ },
+ "ambience/wildlife/bird-05": {
+  "file": "assets/audio/ambience/wildlife/bird-05.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -6.58,
+  "bytes": 12597
+ },
+ "ambience/wildlife/bird-06": {
+  "file": "assets/audio/ambience/wildlife/bird-06.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -6.08,
+  "bytes": 12692
+ },
+ "ambience/wildlife/bird-07": {
+  "file": "assets/audio/ambience/wildlife/bird-07.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -6.46,
+  "bytes": 12844
+ },
+ "ambience/wildlife/bird-08": {
+  "file": "assets/audio/ambience/wildlife/bird-08.ogg",
+  "src": "atmos/birds-trees.wav",
+  "seconds": 1.38,
+  "peak_dbfs": -5.14,
+  "bytes": 12629
+ }
+}

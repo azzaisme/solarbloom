@@ -1,126 +1,125 @@
-import { bloomVoice } from '../ui/ChainSummary';
+import { AudioDirector, type V3 } from './AudioDirector';
+import { variants } from './AudioAssets';
+import { type AreaSound, type BusId, chainTone, DEAD_AREA, duckFor, type Family, type MixSettings, moodFor, pickVariant, type Surface } from './AudioMath';
+import { MusicDirector } from './MusicDirector';
+import { type Perch, SoundscapeDirector } from './SoundscapeDirector';
+
+export type { V3 };
+
 /**
- * Synthesised sound effects plus streamed music and atmos beds. Voice-capped; silent until the first user gesture.
- * Tracks are CC0 (see CREDITS.md in assets/raw/audio/music and assets/raw/audio/atmos).
+ * Phase 8: the game's one sound facade. Game.ts calls the named events below (restored, bloom, build, meow…);
+ * underneath, the AudioDirector owns the context, buses, limiter and voice limits, the SoundscapeDirector the
+ * world's living sound, and the MusicDirector the score. docs/audio/AUDIO_EVENT_MAP.md lists every event.
+ *
+ * The designed (synthesised) layer is one small palette: soft felt-mallet notes on a pentatonic scale and shaped
+ * noise, all low-passed. Recorded organic layers (soil, leaves, footsteps, the cat) are used where they exist.
  */
 const PENTA = [0, 2, 4, 7, 9];
 
-const AUDIO_DIR = '../../assets/raw/audio/';
-/** Only the files named here are bundled; the other raw tracks wait for later layers. */
-const TRACK_URLS = import.meta.glob(
-  [
-    '../../assets/raw/audio/music/birds-wind-synth-v2.ogg',
-    '../../assets/raw/audio/music/birds-wind-ambient.ogg',
-    '../../assets/raw/audio/music/kalimba-think-id-stay-clean.ogg',
-    '../../assets/raw/audio/atmos/city-wind.ogg',
-    '../../assets/raw/audio/atmos/city-hum.ogg',
-    '../../assets/raw/audio/atmos/water-flowing.ogg',
-    '../../assets/raw/audio/atmos/crickets.mp3',
-    '../../assets/raw/audio/atmos/brook.wav',
-    '../../assets/raw/audio/atmos/birds-trees.wav',
-  ],
-  { query: '?url', import: 'default', eager: true },
-) as Record<string, string>;
+/** How many grown trees near the listener may host bird calls. */
+export const BIRD_VOICES = 6;
 
-export type V3 = { x: number; y: number; z: number };
-
-/** Every 3D source uses this distance model: full level within `refDistance` of the camera, softer beyond. */
-const SPATIAL: PannerOptions = { panningModel: 'HRTF', distanceModel: 'inverse', rolloffFactor: 1, maxDistance: 300 };
-/** Effects keep their level at normal viewing distance; ambient objects (brook, birds) swell as you zoom in. */
-const FX_REF = 30;
-const AMBIENT_REF = 14;
-/** Bird emitters in the trees nearest the view. */
-export const BIRD_VOICES = 3;
-
-/** 0 below `a`, 1 above `b`, smooth in between. */
-const ramp = (x: number, a: number, b: number) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
+/** Recorded one-shots (assets/audio/sfx/…), as variation sets. */
+const SAMPLES = {
+  soil: 'sfx/restoration/soil',
+  leaf: 'sfx/restoration/leaf',
+  meow: 'sfx/events/meow',
+  step: (s: Surface) => `sfx/player/step-${s}`,
 };
 
-/**
- * Looping beds, each mixed by how alive the world is (`life`, 0..1). `bus` 'music' follows the Music setting;
- * 'atmos' is the world's own sound and follows the Sound setting. New layers go here: a file, a bus, a level
- * curve. Atmos levels also even out the raw files' loudness (wind is loud, crickets very quiet).
- */
-export const AUDIO_BEDS: { file: string; bus: 'music' | 'atmos'; level: (life: number) => number; spatial?: 'brook' | 'sea' }[] = [
-  // E21.12: the Old City's sea, a 3D wash placed at the nearest shore (level and position from setSea). Running
-  // water stands in for surf until a surf recording is added.
-  { file: 'atmos/water-flowing.ogg', bus: 'atmos', level: () => 0, spatial: 'sea' },
-  // 3D: a babbling brook placed at the clean water nearest the view (level and position from setBrook).
-  { file: 'atmos/brook.wav', bus: 'atmos', level: () => 0, spatial: 'brook' },
-  // The synth-and-birds score: the atmospheric bed under the melody.
-  { file: 'music/birds-wind-synth-v2.ogg', bus: 'music', level: (life) => 0.6 + 0.2 * life },
-  // The kalimba melody (the tune): present from the start, warmer and fuller as the garden grows.
-  { file: 'music/kalimba-think-id-stay-clean.ogg', bus: 'music', level: (life) => 0.55 + 0.45 * life },
-  // Birdsong and wind: silent in the grey city, rising as wildlife comes back.
-  { file: 'music/birds-wind-ambient.ogg', bus: 'music', level: (life) => 1.1 * ramp(life, 0.05, 0.8) },
-  // Dead city: hollow wind and a low hum, receding as the park comes alive (a breath of wind always stays).
-  { file: 'atmos/city-wind.ogg', bus: 'atmos', level: (life) => 0.056 * (1 - 0.8 * ramp(life, 0, 0.6)) },
-  { file: 'atmos/city-hum.ogg', bus: 'atmos', level: (life) => 0.4 * (1 - ramp(life, 0, 0.5)) },
-  // Living park: running water, then insects once the garden is well along.
-  { file: 'atmos/water-flowing.ogg', bus: 'atmos', level: (life) => 0.9 * ramp(life, 0.15, 0.7) },
-  { file: 'atmos/crickets.mp3', bus: 'atmos', level: (life) => 5.2 * ramp(life, 0.35, 1) },
-];
+/** What Game tells the soundscape a few times a second. */
+export interface WorldSense {
+  area: AreaSound;
+  daylight: number;
+  wind: number;
+  /** the whole world's restoration 0..1 */
+  world: number;
+  /** anything has been restored yet (until then the world waits in silence: no music) */
+  restoredOnce: boolean;
+  /** where the listener's attention is (the bot, or the view's focus), world coords */
+  focus: V3;
+}
 
 export class Sfx {
-  private ctx?: AudioContext;
-  private master?: GainNode;
-  private musicGain?: GainNode;
-  /** Phase 4 E03.4: effects have their own gain, so sound and music switch and scale separately. */
-  private sfxGain?: GainNode;
-  /** 0..1 */
-  sfxVolume = 1;
-  musicVolume = 1;
-  private voices = 0;
-  private maxVoices = 12;
-  muted = false;
-  music = true;
-  private musicTimer = 0;
-  private bar = 0;
-  layers = 0; // 0..3, grows with restoration
-  /** 0..1, how restored and alive the world is; mixes the wildlife beds in. */
+  readonly director = new AudioDirector();
+  readonly soundscape = new SoundscapeDirector(this.director);
+  readonly music = new MusicDirector(this.director);
+  /** Legacy fields Game sets every frame: layers 0..3 and the world's life 0..1. */
+  layers = 0;
   life = 0;
-  private beds: { el: HTMLAudioElement; gain: GainNode; bus: 'music' | 'atmos'; level: (life: number) => number; at: number }[] = [];
-  /** The brook's 3D emitter (HRTF), and how much clean water is near the view (0..1). */
-  private brookPanner?: PannerNode;
-  private brookLevel = 0;
-  /** E21.12: the sea's 3D emitter and level (0 away from the Old City's shore) */
-  private seaPanner?: PannerNode;
-  private seaLevel = 0;
-
-  /**
-   * 3D object audio (the web's take on what Atmos does over headphones): the listener sits at the camera, looking
-   * where it looks; spatial sounds are rendered binaurally with HRTF. Call every frame with world coordinates.
-   */
-  setListener(p: { x: number; y: number; z: number }, fwd: { x: number; y: number; z: number }, up: { x: number; y: number; z: number }) {
-    const ctx = this.ctx;
-    if (!ctx) return;
-    const l = ctx.listener;
-    if (l.positionX) {
-      l.positionX.value = p.x;
-      l.positionY.value = p.y;
-      l.positionZ.value = p.z;
-      l.forwardX.value = fwd.x;
-      l.forwardY.value = fwd.y;
-      l.forwardZ.value = fwd.z;
-      l.upX.value = up.x;
-      l.upY.value = up.y;
-      l.upZ.value = up.z;
-    } else {
-      l.setPosition(p.x, p.y, p.z);
-      l.setOrientation(fwd.x, fwd.y, fwd.z, up.x, up.y, up.z);
-    }
-  }
-
-  /** Where the effect being played happens (set by at()); undefined: an interface sound, centred in the head. */
+  muted = false;
+  musicOn = true;
+  private sense: WorldSense = { area: { ...DEAD_AREA }, daylight: 1, wind: 0, world: 0, restoredOnce: false, focus: { x: 0, y: 0, z: 0 } };
+  private noiseBuf?: AudioBuffer;
+  /** Where the effect being played happens (set by at()); undefined: centred. */
   private pos?: V3;
 
-  /**
-   * Plays `play` with every voice it makes placed at `p` in the world, rendered in 3D (HRTF). World sounds (tile
-   * restores, cracks, blooms, builds, drones, the cat) go through here; interface sounds (clicks, errors, coin and
-   * fanfare stingers) are called directly and stay centred. A missing `p` plays centred too.
-   */
+  get ctx() {
+    return this.director.ctx;
+  }
+
+  // ───────────────────────── lifecycle and mix ─────────────────────────
+
+  unlock() {
+    if (!this.director.unlock()) return;
+    const ctx = this.director.ctx!;
+    // one shared noise buffer: every noise voice is a slice of it (no allocation per sound)
+    const n = ctx.sampleRate * 2;
+    this.noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    this.soundscape.start();
+    this.director.preload([...variants(SAMPLES.soil), ...variants(SAMPLES.leaf), ...variants(SAMPLES.meow), ...(['grass', 'dirt', 'stone', 'wood', 'sand', 'water'] as Surface[]).flatMap((s) => variants(SAMPLES.step(s)))]);
+  }
+
+  /** #673: after the page was hidden, picks the sound up again if the browser put it to sleep. */
+  resume() {
+    this.director.resume();
+  }
+
+  setMuted(m: boolean) {
+    this.muted = m;
+    this.director.setMix({ sfxOn: !m });
+  }
+
+  setMusic(on: boolean) {
+    this.musicOn = on;
+    this.director.setMix({ musicOn: on });
+  }
+
+  /** Volumes 0..1 from Settings (and quiet while the page is hidden, see volumesFor). */
+  setVolumes(v: { sfx: number; music: number; master?: number; ambience?: number; ui?: number }) {
+    const m: Partial<MixSettings> = { sfx: v.sfx, music: v.music };
+    if (v.master !== undefined) m.master = v.master;
+    if (v.ambience !== undefined) m.ambience = v.ambience;
+    if (v.ui !== undefined) m.ui = v.ui;
+    // going quiet for a hidden page is quick; coming back is a gentle fade-in
+    const back = (v.master ?? 1) > (this.director.mix.master ?? 1);
+    this.director.setMix(m, back ? 1.2 : 0.15);
+  }
+
+  /** The "reduced repetitive effects" setting. */
+  setReduced(on: boolean) {
+    this.director.voices.reduced = on;
+    this.soundscape.reduced = on;
+  }
+
+  /** E23.2.3: while bloombot sits, the music swells a little (slowly, never a jump). */
+  swell(by: number) {
+    this.music.intensity = Math.min(1.3, this.baseIntensity() + Math.max(0, by));
+  }
+
+  private baseIntensity() {
+    return 0.35 + 0.65 * Math.max(this.sense.area.life, this.sense.world);
+  }
+
+  // ───────────────────────── 3D ─────────────────────────
+
+  setListener(p: V3, fwd: V3, up: V3) {
+    this.director.setListener(p, fwd, up);
+  }
+
+  /** Plays `play` with every voice placed at `p` in the world (3D). A missing `p` plays centred. */
   at(p: V3 | null | undefined, play: (s: this) => void) {
     const prev = this.pos;
     this.pos = p ?? undefined;
@@ -131,390 +130,419 @@ export class Sfx {
     }
   }
 
-  /** A voice's output: its own HRTF panner at `pos` for a world sound, else straight to the effects bus. */
-  private voiceOut(): AudioNode {
-    const bus = this.sfxGain ?? this.master!;
-    if (!this.pos || !this.ctx) return bus;
-    const p = new PannerNode(this.ctx, { ...SPATIAL, refDistance: FX_REF, positionX: this.pos.x, positionY: this.pos.y, positionZ: this.pos.z });
-    p.connect(bus);
-    return p;
+  /** Trees near the listener (nearest first) where birds may call. */
+  setBirds(trees: Perch[]) {
+    this.soundscape.setPerches(trees);
   }
 
-  /** Birds in the trees: looping voices of one recording, each with its own panner, gain and start offset. */
-  private birds: { gain: GainNode; panner: PannerNode; at: number }[] = [];
+  setBrook(amount: number, x: number, y: number, z: number) {
+    this.soundscape.setBrook(amount, { x, y, z });
+  }
 
-  /** Decodes the birds loop once and starts BIRD_VOICES silent emitters (setBirds moves and fades them). */
-  private async startBirds() {
-    const ctx = this.ctx;
-    const url = TRACK_URLS[AUDIO_DIR + 'atmos/birds-trees.wav'];
-    if (!ctx || !this.sfxGain || !url) return;
-    try {
-      const buf = await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer());
-      for (let i = 0; i < BIRD_VOICES; i++) {
-        const src = new AudioBufferSourceNode(ctx, { buffer: buf, loop: true });
-        const gain = new GainNode(ctx, { gain: 0 });
-        const panner = new PannerNode(ctx, { ...SPATIAL, refDistance: AMBIENT_REF });
-        src.connect(gain).connect(panner).connect(this.sfxGain);
-        // Offset each voice through the loop, so three trees never sing the same phrase together.
-        src.start(0, (buf.duration * i) / BIRD_VOICES);
-        this.birds.push({ gain, panner, at: 0 });
-      }
-    } catch {
-      /* no birds: the rest of the soundscape carries on */
-    }
+  setSea(amount: number, x: number, y: number, z: number) {
+    this.soundscape.setSea(amount, { x, y, z });
+  }
+
+  /** What is around the listener (Game samples it a few times a second). */
+  setSense(s: WorldSense) {
+    this.sense = s;
+  }
+
+  /** Every frame (real time: the world keeps sounding through a pause). Directors re-evaluate at 4 Hz. */
+  private lastTick = -1;
+  update(_dt: number) {
+    if (!this.director.ready) return;
+    // the audio clock, not the frame's (capped) dt: on a slow frame the soundscape still glides in real seconds
+    const now = this.director.now();
+    if (this.lastTick < 0) this.lastTick = now;
+    if (now - this.lastTick < 0.25) return;
+    const step = Math.min(2, now - this.lastTick);
+    this.lastTick = now;
+    const s = this.sense;
+    const input = { area: s.area, daylight: s.daylight, world: Math.max(s.world, this.life), wind: s.wind };
+    this.soundscape.update(step, input, s.focus);
+    this.director.setNight(1 - Math.min(1, s.daylight / 0.5));
+    if (this.music.intensity <= 1) this.music.intensity = this.baseIntensity();
+    this.music.update(step, moodFor({ ...input, area: this.soundscape.area }, s.restoredOnce));
+  }
+
+  // ───────────────────────── voices ─────────────────────────
+
+  private busFor(fam: Family): BusId {
+    return fam === 'ui' ? 'ui' : 'sfx';
+  }
+
+  /** The output for a voice: a 3D panner when at() placed it, else its bus. */
+  private out(fam: Family): AudioNode | undefined {
+    const bus = this.busFor(fam);
+    if (this.pos && fam !== 'ui') return this.director.spatialOut(this.pos, bus, 30);
+    return this.director.bus[bus];
   }
 
   /**
-   * Puts the bird voices in these trees (nearest first, up to BIRD_VOICES), `amount` 0..1 each by how grown the
-   * tree is. Voices without a tree fade out where they are.
+   * One designed voice: a felt-mallet note (sine with a soft inharmonic partial that dies fast) or a pad
+   * (slow attack). Everything is low-passed: nothing in this game is shrill.
    */
-  setBirds(trees: (V3 & { amount: number })[]) {
-    const ctx = this.ctx;
+  private tone(fam: Family, freq: number, dur: number, o: { vol?: number; type?: OscillatorType; attack?: number; glide?: number; delay?: number; mallet?: boolean; cutoff?: number } = {}) {
+    const ctx = this.director.ctx;
     if (!ctx) return;
-    const t = ctx.currentTime;
-    this.birds.forEach((v, i) => {
-      const tree = trees[i];
-      const level = tree ? 0.35 * Math.max(0, Math.min(1, tree.amount)) : 0;
-      if (tree) {
-        // A silent voice jumps straight to its new tree; a singing one glides there.
-        const glide = v.at < 0.01 ? 0.01 : 0.6;
-        v.panner.positionX.setTargetAtTime(tree.x, t, glide);
-        v.panner.positionY.setTargetAtTime(tree.y, t, glide);
-        v.panner.positionZ.setTargetAtTime(tree.z, t, glide);
-      }
-      if (Math.abs(level - v.at) > 0.005) v.gain.gain.setTargetAtTime(level, t, 1.2);
-      v.at = level;
-    });
-  }
-
-  /** Places the brook at (x, y, z) with `amount` 0..1 of nearby clean water (0 fades it out). */
-  setBrook(amount: number, x: number, y: number, z: number) {
-    this.brookLevel = 0.3 * Math.max(0, Math.min(1, amount));
-    const p = this.brookPanner;
-    if (!p || !this.ctx || amount <= 0) return;
-    const t = this.ctx.currentTime;
-    p.positionX.setTargetAtTime(x, t, 0.3);
-    p.positionY.setTargetAtTime(y, t, 0.3);
-    p.positionZ.setTargetAtTime(z, t, 0.3);
-  }
-
-  /** E21.12: places the sea's wash at (x, y, z) with `amount` 0..1 (0 fades it out). */
-  setSea(amount: number, x: number, y: number, z: number) {
-    this.seaLevel = 0.45 * Math.max(0, Math.min(1, amount));
-    const p = this.seaPanner;
-    if (!p || !this.ctx || amount <= 0) return;
-    const t = this.ctx.currentTime;
-    p.positionX.setTargetAtTime(x, t, 0.3);
-    p.positionY.setTargetAtTime(y, t, 0.3);
-    p.positionZ.setTargetAtTime(z, t, 0.3);
-  }
-
-  /** Starts every bed fading in to its level; update() follows `life` from there. */
-  private startBeds() {
-    const ctx = this.ctx;
-    if (!ctx || !this.musicGain || !this.sfxGain || typeof Audio === 'undefined') return;
-    for (const b of AUDIO_BEDS) {
-      const url = TRACK_URLS[AUDIO_DIR + b.file];
-      if (!url) continue;
-      try {
-        const el = new Audio(url);
-        el.loop = true;
-        el.preload = 'auto';
-        const gain = ctx.createGain();
-        // Fade in to the current level now, so music never waits on the frame loop to become audible.
-        const level = b.spatial === 'brook' ? () => this.brookLevel : b.spatial === 'sea' ? () => this.seaLevel : b.level;
-        const at = level(this.life);
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.setTargetAtTime(at, ctx.currentTime, 1.5);
-        const out = b.bus === 'music' ? this.musicGain : this.sfxGain;
-        const src = ctx.createMediaElementSource(el).connect(gain);
-        if (b.spatial) {
-          // Inverse distance from the camera: zooming in on the water brings the brook up close.
-          const p = new PannerNode(ctx, { ...SPATIAL, refDistance: AMBIENT_REF });
-          src.connect(p).connect(out);
-          if (b.spatial === 'sea') this.seaPanner = p;
-          else this.brookPanner = p;
-        } else src.connect(out);
-        this.beds.push({ el, gain, bus: b.bus, level, at });
-      } catch {
-        /* a bed that cannot play is skipped; the synth pad covers for missing music */
-      }
-    }
-    this.playBeds('music', this.music);
-    this.playBeds('atmos', !this.muted);
-  }
-
-  /** Beds whose bus is switched off are paused, not just silenced. */
-  private playBeds(bus: 'music' | 'atmos', on: boolean) {
-    for (const b of this.beds) {
-      if (b.bus !== bus) continue;
-      if (on) void b.el.play().catch(() => {});
-      else b.el.pause();
-    }
-  }
-
-  unlock() {
-    if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
-      return;
-    }
-    try {
-      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AC();
-      this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
-      this.master.connect(this.ctx.destination);
-      this.sfxGain = this.ctx.createGain();
-      this.sfxGain.gain.value = this.muted ? 0 : this.sfxVolume;
-      this.sfxGain.connect(this.master);
-      this.musicGain = this.ctx.createGain();
-      this.musicGain.gain.value = this.music ? 0.22 * this.musicVolume : 0;
-      this.musicGain.connect(this.master);
-    } catch {
-      this.ctx = undefined;
-    }
-    this.startBeds();
-    void this.startBirds();
-  }
-
-  /** #673: after the page was hidden, picks the sound up again if the browser put it to sleep (no new context). */
-  resume() {
-    if (this.ctx?.state === 'suspended') void this.ctx.resume().catch(() => {});
-  }
-
-  setMuted(m: boolean) {
-    this.muted = m;
-    if (this.sfxGain && this.ctx) this.sfxGain.gain.setTargetAtTime(m ? 0 : this.sfxVolume, this.ctx.currentTime, 0.05);
-    this.playBeds('atmos', !m);
-  }
-
-  /** Volumes 0..1 for effects and music (Settings sliders). */
-  setVolumes(sfx: number, music: number) {
-    this.sfxVolume = Math.max(0, Math.min(1, sfx));
-    this.musicVolume = Math.max(0, Math.min(1, music));
-    this.setMuted(this.muted);
-    this.setMusic(this.music);
-  }
-
-  /** E23.2.3: while bloombot sits, the music swells by this share (0 = its usual level) */
-  private swellBy = 0;
-
-  /** E23.2.3: let the music swell (sitting on a bench) or settle back. Slow, so it never jumps. */
-  swell(by: number) {
-    this.swellBy = Math.max(0, by);
-    if (this.musicGain && this.ctx && this.music) this.musicGain.gain.setTargetAtTime(0.22 * this.musicVolume * (1 + this.swellBy), this.ctx.currentTime, 1.5);
-  }
-
-  setMusic(on: boolean) {
-    this.music = on;
-    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? 0.22 * this.musicVolume * (1 + this.swellBy) : 0, this.ctx.currentTime, 0.2);
-    this.playBeds('music', on);
-  }
-
-  private tone(freq: number, dur: number, opts: { type?: OscillatorType; vol?: number; attack?: number; glide?: number; delay?: number; dest?: AudioNode } = {}) {
-    const ctx = this.ctx;
-    const music = !!opts.dest && opts.dest === this.musicGain;
-    if (!ctx || !this.master || (this.muted && !music)) return;
-    if (this.voices >= this.maxVoices) return;
-    this.voices++;
-    const t0 = ctx.currentTime + (opts.delay ?? 0);
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = opts.type ?? 'sine';
-    o.frequency.setValueAtTime(freq, t0);
-    if (opts.glide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * opts.glide), t0 + dur);
-    const v = opts.vol ?? 0.2;
+    const out = this.out(fam);
+    if (!out) return;
+    const lim = this.director.voices;
+    lim.start(fam);
+    const t0 = ctx.currentTime + (o.delay ?? 0);
+    const osc = new OscillatorNode(ctx, { type: o.type ?? 'sine', frequency: freq });
+    if (o.glide) osc.frequency.exponentialRampToValueAtTime(Math.max(30, freq * o.glide), t0 + dur);
+    const g = new GainNode(ctx, { gain: 0.0001 });
+    const v = o.vol ?? 0.15;
+    const atk = o.attack ?? 0.006;
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(v, t0 + (opts.attack ?? 0.01));
+    g.gain.exponentialRampToValueAtTime(v, t0 + atk);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    const out = opts.dest ?? this.voiceOut();
-    o.connect(g).connect(out);
-    o.start(t0);
-    o.stop(t0 + dur + 0.05);
-    o.onended = () => {
-      this.voices--;
+    const lp = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: o.cutoff ?? Math.min(6000, freq * 4), Q: 0.4 });
+    osc.connect(g).connect(lp).connect(out);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+    let partial: OscillatorNode | undefined;
+    if (o.mallet) {
+      // the mallet's knock: a quiet partial near 4x that decays in a few tens of ms
+      partial = new OscillatorNode(ctx, { type: 'sine', frequency: freq * 3.99 });
+      const pg = new GainNode(ctx, { gain: 0.0001 });
+      pg.gain.setValueAtTime(0.0001, t0);
+      pg.gain.exponentialRampToValueAtTime(v * 0.18, t0 + 0.003);
+      pg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.07);
+      partial.connect(pg).connect(lp);
+      partial.start(t0);
+      partial.stop(t0 + 0.1);
+    }
+    osc.onended = () => {
+      lim.end(fam);
+      lp.disconnect();
       if (out instanceof PannerNode) out.disconnect();
     };
   }
 
-  private noise(dur: number, vol: number, freq: number) {
-    const ctx = this.ctx;
-    if (!ctx || !this.master || this.muted || this.voices >= this.maxVoices) return;
-    this.voices++;
-    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const f = ctx.createBiquadFilter();
-    f.type = 'bandpass';
-    f.frequency.setValueAtTime(freq, ctx.currentTime);
-    f.frequency.exponentialRampToValueAtTime(freq * 3, ctx.currentTime + dur);
-    const g = ctx.createGain();
-    g.gain.value = vol;
-    const out = this.voiceOut();
+  /** Shaped noise: a band that moves from `f0` to `f1` (Hz) over `dur`, with a soft attack. */
+  private hiss(fam: Family, dur: number, vol: number, f0: number, f1 = f0, o: { attack?: number; delay?: number; q?: number } = {}) {
+    const ctx = this.director.ctx;
+    const buf = this.noiseBuf;
+    if (!ctx || !buf) return;
+    const out = this.out(fam);
+    if (!out) return;
+    const lim = this.director.voices;
+    lim.start(fam);
+    const t0 = ctx.currentTime + (o.delay ?? 0);
+    const src = new AudioBufferSourceNode(ctx, { buffer: buf });
+    const f = new BiquadFilterNode(ctx, { type: 'bandpass', frequency: f0, Q: o.q ?? 0.9 });
+    f.frequency.setValueAtTime(f0, t0);
+    f.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t0 + dur);
+    const g = new GainNode(ctx, { gain: 0.0001 });
+    const atk = o.attack ?? 0.01;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + atk);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(f).connect(g).connect(out);
-    src.start();
+    src.start(t0, Math.random() * 1.5, dur + 0.05);
     src.onended = () => {
-      this.voices--;
+      lim.end(fam);
+      g.disconnect();
       if (out instanceof PannerNode) out.disconnect();
     };
   }
 
-  note(step: number, base = 523.25) {
+  /** A recorded sample from a variation set (no repeats in a row, small pitch/level variation). False if none. */
+  private lastVar: Record<string, number> = {};
+  private sample(base: string, fam: Family, vol: number, o: { spread?: number; delay?: number } = {}): boolean {
+    const ids = variants(base);
+    if (!ids.length) return false;
+    const i = pickVariant(ids.length, this.lastVar[base] ?? -1);
+    const spread = o.spread ?? 0.06;
+    const ok = this.director.play(ids[i], { bus: this.busFor(fam), fam, vol: vol * (0.88 + Math.random() * 0.24), rate: 1 - spread + Math.random() * spread * 2, pos: this.pos, ref: 30, delay: o.delay });
+    if (ok) this.lastVar[base] = i;
+    return ok;
+  }
+
+  /** Admits an event of `fam` now (cooldown and caps). */
+  private admit(fam: Family, key?: string, keyGap = 0) {
+    return !!this.director.ctx && this.director.voices.admit(fam, this.director.now(), 1, key, keyGap);
+  }
+
+  note(step: number, base = 392) {
     const oct = Math.floor(step / 5);
     const semis = PENTA[((step % 5) + 5) % 5] + oct * 12;
     return base * Math.pow(2, semis / 12);
   }
 
+  // ───────────────────────── restoration (the signature moment) ─────────────────────────
+
+  /** 1. Action: bloombot's pulse: a soft, textured intake of energy (a breathy whoosh rising). */
   pulse() {
-    this.noise(0.25, 0.12, 600);
-    this.tone(330, 0.25, { glide: 2, vol: 0.12, type: 'triangle' });
+    if (!this.admit('restore', 'pulse', 0.12)) return;
+    this.hiss('restore', 0.42, 0.11, 380, 1500, { attack: 0.16, q: 0.7 });
+    this.tone('restore', 196, 0.38, { vol: 0.05, glide: 1.5, attack: 0.12, type: 'triangle', cutoff: 900 });
   }
+
+  /**
+   * 2. Transformation: soil relaxing and leaves unfolding, with a warm mallet note that climbs the scale as you
+   * restore tile after tile. (3. Life returning is the soundscape: the patch's own leaves and, later, birds.)
+   */
   restored(n = 0) {
-    this.tone(this.note(n % 5), 0.35, { vol: 0.14, type: 'triangle' });
-    this.tone(this.note((n % 5) + 2), 0.3, { vol: 0.06, delay: 0.04 });
+    if (!this.admit('restore', 'restored', 0.06)) return;
+    if (!this.sample(SAMPLES.soil, 'restore', 0.5)) this.hiss('restore', 0.22, 0.07, 260, 160, { attack: 0.01, q: 0.6 });
+    if (!this.sample(SAMPLES.leaf, 'restore', 0.35, { delay: 0.05 })) this.hiss('restore', 0.35, 0.035, 2200, 3200, { attack: 0.08, delay: 0.05 });
+    this.tone('restore', this.note(n % 7), 0.7, { vol: 0.11, mallet: true, delay: 0.06 });
+    this.tone('restore', this.note((n % 7) + 2), 0.6, { vol: 0.05, mallet: true, delay: 0.13 });
   }
+
+  /** A tile grows a stage (grass → flowers → shrubs): a leafy unfolding and a two-note rise, warmer each level. */
   nurture(level: number) {
-    this.tone(this.note(level * 2), 0.4, { vol: 0.14, type: 'triangle' });
-    this.tone(this.note(level * 2 + 2), 0.45, { vol: 0.1, delay: 0.07 });
+    if (!this.admit('restore', 'nurture', 0.08)) return;
+    if (!this.sample(SAMPLES.leaf, 'restore', 0.3 + 0.1 * level)) this.hiss('restore', 0.4, 0.04, 1800, 2600, { attack: 0.1 });
+    this.tone('restore', this.note(level * 2), 0.6, { vol: 0.1, mallet: true });
+    this.tone('restore', this.note(level * 2 + 2), 0.7, { vol: 0.07, mallet: true, delay: 0.09 });
   }
-  private lastBloom = -1;
-  /** City 10.6: blooms change pitch and texture with the combo instead of stacking (see bloomVoice). */
+
+  // ───────────────────────── Bloom Chains ─────────────────────────
+
+  private chainTimes: number[] = [];
+  /**
+   * One bloom of a chain. Aggregated: a capped family, a rising pentatonic ladder that never leaves two octaves,
+   * fuller chords as it grows, softer as blooms come faster (chainTone). 50 blooms are a texture, not 50 pings.
+   */
   bloom(combo: number) {
-    const now = performance.now() / 1000;
-    const v = bloomVoice(combo, now, this.lastBloom);
-    if (!v) return;
-    this.lastBloom = now;
-    const f = this.note(v.step);
-    this.tone(f, 0.5, { vol: v.vol, type: v.type });
-    this.tone(f * 2, 0.3, { vol: v.octave ? 0.07 : 0.05, type: 'triangle' });
+    const now = this.director.now();
+    this.chainTimes = this.chainTimes.filter((t) => now - t < 1);
+    this.chainTimes.push(now);
+    const gap = combo < 20 ? 0.07 : combo < 100 ? 0.12 : 0.2;
+    if (!this.admit('chain', 'bloom', gap)) return;
+    const c = chainTone(combo, this.chainTimes.length);
+    for (let i = 0; i < c.voices; i++) this.tone('chain', this.note(c.step + i * 2), 0.55, { vol: c.vol, mallet: i === 0, delay: i * 0.025, cutoff: 2200 + 2000 * c.bright });
+    if (combo % 4 === 0) this.hiss('chain', 0.3, 0.02 + 0.02 * c.bright, 2600, 3600, { attack: 0.06 });
   }
+
+  /** A chain's landing: a resolved chord, fuller for longer chains; a long chain briefly widens and ducks the music. */
   chainEnd(combo: number) {
+    if (!this.admit('event', 'chainEnd', 0.5)) return;
     const n = combo >= 10 ? 5 : combo >= 5 ? 4 : 3;
-    for (let i = 0; i < n; i++) this.tone(this.note(i * 2 + 2), 0.5, { vol: 0.12, delay: i * 0.08, type: 'triangle' });
+    for (let i = 0; i < n; i++) this.tone('event', this.note(i * 2 + 2), 1.1, { vol: 0.1, mallet: true, delay: i * 0.09 });
+    if (combo >= 10) {
+      this.tone('event', this.note(0, 196), 2.2, { vol: 0.07, attack: 0.4, type: 'triangle', cutoff: 1200, delay: 0.2 });
+      this.hiss('event', 1.6, 0.04, 900, 3000, { attack: 0.5 });
+      const d = duckFor(Math.min(1, combo / 40));
+      this.director.duck(d.db, d.hold);
+    }
   }
+
+  // ───────────────────────── building and economy ─────────────────────────
+
+  /** Place a machine: a wooden knock, a little latch, and a settling chord (no square-wave beeps). */
   build() {
-    this.tone(140, 0.3, { glide: 0.5, vol: 0.3 });
-    this.tone(880, 0.12, { vol: 0.08, delay: 0.12, type: 'square' });
-    this.tone(1320, 0.2, { vol: 0.06, delay: 0.2 });
+    if (!this.admit('build', 'build', 0.08)) return;
+    this.tone('build', 150, 0.22, { vol: 0.22, glide: 0.6, cutoff: 700 });
+    this.hiss('build', 0.06, 0.08, 1800, 1200, { attack: 0.002, q: 2, delay: 0.1 });
+    this.tone('build', this.note(4), 0.5, { vol: 0.08, mallet: true, delay: 0.16 });
+    this.tone('build', this.note(7), 0.6, { vol: 0.06, mallet: true, delay: 0.24 });
   }
+
+  /** A machine wakes: a soft rising hum into a bright note. */
   powerUp() {
-    this.tone(330, 0.25, { glide: 2, vol: 0.08, type: 'triangle' });
-    this.tone(this.note(7), 0.35, { vol: 0.09, delay: 0.18 });
+    if (!this.admit('build', 'power', 0.3)) return;
+    this.tone('build', 220, 0.5, { glide: 2, vol: 0.06, attack: 0.15, type: 'triangle', cutoff: 1400 });
+    this.tone('build', this.note(7), 0.7, { vol: 0.08, mallet: true, delay: 0.32 });
   }
+
+  /** Spend / upgrade / deliver: a clear, ascending two-note confirmation. Repeats soften into a quiet patter. */
+  private coinAt = -9;
   coin() {
-    this.tone(988, 0.1, { vol: 0.08, type: 'square' });
-    this.tone(1319, 0.25, { vol: 0.08, delay: 0.08, type: 'square' });
+    const now = this.director.now();
+    const quick = now - this.coinAt < 0.6;
+    this.coinAt = now;
+    if (!this.admit('economy')) return;
+    const v = quick ? 0.05 : 0.09;
+    this.tone('economy', this.note(7), 0.35, { vol: v, mallet: true });
+    this.tone('economy', this.note(9), 0.5, { vol: v, mallet: true, delay: 0.07 });
   }
+
+  // ───────────────────────── interface ─────────────────────────
+
   error() {
-    this.tone(220, 0.15, { vol: 0.08, type: 'triangle' });
-    this.tone(196, 0.2, { vol: 0.06, delay: 0.08, type: 'triangle' });
+    if (!this.admit('ui', 'error', 0.25)) return;
+    this.tone('ui', 247, 0.18, { vol: 0.12, mallet: true });
+    this.tone('ui', 196, 0.26, { vol: 0.1, mallet: true, delay: 0.09 });
   }
+
   click() {
-    this.tone(1200, 0.05, { vol: 0.05, type: 'triangle' });
+    if (!this.admit('ui', 'click', 0.035)) return;
+    this.tone('ui', 1047, 0.06, { vol: 0.08, mallet: true, cutoff: 3000 });
   }
-  meow(quiet = false) {
-    const v = quiet ? 0.035 : 0.09;
-    this.tone(720, 0.18, { type: 'sawtooth', vol: v * 0.5, glide: 1.3 });
-    this.tone(930, 0.35, { type: 'triangle', vol: v, glide: 0.62, delay: 0.12 });
-  }
-  /** The waymark's Bloom Pulse (a goal done): a soft swell, a bright rising chord, a shimmer on top. */
+
+  // ───────────────────────── milestones ─────────────────────────
+
+  /** A goal done (the waymark's Bloom Pulse): a soft swell and a rising chord with a little shimmer. */
   bloomPulse() {
-    this.tone(196, 0.9, { glide: 2, vol: 0.06, type: 'triangle' });
-    [0, 2, 4, 7].forEach((st, i) => this.tone(this.note(st, 392), 0.9 - i * 0.1, { vol: 0.1, delay: 0.05 + i * 0.07, type: 'triangle' }));
-    this.tone(this.note(9, 392) * 2, 1.1, { vol: 0.04, delay: 0.32 });
-    this.tone(this.note(12, 392) * 2, 0.9, { vol: 0.03, delay: 0.42 });
+    if (!this.admit('event', 'bloomPulse', 1)) return;
+    this.hiss('event', 1.2, 0.035, 600, 2400, { attack: 0.4 });
+    [0, 2, 4, 7].forEach((st, i) => this.tone('event', this.note(st), 1.2 - i * 0.1, { vol: 0.09, mallet: true, delay: 0.1 + i * 0.08 }));
+    this.tone('event', this.note(9) * 2, 1.2, { vol: 0.025, delay: 0.45, cutoff: 3500 });
+    this.director.duck(-1.5, 1.5);
   }
+
+  /** A new area opens: a lighter, airy cue (not the landmark's). */
+  areaOpen() {
+    if (!this.admit('event', 'areaOpen', 2)) return;
+    this.hiss('event', 1.8, 0.035, 400, 1800, { attack: 0.7 });
+    [0, 4, 7].forEach((st, i) => this.tone('event', this.note(st, 294), 1.6, { vol: 0.08, mallet: true, delay: 0.3 + i * 0.16 }));
+    this.director.duck(-1.5, 2);
+  }
+
+  /**
+   * A landmark wakes, a fountain tier, the core: the rare big moment. A warm pad chord swells under a rising
+   * mallet phrase, the music dips by a few dB and recovers. Distinct from every routine sound.
+   */
+  landmark() {
+    if (!this.admit('event', 'landmark', 3)) return;
+    const root = 196;
+    for (const st of [0, 4, 7]) this.tone('event', this.note(st, root), 3.6, { vol: 0.06, attack: 0.9, type: 'triangle', cutoff: 1400 });
+    this.tone('event', root / 2, 3.8, { vol: 0.07, attack: 0.8, cutoff: 500 });
+    [0, 2, 4, 7, 9, 12].forEach((st, i) => this.tone('event', this.note(st), 1.4, { vol: 0.09, mallet: true, delay: 0.45 + i * 0.14 }));
+    this.tone('event', this.note(14), 2.4, { vol: 0.07, mallet: true, delay: 1.4 });
+    this.hiss('event', 3, 0.03, 500, 3200, { attack: 1.2 });
+    const d = duckFor(1);
+    this.director.duck(d.db, d.hold);
+  }
+
+  /** Legacy name: every old fanfare is a landmark-sized moment. */
   fanfare() {
-    [0, 2, 4, 5, 7, 9].forEach((s, i) => this.tone(this.note(s, 392), 0.7, { vol: 0.13, delay: i * 0.12, type: 'triangle' }));
-    this.tone(this.note(10, 392), 1.5, { vol: 0.12, delay: 0.8 });
+    this.landmark();
   }
+
+  // ───────────────────────── the Lucky Cat ─────────────────────────
+
+  /** A cat's meow: recorded if we have one, else a soft designed one. `quiet`: a far-off hint. */
+  meow(quiet = false) {
+    if (!this.admit('cat', quiet ? 'meowHint' : 'meow', 0.5)) return;
+    if (this.sample(SAMPLES.meow, 'cat', quiet ? 0.25 : 0.7, { spread: 0.05 })) return;
+    const v = quiet ? 0.03 : 0.08;
+    this.tone('cat', 700, 0.2, { type: 'triangle', vol: v * 0.6, glide: 1.25, attack: 0.04, cutoff: 2500 });
+    this.tone('cat', 880, 0.38, { type: 'triangle', vol: v, glide: 0.66, attack: 0.03, delay: 0.12, cutoff: 2500 });
+  }
+
   /**
-   * A drone sets off on a job. E18.5: each role has its own pitch and timbre (Restorer as before), and a role's
-   * chirp plays at most every 80 ms, so a busy swarm never becomes a constant overlapping beep.
+   * Found a Lucky Cat: the meow, then a playful skipping run up the scale and back. A golden cat adds a bright
+   * upper octave; a rainbow (jackpot) cat finishes with a shimmering chord.
    */
-  private droneAt: Record<string, number> = {};
+  catFound(variant: 'plain' | 'golden' | 'rainbow' = 'plain') {
+    this.meow();
+    if (!this.admit('event', 'catFound', 1)) return;
+    const run = [0, 2, 4, 2, 4, 7];
+    run.forEach((st, i) => this.tone('event', this.note(st + 5), 0.4, { vol: 0.08, mallet: true, delay: 0.35 + i * 0.075 }));
+    if (variant !== 'plain') [7, 9, 12].forEach((st, i) => this.tone('event', this.note(st + 5), 0.8, { vol: 0.06, mallet: true, delay: 0.85 + i * 0.09 }));
+    if (variant === 'rainbow') {
+      for (const st of [5, 9, 12]) this.tone('event', this.note(st), 2.4, { vol: 0.05, attack: 0.5, type: 'triangle', delay: 1.1, cutoff: 2000 });
+      this.hiss('event', 2, 0.03, 2000, 4000, { attack: 0.6, delay: 1 });
+      this.director.duck(-2.5, 2.5);
+    } else this.director.duck(-1.5, 1.6);
+  }
+
+  // ───────────────────────── drones and machines ─────────────────────────
+
+  /** A drone sets off on a job: each role a quiet chirp of its own, at most one per role every 0.4 s. */
   drone(role: 'restorer' | 'gardener' | 'scout' | 'courier' | 'spark' | 'harvester' = 'restorer') {
-    const now = performance.now() / 1000;
-    if (now - (this.droneAt[role] ?? -9) < 0.08) return;
-    this.droneAt[role] = now;
+    if (!this.admit('drone', `drone:${role}`, 0.4)) return;
     switch (role) {
-      case 'gardener': // a soft watery blip
-        return this.tone(520, 0.14, { vol: 0.035, glide: 0.8, type: 'sine' });
-      case 'scout': // a higher, quicker ping
-        return this.tone(990, 0.08, { vol: 0.03, glide: 1.8, type: 'triangle' });
-      case 'courier': // a low two-step hum
-        this.tone(392, 0.09, { vol: 0.035, type: 'square' });
-        return this.tone(523, 0.09, { vol: 0.03, type: 'square', delay: 0.07 });
-      case 'spark': // a bright zap
-        return this.tone(1320, 0.07, { vol: 0.03, glide: 0.5, type: 'sawtooth' });
+      case 'gardener':
+        return this.tone('drone', 520, 0.16, { vol: 0.04, glide: 0.8 });
+      case 'scout':
+        return this.tone('drone', 880, 0.1, { vol: 0.03, glide: 1.4, cutoff: 2500 });
+      case 'courier':
+        this.tone('drone', 392, 0.1, { vol: 0.035, mallet: true });
+        return this.tone('drone', 523, 0.1, { vol: 0.03, mallet: true, delay: 0.07 });
+      case 'spark':
+        return this.tone('drone', 1175, 0.08, { vol: 0.025, glide: 0.6, type: 'triangle', cutoff: 2500 });
       default:
-        return this.tone(660, 0.12, { vol: 0.04, glide: 1.5, type: 'triangle' });
+        return this.tone('drone', 587, 0.14, { vol: 0.04, glide: 1.4, type: 'triangle', cutoff: 2000 });
     }
   }
 
-  /**
-   * Look 6.10: one sound per stage of a living transition, layered across tiles but rate-limited per stage, so
-   * a big chain is a texture of cracks and pops rather than a wall of noise.
-   */
-  private stageAt: Record<string, number> = {};
+  /** One sound per stage of a living transition, rate-limited per stage (a big chain is a texture, not a wall). */
   stage(kind: 'crack' | 'grind' | 'creak' | 'thud' | 'sprout' | 'rustle' | 'hum') {
-    const now = performance.now() / 1000;
-    const gap = kind === 'hum' ? 0.9 : kind === 'crack' ? 0.07 : 0.16;
-    if (now - (this.stageAt[kind] ?? -9) < gap) return;
-    this.stageAt[kind] = now;
+    const gap = kind === 'hum' ? 1.2 : kind === 'crack' ? 0.08 : 0.18;
+    if (!this.admit('stage', `stage:${kind}`, gap)) return;
     switch (kind) {
-      case 'crack': // stone crack and snap
-        this.noise(0.07, 0.1, 2600);
-        this.tone(1900 + Math.random() * 600, 0.04, { vol: 0.04, type: 'square', glide: 0.5 });
-        break;
-      case 'grind': // grinding, crumbling
-        this.noise(0.28, 0.07, 260);
-        break;
-      case 'creak': // root creak
-        this.tone(120 + Math.random() * 40, 0.32, { vol: 0.05, type: 'sawtooth', glide: 1.45, attack: 0.06 });
-        break;
-      case 'thud': // soft soil thud
-        this.tone(95, 0.16, { vol: 0.12, glide: 0.55 });
-        break;
-      case 'sprout': // sprout pop
-        this.tone(760 + Math.random() * 200, 0.08, { vol: 0.06, glide: 1.6 });
-        break;
-      case 'rustle': // turf rustle
-        this.noise(0.32, 0.035, 1700);
-        break;
-      case 'hum': // the Cultivator's hum and tine whirr
-        this.tone(110, 0.8, { vol: 0.025, type: 'sawtooth', attack: 0.2 });
-        this.tone(440, 0.5, { vol: 0.012, type: 'triangle', glide: 1.1, delay: 0.1 });
-        break;
+      case 'crack':
+        return this.hiss('stage', 0.07, 0.09, 2400, 1600, { attack: 0.002, q: 1.4 });
+      case 'grind':
+        return this.hiss('stage', 0.3, 0.06, 300, 200, { attack: 0.03, q: 0.6 });
+      case 'creak':
+        return this.tone('stage', 130 + Math.random() * 40, 0.34, { vol: 0.04, type: 'triangle', glide: 1.4, attack: 0.08, cutoff: 600 });
+      case 'thud':
+        if (!this.sample(SAMPLES.soil, 'stage', 0.35)) this.tone('stage', 95, 0.18, { vol: 0.12, glide: 0.55, cutoff: 400 });
+        return;
+      case 'sprout':
+        return this.tone('stage', 700 + Math.random() * 160, 0.12, { vol: 0.045, glide: 1.4, cutoff: 1800 });
+      case 'rustle':
+        if (!this.sample(SAMPLES.leaf, 'stage', 0.25)) this.hiss('stage', 0.34, 0.03, 1700, 2400, { attack: 0.05 });
+        return;
+      case 'hum':
+        // the Cultivator: a low, soft, proximity-bound hum (it is placed in 3D by at())
+        this.tone('stage', 110, 1, { vol: 0.03, attack: 0.25, cutoff: 300 });
+        return this.tone('stage', 330, 0.6, { vol: 0.01, attack: 0.15, glide: 1.05, delay: 0.1, cutoff: 700 });
     }
   }
 
+  // ───────────────────────── footsteps ─────────────────────────
+
   /**
-   * Music and atmos beds fade toward their level for the current `life`. The generative pad now plays only during
-   * Bloom Frenzy (its faster, fuller pulse marks the event), or always if no music bed could load.
+   * One footfall on `surface` at `p`. Recorded steps when the set exists; else a designed soft step. Quiet, and
+   * capped at two voices so a sprint never chatters.
    */
-  update(dt: number) {
-    if (!this.ctx || !this.musicGain) return;
-    for (const b of this.beds) {
-      const v = b.level(this.life);
-      // Relative step, so very quiet beds (the wind) still follow small changes.
-      if (Math.abs(v - b.at) <= 0.02 * Math.max(v, b.at)) continue;
-      b.at = v;
-      b.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 2.5);
+  footstep(surface: Surface, p: V3, pace = 1) {
+    if (!this.director.ctx) return;
+    const prev = this.pos;
+    this.pos = p;
+    try {
+      const vol = 0.32 * Math.min(1.2, 0.7 + 0.3 * pace);
+      if (this.sample(SAMPLES.step(surface), 'footstep', vol, { spread: 0.08 })) return;
+      if (!this.admit('footstep')) return;
+      switch (surface) {
+        case 'grass':
+          return this.hiss('footstep', 0.12, 0.05, 2600, 1800, { attack: 0.01, q: 0.6 });
+        case 'dirt':
+          this.hiss('footstep', 0.09, 0.06, 900, 600, { attack: 0.004, q: 0.8 });
+          return this.tone('footstep', 80, 0.07, { vol: 0.06, cutoff: 300 });
+        case 'sand':
+          return this.hiss('footstep', 0.16, 0.05, 1300, 900, { attack: 0.02, q: 0.5 });
+        case 'stone':
+          this.hiss('footstep', 0.04, 0.06, 2800, 2200, { attack: 0.002, q: 1.6 });
+          return this.tone('footstep', 140, 0.06, { vol: 0.07, cutoff: 500 });
+        case 'wood':
+          this.tone('footstep', 210, 0.1, { vol: 0.09, mallet: true, cutoff: 900 });
+          return this.hiss('footstep', 0.05, 0.03, 1200, 900, { attack: 0.002, q: 1.2 });
+        case 'water':
+          return this.hiss('footstep', 0.22, 0.06, 1500, 700, { attack: 0.01, q: 0.5 });
+      }
+    } finally {
+      this.pos = prev;
     }
-    if (!this.music) return;
-    if (this.beds.some((b) => b.bus === 'music')) return;
-    this.musicTimer -= dt;
-    if (this.musicTimer > 0) return;
-    this.musicTimer = 2.4;
-    const roots = [0, 3, 1, 4];
-    const r = roots[this.bar++ % roots.length];
-    const base = 196;
-    for (const s of [r, r + 2, r + 4]) this.tone(this.note(s, base), 2.6, { vol: 0.08, attack: 0.6, dest: this.musicGain });
-    if (this.layers >= 1) this.tone(this.note(r + 5 + (this.bar % 3), base * 2), 1.2, { vol: 0.05, attack: 0.05, delay: 0.6, dest: this.musicGain, type: 'triangle' });
-    if (this.layers >= 2) this.tone(this.note(r + 7, base * 2), 0.9, { vol: 0.04, delay: 1.5, dest: this.musicGain, type: 'triangle' });
-    if (this.layers >= 3) this.tone(this.note(r, base / 2), 2.4, { vol: 0.07, attack: 0.3, dest: this.musicGain });
+  }
+
+  // ───────────────────────── debug ─────────────────────────
+
+  /** A snapshot for the audio debug HUD. */
+  debug() {
+    const sc = this.soundscape;
+    return {
+      ...this.director.stats(),
+      stage: sc.stage,
+      area: sc.area,
+      beds: sc.levels,
+      brook: sc.brookLevel,
+      sea: sc.seaLevel,
+      music: this.music.status,
+      intensity: this.music.intensity,
+      ducking: this.director.ducking,
+      wildlife: sc.log,
+      restoredOnce: this.sense.restoredOnce,
+    };
   }
 }

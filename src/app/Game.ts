@@ -8,6 +8,8 @@ import { PARK_GROWTH } from '../data/bloombot';
 import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
+import { AudioDebugHUD } from '../audio/AudioDebugHUD';
+import { sampleArea, surfaceOf, type TileSound } from '../audio/AudioMath';
 import { treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
@@ -301,6 +303,8 @@ export class Game {
   readonly overlays: Overlays;
   readonly hud: Hud;
   readonly sfx = new Sfx();
+  /** Phase 8: the opt-in audio debug overlay (?audiodebug or Shift+F9) */
+  private audioHud = new AudioDebugHUD(this.sfx);
   settings: Settings;
 
   /** simulated seconds not yet ticked (runSimFrame) */
@@ -631,6 +635,7 @@ export class Game {
         setTimeout(() => this.hud.toast('The controls changed in this update, so your own keys are back to the defaults.', '', 6), 900);
       }
       const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
+      visuals.onFootfall = () => this.footfall(); // Phase 8 A05: footsteps on the foot plants of the walk
       this.bot = bot;
       // #629: the Bloombot page's live look at Bloombot
       this.turntable = new Turntable(this.app, () => this.bot?.visuals);
@@ -909,7 +914,53 @@ export class Game {
     this.sfx.setBirds(picked);
   }
 
-  private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
+  /**
+   * Phase 8 A04: what the soundscape hears, a few times a second: the ground within 12 tiles of the listener's
+   * attention (bloombot, or the view's focus), sampled for life, vegetation, canopy and clean water, plus the time
+   * of day, the wind and the world's overall progress. The beds follow it (SoundscapeDirector).
+   */
+  private senseSoundscape() {
+    const g = this.sim.grid;
+    const bot = this.bot;
+    const roof = bot?.pose.roofId ?? GROUND;
+    const cx = bot ? bot.pose.x : this.camera.target.x;
+    const cz = bot ? bot.pose.z : this.camera.target.z;
+    const get = (x: number, z: number): TileSound | undefined => {
+      const t = g.get(roof, x, z);
+      if (!t) return undefined;
+      if (t.feature === 'water') return t.ground === 'restored' ? { ground: 'restored', bloom: 0, water: true } : { ground: 'polluted', bloom: 0 };
+      if (t.feature === 'building' || (t.blocked && !t.unblocked)) return { ground: t.ground, bloom: 0, solid: true };
+      return { ground: t.ground, bloom: t.bloom, tree: treeStage(t, this.sim.water.bloomShown(t)) ?? 0 };
+    };
+    const [fx, fy, fz] = bot ? bot.world() : [this.camera.target.x, 0, this.camera.target.z];
+    const restored = this.sim.progression.restoredCount(HOME);
+    this.sfx.setSense({
+      area: sampleArea(get, cx, cz, 12),
+      daylight: this.dayNight.light,
+      wind: this.weatherVisuals?.wind ?? 0,
+      world: Math.min(1, restored / 48),
+      // the player's own restoring (a new garden's park starts with a few green tiles of its own)
+      restoredOnce: (this.sim.state.stats.tilesRestored ?? 0) > 0,
+      focus: { x: fx, y: fy, z: fz },
+    });
+  }
+
+  /** Phase 8 A05: one of bloombot's footfalls, on the surface under it. */
+  private footfall() {
+    const bot = this.bot;
+    if (!bot || this.cinematic) return;
+    const p = bot.pose;
+    const t = this.sim.grid.get(p.roofId, Math.floor(p.x), Math.floor(p.z));
+    const wading = bot.walker.wading(p);
+    // a deck (a jetty, a plank bridge): walkable paving or planks with water on two opposite sides
+    const wet = (dx: number, dz: number) => this.sim.grid.get(p.roofId, Math.floor(p.x) + dx, Math.floor(p.z) + dz)?.feature === 'water';
+    const bridge = !!t && t.feature !== 'water' && ((wet(1, 0) && wet(-1, 0)) || (wet(0, 1) && wet(0, -1)));
+    const surface = surfaceOf(t?.feature, t?.ground, { wading, bridge });
+    const [x, y, z] = bot.world();
+    this.sfx.footstep(surface, { x, y, z }, bot.speed / 2.6);
+  }
+
+  private setVolume(k: 'sfxVolume' | 'musicVolume' | 'masterVolume' | 'ambienceVolume' | 'uiVolume', v: number) {
     this.settings[k] = Math.max(0, Math.min(100, v));
     this.setSetting('sound', this.settings.sound);
   }
@@ -929,6 +980,7 @@ export class Game {
     this.applyVolumes();
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
+    this.sfx.setReduced(!!s.reducedRepetitive);
     document.body.classList.toggle('contrast', !!s.highContrast);
     this.look.highContrast = !!s.highContrast;
     // Look 5.11: HUD glass without live blur (cheaper on phones). Look 1's Low graphics tier can set it too.
@@ -1098,7 +1150,7 @@ export class Game {
   /** E22.11 / #673: the player's volumes, through every pause and menu; quiet only while the page is hidden or the device sleeps. */
   private applyVolumes() {
     const v = volumesFor(this.settings, this.pause);
-    this.sfx.setVolumes(v.sfx, v.music);
+    this.sfx.setVolumes(v);
   }
 
   // ───────────────────────── E22.11: the menu and Settings ─────────────────────────
@@ -1146,7 +1198,7 @@ export class Game {
       this.settings.speed = this.speed;
       return;
     }
-    if (k === 'sfxVolume' || k === 'musicVolume') return this.setVolume(k, Number(v));
+    if (k === 'sfxVolume' || k === 'musicVolume' || k === 'masterVolume' || k === 'ambienceVolume' || k === 'uiVolume') return this.setVolume(k, Number(v));
     if (k === 'gfx') {
       this.setGraphics(v as GfxSetting);
       this.settingsUi.refresh(); // the Glow row says when a tier has no glow (#633)
@@ -4224,7 +4276,7 @@ export class Game {
       // E21.5: an Old City region names itself; its backstreets open quietly
       if (info.region) this.hud.toast(`🔓 ${s.gates.regionById(info.region)!.name} is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>`, 'gold', 4);
       else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>Pulse its ground green to wake the ${info.landmarkName}.</small>`, 'gold', 4);
-      if (!info.noLandmark) this.sfx.fanfare();
+      if (!info.noLandmark) this.sfx.areaOpen();
       this.save();
     });
     // a raised layer added to the world gets its roof drawn
@@ -4486,8 +4538,7 @@ export class Game {
       }
       if (id) this.cat.hide(id, true);
       this.hud.hideTip();
-      this.sfx.at(p, (q) => q.meow());
-      setTimeout(() => this.sfx.fanfare(), 250);
+      this.sfx.at(p, (q) => q.catFound(variant === 'golden' || variant === 'rainbow' ? variant : 'plain'));
       // Rarer cats are named in words (and shaped differently), never told apart by colour alone.
       const label = variant === 'rainbow' ? '🌈 You found a Rainbow Cat!' : variant === 'golden' ? '👑 You found a Golden Cat!' : '🐱 You found a Lucky Cat!';
       this.hud.toast(label, 'cat', 2.4);
@@ -5207,7 +5258,9 @@ export class Game {
       this.brookScan = 0.25;
       this.placeBrook();
       this.placeBirds();
+      this.senseSoundscape();
     }
+    this.audioHud.update(realDt);
     this.drones.update(paused || this.photo.frozen ? 0 : dt); // drone personality freezes with the game
     this.cat.update(wdt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
