@@ -518,16 +518,12 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
   const R = rng((variant + 1) * 7919 + SPECIES.indexOf(sp) * 104729 + stage * 13);
   const bark = BARK[sp];
   const barkDark = scaleC(bark, sp === 'birch' ? 0.45 : 0.7);
-  const det = lod === 0 ? 0 : lod >= 2 ? 2 : 1;
-  const big = lod === 0 ? 0 : lod >= 2 ? 3 : 2; // detail for the main clumps
   if (stage === 1) return sapling(B, sp, R, lod).done();
   const S = (stage === 2 ? 0.62 : stage === 4 ? 1.08 : 1) * 1.12; // overall size
   const pal = leafPalette(sp, R, stage);
-  if (lod === 0) return farTree(B, sp, R, S, pal, bark).done();
-
-  if (sp === 'pine') pine(B, R, S, pal, bark, det, big, lod);
-  else if (sp === 'willow') willow(B, R, S, pal, bark, barkDark, det, big, lod);
-  else broadleaf(B, sp, R, S, pal, bark, barkDark, det, big, stage, lod);
+  if (sp === 'pine') pine(B, R, S, pal, bark, lod);
+  else if (sp === 'willow') willow(B, R, S, pal, bark, barkDark, lod);
+  else broadleaf(B, sp, R, S, pal, bark, barkDark, stage, lod);
 
   // machine side: brass irrigation collar with a little cyan status light (grown trees only)
   if (stage >= 3 && lod > 0) {
@@ -541,8 +537,8 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
 }
 
 /** The trunk: a gently curving, flared tube. Returns its top. */
-function trunk(B: Buf, R: () => number, H: number, rad: number, bark: C, barkDark: C, segs: number, sides: number, birch = false): V {
-  const lean: V = [(R() - 0.5) * 0.14, 1, (R() - 0.5) * 0.14];
+function trunk(B: Buf, R: () => number, H: number, rad: number, bark: C, barkDark: C, segs: number, sides: number, birch = false, leanBy = 0.14): V {
+  const lean: V = [(R() - 0.5) * leanBy, 1, (R() - 0.5) * leanBy];
   const tp: V[] = [];
   const tr: number[] = [];
   const tc: C[] = [];
@@ -560,130 +556,256 @@ function trunk(B: Buf, R: () => number, H: number, rad: number, bark: C, barkDar
   return tp[segs];
 }
 
-/** Far zoom: a trunk, three limbs and a few dozen big leaves (cheap, calm at a distance, still a tree). */
-function farTree(B: Buf, sp: Species, R: () => number, S: number, pal: Palette, bark: C) {
-  const shape: Record<Species, [number, number, number]> = {
-    // trunk height, crown radius, crown half-height (in units of S)
-    oak: [0.5, 0.5, 0.4],
-    cherry: [0.42, 0.52, 0.36],
-    birch: [0.78, 0.3, 0.44],
-    pine: [0.25, 0.36, 0.6],
-    willow: [0.5, 0.5, 0.36],
-  };
-  const [th, cr, ch] = shape[sp];
-  tube(B, [[0, 0, 0], [0, th * S + ch * S * 0.5, 0]], [0.07 * S, 0.04 * S], 4, [scaleC(bark, 0.75), bark], [0, 0.1], false);
-  const heart: V = [0, th * S + ch * S * 0.8, 0];
-  const crown: Crown = { heart, r: cr * S, pal };
-  const n = 44;
-  for (let i = 0; i < n; i++) {
-    const u = norm([R() * 2 - 1, R() * 1.7 - 0.6, R() * 2 - 1]);
-    const k = sp === 'pine' ? 1 - 0.75 * clamp(0.5 + 0.5 * u[1], 0, 1) : 1; // a cone for the pine
-    const p: V = [heart[0] + u[0] * cr * S * 0.7 * k, heart[1] + u[1] * ch * S * 0.8, heart[2] + u[2] * cr * S * 0.7 * k];
-    spray(B, R, { p, dir: u }, 1, 0.02, (sp === 'pine' || sp === 'willow' ? 0.3 : 0.26) * S, crown, 0.6, sp === 'pine' ? 0.4 : sp === 'willow' ? 0.35 : 0.7, sp === 'willow' ? 0.9 : 0.25);
-  }
-  return B;
+// ───────────── P7-E29: clustered crowns ─────────────
+//
+// Phase 7 review: crowns of loose leaf cards read as a cloud of flakes up close and a scatter of confetti far off,
+// and lone spheres read as lollipops. A crown is now a few designed leaf-cluster volumes resting on the ends of
+// real limbs: each cluster is a soft, lumpy mass (the foliage shader draws leaves over it) with a fringe of leaf
+// cards round its edge, so the silhouette is leafy and layered. Clusters are lit as one crown: light on the sunny
+// top, darker and cooler underneath and toward the heart, which gives the canopy's underside its depth. Every
+// detail level uses the same cluster layout, so a tree keeps its silhouette as it changes level (no popping).
+
+/** One leaf mass of a crown: centre, radii, and how light it sits in the crown (0 inner / under … 1 outer top). */
+interface Cluster {
+  c: V;
+  r: V;
+  /** the limb that carries it starts here (none: it sits on another cluster) */
+  from?: V;
+  /** that limb's radius where it starts */
+  rad?: number;
+  /** tone shift for this cluster (-1 … 1): a slightly different green, so the masses read apart */
+  tone: number;
+  /** bumps on its surface (default 6) */
+  lobes?: number;
 }
 
-function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette, bark: C, barkDark: C, _det: number, _big: number, stage: TreeStage, lod: Lod = 1) {
+/** Per detail level: cluster sphere detail, fringe leaves per cluster (per unit of cluster size), fringe leaf length. */
+const CROWN: Record<Lod, { detail: number; fringe: number; leaf: number; limbSides: number }> = {
+  0: { detail: 1, fringe: 0, leaf: 0, limbSides: 0 },
+  1: { detail: 2, fringe: 18, leaf: 1.2, limbSides: 5 },
+  2: { detail: 2, fringe: 34, leaf: 0.8, limbSides: 6 },
+  3: { detail: 2, fringe: 52, leaf: 0.7, limbSides: 6 },
+};
+
+/** A limb from `a` to `b` that bows upward a little (or droops for negative `bow`), tapering from rad to rad·k. */
+function bough(B: Buf, R: () => number, a: V, b: V, rad: number, sides: number, bark: C, f0: number, f1: number, bow = 0.12, k = 0.45) {
+  const d = sub(b, a);
+  const L = len(d);
+  const side: V = [(R() - 0.5) * 0.12 * L, 0, (R() - 0.5) * 0.12 * L];
+  const p1 = add(add(a, mul(d, 0.34)), add([0, bow * L * 0.6, 0], side));
+  const p2 = add(add(a, mul(d, 0.7)), add([0, bow * L * 0.5, 0], mul(side, 0.5)));
+  tube(B, [a, p1, p2, b], [rad, rad * (1 - (1 - k) * 0.4), rad * (1 - (1 - k) * 0.75), rad * k], sides, [scaleC(bark, 0.85), bark, bark, bark], [f0, lerp(f0, f1, 0.34), lerp(f0, f1, 0.7), f1], true);
+}
+
+/** Draws a crown's clusters (and the limbs that carry them) at detail level `lod`. */
+function drawCrown(B: Buf, R: () => number, cl: Cluster[], cr: Crown, bark: C, lod: Lod, o: { narrow: number; leafL: number; droop?: number }) {
+  const q = CROWN[lod];
+  if (lod > 0)
+    for (const k of cl)
+      if (k.from && k.rad) {
+        // the limb ends inside its cluster, a little below the centre, so it shows under the crown and vanishes in it
+        const end = add(k.c, [0, -k.r[1] * 0.35, 0]);
+        bough(B, R, k.from, end, k.rad, q.limbSides, bark, 0.14, 0.45);
+      }
+  for (let i = 0; i < cl.length; i++) {
+    const k = cl[i];
+    const pal = shade(shiftPal(cr.alt && (i * 0.618) % 1 < cr.alt.share ? cr.alt.pal : cr.pal, k.tone));
+    puff(B, { c: k.c, r: k.r, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.55 + 0.3 * clamp(len(sub(k.c, cr.heart)) / cr.r, 0, 1), seed: i * 31 + 7, detail: q.detail, clusters: k.lobes ?? 6, crown: cr.heart, crownR: cr.r, leafy: true });
+    if (!q.fringe) continue;
+    const size = (k.r[0] + k.r[2]) / 2;
+    fringe(B, R, k, Math.round(q.fringe * clamp(size / 0.3, 0.6, 1.6)), pal, cr, o.leafL * q.leaf, o.narrow, o.droop ?? 0.35);
+  }
+}
+
+/**
+ * Leaves round a cluster's edge that break its outline: each starts just under the surface and sticks out past it,
+ * lying back along it and drooping a little, lit with the surface's own soft normal so the mass keeps its light.
+ * Mostly on the sides and top: underneath they would only fill the shade.
+ */
+function fringe(B: Buf, R: () => number, k: Cluster, n: number, pal: Palette, cr: Crown, L: number, narrow: number, droop: number) {
+  for (let i = 0; i < n; i++) {
+    const u = randDir(R, -0.45);
+    const sn = norm([u[0] / k.r[0], u[1] / k.r[1], u[2] / k.r[2]]);
+    const p: V = [k.c[0] + u[0] * k.r[0] * 0.9, k.c[1] + u[1] * k.r[1] * 0.9, k.c[2] + u[2] * k.r[2] * 0.9];
+    const t1 = norm(Math.abs(sn[1]) < 0.9 ? cross(sn, [0, 1, 0]) : cross(sn, [1, 0, 0]));
+    const t2 = cross(sn, t1);
+    const a = R() * Math.PI * 2;
+    const tan = add(mul(t1, Math.cos(a)), mul(t2, Math.sin(a)));
+    const dir = norm(add(add(tan, mul(sn, 0.9)), [0, -droop, 0]));
+    const soft = norm(add(mul(norm(sub(p, cr.heart)), 0.5), sn));
+    const col = leafColour(cr, p, soft, R);
+    const tint = mix(col, pal.base, 0.35);
+    const l = L * (0.8 + R() * 0.45);
+    const upv: V = Math.abs(dot(dir, soft)) > 0.92 ? norm(add(soft, [0.3, 0.2, -0.3])) : soft;
+    card(B, p, dir, upv, l, l * narrow, tint, mix(tint, pal.light, 0.15), 0.8, 1.1, 0.5, 0.14, soft);
+  }
+}
+
+/**
+ * The crown's underside is the shade colour: lifted and cooled from the leaf's darkest tone, so the canopy seen from
+ * below has depth (about 40% darker than its lit top, not black).
+ */
+const shade = (p: Palette): Palette => ({ ...p, dark: mix(p.dark, mul3(p.base, [0.8, 0.95, 1.12]), 0.45) });
+const mul3 = (a: C, b: C): C => [a[0] * b[0], a[1] * b[1], a[2] * b[2]];
+
+/** A palette nudged lighter / yellower (tone > 0) or deeper (tone < 0). */
+function shiftPal(p: Palette, tone: number): Palette {
+  const k = 1 + tone * 0.12;
+  const y: C = [1 + tone * 0.05, 1 + tone * 0.02, 1 - tone * 0.06];
+  const f = (c: C): C => [c[0] * k * y[0], c[1] * k * y[1], c[2] * k * y[2]];
+  return { base: f(p.base), light: f(p.light), dark: f(p.dark) };
+}
+
+/** A trunk for every detail level: full taper and flare near, a plain tapered post far. Returns its top. */
+function trunkAt(B: Buf, R: () => number, lod: Lod, H: number, rad: number, bark: C, barkDark: C, birch = false, lean = 0.14): V {
+  if (lod === 0) {
+    const top: V = [(R() - 0.5) * lean * H, H, (R() - 0.5) * lean * H];
+    tube(B, [[0, 0, 0], mul(top, 0.5), top], [rad * 1.25, rad * 0.85, rad * 0.6], 5, [barkDark, bark, bark], [0, 0.06, 0.12], false);
+    return top;
+  }
+  return trunk(B, R, H, rad, bark, barkDark, birch ? 6 : 5, lod >= 2 ? 9 : 7, birch, lean);
+}
+
+/**
+ * Broad shade tree (oak): a stout, flared trunk that splits low into a few strong limbs reaching up and out, and a
+ * wide, layered dome of clusters (an outer ring, a raised inner ring and a crown on top), wider than it is tall.
+ * Cherry: shorter and crookeder, limbs spreading almost flat into an umbrella of blossom. Birch: a slender white
+ * leader with a narrow, airy oval of small clusters stacked along its upper half.
+ */
+function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette, bark: C, barkDark: C, stage: TreeStage, lod: Lod) {
   const birch = sp === 'birch';
   const cherry = sp === 'cherry';
   const young = stage === 2;
-  const trunkH = (birch ? 0.8 : cherry ? 0.36 : 0.44) * S;
-  const trunkR = (birch ? 0.05 : 0.088) * S;
-  const top = trunk(B, R, trunkH, trunkR, bark, barkDark, birch ? 6 : 4, 7, birch);
-  const crownH = (birch ? 0.3 : cherry ? 0.3 : 0.36) * S;
-  const heart: V = [top[0], top[1] + crownH * (birch ? 0.1 : 0.75), top[2]];
-  const crownR = (birch ? 0.5 : cherry ? 0.62 : 0.6) * S;
-  const crown: Crown = { heart, r: crownR, pal };
-  // cherry: mostly blossom; a Thriving or Radiant one leafs out a little green among it
-  if (cherry) crown.alt = stage >= 3
-    ? { pal: { base: hsl(96, 50, 40), light: hsl(84, 60, 56), dark: hsl(110, 44, 24) }, share: 0.16 }
-    : { pal: { base: hex(PALETTE.treeBlossom[0]), light: hex(PALETTE.treeBlossom[1]), dark: hex(PALETTE.treeBlossom[2]) }, share: 0.3 };
-  const o: LimbOpts = { upturn: birch ? 0.9 : cherry ? 0.35 : 0.55, kids: young || birch ? [2] : [3, lod >= 2 ? 3 : 2], fork: birch ? 0.6 : cherry ? 0.85 : 0.75, shrink: 0.68, bark, sides: 6 };
-  const tips: Tip[] = [];
-  const maxDepth = birch || young ? 1 : 2;
+  const trunkH = (birch ? 0.86 : cherry ? 0.4 : 0.52) * S;
+  const trunkR = (birch ? 0.045 : cherry ? 0.082 : 0.1) * S;
+  const top = trunkAt(B, R, lod, trunkH, trunkR, bark, barkDark, birch, cherry ? 0.3 : 0.14);
+  const cl: Cluster[] = [];
+  let heart: V;
+  let crownR: number;
   if (birch) {
-    // a slender leader with short upswept limbs along its upper half
-    const n = young ? 4 : 7;
+    // a narrow oval: small clusters spiralling up the leader, the biggest a third of the way up the crown
+    const n = young ? 4 : 6;
+    heart = [top[0], top[1] + 0.12 * S, top[2]];
+    crownR = 0.42 * S;
     for (let i = 0; i < n; i++) {
-      const k = 0.45 + 0.55 * (i / (n - 1));
-      const a = i * 2.4 + R() * 0.6;
-      const from: V = [top[0] * k, trunkH * k, top[2] * k];
-      const dir = norm([Math.cos(a), 0.55 + R() * 0.3, Math.sin(a)]);
-      limb(B, R, from, dir, (0.3 - 0.12 * k) * S * (0.9 + R() * 0.3), trunkR * 0.5 * (1.2 - 0.6 * k), 0, maxDepth, 0.2 + 0.2 * k, o, tips);
+      const k = i / (n - 1);
+      const a = i * 2.4 + R() * 0.5;
+      const w = (0.22 + 0.14 * Math.sin(Math.PI * (0.25 + 0.75 * k))) * S;
+      const y = top[1] - 0.28 * S + k * 0.62 * S;
+      const off = (0.14 + 0.06 * R()) * S * (1 - 0.6 * k);
+      const from: V = [top[0] * (y / top[1]) * 0.9, Math.min(y - 0.1 * S, top[1]), top[2] * (y / top[1]) * 0.9];
+      cl.push({ c: [top[0] + Math.cos(a) * off, y, top[2] + Math.sin(a) * off], r: [w * 0.9, w * 0.85, w * 0.9], from, rad: trunkR * 0.45, tone: R() * 2 - 1 });
     }
-    limb(B, R, top, norm([(R() - 0.5) * 0.2, 1, (R() - 0.5) * 0.2]), 0.22 * S, trunkR * 0.5, 0, maxDepth, 0.3, o, tips);
+    cl.push({ c: [top[0], top[1] + 0.4 * S, top[2]], r: [0.16 * S, 0.2 * S, 0.16 * S], tone: 0.6 });
+    if (lod > 0) bough(B, R, [top[0] * 0.8, top[1] * 0.8, top[2] * 0.8], [top[0], top[1] + 0.32 * S, top[2]], trunkR * 0.55, 5, bark, 0.12, 0.4, 0.02);
   } else {
-    // the trunk splits into limbs that reach up and out, plus a leader through the middle
-    const n = young ? 3 : 4;
+    // the outer ring: one cluster per main limb
+    const ring = young ? 3 : cherry ? 5 : 5 + Math.floor(R() * 2);
+    const reach = (cherry ? 0.56 : 0.5) * S;
+    const rise = (cherry ? 0.16 : 0.26) * S;
+    heart = [top[0], top[1] + (cherry ? 0.2 : 0.3) * S, top[2]];
+    crownR = (cherry ? 0.78 : 0.74) * S;
     const a0 = R() * Math.PI * 2;
-    for (let i = 0; i < n; i++) {
-      const a = a0 + (i / n) * Math.PI * 2 + (R() - 0.5) * 0.5;
-      const rise = cherry ? 0.45 + R() * 0.25 : 0.7 + R() * 0.35;
-      const dir = norm([Math.cos(a), rise, Math.sin(a)]);
-      const from: V = [top[0], top[1] - (i % 2) * 0.05 * S, top[2]];
-      limb(B, R, from, dir, (cherry ? 0.36 : 0.33) * S * (0.9 + R() * 0.25), trunkR * 0.62, 0, maxDepth, 0.14, o, tips);
+    for (let i = 0; i < ring; i++) {
+      const a = a0 + (i / ring) * Math.PI * 2 + (R() - 0.5) * 0.7;
+      const d = reach * (0.82 + R() * 0.3);
+      const rr = (cherry ? 0.3 : 0.32) * S * (0.85 + R() * 0.3);
+      const y = top[1] + rise + (R() - 0.5) * 0.12 * S;
+      // limbs leave the trunk at staggered heights, the lower ones a little below its top
+      const from: V = [top[0] * 0.9, top[1] - (i % 2) * 0.1 * S, top[2] * 0.9];
+      cl.push({ c: [top[0] + Math.cos(a) * d, y, top[2] + Math.sin(a) * d], r: [rr * 1.08, rr * (cherry ? 0.66 : 0.74), rr * 1.08], from, rad: trunkR * 0.6, tone: R() * 1.4 - 0.9 });
     }
-    limb(B, R, top, norm([(R() - 0.5) * 0.3, 1, (R() - 0.5) * 0.3]), 0.28 * S, trunkR * 0.6, 0, maxDepth, 0.14, o, tips);
-  }
-  const [n, k] = LEAVES[lod];
-  const L = (birch ? 0.08 : 0.1) * S * k * (young ? 1.15 : 1);
-  for (const t of tips) spray(B, R, t, n, 0.2 * S, L, crown, 0.65 + 0.3 * clamp(len(sub(t.p, heart)) / crownR, 0, 1), birch ? 0.55 : 0.62, birch ? 0.35 : 0.2);
-}
-
-function pine(B: Buf, R: () => number, S: number, pal: Palette, bark: C, _det: number, _big: number, lod: Lod = 1) {
-  const H = 1.35 * S;
-  const trunkR = 0.06 * S;
-  tube(B, [[0, 0, 0], [0, H * 0.5, 0], [0, H * 0.97, 0]], [trunkR * 1.3, trunkR * 0.8, trunkR * 0.2], 6, [scaleC(bark, 0.75), bark, bark], [0, 0.15, 0.4], false);
-  const crown: Crown = { heart: [0, H * 0.55, 0], r: 0.6 * S, pal };
-  const [n, k] = LEAVES[lod];
-  const whorls = 5;
-  for (let w = 0; w < whorls; w++) {
-    const kk = w / (whorls - 1);
-    const y = H * (0.24 + 0.68 * kk);
-    const reach = (0.44 - 0.33 * kk) * S;
-    const arms = 6 - Math.floor(kk * 2);
-    for (let i = 0; i < arms; i++) {
-      const a = (i / arms) * Math.PI * 2 + w * 0.7 + R() * 0.3;
-      // a bough: out and a little down, lifting at its tip
-      const out: V = [Math.cos(a), 0, Math.sin(a)];
-      const p0: V = [0, y, 0];
-      const p1 = add(p0, add(mul(out, reach * 0.55), [0, -reach * 0.16, 0]));
-      const p2 = add(p0, add(mul(out, reach), [0, -reach * 0.14, 0]));
-      tube(B, [p0, p1, p2], [trunkR * 0.4 * (1 - 0.5 * kk), trunkR * 0.25, trunkR * 0.1], 3, [bark, bark, bark], [0.2 + 0.3 * kk, 0.4 + 0.3 * kk, 0.6 + 0.3 * kk], false);
-      for (const [q, f] of [[p1, 0.5], [p2, 0.7], [add(mul(add(p0, p1), 0.5), [0, 0, 0]), 0.4]] as [V, number][])
-        spray(B, R, { p: q, dir: norm(add(out, [0, -0.2, 0])) }, Math.max(2, Math.round(n * 0.5)), 0.1 * S, 0.11 * S * k, crown, f + 0.2 * kk, 0.3, 0.5);
+    // the raised inner ring and the crown on top, carried by a leader through the middle
+    const inner = young ? 1 : cherry ? 2 : 3;
+    for (let i = 0; i < inner; i++) {
+      const a = a0 + ((i + 0.5) / inner) * Math.PI * 2 + (R() - 0.5) * 0.5;
+      const d = inner === 1 ? 0 : reach * (0.34 + R() * 0.12);
+      const rr = (cherry ? 0.3 : 0.34) * S * (0.9 + R() * 0.2);
+      const y = top[1] + rise + (cherry ? 0.16 : 0.26) * S + R() * 0.06 * S;
+      cl.push({ c: [top[0] + Math.cos(a) * d, y, top[2] + Math.sin(a) * d], r: [rr, rr * (cherry ? 0.72 : 0.82), rr], from: i === 0 ? top : undefined, rad: trunkR * 0.55, tone: 0.3 + R() * 0.7 });
     }
   }
-  spray(B, R, { p: [0, H * 0.97, 0], dir: [0, 1, 0] }, n, 0.05 * S, 0.1 * S * k, crown, 1, 0.3, -0.6);
+  const cr: Crown = { heart, r: crownR, pal };
+  // cherry: blossom clusters with a little fresh green among them once it's Thriving; a sapling-stage cherry is all
+  // blossom
+  if (cherry)
+    cr.alt = stage >= 3
+      ? { pal: { base: hsl(96, 46, 40), light: hsl(84, 56, 56), dark: hsl(110, 40, 24) }, share: 0.14 }
+      : { pal: { base: hex(PALETTE.treeBlossom[0]), light: hex(PALETTE.treeBlossom[1]), dark: hex(PALETTE.treeBlossom[2]) }, share: 0.3 };
+  drawCrown(B, R, cl, cr, bark, lod, { narrow: birch ? 0.55 : 0.62, leafL: (birch ? 0.085 : 0.11) * S });
 }
 
-function willow(B: Buf, R: () => number, S: number, pal: Palette, bark: C, barkDark: C, _det: number, _big: number, lod: Lod) {
-  const trunkH = 0.5 * S;
-  const top = trunk(B, R, trunkH, 0.085 * S, bark, barkDark, 4, 7);
-  const heart: V = [top[0], trunkH + 0.2 * S, top[2]];
-  const crown: Crown = { heart, r: 0.62 * S, pal };
-  const [n, k] = LEAVES[lod];
-  const arms = lod === 1 ? 7 : 9;
+/**
+ * Spire pine: a straight, tapering trunk and a stack of drooping, layered tiers that narrow toward a pointed top,
+ * each tier a flattened ring of needle masses (never a smooth cone).
+ */
+function pine(B: Buf, R: () => number, S: number, pal: Palette, bark: C, lod: Lod) {
+  const H = 1.55 * S;
+  const trunkR = 0.07 * S;
+  tube(B, [[0, 0, 0], [0, H * 0.45, 0], [0, H * 0.95, 0]], [trunkR * 1.35, trunkR * 0.8, trunkR * 0.2], lod === 0 ? 5 : 7, [scaleC(bark, 0.75), bark, bark], [0, 0.15, 0.4], false);
+  const cr: Crown = { heart: [0, H * 0.5, 0], r: 0.62 * S, pal };
+  const cl: Cluster[] = [];
+  const tiers = 6;
+  for (let w = 0; w < tiers; w++) {
+    const k = w / (tiers - 1);
+    const y = H * (0.22 + 0.66 * k);
+    const reach = (0.52 - 0.4 * k) * S;
+    // each tier a drooping skirt of needles with a lumpy rim, sitting low on the tier below so the layers read as
+    // one tapering spire
+    const off = (R() - 0.5) * 0.04 * S;
+    cl.push({ c: [off, y, -off], r: [reach * 0.95, (0.17 - 0.04 * k) * S, reach * 0.95], tone: k * 0.8 - 0.5 + (R() - 0.5) * 0.3, lobes: 9 });
+  }
+  cl.push({ c: [0, H * 0.97, 0], r: [0.07 * S, 0.14 * S, 0.07 * S], tone: 0.5 });
+  drawCrown(B, R, cl, cr, bark, lod, { narrow: 0.28, leafL: 0.12 * S, droop: 0.6 });
+}
+
+/**
+ * Canal willow: a leaning trunk, limbs that rise and arch over, a low dome of leaf masses on top and a curtain of
+ * hanging strands falling from the arch almost to the ground.
+ */
+function willow(B: Buf, R: () => number, S: number, pal: Palette, bark: C, barkDark: C, lod: Lod) {
+  const trunkH = 0.52 * S;
+  const top = trunkAt(B, R, lod, trunkH, 0.095 * S, bark, barkDark, false, 0.24);
+  const heart: V = [top[0], trunkH + 0.24 * S, top[2]];
+  const cr: Crown = { heart, r: 0.7 * S, pal };
+  const cl: Cluster[] = [];
+  const arms = 5;
+  const a0 = R() * Math.PI * 2;
+  const tips: { p: V; out: V }[] = [];
   for (let i = 0; i < arms; i++) {
-    const a = (i / arms) * Math.PI * 2 + R() * 0.4;
+    const a = a0 + (i / arms) * Math.PI * 2 + (R() - 0.5) * 0.5;
     const out: V = [Math.cos(a), 0, Math.sin(a)];
-    // a limb that rises, arches over and lets its tip fall
-    const reach = (0.34 + R() * 0.12) * S;
-    const p1 = add(top, add(mul(out, reach * 0.45), [0, 0.3 * S, 0]));
-    const p2 = add(top, add(mul(out, reach * 0.9), [0, 0.34 * S, 0]));
-    const p3 = add(top, add(mul(out, reach * 1.15), [0, 0.2 * S, 0]));
-    tube(B, [top, p1, p2, p3], [0.03 * S, 0.02 * S, 0.012 * S, 0.006 * S], 4, [bark, bark, bark, bark], [0.14, 0.25, 0.4, 0.55], false);
-    spray(B, R, { p: p2, dir: out }, Math.round(n * 0.6), 0.12 * S, 0.11 * S * k, crown, 0.6, 0.3, 0.5);
-    // hanging strands: thin stems that fall from the arch, leaves pointing down along them
-    for (const from of [p2, p3, add(mul(add(p1, p2), 0.5), [0, 0, 0])]) {
-      const Ls = (0.3 + R() * 0.22) * S;
-      const sway: V = [(R() - 0.5) * 0.08 * S, 0, (R() - 0.5) * 0.08 * S];
+    const reach = (0.44 + R() * 0.12) * S;
+    const c = add(top, add(mul(out, reach * 0.62), [0, 0.3 * S, 0]));
+    cl.push({ c, r: [0.28 * S, 0.17 * S, 0.28 * S], from: top, rad: 0.05 * S, tone: R() * 1.2 - 0.6 });
+    tips.push({ p: add(top, add(mul(out, reach), [0, 0.22 * S, 0])), out });
+  }
+  cl.push({ c: add(top, [0, 0.42 * S, 0]), r: [0.3 * S, 0.18 * S, 0.3 * S], from: top, rad: 0.05 * S, tone: 0.5 });
+  drawCrown(B, R, cl, cr, bark, lod, { narrow: 0.3, leafL: 0.1 * S });
+  // the curtain: far off, a few long hanging masses; nearer, strands of leaves on thin falling stems
+  const strands = lod === 0 ? 0 : lod === 1 ? 5 : 7;
+  for (let i = 0; i < tips.length; i++) {
+    const { p, out } = tips[i];
+    const pal2 = shiftPal(pal, (i % 3) * 0.3 - 0.3);
+    // a hanging mass inside the strands (all that's left far off), so the curtain reads as foliage, not threads
+    const near = lod > 0;
+    puff(B, { c: add(p, [0, -0.2 * S, 0]), r: near ? [0.15 * S, 0.22 * S, 0.15 * S] : [0.18 * S, 0.25 * S, 0.18 * S], base: pal2.base, light: pal2.light, dark: pal2.dark, flex: 0.9, seed: i, detail: lod >= 2 ? 2 : lod === 1 ? 1 : 0, clusters: 4, crown: heart, crownR: cr.r, leafy: true });
+    if (!near) continue;
+    const side = cross(out, [0, 1, 0]);
+    for (let s = 0; s < strands; s++) {
+      const t = s / (strands - 1) - 0.5;
+      const from = add(add(p, mul(side, t * 0.42 * S)), mul(out, -Math.abs(t) * 0.16 * S + (R() - 0.5) * 0.05 * S));
+      const Ls = (0.42 + R() * 0.2) * S;
+      const sway: V = add(mul(out, 0.05 * S), [(R() - 0.5) * 0.04 * S, 0, (R() - 0.5) * 0.04 * S]);
       const mid = add(from, add(mul(sway, 0.5), [0, -Ls * 0.5, 0]));
       const end = add(from, add(sway, [0, -Ls, 0]));
-      tube(B, [from, mid, end], [0.004 * S, 0.003 * S, 0.002 * S], 3, [pal.dark, pal.dark, pal.base], [0.55, 0.85, 1.1], false);
-      for (const [q, f] of [[mid, 0.85], [end, 1.1], [add(mul(add(from, mid), 0.5), [0, 0, 0]), 0.7]] as [V, number][])
-        spray(B, R, { p: q, dir: [0, -1, 0] }, Math.max(2, Math.round(n * 0.35)), 0.04 * S, 0.1 * S * k, crown, f, 0.26, 1.6);
+      tube(B, [from, mid, end], [0.004 * S, 0.003 * S, 0.002 * S], 3, [pal2.dark, pal2.dark, pal2.base], [0.6, 0.9, 1.15], false);
+      const per = lod === 1 ? 3 : 5;
+      for (let j = 0; j < per; j++) {
+        const kk = (j + 0.5) / per;
+        const q = add(from, add(mul(sway, kk), [0, -Ls * kk, 0]));
+        spray(B, R, { p: q, dir: [0, -1, 0] }, lod === 1 ? 3 : 4, 0.05 * S, 0.12 * S, { heart, r: cr.r, pal: pal2 }, 0.6 + 0.5 * kk, 0.26, 1.8);
+      }
     }
   }
 }
