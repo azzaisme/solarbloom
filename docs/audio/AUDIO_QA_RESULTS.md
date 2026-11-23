@@ -10,20 +10,20 @@ listening test has been done yet: that is the main open item (A09).
 |---|---|
 | Unit suite (`npm test`, 140 files) | 1416 passed, 2 skipped |
 | `tests/audio.test.ts` (sampler, stages, beds, moods, limiter, chain ladder, manifest, seams, peaks) | 19 / 19 |
-| `npm run test:audio` (real game, see below) | 18 / 18 on the Chopin stand-in build; re-run on the final score in progress |
+| `npm run test:audio` (real game, see below) | 18 / 18 on the final five-piece score |
 | Bake report: every loop's seam step | 0.26–1.04 × an ordinary sample step (inaudible) |
 | Bake report: every file's decoded peak | ≤ −1.0 dBFS |
 
 `npm run test:audio` in the built game, new garden:
 
 - silent before the first gesture; music silent before the player's own first restoration ("the world waits");
-- dead ground: wind only, no leaves/meadow/insects/birds (≈ −44 dB RMS with no sea nearby);
+- dead ground: wind only, no leaves/meadow/insects/birds (−38 dB RMS, a still sea in the distance);
 - restore 373 tiles round bloombot: life glides up over ~10 s to "thriving" (0.65); leaves 0.18, meadow 0.11,
   wind down from 0.15 to 0.05, bird calls every ~6 s; output −33.5 → −26.2 dB RMS (fuller, never a wall);
 - teleport 60 tiles into wasteland: 2 s later life still 0.65 (fades behind), then barren 0.00, wind back;
 - 50-bloom chain + landmark + coins + drones: ≤ 10 voices (pool 24), peak −8.5 dBFS after the limiter;
 - hidden page: −120 dB; back: fades in.
-- Capture: `docs/audio/captures/dead-to-living-60s.ogg` (restoration at 0:17), log `dead-to-living.json`.
+- Capture: `docs/audio/captures/dead-to-living-60s.ogg` (final build; restoration at 0:17), log `dead-to-living.json`.
 
 ## Epic report
 
