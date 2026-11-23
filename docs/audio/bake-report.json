@@ -115,29 +115,53 @@
   "peak_dbfs": -5.14,
   "bytes": 12629
  },
- "music/nocturne-op55-no2": {
-  "file": "assets/audio/music/nocturne-op55-no2.ogg",
-  "src": "music/chopin-nocturne-op55no2.mp3",
-  "seconds": 309.944,
-  "peak_dbfs": -1.17,
-  "bytes": 3843532,
-  "lufs": -19.7
+ "music/bach-sarabande-harp": {
+  "file": "assets/audio/music/bach-sarabande-harp.ogg",
+  "src": "music/bach-bwv825-sarabande-harp.flac",
+  "seconds": 153.5,
+  "peak_dbfs": -4.13,
+  "bytes": 2360690,
+  "lufs": -20.0
  },
- "music/nocturne-op72-no1": {
-  "file": "assets/audio/music/nocturne-op72-no1.ogg",
-  "src": "music/chopin-nocturne-op72no1.mp3",
-  "seconds": 272.656,
-  "peak_dbfs": -1.49,
-  "bytes": 3364160,
-  "lufs": -21.3
+ "music/dvorak-romanza-quartet": {
+  "file": "assets/audio/music/dvorak-romanza-quartet.ogg",
+  "src": "music/dvorak-op51-romanza-quartet.mp3",
+  "seconds": 367.128,
+  "peak_dbfs": -1.31,
+  "bytes": 5126517,
+  "lufs": -21.5
  },
- "music/nocturne-op9-no2": {
-  "file": "assets/audio/music/nocturne-op9-no2.ogg",
-  "src": "music/chopin-nocturne-op9no2.mp3",
-  "seconds": 276.608,
-  "peak_dbfs": -1.3,
-  "bytes": 3382309,
-  "lufs": -21.7
+ "music/iwashimizu-shakuhachi": {
+  "file": "assets/audio/music/iwashimizu-shakuhachi.ogg",
+  "src": "music/iwashimizu-shakuhachi.mp3",
+  "seconds": 363.416,
+  "peak_dbfs": -11.98,
+  "bytes": 5054913,
+  "lufs": -20.9
+ },
+ "music/raga-kiravani-veena": {
+  "file": "assets/audio/music/raga-kiravani-veena.ogg",
+  "src": "music/raga-kiravani-veena.mp3",
+  "seconds": 812.33,
+  "peak_dbfs": -2.19,
+  "bytes": 8520379,
+  "lufs": -20.0
+ },
+ "music/schubert-andante-piano": {
+  "file": "assets/audio/music/schubert-andante-piano.ogg",
+  "src": "music/schubert-d664-andante-piano.mp3",
+  "seconds": 290.84,
+  "peak_dbfs": -1.37,
+  "bytes": 3823747,
+  "lufs": -22.1
+ },
+ "music/tournier-calme-harp": {
+  "file": "assets/audio/music/tournier-calme-harp.ogg",
+  "src": "music/tournier-sonatine-calme-harp.flac",
+  "seconds": 256.0,
+  "peak_dbfs": -4.95,
+  "bytes": 3884826,
+  "lufs": -20.0
  },
  "sfx/events/meow-01": {
   "file": "assets/audio/sfx/events/meow-01.ogg",

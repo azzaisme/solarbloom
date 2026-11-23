@@ -18,6 +18,7 @@ CREDITS = os.path.join(ROOT, 'docs', 'audio', 'CREDITS.md')
 PROOF = 'docs/audio/LICENCE_EVIDENCE.md'
 
 CC0 = 'CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)'
+PDD = 'CC Public Domain Dedication (http://creativecommons.org/licenses/publicdomain/)'
 PDM = 'Public Domain Mark 1.0 (https://creativecommons.org/publicdomain/mark/1.0/)'
 
 # raw master (under assets/raw/audio) → provenance. `human`: the evidence that a person recorded / performed it.
@@ -43,12 +44,18 @@ SOURCES = {
                                human='Freesound field recordings (Fantozzi pack 10338, CC0)'),
     'sfx/steps': dict(title='Different steps on wood, stone, leaves, gravel and mud', creator='TinyWorlds (from pdsounds.org recordings)', url='https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud', lic=CC0,
                       human='"The sounds are recordings from pdsounds.org, which I edited"'),
-    'music/chopin-nocturne-op9no2.mp3': dict(title='Chopin: Nocturne Op. 9 No. 2 in E-flat major', creator='Frédéric Chopin (composer); Aya Higuchi (piano); Musopen', url='https://archive.org/details/musopen-chopin', lic=CC0,
-                                             human='Musopen commissioned studio recording by a named pianist (performer in the file tag)'),
-    'music/chopin-nocturne-op55no2.mp3': dict(title='Chopin: Nocturne Op. 55 No. 2 in E-flat major', creator='Frédéric Chopin (composer); Musopen (recording)', url='https://archive.org/details/musopen-chopin', lic=CC0,
-                                              human='Musopen piano recording (performer not tagged in the file)'),
-    'music/chopin-nocturne-op72no1.mp3': dict(title='Chopin: Nocturne Op. 72 No. 1 in E minor', creator='Frédéric Chopin (composer); Musopen (recording)', url='https://archive.org/details/musopen-chopin', lic=CC0,
-                                              human='Musopen piano recording (performer not tagged in the file)'),
+    'music/tournier-sonatine-calme-harp.flac': dict(title='Marcel Tournier: Sonatine No. 1 Op. 30, II. Calme et expressif (1924)', creator='Marcel Tournier (composer); Ina Zdorovetchi (harp); recorded by tom.k@archive.org', url='https://archive.org/details/Ina_11_21_2010', lic=CC0,
+                                                    human='Live recital, Brown Hall, Boston, 21 Nov 2010 (24-bit/96 kHz binaural recording)'),
+    'music/bach-bwv825-sarabande-harp.flac': dict(title='J. S. Bach: Partita No. 1 BWV 825, Sarabande', creator='J. S. Bach (composer); Ina Zdorovetchi (harp); recorded by tom.k@archive.org', url='https://archive.org/details/Ina_11_21_2010', lic=CC0,
+                                                  human='Live recital, Brown Hall, Boston, 21 Nov 2010'),
+    'music/raga-kiravani-veena.mp3': dict(title='Raga Kiravani: alapana and tanam (traditional raga, improvised)', creator='L. Ramakrishnan (veena)', url='https://archive.org/details/LR_kIravANI', lic=PDD,
+                                          human="Performer's own upload: recorded at Lars Nesbakken's home studio, Portland, Oregon"),
+    'music/iwashimizu-shakuhachi.mp3': dict(title='Iwashimizu (Tozan-ryu honkyoku; Nakao Tozan, 1904)', creator='Nakao Tozan (composer); Iburozan (shakuhachi)', url='https://archive.org/details/Iwashimizu', lic=CC0,
+                                            human="Performer's own upload: \"performed by Iburozan on November 23rd. 2010\""),
+    'music/dvorak-op51-romanza-quartet.mp3': dict(title='Antonín Dvořák: String Quartet No. 10 Op. 51, III. Romanza', creator='Antonín Dvořák (composer); Musopen String Quartet', url='https://archive.org/details/MusopenKickstarterRecordings', lic=CC0,
+                                                  human='Musopen commissioned studio recording (2012 Kickstarter)'),
+    'music/schubert-d664-andante-piano.mp3': dict(title='Franz Schubert: Piano Sonata in A D. 664, II. Andante', creator='Franz Schubert (composer); Paul Pitman (piano); Musopen', url='https://archive.org/details/MusopenKickstarterRecordings', lic=CC0,
+                                                  human='Musopen commissioned studio recording (performer in the file tag)'),
 }
 
 
@@ -117,7 +124,7 @@ def main():
         for (who, url, lic), ids in sorted(used.items(), key=lambda x: (not x[1][0].startswith('music'), x[0][0])):
             short = sorted({i.rsplit('-', 1)[0] if i[-3] == '-' and i[-2:].isdigit() else i for i in ids})
             f.write(f"| {who} | {url} | {lic.split(' (')[0]} | {', '.join(f'`{s}`' for s in short)} |\n")
-        f.write('\nMusic: Frédéric Chopin\'s Nocturnes in recordings released to the public domain by Musopen (musopen.org).\n')
+        f.write('\nMusic: performances by Ina Zdorovetchi (harp), L. Ramakrishnan (veena), Iburozan (shakuhachi), Paul Pitman (piano) and the Musopen String Quartet, released to the public domain.\n')
     print(f'{len(rows)} rows → {os.path.relpath(CSV, ROOT)}, {os.path.relpath(CREDITS, ROOT)}')
 
 

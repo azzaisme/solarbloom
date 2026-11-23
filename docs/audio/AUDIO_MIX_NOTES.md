@@ -23,8 +23,8 @@ RMS at the output, after the limiter, averaged over 9–14 s:
 | Situation | Output RMS | What plays |
 |---|---:|---|
 | Dead ground, no music (before the first restoration) | **−44 dB** | thin wind only |
-| Dead ground with a nocturne | −31.6 dB | wind + music |
-| Restored, thriving patch with a nocturne | **−25.3 dB** | music, leaves 0.18, meadow 0.11, wind 0.05, bird calls every ~6 s |
+| Dead ground with music (Chopin stand-in, since replaced) | −31.6 dB | wind + music |
+| Restored, thriving patch with music (stand-in) | **−25.3 dB** | music, leaves 0.18, meadow 0.11, wind 0.05, bird calls every ~6 s |
 | 50-bloom chain + landmark cue + coins + drones at once | peak **−10.4 dBFS** | 9 voices at the most (pool 24) |
 | Page hidden | −120 dB | master at 0 |
 

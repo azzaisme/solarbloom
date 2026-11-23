@@ -101,7 +101,7 @@ try {
   check(alive.snap.beds.leaves > 0.08, 'leaves move in the restored ground');
   check(alive.snap.beds.wind < dead.snap.beds.wind * 0.7, 'the dry wind stepped back');
   check(alive.rms > dead.rms + 3, `living ground is audibly fuller than dead ground (${dead.rms.toFixed(1)} → ${alive.rms.toFixed(1)} dB)`);
-  check(/Nocturne/.test(alive.snap.music), `the score has begun after its opening rest (${alive.snap.music})`);
+  check(/\(\d+\/\d+ s\)/.test(alive.snap.music), `the score has begun after its opening rest (${alive.snap.music})`);
   check(alive.rms < -14, `…but never a loud wall of sound (${alive.rms.toFixed(1)} dB RMS)`);
 
   // 3. back into the wasteland: teleport 60 tiles away to dead ground

@@ -67,10 +67,17 @@ SPEC = [
          af='highpass=f=120,lowpass=f=7000', peak=-8),
     dict(id='sfx/player/step-wood', kind='set', srcs=['sfx/steps/wood01.ogg', 'sfx/steps/wood02.ogg', 'sfx/steps/wood03.ogg'], max_len=0.35, ch=1, sr=32000,
          af='highpass=f=90,lowpass=f=6000', peak=-7),
-    # ── music: Chopin nocturnes, Musopen recordings (CC0), streamed; -18 LUFS, gentle fades ──
-    dict(id='music/nocturne-op9-no2', src='music/chopin-nocturne-op9no2.mp3', kind='music', ch=2, sr=44100, af='highpass=f=35', lufs=-18, q=4),
-    dict(id='music/nocturne-op55-no2', src='music/chopin-nocturne-op55no2.mp3', kind='music', ch=2, sr=44100, af='highpass=f=35', lufs=-18, q=4),
-    dict(id='music/nocturne-op72-no1', src='music/chopin-nocturne-op72no1.mp3', kind='music', ch=2, sr=44100, af='highpass=f=35', lufs=-18, q=4),
+    # ── music: human performances on real instruments, CC0 / public domain (docs/audio/ASSET_MANIFEST.csv). Streamed.
+    # Each: rumble off, gentle compression where its dynamics are too wide for quiet play, then -20 LUFS.
+    dict(id='music/tournier-calme-harp', src='music/tournier-sonatine-calme-harp.flac', kind='music', ch=2, sr=44100, q=4, lufs=-20,
+         af='highpass=f=60,acompressor=threshold=-26dB:ratio=2:attack=60:release=600:makeup=1'),
+    dict(id='music/bach-sarabande-harp', src='music/bach-bwv825-sarabande-harp.flac', kind='music', ch=2, sr=44100, q=4, lufs=-20, fin=1.5,
+         af='highpass=f=60,acompressor=threshold=-26dB:ratio=2:attack=60:release=600:makeup=1'),
+    dict(id='music/raga-kiravani-veena', src='music/raga-kiravani-veena.mp3', kind='music', ch=2, sr=44100, q=3, lufs=-20, af='highpass=f=50'),
+    dict(id='music/iwashimizu-shakuhachi', src='music/iwashimizu-shakuhachi.mp3', kind='music', ch=2, sr=44100, q=4, lufs=-21,
+         af='highpass=f=80,acompressor=threshold=-28dB:ratio=3:attack=12:release=350:makeup=1,lowpass=f=12000'),
+    dict(id='music/dvorak-romanza-quartet', src='music/dvorak-op51-romanza-quartet.mp3', kind='music', ch=2, sr=44100, q=4, lufs=-20, af='highpass=f=45'),
+    dict(id='music/schubert-andante-piano', src='music/schubert-d664-andante-piano.mp3', kind='music', ch=2, sr=44100, q=4, lufs=-20, af='highpass=f=35'),
 ]
 
 # footsteps and music are added from tools/audio/sources.json (written once the sources were chosen)

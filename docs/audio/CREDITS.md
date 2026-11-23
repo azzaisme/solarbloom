@@ -6,9 +6,12 @@ by `tools/audio/manifest.py`. Designed interface and reward tones are written by
 
 | Work | Source | Licence | Used as |
 |---|---|---|---|
-| Chopin: Nocturne Op. 55 No. 2 in E-flat major by Frédéric Chopin (composer); Musopen (recording) | https://archive.org/details/musopen-chopin | CC0 1.0 | `music/nocturne-op55-no2` |
-| Chopin: Nocturne Op. 72 No. 1 in E minor by Frédéric Chopin (composer); Musopen (recording) | https://archive.org/details/musopen-chopin | CC0 1.0 | `music/nocturne-op72-no1` |
-| Chopin: Nocturne Op. 9 No. 2 in E-flat major by Frédéric Chopin (composer); Aya Higuchi (piano); Musopen | https://archive.org/details/musopen-chopin | CC0 1.0 | `music/nocturne-op9-no2` |
+| Antonín Dvořák: String Quartet No. 10 Op. 51, III. Romanza by Antonín Dvořák (composer); Musopen String Quartet | https://archive.org/details/MusopenKickstarterRecordings | CC0 1.0 | `music/dvorak-romanza-quartet` |
+| Franz Schubert: Piano Sonata in A D. 664, II. Andante by Franz Schubert (composer); Paul Pitman (piano); Musopen | https://archive.org/details/MusopenKickstarterRecordings | CC0 1.0 | `music/schubert-andante-piano` |
+| Iwashimizu (Tozan-ryu honkyoku; Nakao Tozan, 1904) by Nakao Tozan (composer); Iburozan (shakuhachi) | https://archive.org/details/Iwashimizu | CC0 1.0 | `music/iwashimizu-shakuhachi` |
+| J. S. Bach: Partita No. 1 BWV 825, Sarabande by J. S. Bach (composer); Ina Zdorovetchi (harp); recorded by tom.k@archive.org | https://archive.org/details/Ina_11_21_2010 | CC0 1.0 | `music/bach-sarabande-harp` |
+| Marcel Tournier: Sonatine No. 1 Op. 30, II. Calme et expressif (1924) by Marcel Tournier (composer); Ina Zdorovetchi (harp); recorded by tom.k@archive.org | https://archive.org/details/Ina_11_21_2010 | CC0 1.0 | `music/tournier-calme-harp` |
+| Raga Kiravani: alapana and tanam (traditional raga, improvised) by L. Ramakrishnan (veena) | https://archive.org/details/LR_kIravANI | CC Public Domain Dedication | `music/raga-kiravani-veena` |
 | 20 Rustles of dry leaves by qubodup | https://opengameart.org/content/20-rustles-dry-leaves | CC0 1.0 | `sfx/restoration/leaf` |
 | AMB Morning Sounds (Perfect Loop) by Kresiek The Furry | https://opengameart.org/content/amb-morning-sounds-perfect-loop | CC0 1.0 | `ambience/restored/meadow` |
 | Aspen and Cottonwood Trees Blowing in Wind (Radio Aporee 58287) by dlee (Metabolic Studio) | https://archive.org/details/aporee_58287_66859 | Public Domain Mark 1.0 | `ambience/restored/leaves` |
@@ -21,4 +24,4 @@ by `tools/audio/manifest.py`. Designed interface and reward tones are written by
 | Simpson Lake Shore (Radio Aporee 51993) by Pierrot Desperes | https://archive.org/details/aporee_51993_59367 | Public Domain Mark 1.0 | `ambience/water/shore` |
 | windy ambient noise (windy_ambiance.ogg) by Some Weirdo | https://opengameart.org/content/windy-ambient-noise | CC0 1.0 | `ambience/barren/wind-dry` |
 
-Music: Frédéric Chopin's Nocturnes in recordings released to the public domain by Musopen (musopen.org).
+Music: performances by Ina Zdorovetchi (harp), L. Ramakrishnan (veena), Iburozan (shakuhachi), Paul Pitman (piano) and the Musopen String Quartet, released to the public domain.

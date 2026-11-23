@@ -17,10 +17,20 @@ export interface MusicTrack {
  * its own borrows the nearest one (garden ← water, quiet ← night).
  */
 export const MUSIC: MusicTrack[] = [
-  // Frédéric Chopin, Nocturnes: Musopen's public-domain (CC0) recordings of real pianists (see the manifest)
-  { id: 'music/nocturne-op9-no2', title: 'Nocturne in E-flat major, Op. 9 No. 2', moods: ['garden', 'water'] },
-  { id: 'music/nocturne-op55-no2', title: 'Nocturne in E-flat major, Op. 55 No. 2', moods: ['water', 'garden', 'night'], gain: 0.85 },
-  { id: 'music/nocturne-op72-no1', title: 'Nocturne in E minor, Op. 72 No. 1', moods: ['quiet', 'night'] },
+  // Real players on real instruments, CC0 / public domain (see the manifest). Chosen to be unfamiliar: nothing a
+  // player already hears as "that famous piece" or another game's soundtrack.
+  // the cracked-earth opening and first stirrings: breath and silence
+  { id: 'music/iwashimizu-shakuhachi', title: 'Iwashimizu (shakuhachi, Iburozan)', moods: ['quiet', 'water'] },
+  // the garden waking: warm, flowing harp
+  { id: 'music/tournier-calme-harp', title: 'Tournier: Sonatine, Calme et expressif (harp, Ina Zdorovetchi)', moods: ['garden', 'water'] },
+  // an established meadow: the warmest, most hopeful
+  { id: 'music/dvorak-romanza-quartet', title: 'Dvořák: Romanza, Op. 51 (Musopen String Quartet)', moods: ['garden'], gain: 1.15 },
+  // daytime gardening: a songful piano
+  { id: 'music/schubert-andante-piano', title: 'Schubert: Andante, D. 664 (piano, Paul Pitman)', moods: ['garden', 'quiet'], gain: 1.2 },
+  // by water and at night: a short, still harp sarabande
+  { id: 'music/bach-sarabande-harp', title: 'Bach: Sarabande, BWV 825 (harp, Ina Zdorovetchi)', moods: ['water', 'night'] },
+  // night and long idle stretches: thirteen unhurried minutes of plucked improvisation
+  { id: 'music/raga-kiravani-veena', title: 'Raga Kiravani (veena, L. Ramakrishnan)', moods: ['night', 'quiet'] },
 ];
 
 /** Seconds of silence between two pieces: silence is part of the score. */
