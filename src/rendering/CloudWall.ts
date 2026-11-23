@@ -10,6 +10,8 @@ import { SLAB_TOP } from './SceneBuilder';
 
 interface Wall {
   root: pc.Entity;
+  /** where each of its clouds stands (x, y, z, size): the wisps rise from these */
+  anchors: [number, number, number, number][];
   /** dissolving after an unlock: seconds since it started (undefined while standing) */
   leaving?: number;
   /** each cloud's size when it started leaving */
@@ -23,8 +25,20 @@ interface Wall {
  * the area is bought, its wall rises and melts away over a couple of seconds. Purely visual: nothing here reads
  * or writes the simulation beyond area states.
  */
+/** P7-E27: a puff lifting off the wall: where it started, how big, how old and how long it lives. */
+interface Wisp {
+  e: pc.Entity;
+  from: [number, number, number, number];
+  age: number;
+  life: number;
+  drift: [number, number];
+}
+
 export class CloudWall {
   private walls = new Map<string, Wall>();
+  private wisps: Wisp[] = [];
+  private wispGroup = -1;
+  private seed = 0x9e3779b9;
   private parts: ReturnType<typeof wallCloudParts>;
   private root: pc.Entity;
   private group = -1;
@@ -40,7 +54,11 @@ export class CloudWall {
     this.root = new pc.Entity('cloudWall');
     parent.addChild(this.root);
     this.parts = wallCloudParts(device, sunUp);
-    if (batcher) this.group = batcher.addGroup('cloudWall', false, 10000).id;
+    if (batcher) {
+      this.group = batcher.addGroup('cloudWall', false, 10000).id;
+      // the wisps move every frame: a dynamic batch keeps them to one draw call
+      this.wispGroup = batcher.addGroup('cloudWisps', true, 100).id;
+    }
   }
 
   /** Rebuilds every sealed area's wall (call after reveals and unlocks; cheap: a few areas at a time). */
@@ -54,7 +72,8 @@ export class CloudWall {
     for (const id of sealed) {
       const old = this.walls.get(id);
       if (old && old.leaving === undefined) old.root.destroy(); // rebuilt: a neighbour may have opened since
-      this.walls.set(id, { root: this.build(id) });
+      const anchors: Wall['anchors'] = [];
+      this.walls.set(id, { root: this.build(id, anchors), anchors });
     }
     if (this.batcher && this.group >= 0) this.batcher.markGroupDirty(this.group);
   }
@@ -74,7 +93,7 @@ export class CloudWall {
   }
 
   /** Clouds along each chunk edge this sealed area shares with open ground. */
-  private build(id: string): pc.Entity {
+  private build(id: string, anchors: Wall['anchors']): pc.Entity {
     const s = this.sim;
     const map = s.areas.map;
     const root = new pc.Entity(`cloudWall:${id}`);
@@ -111,7 +130,9 @@ export class CloudWall {
             const size = (1.0 + 0.35 * row + h * 0.45) * grow;
             // E21.24: on the Old City's terraces the wall stands on the higher of the two grounds it divides
             const lift = s.grid.terraced(GROUND) ? Math.max(levelY(levelAt(Math.floor(x), Math.floor(z))), levelY(levelAt(Math.floor(x - (along === 'z' ? inward * 2 : 0)), Math.floor(z - (along === 'x' ? inward * 2 : 0))))) : 0;
-            this.cloud(root, x, y - 0.15 + 0.5 * row * grow + lift, z, size, h * 360);
+            const cy = y - 0.15 + 0.5 * row * grow + lift;
+            this.cloud(root, x, cy, z, size, h * 360);
+            anchors.push([x, cy, z, size]);
           }
         }
       }
@@ -119,17 +140,74 @@ export class CloudWall {
     return root;
   }
 
-  private cloud(parent: pc.Entity, x: number, y: number, z: number, size: number, rot: number) {
+  private cloud(parent: pc.Entity, x: number, y: number, z: number, size: number, rot: number, parts = this.parts.meshes, group = this.group) {
     const c = new pc.Entity('wallCloud');
     c.setLocalPosition(x, y, z);
     c.setLocalEulerAngles(0, rot, 0);
     c.setLocalScale(size, size * 0.95, size);
     parent.addChild(c);
-    for (const p of this.parts.meshes) {
+    for (const p of parts) {
       const e = new pc.Entity();
       e.setLocalPosition(p.pos[0], p.pos[1], p.pos[2]);
-      e.addComponent('render', { meshInstances: [new pc.MeshInstance(p.mesh, this.parts.material)], castShadows: false, receiveShadows: false, batchGroupId: this.group >= 0 ? this.group : undefined });
+      e.addComponent('render', { meshInstances: [new pc.MeshInstance(p.mesh, this.parts.material)], castShadows: false, receiveShadows: false, batchGroupId: group >= 0 ? group : undefined });
       c.addChild(e);
+    }
+    return c;
+  }
+
+  private rnd() {
+    // mulberry32: the wisps' picks are seeded, so a run looks the same every time
+    let t = (this.seed = (this.seed + 0x6d2b79f5) | 0);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  /** A standing cloud within reach of the camera's focus to lift a wisp from (undefined if none is near). */
+  private pickAnchor(focus: pc.Vec3, reach: number): Wisp['from'] | undefined {
+    const standing = [...this.walls.values()].filter((w) => w.leaving === undefined && w.anchors.length);
+    if (!standing.length) return undefined;
+    for (let i = 0; i < 24; i++) {
+      const w = standing[Math.floor(this.rnd() * standing.length)];
+      const a = w.anchors[Math.floor(this.rnd() * w.anchors.length)];
+      if (Math.hypot(a[0] - focus.x, a[2] - focus.z) < reach) return a;
+    }
+    return undefined;
+  }
+
+  /**
+   * P7-E27 (owner, 23 Nov 2026): the walls breathe. A few small puffs lift off the clouds near the camera, rise and
+   * melt away (shrinking to nothing, as a wall does when its area opens), then start again elsewhere on the wall.
+   */
+  private updateWisps(dt: number, focus: pc.Vec3) {
+    const W = LOOK.cloudRing.wisps;
+    const want = this.reducedMotion ? 0 : W.count;
+    while (this.wisps.length < want) {
+      const e = this.cloud(this.root, 0, -1000, 0, 0.001, this.rnd() * 360, this.parts.meshes.slice(0, W.parts), this.wispGroup);
+      // spread the first ones through their lives so they don't all rise together
+      this.wisps.push({ e, from: [0, -1000, 0, 0], age: -this.rnd() * W.life[1], life: 1, drift: [0, 0] });
+    }
+    while (this.wisps.length > want) this.wisps.pop()!.e.destroy();
+    for (const w of this.wisps) {
+      w.age += dt;
+      if (w.age < 0) continue; // still waiting for its first turn
+      if (w.age >= w.life) {
+        // start again from another cloud near the camera (or wait off-stage if none is near)
+        const a = this.pickAnchor(focus, W.reach);
+        w.age = 0;
+        w.life = W.life[0] + this.rnd() * (W.life[1] - W.life[0]);
+        w.from = a ?? [0, -1000, 0, 0];
+        const ang = this.rnd() * Math.PI * 2;
+        w.drift = [Math.cos(ang) * W.drift, Math.sin(ang) * W.drift];
+      }
+      const t = Math.max(0, w.age) / w.life;
+      const [x, y, z, size] = w.from;
+      // swell a little as it lifts off, then shrink away to nothing near the top of its rise
+      const k = t < 0.2 ? 0.55 + 0.45 * (t / 0.2) : Math.pow(1 - (t - 0.2) / 0.8, 1.4);
+      const sc = Math.max(0.001, size * W.size * k);
+      const ease = 1 - (1 - t) * (1 - t);
+      w.e.setLocalPosition(x + w.drift[0] * t, y + 0.3 * size + W.rise * ease, z + w.drift[1] * t);
+      w.e.setLocalScale(sc, sc * 0.9, sc);
     }
   }
 
@@ -140,8 +218,9 @@ export class CloudWall {
     for (const c of w.root.children) for (const p of c.children) if ((p as pc.Entity).render) (p as pc.Entity).render!.batchGroupId = -1;
   }
 
-  /** Dissolving walls rise and shrink away, then go. */
-  update(dt: number) {
+  /** Dissolving walls rise and shrink away, then go; standing walls breathe out wisps near `focus`. */
+  update(dt: number, focus?: pc.Vec3) {
+    if (focus) this.updateWisps(dt, focus);
     for (const [id, w] of this.walls) {
       if (w.leaving === undefined) continue;
       w.leaving += dt;

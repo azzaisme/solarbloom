@@ -14,7 +14,8 @@ export const LOOK = {
     // before tone mapping (most of a beach clipped). Now a sunlit pale surface lands just under white, and the
     // sun is about three times the shade's light, so shadows read
     // P7-E27: a warm near-ivory key (#FFF0D6 family) rather than peach, so ivory stone and pale sand stay ivory
-    color: '#ffe8c6',
+    // P7-E27.2 (#720): the brief's sun, #FFF0D6 (was #ffe8c6, and #ffdcaa before that)
+    color: '#fff0d6',
     intensity: 2.1,
     elevation: 34,
     /**
@@ -83,7 +84,9 @@ export const LOOK = {
    */
   grade: {
     // E27.1 (#679): saturation 1.32 and vibrance 0.42 pushed the greens fluorescent, and lifted shadows flattened them
-    warm: { brightness: 1.0, contrast: 1.06, saturation: 1.1, tint: '#fff9f0', shadows: 0.0, highlights: -0.15, vibrance: 0.15 },
+    // P7-E27.1 (#719): saturation 1.1 + vibrance 0.15 roughly halved the blue of every warm or green surface (sunlit
+    // grass 70 → 37, timber 74 → 40): lime grass, orange timber and sand. Now neutral saturation, a faint warm tint
+    warm: { brightness: 1.0, contrast: 1.06, saturation: 1.0, tint: '#fffaf2', shadows: 0.0, highlights: -0.15, vibrance: 0.0 },
     dead: { brightness: 0.97, contrast: 1.03, saturation: 0.82, tint: '#e9eef6', shadows: 0.0, highlights: -0.1, vibrance: 0.0 },
     /** High contrast (settings): a flatter grade with no vignette so outlines and text stay readable. */
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
@@ -127,9 +130,20 @@ export const LOOK = {
    * P7-E27 prototype (owner's idea, 23 Nov 2026): continue the region-gate cloud wall (CloudWall) along every edge
    * where revealed ground meets the hidden city, so the open island is ringed by cloud instead of fading into grey
    * haze. `rows` of clouds (the gate walls have 2), each row further in, larger and higher; `size` scales the ring's
-   * clouds and spacing. Off by default until it is judged in the fixed shots.
+   * clouds and spacing. Judged in the fixed shots (off / 3 × 1.3 / 4 × 1.7) and chosen by the owner at 4 × 1.7: the
+   * low cameras get a cloud bank where the grey hidden city showed. The clouds' shape is P7-E32's.
    */
-  cloudRing: { on: false, rows: 3, size: 1.3 },
+  cloudRing: {
+    on: true,
+    rows: 4,
+    size: 1.7,
+    /**
+     * The walls breathe (owner, 23 Nov 2026): `count` small puffs (`parts` of a wall cloud's puffs, `size` of the cloud
+     * they leave) lift off standing clouds within `reach` of the camera's focus, rise `rise` and drift `drift` over a
+     * `life` of seconds while they melt away, then start again elsewhere. One dynamic batch; none with reduced motion.
+     */
+    wisps: { count: 12, parts: 4, size: 0.55, rise: 2.4, drift: 0.8, life: [5, 9] as [number, number], reach: 36 },
+  },
   /**
    * Look 1.10: drifting light motes and soft light shafts over restored ground near the camera's focus. Counts per
    * graphics tier; `lowVfx` and reduced motion turn the motes off, reduced motion freezes the shafts.

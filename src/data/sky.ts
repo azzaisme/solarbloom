@@ -6,18 +6,22 @@
  * low down, so a new game reads as a hazy sunny day, not an overcast one; the full clear blue comes with restoration.
  */
 export const SKY = {
-  /** straight up */
-  // P7-E27: a clear blue sky even before restoration (the fogged sky read overcast grey); clarity still deepens it
-  zenith: ['#6f9fd6', '#5e9ee6'],
-  /** about 12° up (SKY_BANDS) */
-  upper: ['#97bde0', '#8ec3f0'],
-  /** a warm band just above the horizon */
-  glow: ['#dcdcd6', '#eee8da'],
-  /** the horizon and the distance (scene fog colour) */
+  // P7-E27.3 (#721): the dome's vertex colours are encoded to sRGB once more on output (they are not decoded first, as
+  // material colours are), so a dome hex lands on screen roughly as its sRGB encoding: #3f86da shows as about
+  // #8ec3f0. The night sky was approved against this, so the day values are authored to compensate (target on
+  // screen in each comment) rather than changing the pipeline. `haze` is the exception: it is also the scene fog,
+  // which the engine decodes, and Sky.horizonSeen decodes it for the dome, so it is written as seen.
+  /** straight up (on screen ~#5e9ee6 clear, a touch greyer while fogged) */
+  zenith: ['#2a5fb8', '#1d59cb'],
+  /** about 8° up (SKY_BANDS) (on screen ~#8ec3f0) */
+  upper: ['#4a86cc', '#3f86da'],
+  /** a pale band just above the horizon (on screen ~#c4dbef: blue, not cream) */
+  glow: ['#8aaccc', '#8fb7dd'],
+  /** the horizon and the distance (scene fog colour; as seen) */
   // P7-E27: cool pale blue haze (atmospheric perspective), not cream: the distance fades blue and the near scene stays clean
   haze: ['#c8d6e0', '#d6e4ee'],
-  /** extra warmth in the sky toward the sun */
-  sunGlow: ['#e0e2dc', '#fff0cc'],
+  /** extra warmth in the sky toward the sun (on screen a soft warm ivory near the sun only) */
+  sunGlow: ['#c9ccc4', '#ffe0af'],
   sunCore: '#fff7e2',
   cloudLit: ['#e7e9ea', '#ffffff'],
   cloudShade: ['#c4cdd8', '#d6e0ee'],
@@ -28,7 +32,8 @@ export const SKY = {
  * so of sky, and with the blue starting at 25° all it showed was the warm glow band, which tone mapping turned a flat
  * grey-white: an overcast look on a sunny day. Now the warm band hugs the horizon and the sky is blue by about 12°.
  */
-export const SKY_BANDS = { glow: 3, upper: 12, zenith: 60 };
+// P7-E27: blue from lower down (upper 12° → 8°, zenith 60° → 45°): the low follow camera sees only ~17° of sky
+export const SKY_BANDS = { glow: 3, upper: 8, zenith: 45 };
 /** The bands the approved moonlit night was tuned with: the dome eases back to these as night falls. */
 export const SKY_BANDS_NIGHT = { glow: 4, upper: 25, zenith: 90 };
 
