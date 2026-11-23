@@ -63,6 +63,7 @@ const QUICK = [
   'plot-work',
   // P7-E27 (#713): the Bright Day calibration and the cloud ring
   'p7-lighting',
+  'p7-ruins',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

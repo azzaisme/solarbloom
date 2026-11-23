@@ -43,6 +43,7 @@ import { bloomGetsHeart, heartBox, type Rect } from '../rendering/HeartFlight';
 import { BIRD_HEART } from '../data/birdHeart';
 import { Clouds } from '../rendering/Clouds';
 import { CloudWall } from '../rendering/CloudWall';
+import { Ruins } from '../rendering/Ruins';
 import { Fauna } from '../rendering/Fauna';
 import { createModels } from '../rendering/Models';
 import { CameraController } from '../rendering/CameraController';
@@ -286,6 +287,8 @@ export class Game {
   /** region unlocks: the wall of clouds around sealed areas */
   /** P7-E27: public for the dev lighting panel (it re-syncs the ring when its size changes) */
   readonly cloudWall: CloudWall;
+  /** P7-E32 (#756): the distant ruined city round the island */
+  readonly ruins: Ruins;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   /**
@@ -405,7 +408,9 @@ export class Game {
     this.camera = new CameraController(this.app, this.tweens);
     // Look 4.7: the sky behind everything (its own layer, drawn first).
     this.sky = new Sky(this.app, this.scene.sun);
-    this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
+    // P7-E32 (#756): the distant ruined city, in its own layer between the sky and the world
+    this.ruins = new Ruins(this.app, this.sky, this.scene.sun);
+    this.camera.cam.layers = [this.sky.layer.id, this.ruins.layer.id, ...this.camera.cam.layers];
     this.look = new LookController(this.app, this.scene, this.camera);
     this.dayNight = new DayNight(this.app, this.scene, this.sky);
     // P7-E27.7: live tuning re-reads every lighting knob: the environment bake, the day/night light and the sky dome
@@ -5302,6 +5307,9 @@ export class Game {
     // takes its own night in waterFrame)
     this.transitions?.setSeaNight(1 - this.dayNight.daylight);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
+    // P7-E32: the ruins follow the camera inside the sky dome and fade with the weather's view
+    this.ruins.view = this.weatherVisuals?.view ?? 1;
+    this.ruins.update(this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.syncView();
     {
       const c = this.camera;
