@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 import { RUINS, type RuinKind, type RuinLayerName } from '../data/ruins';
 import type { Sky } from './Sky';
 
@@ -132,6 +133,8 @@ export interface Built {
 export class RuinPlanner {
   private seed: number = RUINS.seed;
   reach = 0;
+  /** the thinnest a part may be in this band (world units): thinner reads as a crossbar floating in the sky */
+  private thin = 1;
 
   private rnd() {
     let t = (this.seed = (this.seed + 0x6d2b79f5) | 0);
@@ -159,6 +162,7 @@ export class RuinPlanner {
     const lampSpots: { geo: Geo; at: V3; n: V3 }[] = [];
     RUINS.layers.forEach((L, li) => {
       const name = L.name as RuinLayerName;
+      this.thin = L.radius[0] * RUINS.minThin;
       const geos = Array.from({ length: S }, () => new Geo());
       const sectorOf = (deg: number) => Math.floor((((deg % 360) + 360) % 360) / (360 / S)) % S;
       const toRad = (d: number) => (d * Math.PI) / 180;
@@ -181,7 +185,7 @@ export class RuinPlanner {
           const top = [p(d, rIn(d) + 2), p(e, rIn(e) + 2), p(e, rIn(e) + depth), p(d, rIn(d) + depth)];
           const hd = hAt(d);
           const he = hAt(e);
-          geos[sectorOf((d + e) / 2)].frustum(bot, top, -30, [hd, he, he * 1.15, hd * 1.15], this.rnd() < 0.3 ? C.stoneDark : C.cliff, this.rnd() < 0.35 ? C.moss : C.landTop);
+          geos[sectorOf((d + e) / 2)].frustum(bot, top, 0, [hd, he, he * 1.15, hd * 1.15], this.rnd() < 0.3 ? C.stoneDark : C.cliff, this.rnd() < 0.35 ? C.moss : C.landTop);
         }
         // the structures, deeper inland first (drawn first: they stand behind the nearer ones)
         const count = Math.max(1, Math.round(((a1 - a0) / 10) * L.density));
@@ -234,7 +238,7 @@ export class RuinPlanner {
         const base = h * this.range(0.55, 0.7);
         box(0, base / 2, 0, w / 2, base / 2, w / 2, stone);
         // the upper storey is open: two corner piers (one broken short), a lintel across where it survives
-        const pw = w * 0.22;
+        const pw = Math.max(w * 0.22, this.thin);
         const hl = h - base;
         const hr = hl * this.range(0.35, 0.8);
         box(-w / 2 + pw / 2, base + hl / 2, 0, pw / 2, hl / 2, w / 2, stone);
@@ -320,7 +324,8 @@ export class RuinPlanner {
         const H = this.range(16, 26) * s;
         const u0 = (-segs * span) / 2;
         const gap = 1 + Math.floor(this.rnd() * (segs - 1));
-        for (let i = 0; i <= segs; i++) box(u0 + i * span, H / 2, 0, 0.8 * s, H / 2, 0.8 * s, C.stoneDark);
+        const pr = Math.max(0.8 * s, this.thin / 2);
+        for (let i = 0; i <= segs; i++) box(u0 + i * span, H / 2, 0, pr, H / 2, pr, C.stoneDark);
         for (let i = 0; i < segs; i++) {
           const uc = u0 + (i + 0.5) * span;
           if (i === gap) {
@@ -358,7 +363,7 @@ export class RuinPlanner {
         const tp = b * 0.35;
         const h = this.range(24, 36) * s;
         const top = h * (this.rnd() < 0.5 ? 1 : 0.8);
-        const leg = 0.35 * s;
+        const leg = Math.max(0.35 * s, this.thin / 2);
         const corners: V2[] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
         for (const [cu, cw] of corners) {
           const p0 = f.at(cu * b, 0, cw * b);
@@ -384,7 +389,7 @@ export class RuinPlanner {
           const p = f.at(Math.cos(a) * rr, 0, Math.sin(a) * rr);
           return [p[0], p[2]];
         });
-        g.frustum(oct(1 * s), oct(0.5 * s), f.o[1], new Array(6).fill(f.o[1] + h), C.stone, C.stone);
+        g.frustum(oct(Math.max(1 * s, this.thin * 0.7)), oct(Math.max(0.5 * s, this.thin * 0.5)), f.o[1], new Array(6).fill(f.o[1] + h), C.stone, C.stone);
         box(0, h + 0.6 * s, -0.5 * s, 0.9 * s, 0.9 * s, 1.8 * s, C.stone);
         const hub = f.at(0, h + 0.6 * s, 1.4 * s);
         const spin = this.rnd() * Math.PI * 2;
@@ -393,7 +398,7 @@ export class RuinPlanner {
           const len = (i === 1 ? this.range(0.3, 0.6) : 1) * 13 * s;
           const a = spin + (i / 3) * Math.PI * 2;
           const dir = add(scl(T, Math.cos(a)), scl(up, Math.sin(a)));
-          g.box(add(hub, scl(dir, len / 2)), scl(dir, len / 2), scl(add(scl(T, -Math.sin(a)), scl(up, Math.cos(a))), 0.45 * s), scl(N, 0.15 * s), C.stone);
+          g.box(add(hub, scl(dir, len / 2)), scl(dir, len / 2), scl(add(scl(T, -Math.sin(a)), scl(up, Math.cos(a))), Math.max(0.45 * s, this.thin / 2)), scl(N, 0.15 * s), C.stone);
         }
         break;
       }
@@ -407,19 +412,18 @@ export class RuinPlanner {
  * with broken stone towers, solarpunk spires with ring platforms and panel fins, aqueduct arches, viaducts, lattice
  * frames, derelict wind turbines and ruined blocks, generated once from RUINS.seed.
  *
- * Drawn in its own layer between the sky and the world, with no depth: everything in the world paints over it, and
- * within it the bands draw far to near (manual order). The whole set is shrunk about the camera each frame so it
- * sits inside the sky dome (see data/ruins.ts); on screen each silhouette is exactly where the real one would be.
+ * Drawn in its own layer right after the world's opaque pass, depth-tested but writing no depth; within it the bands
+ * draw far to near (manual order). Each frame every vertex is slid along its ray from the camera onto a plane
+ * where the distance has gone to haze (see update and data/ruins.ts): on screen each silhouette is exactly where the real one would be.
  * Light and distance fade are baked into vertex colours and rebaked only when the sun, the haze or the night move.
  * One mesh per band and azimuth slice, so the camera culls what's behind it: a handful of draw calls.
  */
 export class Ruins {
   readonly layer: pc.Layer;
   readonly root: pc.Entity;
-  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
+  private meshes: { mesh: pc.Mesh; mi: pc.MeshInstance; base: Float32Array; drawn: Float32Array; nrm: Float32Array; alb: Float32Array; y: Float32Array; lamp: Float32Array; fade: number; cols: Uint8Array }[] = [];
   private sig: number[] = [];
-  /** the furthest any piece stands from the centre (for the shrink) */
-  private reach = 0;
+  private viewSig: number[] = [];
   /** E23.7.2: the weather's view (1 clear … less in fog and rain): the ruins fade out with it */
   view = 1;
 
@@ -430,8 +434,10 @@ export class Ruins {
   ) {
     const comp = app.scene.layers;
     this.layer = new pc.Layer({ name: 'Ruins', opaqueSortMode: pc.SORTMODE_MANUAL });
-    // right after the sky: the world (and everything after it) draws over the ruins
-    comp.insert(this.layer, comp.layerList.indexOf(sky.layer) + 1);
+    // right after the world's opaque pass: the ruins sit where the distance has gone to haze (see update), so the visible world
+    // hides them by depth while the fully fogged distance behind that plane doesn't
+    const world = comp.getLayerById(pc.LAYERID_WORLD)!;
+    comp.insertOpaque(this.layer, comp.getOpaqueIndex(world) + 1);
     this.root = new pc.Entity('ruins');
     app.root.addChild(this.root);
 
@@ -443,13 +449,11 @@ export class Ruins {
     mat.emissive = new pc.Color(1, 1, 1);
     mat.emissiveVertexColor = true;
     mat.depthWrite = false;
-    mat.depthTest = false;
+    mat.depthTest = true;
     mat.cull = pc.CULLFACE_BACK;
     mat.update();
 
-    const plan = new RuinPlanner();
-    const built = plan.build();
-    this.reach = plan.reach;
+    const built = new RuinPlanner().build();
     for (const b of built) {
       const g = b.geo;
       if (!g.idx.length) continue;
@@ -467,6 +471,8 @@ export class Ruins {
       this.meshes.push({
         mesh,
         mi,
+        base: Float32Array.from(g.pos),
+        drawn: Float32Array.from(g.pos),
         nrm: Float32Array.from(g.nrm),
         alb: Float32Array.from(g.alb),
         y: Float32Array.from({ length: n }, (_, i) => g.pos[i * 3 + 1]),
@@ -482,17 +488,45 @@ export class Ruins {
     return this.meshes.length;
   }
 
-  /** Follow the camera (the shrink about it) and rebake the colours when the light, haze or night move. */
-  update(cam: pc.Vec3, farClip: number) {
-    if (!RUINS.on) {
-      this.root.enabled = false;
-      return;
+  /**
+   * Places the ruins for this frame's camera and rebakes their colours when the light, haze or night move.
+   *
+   * Every vertex is slid along its own ray from the camera onto a plane `D` deep, so on screen each silhouette is
+   * exactly where the real one, hundreds of units out, would be; but by depth the ruins stand where the distance
+   * above the horizon has gone wholly to haze: the horizon haze (LookShaders `lookHorizonFog`, LOOK.horizon) is full
+   * from `start + reach × (end − start)` of the scene fog, well before the fog's end. The visible world in front of
+   * that plane hides the ruins; the haze-coloured distance behind it (it reads as sky) doesn't. `fogStart`/`fogEnd`
+   * are the scene fog's, as view depths.
+   */
+  update(cam: pc.Vec3, forward: pc.Vec3, fogStart: number, fogEnd: number) {
+    this.root.enabled = RUINS.on;
+    if (!RUINS.on) return;
+    const H = LOOK.horizon;
+    const full = H.strength >= 0.99 ? fogStart + (fogEnd - fogStart) * H.reach : fogEnd;
+    const D = Math.max(1, full * RUINS.depth);
+    const vs = [cam.x, cam.y, cam.z, forward.x, forward.y, forward.z, D];
+    if (!this.viewSig.length || vs.some((v, i) => Math.abs(v - this.viewSig[i]) > 1e-4)) {
+      this.viewSig = vs;
+      for (const m of this.meshes) {
+        const b = m.base;
+        const o = m.drawn;
+        for (let i = 0; i < b.length; i += 3) {
+          const dx = b[i] - cam.x;
+          const dy = b[i + 1] - cam.y;
+          const dz = b[i + 2] - cam.z;
+          // depth along the view; near or behind the camera's plane, fall back to the distance along the ray
+          let t = dx * forward.x + dy * forward.y + dz * forward.z;
+          const r = Math.hypot(dx, dy, dz);
+          if (t < r * 0.2) t = r;
+          const k = D / t;
+          o[i] = cam.x + dx * k;
+          o[i + 1] = cam.y + dy * k;
+          o[i + 2] = cam.z + dz * k;
+        }
+        m.mesh.setPositions(o);
+        m.mesh.update(pc.PRIMITIVE_TRIANGLES);
+      }
     }
-    const [cx, cz] = RUINS.centre;
-    const off = Math.hypot(cam.x - cx, cam.y, cam.z - cz);
-    const k = (RUINS.fill * farClip) / (this.reach + off);
-    this.root.setPosition(cam.x * (1 - k), cam.y * (1 - k), cam.z * (1 - k));
-    this.root.setLocalScale(k, k, k);
 
     const s = this.sun.up;
     const lc = this.sun.light?.color ?? new pc.Color(1, 1, 1);

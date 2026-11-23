@@ -23,8 +23,8 @@ island were the hidden areas' grey fog chunks and the cloud walls.
 ## What E32 adds
 
 `src/rendering/Ruins.ts` + `src/data/ruins.ts`: three bands of ruined coast (near ~225, mid ~350, far ~500 units from
-the island's centre) drawn in their own layer between the sky and the world, shrunk about the camera so they fit
-inside the sky dome, with light and distance fade baked into vertex colours toward the sky's horizon colour (read
+the island's centre) drawn in their own layer after the world's opaque pass, each vertex slid along its view ray onto a plane where the
+horizon haze is full (so the visible world hides them and the haze-coloured distance doesn't), with light and distance fade baked into vertex colours toward the sky's horizon colour (read
 from `Sky` at runtime). It is not the #681 backdrop: that was four retired GLB models floating at the horizon with
 nothing under them, cream at night. These stand on coasts, fade blue, go to dark silhouettes at night, and the open
 sea south of the start stays open.

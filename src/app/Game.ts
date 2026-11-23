@@ -5307,10 +5307,10 @@ export class Game {
     // takes its own night in waterFrame)
     this.transitions?.setSeaNight(1 - this.dayNight.daylight);
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
-    // P7-E32: the ruins follow the camera inside the sky dome and fade with the weather's view
     this.ruins.view = this.weatherVisuals?.view ?? 1;
-    this.ruins.update(this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.syncView();
+    // P7-E32: the ruins stand where the fogged distance (set by syncView) has gone to haze
+    this.ruins.update(this.camera.entity.getPosition(), this.camera.entity.forward, this.app.scene.fog.start, this.app.scene.fog.end);
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;

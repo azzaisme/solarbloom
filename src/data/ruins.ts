@@ -4,10 +4,11 @@
  *
  * The scene fog ends 64–88 units past the camera target and the far clip a little after it, so the ruins can't stand
  * in the world at their real distance. They are built at their real size and place (world units, round `centre`) and
- * drawn in their own layer between the sky and the world, shrunk about the camera so they fit inside the sky dome:
- * a uniform scale about the eye leaves every silhouette on screen exactly where the real one would be. They write no
- * depth, so the whole world paints over them, and their distance fade is baked into vertex colours toward the
- * sky's horizon colour (read from Sky each time the light or haze moves).
+ * drawn in their own layer right after the world's opaque pass, with every vertex slid along its own ray from the
+ * camera onto a plane where the distance above the horizon has gone wholly to haze: on screen each silhouette is
+ * exactly where the real one would be, while by depth the visible world hides them and the haze-coloured distance
+ * doesn't. Their distance
+ * fade is baked into vertex colours toward the sky's horizon colour (read from Sky each time the light or haze moves).
  *
  * Directions are compass bearings in degrees from `centre`: 0 is +z (south, the open sea beyond Saltwind Beach),
  * 90 is +x (east, the mainland), 180 is −z (north), 270 is −x (west).
@@ -17,8 +18,13 @@ export const RUINS = {
   seed: 0x5b1e7,
   /** the island's middle (world x, z): bearings and radii are measured from here */
   centre: [8, 8] as [number, number],
-  /** the farthest ruin is drawn at this share of the far clip (inside the sky dome at 0.97) */
-  fill: 0.9,
+  /** the thinnest any part is, as a share of its band's distance (~0.25°: thinner is lost and leaves crossbars floating) */
+  minThin: 0.0045,
+  /**
+   * the depth the ruins are drawn at, as a share of where the horizon haze is full (Ruins.update): a little short of
+   * it, since the haze is measured along each ray and the depth along the view (they part toward the screen's edges)
+   */
+  depth: 0.85,
   /** azimuth slices per layer: each is its own mesh so the camera culls the ones behind it */
   sectors: 6,
   /**
@@ -28,9 +34,9 @@ export const RUINS = {
    * plateau height range under it.
    */
   layers: [
-    { name: 'far', radius: [470, 520] as [number, number], fade: 0.52, scale: 0.85, density: 1.6, land: [1, 10] as [number, number] },
-    { name: 'mid', radius: [330, 370] as [number, number], fade: 0.34, scale: 0.55, density: 1.8, land: [0.5, 6] as [number, number] },
-    { name: 'near', radius: [215, 240] as [number, number], fade: 0.2, scale: 0.36, density: 1.4, land: [0.3, 3] as [number, number] },
+    { name: 'far', radius: [470, 520] as [number, number], fade: 0.46, scale: 0.85, density: 1.6, land: [1, 10] as [number, number] },
+    { name: 'mid', radius: [330, 370] as [number, number], fade: 0.3, scale: 0.55, density: 1.8, land: [0.5, 6] as [number, number] },
+    { name: 'near', radius: [215, 240] as [number, number], fade: 0.17, scale: 0.36, density: 1.4, land: [0.3, 3] as [number, number] },
   ],
   /**
    * Coasts per layer: [from°, to°] bearings. The mainland fills the east; the north and west have broken coasts; the
@@ -67,7 +73,7 @@ export const RUINS = {
    * feet melt into the sea haze and the towers stand clear of it. `strength` is the extra fade at sea level, easing
    * off with height over `height` units.
    */
-  heightFog: { strength: 0.45, height: 8 },
+  heightFog: { strength: 0.32, height: 6 },
   /** by night the bands fade less (dark blue silhouettes against the moonlit sky) */
   nightFade: 0.55,
   /** a few tiny warm lights on the near and mid ruins by night (not every structure lit) */
