@@ -34,46 +34,56 @@ export const RUINS = {
    * plateau height range under it.
    */
   layers: [
-    { name: 'far', radius: [470, 520] as [number, number], fade: 0.46, scale: 0.85, density: 1.6, land: [1, 10] as [number, number] },
-    { name: 'mid', radius: [330, 370] as [number, number], fade: 0.3, scale: 0.55, density: 1.8, land: [0.5, 6] as [number, number] },
-    { name: 'near', radius: [215, 240] as [number, number], fade: 0.17, scale: 0.36, density: 1.4, land: [0.3, 3] as [number, number] },
+    // P7-E32 (lead review): the bands step back in value (near clearly darker and bluer than the sky, far faint), and
+    // stand on real land: low coasts rising to mesas, highest under the near band
+    { name: 'far', radius: [470, 520] as [number, number], fade: 0.5, scale: 1.0, density: 1.0, land: [2, 12] as [number, number] },
+    { name: 'mid', radius: [330, 370] as [number, number], fade: 0.3, scale: 0.75, density: 1.0, land: [2, 11] as [number, number] },
+    { name: 'near', radius: [215, 240] as [number, number], fade: 0.1, scale: 0.62, density: 0.75, land: [2, 13] as [number, number] },
   ],
   /**
    * Coasts per layer: [from°, to°] bearings. The mainland fills the east; the north and west have broken coasts; the
-   * south (the open sea past the jetty) stays open, with only a far, faint shore across it.
+   * south (the open sea past the jetty) stays open between two headlands, with only a far, faint shore across it.
    */
   coasts: {
     far: [[25, 120], [150, 215], [240, 300], [325, 350]],
-    mid: [[48, 135], [165, 200], [228, 262]],
-    near: [[62, 112], [182, 206], [276, 292]],
+    // headlands either side of the south frame the open sea past the jetty (it stays open from 345° to 15°)
+    mid: [[22, 135], [165, 200], [228, 262], [318, 342]],
+    near: [[40, 112], [182, 206], [276, 292], [322, 336]],
   } as Record<'far' | 'mid' | 'near', [number, number][]>,
   /** what stands on the coasts (relative weights per layer) */
   kinds: {
-    far: { tower: 3, spire: 2, aqueduct: 2, block: 3, frame: 1, turbine: 0, viaduct: 1 },
-    mid: { tower: 3, spire: 2, aqueduct: 3, block: 2, frame: 1, turbine: 1, viaduct: 2 },
-    near: { tower: 2, spire: 1, aqueduct: 2, block: 2, frame: 2, turbine: 2, viaduct: 1 },
-  } as Record<'far' | 'mid' | 'near', Record<'tower' | 'spire' | 'aqueduct' | 'block' | 'frame' | 'turbine' | 'viaduct', number>>,
+    // fewer, bigger, more distinctive pieces up close (arches, jagged towers, ruined domes); thin frames and turbines
+    // only in the middle distance, where they read as a skyline detail
+    far: { tower: 3, spire: 2, aqueduct: 2, block: 3, dome: 2, frame: 0, turbine: 0, viaduct: 0 },
+    mid: { tower: 3, spire: 2, aqueduct: 3, block: 1, dome: 2, frame: 0, turbine: 1, viaduct: 1 },
+    near: { tower: 3, spire: 1, aqueduct: 4, block: 1, dome: 2, frame: 0, turbine: 0, viaduct: 0 },
+  } as Record<'far' | 'mid' | 'near', Record<'tower' | 'spire' | 'aqueduct' | 'block' | 'dome' | 'frame' | 'turbine' | 'viaduct', number>>,
+  /** waterfalls off the near band's highest cliffs (at most this many, where the cliff is at least `minHeight`) */
+  falls: { count: 3, minHeight: 8, colour: '#e4f0f6' },
+  /** how far the land's face toward the island leans back per unit of height (0 a sheer cliff): hills, not slabs */
+  slope: { far: 3, mid: 2, near: 0.7 } as Record<'far' | 'mid' | 'near', number>,
   /** albedos as seen (sRGB): weathered ivory stone, darker stone, rusted metal, old panels, dry plateau and cliff */
   colours: {
-    stone: '#d6ccb8',
-    stoneDark: '#a9a090',
+    stone: '#c4bcab',
+    stoneDark: '#9a9486',
     metal: '#8c7a68',
     panel: '#5f7286',
-    landTop: '#b5aa8e',
-    cliff: '#c4b69a',
-    moss: '#97a07a',
+    landTop: '#a39c82',
+    cliff: '#a9a08c',
+    moss: '#7f9468',
   },
   /**
    * Baked light: sun (key light's colour, `sun` strength on faces turned to it) over a sky ambient (`ambient` by
    * day, `ambientNight` by night). The light's direction and colour are read from the scene's sun each recolour.
    */
-  light: { sun: 0.55, ambient: 0.62, ambientNight: 0.3, nightTint: '#6d80b8' },
+  // the day ambient is the sky's cool blue (`dayTint`), so shaded faces read blue-grey against the pale horizon
+  light: { sun: 0.6, ambient: 0.5, ambientNight: 0.3, dayTint: '#93acd8', nightTint: '#6d80b8' },
   /**
    * Height fog on the distance: low ground fades further toward the horizon colour than high ground, so the coasts'
    * feet melt into the sea haze and the towers stand clear of it. `strength` is the extra fade at sea level, easing
    * off with height over `height` units.
    */
-  heightFog: { strength: 0.32, height: 6 },
+  heightFog: { strength: 0.25, height: 3 },
   /** by night the bands fade less (dark blue silhouettes against the moonlit sky) */
   nightFade: 0.55,
   /** a few tiny warm lights on the near and mid ruins by night (not every structure lit) */

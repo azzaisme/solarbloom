@@ -34,7 +34,7 @@ describe('P7-E32 ruined skyline', () => {
     expect([...order].sort((x, y) => x - y)).toEqual(order); // the manual draw order is far → near
   });
 
-  it('stands well beyond the playable island, never in the open sea south of the start', () => {
+  it('stands well beyond the playable island, never in the open sea due south of the start', () => {
     const { built } = plan();
     let verts = 0;
     for (const b of built) {
@@ -43,10 +43,10 @@ describe('P7-E32 ruined skyline', () => {
         const d = Math.hypot(p[i] - RUINS.centre[0], p[i + 2] - RUINS.centre[1]);
         expect(d).toBeGreaterThan(190); // the Old City island reaches ~145 from its centre at the corners
         verts++;
-        // the near and mid bands leave the sea past the jetty open (only the far band has a faint shore there)
+        // the near and mid bands leave the sea past the jetty open, 345°–15° (only the far band has a faint shore there)
         if (b.layer > 0) {
           const br = bearing(p[i], p[i + 2]);
-          expect(br > 40 && br < 320).toBe(true);
+          expect(br > 15 && br < 345).toBe(true);
         }
       }
     }

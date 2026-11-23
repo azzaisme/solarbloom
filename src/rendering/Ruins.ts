@@ -116,6 +116,7 @@ const C = {
   landTop: lin(RUINS.colours.landTop),
   cliff: lin(RUINS.colours.cliff),
   moss: lin(RUINS.colours.moss),
+  water: lin(RUINS.falls.colour),
 };
 
 export interface Built {
@@ -166,15 +167,17 @@ export class RuinPlanner {
       const geos = Array.from({ length: S }, () => new Geo());
       const sectorOf = (deg: number) => Math.floor((((deg % 360) + 360) % 360) / (360 / S)) % S;
       const toRad = (d: number) => (d * Math.PI) / 180;
+      let falls = 0;
       for (const [a0, a1] of RUINS.coasts[name]) {
         // the coast's shape along its arc: an uneven shoreline and a plateau that eases down at both headlands
         const ph = [this.rnd() * 6.3, this.rnd() * 6.3, this.rnd() * 6.3];
         const rIn = (deg: number) => L.radius[0] + 7 * Math.sin(toRad(deg) * 9 + ph[0]) + 4 * Math.sin(toRad(deg) * 23 + ph[1]);
         const hAt = (deg: number) => {
           const end = smooth(Math.min(deg - a0, a1 - deg) / 5);
-          // rolling headlands and low shores between them (squared, so most of the coast is low and a few rise)
-          const wav = Math.max(0, 0.5 + 0.35 * Math.sin(toRad(deg) * 7 + ph[2]) + 0.25 * Math.sin(toRad(deg) * 19 + ph[0])) ** 2;
-          return (L.land[0] + (L.land[1] - L.land[0]) * Math.min(1, wav)) * end;
+          // low shores rising in steps to flat-topped mesas (the step makes a cliff between two slices)
+          const wav = 0.5 + 0.35 * Math.sin(toRad(deg) * 7 + ph[2]) + 0.25 * Math.sin(toRad(deg) * 19 + ph[0]);
+          const mesa = smooth((wav - 0.55) / 0.08);
+          return (L.land[0] + (L.land[1] - L.land[0]) * Math.min(1, 0.2 * Math.max(0, wav) + 0.8 * mesa)) * end;
         };
         const step = 2.5;
         for (let d = a0; d < a1 - 1e-6; d += step) {
@@ -182,10 +185,22 @@ export class RuinPlanner {
           const p = (deg: number, r: number): V2 => [cx + r * Math.sin(toRad(deg)), cz + r * Math.cos(toRad(deg))];
           const depth = 70;
           const bot = [p(d, rIn(d) - 4), p(e, rIn(e) - 4), p(e, rIn(e) + depth), p(d, rIn(d) + depth)];
-          const top = [p(d, rIn(d) + 2), p(e, rIn(e) + 2), p(e, rIn(e) + depth), p(d, rIn(d) + depth)];
           const hd = hAt(d);
           const he = hAt(e);
-          geos[sectorOf((d + e) / 2)].frustum(bot, top, 0, [hd, he, he * 1.15, hd * 1.15], this.rnd() < 0.3 ? C.stoneDark : C.cliff, this.rnd() < 0.35 ? C.moss : C.landTop);
+          const lean = RUINS.slope[name];
+          const top = [p(d, rIn(d) + 2 + hd * lean), p(e, rIn(e) + 2 + he * lean), p(e, rIn(e) + depth), p(d, rIn(d) + depth)];
+          const geo = geos[sectorOf((d + e) / 2)];
+          geo.frustum(bot, top, 0, [hd, he, he, hd], this.rnd() < 0.4 ? C.stoneDark : C.cliff, this.rnd() < (name === 'near' ? 0.6 : 0.35) ? C.moss : C.landTop);
+          // a waterfall off the near band's high cliffs, now and then
+          const F = RUINS.falls;
+          if (name === 'near' && falls < F.count && Math.min(hd, he) >= F.minHeight && this.rnd() < 0.35) {
+            falls++;
+            const m = (d + e) / 2;
+            const th = toRad(m);
+            const h = Math.min(hd, he) - 0.2;
+            const at: V3 = [cx + (rIn(m) - 4.8) * Math.sin(th), h / 2, cz + (rIn(m) - 4.8) * Math.cos(th)];
+            geo.box(at, [Math.cos(th) * 1.6, 0, -Math.sin(th) * 1.6], [0, h / 2, 0], [Math.sin(th) * 0.5, 0, Math.cos(th) * 0.5], C.water);
+          }
         }
         // the structures, deeper inland first (drawn first: they stand behind the nearer ones)
         const count = Math.max(1, Math.round(((a1 - a0) / 10) * L.density));
@@ -233,12 +248,30 @@ export class RuinPlanner {
     const stone = this.rnd() < 0.7 ? C.stone : C.stoneDark;
     switch (kind) {
       case 'tower': {
-        const w = this.range(4, 7) * s;
-        const h = this.range(22, 42) * s;
+        const w = this.range(6, 10) * s;
+        const h = this.range(20, 34) * s;
+        if (this.rnd() < 0.6) {
+          // a solid shaft with a jagged, stepped broken crown and moss on its ledges
+          const body = h * this.range(0.65, 0.8);
+          box(0, body / 2, 0, w / 2, body / 2, w / 2, stone);
+          box(0, body + 0.25 * s, 0, w / 2 + 0.2 * s, 0.25 * s, w / 2 + 0.2 * s, C.moss);
+          const steps = 2 + Math.floor(this.rnd() * 2);
+          let u = -w / 2;
+          for (let i = 0; i < steps; i++) {
+            const sw = (w / steps) * this.range(0.8, 1.1);
+            const sh = (h - body) * this.range(0.3, 1);
+            const u1 = Math.min(w / 2, u + sw);
+            box((u + u1) / 2, body + sh / 2, 0, (u1 - u) / 2, sh / 2, w / 2 * 0.9, stone);
+            wedge(u, u1, body + sh, this.range(0.6, 1.6) * s, w / 2 * 0.9, this.rnd() < 0.5, stone);
+            u = u1;
+          }
+          lamp(f.at(0, body * 0.6, w / 2));
+          break;
+        }
         const base = h * this.range(0.55, 0.7);
         box(0, base / 2, 0, w / 2, base / 2, w / 2, stone);
         // the upper storey is open: two corner piers (one broken short), a lintel across where it survives
-        const pw = Math.max(w * 0.22, this.thin);
+        const pw = Math.max(w * 0.3, this.thin);
         const hl = h - base;
         const hr = hl * this.range(0.35, 0.8);
         box(-w / 2 + pw / 2, base + hl / 2, 0, pw / 2, hl / 2, w / 2, stone);
@@ -280,11 +313,11 @@ export class RuinPlanner {
       }
       case 'aqueduct': {
         const bays = 3 + Math.floor(this.rnd() * 5);
-        const bw = this.range(8, 11) * s;
-        const H = this.range(14, 22) * s;
-        const pw = 1.7 * s;
-        const deck = 2.2 * s;
-        const hw = 1.3 * s;
+        const bw = this.range(9, 12) * s;
+        const H = this.range(16, 24) * s;
+        const pw = Math.max(2.6 * s, this.thin);
+        const deck = 3 * s;
+        const hw = 1.8 * s;
         const u0 = (-bays * bw) / 2;
         const broken = new Set<number>();
         for (let i = 0; i < bays; i++) if (this.rnd() < 0.25) broken.add(i);
@@ -297,7 +330,7 @@ export class RuinPlanner {
           const uc = u0 + (i + 0.5) * bw;
           const rr = (bw - pw) / 2;
           const spring = H - deck - rr * 0.9;
-          const K = 6;
+          const K = 8;
           for (let k = 0; k < K; k++) {
             const a0 = Math.PI - (k / K) * Math.PI;
             const a1 = Math.PI - ((k + 1) / K) * Math.PI;
@@ -306,6 +339,7 @@ export class RuinPlanner {
             g.hull([f.at(p0[0], p0[1], -hw), f.at(p1[0], p1[1], -hw), f.at(p1[0], H - deck, -hw), f.at(p0[0], H - deck, -hw)], scl(N, hw * 2), stone);
           }
           box(uc, H - deck / 2, 0, bw / 2 + 0.01, deck / 2, hw * 1.1, stone);
+          if (this.rnd() < 0.6) box(uc, H + 0.2 * s, 0, bw / 2 * this.range(0.4, 1), 0.2 * s, hw * 1.15, C.moss);
         }
         // a second, lighter tier on some
         if (this.rnd() < 0.4) {
@@ -339,6 +373,24 @@ export class RuinPlanner {
           }
           box(uc, H + 0.7 * s, 0, span / 2, 0.7 * s, 1.8 * s, C.stone);
         }
+        break;
+      }
+      case 'dome': {
+        // a ruined dome on a drum: octagonal tiers narrowing to the crown, the top broken open on some
+        const r = this.range(5, 8) * s;
+        const oct = (rr: number, half = false): V2[] => Array.from({ length: half ? 5 : 8 }, (_, i) => {
+          const a = half ? (i / 4) * Math.PI : ((i + 0.5) / 8) * Math.PI * 2;
+          const p = f.at(Math.cos(a) * rr, 0, (half ? -1 : 1) * Math.sin(a) * rr);
+          return [p[0], p[2]];
+        });
+        const y0 = f.o[1];
+        const drum = r * this.range(0.5, 0.9);
+        g.frustum(oct(r), oct(r), y0, new Array(8).fill(y0 + drum), stone, stone);
+        g.frustum(oct(r), oct(r * 0.82), y0 + drum, new Array(8).fill(y0 + drum + r * 0.35), stone, stone);
+        const broken = this.rnd() < 0.5;
+        g.frustum(oct(r * 0.82, broken), oct(r * 0.5, broken), y0 + drum + r * 0.35, new Array(broken ? 5 : 8).fill(y0 + drum + r * 0.65), stone, stone);
+        if (!broken) g.frustum(oct(r * 0.5), oct(r * 0.15), y0 + drum + r * 0.65, new Array(8).fill(y0 + drum + r * 0.85), stone, stone);
+        lamp(f.at(0, drum * 0.5, r));
         break;
       }
       case 'block': {
@@ -540,11 +592,12 @@ export class Ruins {
   private recolour(sunDir: V3, sunCol: V3, haze: [number, number, number]) {
     const night = Math.min(1, Math.max(0, this.sky.night));
     const L = RUINS.light;
-    // by night the sky's light is a cool blue (the tint, normalised to its brightest channel)
-    const tint = lin(L.nightTint);
-    const tmax = Math.max(...tint, 1e-3);
+    // the sky's light is a cool blue by day and a deeper one by night (each tint normalised to its brightest channel)
+    const norm = (c: V3) => c.map((v) => v / Math.max(...c, 1e-3)) as V3;
+    const day = norm(lin(L.dayTint));
+    const nt = norm(lin(L.nightTint));
     const amb = L.ambient + (L.ambientNight - L.ambient) * night;
-    const ambC = tint.map((t) => amb * (1 + (t / tmax - 1) * night)) as V3;
+    const ambC = day.map((d, i) => amb * (d + (nt[i] - d) * night)) as V3;
     const sunK = L.sun * (1 - 0.4 * night);
     const sl: V3 = sunCol.map((c) => (c ** 2.2) * sunK) as V3;
     const lampC = lin(RUINS.lamps.colour);
