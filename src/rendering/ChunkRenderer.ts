@@ -28,7 +28,7 @@ import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } 
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage, treeWorldOf } from './TreePlacement';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
-import { areaEdges, buildingDressing, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
+import { areaEdges, beachDressing, buildingDressing, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
 import { zoneAt, type PlantingZone } from './PlantingZones';
 import { MODELS, ModelBatch } from './Models';
 import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
@@ -3649,6 +3649,14 @@ export class ChunkRenderer {
           b.tip = '';
         }
       }
+      return;
+    } else if (f === 'sand' && zoneOf(c, t.x, t.z) === 'beach') {
+      // P7-E28: the beach by the sea stays sand once restored (clean and pale; it blends into the lawn behind it).
+      // Visual only: the tile is still restored ground with its own feature.
+      this.slab(b, PALETTE.beachSand[((t.variant % 3) + 3) % 3], [x, h, z], [1, 0.16, 1]);
+      turfTop(c, t, top);
+      beachDressing(c, t, x, z, top);
+      if (t.plant) this.plantExtras(t, x, z, top); // what the player's pulse grew still shows
       return;
     } else {
       this.slab(b, grass, [x, h, z], [1, 0.16, 1]);

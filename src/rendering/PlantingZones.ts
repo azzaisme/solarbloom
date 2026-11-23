@@ -7,21 +7,24 @@
  * Looks only: nothing here is saved or read by the simulation, and the same world always gets the same zones.
  *
  * API (kept stable for P7-E29; any change is called out in its commit message):
- *   zoneAt(x, z, ctx) → PlantingZone
+ *   zoneAt(x, z, ctx) → PlantingZone (incl. 'beach')
+ *   beachDepth(x, z, ctx) → 0…1 in from the sea, or undefined
  *   ZONE_DENSITY[zone] → 'calm' | 'moderate' | 'dense'
  *   ctx.ignoreOccupants: zones from the generated world only (no machines), for trees
  */
 import type { TileData } from '../core/types';
+import { seaCell, surfCell } from '../core/OldCityLayout';
 
-export type PlantingZone = 'open_lawn' | 'meadow' | 'flower_garden' | 'shoreline' | 'woodland_understory' | 'path_edge' | 'landmark_clearance';
+export type PlantingZone = 'open_lawn' | 'meadow' | 'flower_garden' | 'shoreline' | 'woodland_understory' | 'path_edge' | 'landmark_clearance' | 'beach';
 
-export const PLANTING_ZONES: readonly PlantingZone[] = ['open_lawn', 'meadow', 'flower_garden', 'shoreline', 'woodland_understory', 'path_edge', 'landmark_clearance'];
+export const PLANTING_ZONES: readonly PlantingZone[] = ['open_lawn', 'meadow', 'flower_garden', 'shoreline', 'woodland_understory', 'path_edge', 'landmark_clearance', 'beach'];
 
 /** P7-E28.3 (#728): how full each zone is planted: about half the restored ground calm, a third moderate, a fifth dense. */
 export const ZONE_DENSITY: Record<PlantingZone, 'calm' | 'moderate' | 'dense'> = {
   open_lawn: 'calm',
   path_edge: 'calm',
   landmark_clearance: 'calm',
+  beach: 'calm',
   meadow: 'moderate',
   shoreline: 'moderate',
   woodland_understory: 'moderate',
@@ -31,7 +34,7 @@ export const ZONE_DENSITY: Record<PlantingZone, 'calm' | 'moderate' | 'dense'> =
 /** What zoneAt needs to know about the world. A chunk renderer's DressCtx satisfies it. */
 export interface ZoneCtx {
   /** A generated tile (undefined: not generated yet, read as plain ground). */
-  peek(x: number, z: number): Pick<TileData, 'feature' | 'blocked' | 'occupantId'> | undefined;
+  peek(x: number, z: number): Pick<TileData, 'feature' | 'blocked' | 'occupantId' | 'level'> | undefined;
   /** The area id a cell belongs to. */
   areaAt(x: number, z: number): string;
   /** The area type of the cell being zoned (park, grove, canal, beach…). */
@@ -54,13 +57,17 @@ export const ZONES = {
   /** size in tiles of the lawn / meadow / garden noise field */
   fieldScale: 6.5,
   /** noise thresholds on the field: below `lawn` open lawn, below `meadow` meadow, above it a flower garden */
-  lawn: 0.5,
-  meadow: 0.67,
+  lawn: 0.48,
+  meadow: 0.635,
   /** a garden is likelier within two cells of a path (flowers in beds along edges) */
   pathBias: 0.07,
   /** copses in parkland and by water: field value above this is woodland understory */
   copse: 0.76,
   copseScale: 9,
+  /** the beach: sand within this many tiles of the open sea or surf stays sand, its inner edge wavy by `beachWobble` */
+  beach: 3.6,
+  beachWobble: 1.4,
+  beachScale: 6,
 };
 
 /** Area types whose natural ground is mostly woodland. */
@@ -103,6 +110,33 @@ function landmarkDist(x: number, z: number, lm: readonly [number, number] | unde
   return Math.max(dx, dz);
 }
 
+/** Open sea or surf (not a canal or pond): an Old City water cell the coast generates. */
+function seaward(x: number, z: number, ctx: ZoneCtx) {
+  const n = ctx.peek(x, z);
+  return !!n && featureOf(n) === 'water' && (seaCell(x, z) || surfCell(x, z));
+}
+
+/**
+ * The beach at a sand cell: how far in from the sea it is (0 at the waterline … 1 at the wavy inner edge where it
+ * meets the lawn), or undefined if it isn't beach. Only Old City sand (it has a terrace `level`) within reach of the
+ * open sea or surf: canal and pond banks stay shoreline. Exported for the dressing (wet band, dune grass).
+ */
+export function beachDepth(x: number, z: number, ctx: ZoneCtx): number | undefined {
+  const t = ctx.peek(x, z);
+  if (!t || featureOf(t) !== 'sand' || t.level === undefined) return undefined;
+  const band = ZONES.beach + ZONES.beachWobble * (2 * noise2(x / ZONES.beachScale, z / ZONES.beachScale, 7121) - 1);
+  const R = Math.ceil(ZONES.beach + ZONES.beachWobble);
+  let best = Infinity;
+  for (let dz = -R; dz <= R; dz++)
+    for (let dx = -R; dx <= R; dx++) {
+      const d = Math.hypot(dx, dz);
+      if (d >= best || d > band + 0.5) continue;
+      if (seaward(x + dx, z + dz, ctx)) best = d;
+    }
+  if (best > band + 0.5) return undefined;
+  return Math.max(0, Math.min(1, (best - 1) / Math.max(0.5, band - 0.5)));
+}
+
 /** The lawn / meadow / garden field at a cell (0…1), before any bias. Exported for tests and tuning. */
 export function zoneField(x: number, z: number) {
   const s = ZONES.fieldScale;
@@ -113,6 +147,7 @@ export function zoneField(x: number, z: number) {
  * The planting zone of cell (x, z). Hard ground (paving, roads, the jetty's planks) is `path_edge`, water is
  * `shoreline`, anything built, blocked or occupied is `landmark_clearance`; plantable ground goes by, in order:
  *  1. within `clearance` of the landmark or a machine: `landmark_clearance` (low and open, so prompts read);
+ *  1b. Old City sand within a wavy band of the open sea or surf: `beach` (stays sand: no flowers, no trees);
  *  2. next to water: `shoreline` (reeds, stones, restrained bank plants);
  *  3. next to a path or road: `path_edge` (short, neat borders);
  *  4. within `gardenRing` of the landmark or a machine: `flower_garden` (the destination's fuller beds);
@@ -146,6 +181,7 @@ export function zoneAt(x: number, z: number, ctx: ZoneCtx): PlantingZone {
     }
   const dest = Math.min(lmd, machine);
   if (dest <= ZONES.clearance) return 'landmark_clearance';
+  if (beachDepth(x, z, ctx) !== undefined) return 'beach';
   if (water) return 'shoreline';
   if (edge) return 'path_edge';
   if (dest <= R) return 'flower_garden';
