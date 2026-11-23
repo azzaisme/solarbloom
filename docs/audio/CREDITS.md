@@ -8,10 +8,9 @@ by `tools/audio/manifest.py`. Designed interface and reward tones are written by
 |---|---|---|---|
 | Antonín Dvořák: String Quartet No. 10 Op. 51, III. Romanza by Antonín Dvořák (composer); Musopen String Quartet | https://archive.org/details/MusopenKickstarterRecordings | CC0 1.0 | `music/dvorak-romanza-quartet` |
 | Franz Schubert: Piano Sonata in A D. 664, II. Andante by Franz Schubert (composer); Paul Pitman (piano); Musopen | https://archive.org/details/MusopenKickstarterRecordings | CC0 1.0 | `music/schubert-andante-piano` |
-| Iwashimizu (Tozan-ryu honkyoku; Nakao Tozan, 1904) by Nakao Tozan (composer); Iburozan (shakuhachi) | https://archive.org/details/Iwashimizu | CC0 1.0 | `music/iwashimizu-shakuhachi` |
 | J. S. Bach: Partita No. 1 BWV 825, Sarabande by J. S. Bach (composer); Ina Zdorovetchi (harp); recorded by tom.k@archive.org | https://archive.org/details/Ina_11_21_2010 | CC0 1.0 | `music/bach-sarabande-harp` |
+| Joseph Haydn: String Quartet Op. 64 No. 5 "Lark", II. Adagio cantabile by Joseph Haydn (composer); Musopen String Quartet | https://archive.org/details/MusopenKickstarterRecordings | CC0 1.0 | `music/haydn-lark-adagio-quartet` |
 | Marcel Tournier: Sonatine No. 1 Op. 30, II. Calme et expressif (1924) by Marcel Tournier (composer); Ina Zdorovetchi (harp); recorded by tom.k@archive.org | https://archive.org/details/Ina_11_21_2010 | CC0 1.0 | `music/tournier-calme-harp` |
-| Raga Kiravani: alapana and tanam (traditional raga, improvised) by L. Ramakrishnan (veena) | https://archive.org/details/LR_kIravANI | CC Public Domain Dedication | `music/raga-kiravani-veena` |
 | 20 Rustles of dry leaves by qubodup | https://opengameart.org/content/20-rustles-dry-leaves | CC0 1.0 | `sfx/restoration/leaf` |
 | AMB Morning Sounds (Perfect Loop) by Kresiek The Furry | https://opengameart.org/content/amb-morning-sounds-perfect-loop | CC0 1.0 | `ambience/restored/meadow` |
 | Aspen and Cottonwood Trees Blowing in Wind (Radio Aporee 58287) by dlee (Metabolic Studio) | https://archive.org/details/aporee_58287_66859 | Public Domain Mark 1.0 | `ambience/restored/leaves` |
@@ -24,4 +23,4 @@ by `tools/audio/manifest.py`. Designed interface and reward tones are written by
 | Simpson Lake Shore (Radio Aporee 51993) by Pierrot Desperes | https://archive.org/details/aporee_51993_59367 | Public Domain Mark 1.0 | `ambience/water/shore` |
 | windy ambient noise (windy_ambiance.ogg) by Some Weirdo | https://opengameart.org/content/windy-ambient-noise | CC0 1.0 | `ambience/barren/wind-dry` |
 
-Music: performances by Ina Zdorovetchi (harp), L. Ramakrishnan (veena), Iburozan (shakuhachi), Paul Pitman (piano) and the Musopen String Quartet, released to the public domain.
+Music: performances by Ina Zdorovetchi (harp), Paul Pitman (piano) and the Musopen String Quartet, released to the public domain.

@@ -48,10 +48,8 @@ SOURCES = {
                                                     human='Live recital, Brown Hall, Boston, 21 Nov 2010 (24-bit/96 kHz binaural recording)'),
     'music/bach-bwv825-sarabande-harp.flac': dict(title='J. S. Bach: Partita No. 1 BWV 825, Sarabande', creator='J. S. Bach (composer); Ina Zdorovetchi (harp); recorded by tom.k@archive.org', url='https://archive.org/details/Ina_11_21_2010', lic=CC0,
                                                   human='Live recital, Brown Hall, Boston, 21 Nov 2010'),
-    'music/raga-kiravani-veena.mp3': dict(title='Raga Kiravani: alapana and tanam (traditional raga, improvised)', creator='L. Ramakrishnan (veena)', url='https://archive.org/details/LR_kIravANI', lic=PDD,
-                                          human="Performer's own upload: recorded at Lars Nesbakken's home studio, Portland, Oregon"),
-    'music/iwashimizu-shakuhachi.mp3': dict(title='Iwashimizu (Tozan-ryu honkyoku; Nakao Tozan, 1904)', creator='Nakao Tozan (composer); Iburozan (shakuhachi)', url='https://archive.org/details/Iwashimizu', lic=CC0,
-                                            human="Performer's own upload: \"performed by Iburozan on November 23rd. 2010\""),
+    'music/haydn-op64no5-adagio-quartet.mp3': dict(title='Joseph Haydn: String Quartet Op. 64 No. 5 "Lark", II. Adagio cantabile', creator='Joseph Haydn (composer); Musopen String Quartet', url='https://archive.org/details/MusopenKickstarterRecordings', lic=CC0,
+                                                   human='Musopen commissioned studio recording (2012 Kickstarter)'),
     'music/dvorak-op51-romanza-quartet.mp3': dict(title='Antonín Dvořák: String Quartet No. 10 Op. 51, III. Romanza', creator='Antonín Dvořák (composer); Musopen String Quartet', url='https://archive.org/details/MusopenKickstarterRecordings', lic=CC0,
                                                   human='Musopen commissioned studio recording (2012 Kickstarter)'),
     'music/schubert-d664-andante-piano.mp3': dict(title='Franz Schubert: Piano Sonata in A D. 664, II. Andante', creator='Franz Schubert (composer); Paul Pitman (piano); Musopen', url='https://archive.org/details/MusopenKickstarterRecordings', lic=CC0,
@@ -124,7 +122,7 @@ def main():
         for (who, url, lic), ids in sorted(used.items(), key=lambda x: (not x[1][0].startswith('music'), x[0][0])):
             short = sorted({i.rsplit('-', 1)[0] if i[-3] == '-' and i[-2:].isdigit() else i for i in ids})
             f.write(f"| {who} | {url} | {lic.split(' (')[0]} | {', '.join(f'`{s}`' for s in short)} |\n")
-        f.write('\nMusic: performances by Ina Zdorovetchi (harp), L. Ramakrishnan (veena), Iburozan (shakuhachi), Paul Pitman (piano) and the Musopen String Quartet, released to the public domain.\n')
+        f.write('\nMusic: performances by Ina Zdorovetchi (harp), Paul Pitman (piano) and the Musopen String Quartet, released to the public domain.\n')
     print(f'{len(rows)} rows → {os.path.relpath(CSV, ROOT)}, {os.path.relpath(CREDITS, ROOT)}')
 
 

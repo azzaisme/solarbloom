@@ -46,11 +46,11 @@ Debug: ?audiodebug or Shift+F9; window.__audio()
 
 Epic: A03 Human-made long-form soundtrack
 Status: Partial (awaiting the owner's approval of the six pieces)
-Assets: shakuhachi, two harp pieces, veena raga, Dvořák Romanza, Schubert Andante — CC0 / PD, verified on archive.org
+Assets: one chamber palette — Tournier and Bach (harp), Schubert (piano), Dvořák and Haydn (string quartet) — CC0, verified on archive.org
 Behaviour: one piece at a time, played through, 35–90 s rests; mood hold 40 s before a crossfade; no restart on
   camera or small moves; night low-pass; restoration opens the level; big moments duck 1–3 dB
 Remaining: owner listening; no intro/outro stems or intensity stems exist for these recordings (not needed for
-  through-played pieces); Satie dropped at the owner's request (too associated with another game)
+  through-played pieces); Satie dropped (too associated with another game); shakuhachi and veena dropped (one palette, not a world tour)
 
 Epic: A04 Dead-to-living dynamic soundscape (signature)
 Status: Done (pending ears)
@@ -82,7 +82,7 @@ Epic: A08 Asset pipeline & rights
 Status: Done
 Files: tools/audio/bake.py, tools/audio/manifest.py, docs/audio/ASSET_MANIFEST.csv, CREDITS.md, LICENCE_EVIDENCE.md
 Rule enforced by tests: every shipped file has a manifest row with creator, source and licence
-Residual risks: LICENCE_EVIDENCE.md (Public Domain Mark items; Iwashimizu EU term to 31 Dec 2026; recordist-
+Residual risks: LICENCE_EVIDENCE.md (Public Domain Mark items; recordist-
   dedicated harp recordings; Content ID on PD classical)
 
 Epic: A09 Playtesting, mixing & final QA

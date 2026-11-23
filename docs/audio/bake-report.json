@@ -131,20 +131,12 @@
   "bytes": 5126517,
   "lufs": -21.5
  },
- "music/iwashimizu-shakuhachi": {
-  "file": "assets/audio/music/iwashimizu-shakuhachi.ogg",
-  "src": "music/iwashimizu-shakuhachi.mp3",
-  "seconds": 363.416,
-  "peak_dbfs": -11.98,
-  "bytes": 5054913,
-  "lufs": -20.9
- },
- "music/raga-kiravani-veena": {
-  "file": "assets/audio/music/raga-kiravani-veena.ogg",
-  "src": "music/raga-kiravani-veena.mp3",
-  "seconds": 812.33,
-  "peak_dbfs": -2.19,
-  "bytes": 8520379,
+ "music/haydn-lark-adagio-quartet": {
+  "file": "assets/audio/music/haydn-lark-adagio-quartet.ogg",
+  "src": "music/haydn-op64no5-adagio-quartet.mp3",
+  "seconds": 291.758,
+  "peak_dbfs": -2.63,
+  "bytes": 4010772,
   "lufs": -20.0
  },
  "music/schubert-andante-piano": {
