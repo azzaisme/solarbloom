@@ -27,6 +27,8 @@ from mathutils import Vector
 PALETTES = {
     # ivory ruined stone with moss (the distant ruined city, P7-E32)
     "ruin": {"stone": "#d8d0bf", "low": "#a99d88", "moss": "#7d9658"},
+    # warm sea-cliff rock with a grassy top (what the ruins stand on)
+    "cliff": {"stone": "#b8a88f", "low": "#8c7e6a", "moss": "#6f9150"},
 }
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
@@ -174,9 +176,11 @@ cam_data = bpy.data.cameras.new("cam")
 cam_data.lens = 50
 cam = bpy.data.objects.new("cam", cam_data)
 scene.collection.objects.link(cam)
-yaw, pitch, dist = math.radians(30), math.radians(12), w * 2.6
-cam.location = (math.sin(yaw) * math.cos(pitch) * dist, -math.cos(yaw) * math.cos(pitch) * dist, H * 0.45 + math.sin(pitch) * dist)
-direction = Vector((0, 0, H * 0.45)) - cam.location
+# frame the whole model: fit the larger of its width (16:9 frame) and its height
+fit = max(max(obj.dimensions.x, obj.dimensions.y) / 1.6, H)
+yaw, pitch, dist = math.radians(30), math.radians(12), fit * 4.2
+cam.location = (math.sin(yaw) * math.cos(pitch) * dist, -math.cos(yaw) * math.cos(pitch) * dist, H * 0.5 + math.sin(pitch) * dist)
+direction = Vector((0, 0, H * 0.5)) - cam.location
 cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
 scene.camera = cam
 scene.render.filepath = os.path.join(out_dir, f"{name}.png")
