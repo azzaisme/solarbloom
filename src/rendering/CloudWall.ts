@@ -124,13 +124,16 @@ export class CloudWall {
           for (let u = 0.6 + row; u < CHUNK; u += step) {
             const a = start + u;
             const h = hash01(Math.floor(a * 10), edge, row, along === 'z' ? 1 : 2);
-            const depth = (0.7 + 1.4 * row) * grow + h * 0.5;
+            // tiered: the two rows at the edge keep the gate walls' size; only the rows behind them grow, so the big
+            // banks stand back from the playable ground and never loom right in front of a near camera
+            const g = row >= 2 ? grow : 1;
+            const depth = 0.7 + 1.4 * row * (row >= 2 ? grow : 1) + h * 0.5;
             const x = along === 'z' ? edge + inward * depth : a + (h - 0.5) * 0.6;
             const z = along === 'z' ? a + (h - 0.5) * 0.6 : edge + inward * depth;
-            const size = (1.0 + 0.35 * row + h * 0.45) * grow;
+            const size = (1.0 + 0.35 * row + h * 0.45) * g;
             // E21.24: on the Old City's terraces the wall stands on the higher of the two grounds it divides
             const lift = s.grid.terraced(GROUND) ? Math.max(levelY(levelAt(Math.floor(x), Math.floor(z))), levelY(levelAt(Math.floor(x - (along === 'z' ? inward * 2 : 0)), Math.floor(z - (along === 'x' ? inward * 2 : 0))))) : 0;
-            const cy = y - 0.15 + 0.5 * row * grow + lift;
+            const cy = y - 0.15 + 0.5 * row * g + lift;
             this.cloud(root, x, cy, z, size, h * 360);
             anchors.push([x, cy, z, size]);
           }

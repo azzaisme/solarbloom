@@ -71,7 +71,7 @@ const ground = {
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
   /** the stone edge of dead paving where it stands above the earth beside it */
   pavingKerb: '#a48a72',
-  painted: { sand: ['#d9c79e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
+  painted: { sand: ['#e9dfc2'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   /**
    * E25 (#626): the sandbar out in the sea is wet sand: the painted sand is tinted by `wetSandTint` and its sides take
    * `wetSand`: a little darker than the dry beach.
@@ -121,7 +121,8 @@ const lawn = {
     ['#9cc463', '#a5c96a', '#93bd5c', '#accd72', '#91b75a'],
     ['#77ad3e', '#80b443', '#6da23a', '#87b84a', '#649a37'],
     ['#538f34', '#5c973a', '#4c872f', '#639c3f', '#47802c'],
-    ['#80ae3a', '#8ab440', '#77a636', '#92b946', '#6f9e33'],
+    // P7-E27 (#713): Radiant less yellow (was #80ae3a …): still the warmest stage, but a natural green in the sun
+    ['#74b23c', '#7db842', '#6ca838', '#85bc48', '#669e34'],
   ] as string[][],
   /** tufts: darker base, lighter tips (MeshBuilder.tip) */
   tuft: ['#4a7f2c', '#538a31', '#5f9337'],

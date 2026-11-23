@@ -129,8 +129,8 @@ export const LOOK = {
   /**
    * P7-E27 prototype (owner's idea, 23 Nov 2026): continue the region-gate cloud wall (CloudWall) along every edge
    * where revealed ground meets the hidden city, so the open island is ringed by cloud instead of fading into grey
-   * haze. `rows` of clouds (the gate walls have 2), each row further in, larger and higher; `size` scales the ring's
-   * clouds and spacing. Judged in the fixed shots (off / 3 × 1.3 / 4 × 1.7) and chosen by the owner at 4 × 1.7: the
+   * haze. `rows` of clouds (the gate walls have 2), each row further in, larger and higher; `size` scales the rows
+   * behind the first two (those keep the gate walls' size, so the big banks stand back from the playable edge). Judged in the fixed shots (off / 3 × 1.3 / 4 × 1.7) and chosen by the owner at 4 × 1.7: the
    * low cameras get a cloud bank where the grey hidden city showed. The clouds' shape is P7-E32's.
    */
   cloudRing: {

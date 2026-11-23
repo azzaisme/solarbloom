@@ -212,7 +212,9 @@ function paintSand(px: Uint8ClampedArray) {
   const n1 = makeNoise(41), n2 = makeNoise(53), n3 = makeNoise(67);
   const peb = stones(rng(15), 26, 0.005, 0.014);
   // P7-E27: pale warm sand (was a saturated orange-gold, base 232,196,128); the Palette's painted.sand is its average
-  const base: RGB = [224, 204, 160], pale: RGB = [240, 226, 192], tawny: RGB = [204, 180, 136], shade: RGB = [174, 150, 112];
+  // P7-E27.3 (#721): paler again (was 224,204,160): the warm sun and grade add ~0.08 saturation on screen, so this lands
+  // near the brief's pale warm sand (~#E2CFA4) rather than tan
+  const base: RGB = [240, 228, 196], pale: RGB = [250, 242, 218], tawny: RGB = [222, 206, 170], shade: RGB = [190, 174, 140];
   const stoneBody: RGB = [228, 212, 190], stoneLight: RGB = [252, 244, 228], stoneDark: RGB = [168, 132, 92];
   for (let y = 0; y < SIZE; y++)
     for (let x = 0; x < SIZE; x++) {
