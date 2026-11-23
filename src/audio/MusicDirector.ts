@@ -16,7 +16,12 @@ export interface MusicTrack {
  * The score (human-composed and human-performed; see docs/audio/ASSET_MANIFEST.csv). A mood with no track of
  * its own borrows the nearest one (garden ← water, quiet ← night).
  */
-export const MUSIC: MusicTrack[] = [];
+export const MUSIC: MusicTrack[] = [
+  // Frédéric Chopin, Nocturnes: Musopen's public-domain (CC0) recordings of real pianists (see the manifest)
+  { id: 'music/nocturne-op9-no2', title: 'Nocturne in E-flat major, Op. 9 No. 2', moods: ['garden', 'water'] },
+  { id: 'music/nocturne-op55-no2', title: 'Nocturne in E-flat major, Op. 55 No. 2', moods: ['water', 'garden', 'night'], gain: 0.85 },
+  { id: 'music/nocturne-op72-no1', title: 'Nocturne in E minor, Op. 72 No. 1', moods: ['quiet', 'night'] },
+];
 
 /** Seconds of silence between two pieces: silence is part of the score. */
 export const REST = { min: 35, max: 90, first: 6 };

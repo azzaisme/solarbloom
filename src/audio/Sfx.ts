@@ -105,8 +105,10 @@ export class Sfx {
   }
 
   /** E23.2.3: while bloombot sits, the music swells a little (slowly, never a jump). */
+  private swellBy = 0;
   swell(by: number) {
-    this.music.intensity = Math.min(1.3, this.baseIntensity() + Math.max(0, by));
+    this.swellBy = Math.max(0, by);
+    this.music.intensity = Math.min(1.3, this.baseIntensity() + this.swellBy);
   }
 
   private baseIntensity() {
@@ -150,6 +152,7 @@ export class Sfx {
 
   /** Every frame (real time: the world keeps sounding through a pause). Directors re-evaluate at 4 Hz. */
   private lastTick = -1;
+  private everAlive = false;
   update(_dt: number) {
     if (!this.director.ready) return;
     // the audio clock, not the frame's (capped) dt: on a slow frame the soundscape still glides in real seconds
@@ -162,8 +165,10 @@ export class Sfx {
     const input = { area: s.area, daylight: s.daylight, world: Math.max(s.world, this.life), wind: s.wind };
     this.soundscape.update(step, input, s.focus);
     this.director.setNight(1 - Math.min(1, s.daylight / 0.5));
-    if (this.music.intensity <= 1) this.music.intensity = this.baseIntensity();
-    this.music.update(step, moodFor({ ...input, area: this.soundscape.area }, s.restoredOnce));
+    this.music.intensity = Math.min(1.3, this.baseIntensity() + this.swellBy);
+    // or the ground round the listener has come alive (a loaded garden, a walk into restored land)
+    if (this.soundscape.area.life > 0.12) this.everAlive = true;
+    this.music.update(step, moodFor({ ...input, area: this.soundscape.area }, s.restoredOnce || this.everAlive));
   }
 
   // ───────────────────────── voices ─────────────────────────

@@ -69,7 +69,7 @@ export class SoundscapeDirector {
 
   /** The sea's wash from the nearest open water (`amount` 0..1). */
   setSea(amount: number, p?: V3) {
-    this.seaLevel = 0.42 * Math.max(0, Math.min(1, amount));
+    this.seaLevel = 0.8 * /* the shore bed is baked at -29 LUFS (its waves are peaky) */ Math.max(0, Math.min(1, amount));
     if (p && amount > 0) this.sea?.moveTo(p);
   }
 

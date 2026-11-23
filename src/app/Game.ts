@@ -939,8 +939,8 @@ export class Game {
       daylight: this.dayNight.light,
       wind: this.weatherVisuals?.wind ?? 0,
       world: Math.min(1, restored / 48),
-      // the player's own restoring (a new garden's park starts with a few green tiles of its own)
-      restoredOnce: (this.sim.state.stats.tilesRestored ?? 0) > 0,
+      // the player's own restoring: a pulse that landed (drones green a few tiles by themselves from the start)
+      restoredOnce: (this.sim.state.stats.pulses ?? 0) > 0,
       focus: { x: fx, y: fy, z: fz },
     });
   }

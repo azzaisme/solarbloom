@@ -30,10 +30,10 @@ export interface MixSettings {
 
 /**
  * Calibration: the level each bus sits at when its slider is at 100%. Assets are loudness-normalised when baked
- * (tools/audio/bake.py: music to -18 LUFS, beds to -24 LUFS), so these trims are the whole mix. With them the
+ * (tools/audio/bake.py: piano music lands at -19..-21 LUFS under its -1 dBFS ceiling, beds at -24..-26 LUFS), so these trims are the whole mix. With them the
  * restored exploration mix has the ambience roughly 8 dB under the music (docs/audio/AUDIO_MIX_NOTES.md).
  */
-export const BUS_TRIM: Record<BusId, number> = { music: 0.42, ambience: 1, sfx: 0.5, ui: 0.32 };
+export const BUS_TRIM: Record<BusId, number> = { music: 0.55, ambience: 1, sfx: 0.5, ui: 0.32 };
 
 /** The gain each bus should have now. A bus that is switched off is 0; the master scales them all. */
 export function busGains(m: MixSettings): Record<BusId, number> {

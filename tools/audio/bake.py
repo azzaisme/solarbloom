@@ -36,22 +36,41 @@ SPEC = [
     dict(id='ambience/barren/wind-dry', src='atmos/city-wind.ogg', kind='loop', start=20, dur=75, xfade=6, ch=2, sr=44100,
          af='highpass=f=220,lowpass=f=3200,equalizer=f=900:t=q:w=1:g=-4', lufs=-24),
     # ── restored ground ──
-    dict(id='ambience/restored/leaves', src='atmos/leaves.ogg', kind='loop', start=0, dur=60, xfade=5, ch=2, sr=44100, af=CLEAN + ',highpass=f=300', lufs=-24),
-    dict(id='ambience/restored/meadow', src='atmos/meadow.ogg', kind='loop', start=0, dur=90, xfade=6, ch=2, sr=44100, af=CLEAN, lufs=-24),
-    # the crickets were boosted 14 dB in game over a rumbling noise floor: cut the rumble and the hiss instead
-    dict(id='ambience/restored/night-insects', src='atmos/crickets.mp3', kind='loop', start=0.5, dur=17, xfade=2.5, ch=2, sr=44100,
-         af='highpass=f=1800,lowpass=f=7000,afftdn=nf=-40', lufs=-26),
+    # aspen and cottonwood leaves in the wind (contact mics on the branches): soft, low-passed so it never fizzes
+    dict(id='ambience/restored/leaves', src='atmos/aspen-leaves.mp3', kind='loop', start=30, dur=80, xfade=6, ch=2, sr=44100,
+         af='highpass=f=350,lowpass=f=5500,equalizer=f=3500:t=q:w=1:g=-3', lufs=-25),
+    # a spring morning: sparse birds and air (recorded as a perfect loop by its author; folded again for safety)
+    dict(id='ambience/restored/meadow', src='atmos/morning-kresiek.ogg', kind='loop', start=0, dur=58, xfade=5, ch=2, sr=44100, af=CLEAN, lufs=-25),
+    # a quiet night in the Cévennes: insects without hiss (the old crickets file is kept as a master only)
+    dict(id='ambience/restored/night-insects', src='atmos/night-cevennes.mp3', kind='loop', start=4, dur=90, xfade=6, ch=2, sr=44100,
+         af='highpass=f=250,lowpass=f=8000', lufs=-26),
     # ── water (mono: they are 3D sources) ──
     dict(id='ambience/water/brook', src='atmos/brook.wav', kind='loop', start=0, dur=27, xfade=3, ch=1, sr=24000, af='highpass=f=120,lowpass=f=7500', lufs=-22),
-    dict(id='ambience/water/shore', src='atmos/shore.ogg', kind='loop', start=0, dur=60, xfade=5, ch=1, sr=32000, af='highpass=f=80,lowpass=f=6000', lufs=-22),
+    # waves lapping at a lake shore; the distant traffic is under the high-pass
+    dict(id='ambience/water/shore', src='atmos/lake-shore.mp3', kind='loop', start=5, dur=100, xfade=6, ch=1, sr=32000, af='highpass=f=180,lowpass=f=6000,acompressor=threshold=-28dB:ratio=6:attack=3:release=250,alimiter=limit=0.5', lufs=-22),
     # ── wildlife: single calls cut from the park recording's busiest stretch ──
     dict(id='ambience/wildlife/bird', src='atmos/birds-trees.wav', kind='calls', n=8, band=(1800, 7000), min_len=1.2, max_len=3.2, ch=1, sr=24000,
          af='highpass=f=900,lowpass=f=8500', peak=-6),
-    # ── restoration foley ──
-    dict(id='sfx/restoration/soil', src='sfx/soil.ogg', kind='calls', n=4, band=(100, 2000), min_len=0.25, max_len=0.7, ch=1, sr=32000, af='highpass=f=60,lowpass=f=6000', peak=-4),
-    dict(id='sfx/restoration/leaf', src='sfx/leaf.ogg', kind='calls', n=4, band=(1500, 7000), min_len=0.3, max_len=0.9, ch=1, sr=32000, af='highpass=f=300,lowpass=f=9000', peak=-5),
-    dict(id='sfx/events/meow', src='sfx/meow.ogg', kind='calls', n=3, band=(400, 3000), min_len=0.4, max_len=1.4, ch=1, sr=32000, af='highpass=f=150,lowpass=f=7000', peak=-4),
-    dict(id='ambience/barren/creak', src='sfx/creak.ogg', kind='calls', n=3, band=(150, 3000), min_len=0.6, max_len=2.5, ch=1, sr=32000, af='highpass=f=120,lowpass=f=4000', peak=-6),
+    # ── restoration foley: dry-leaf rustles (no CC0 soil recording with provenance was found: soil stays designed) ──
+    dict(id='sfx/restoration/leaf', kind='set', srcs=[f'sfx/rustle/rustle{n}.flac' for n in ('10', '09', '12', '17', '02', '18')], max_len=0.8, ch=1, sr=32000,
+         af='highpass=f=400,lowpass=f=7500', peak=-6),
+    # ── the Lucky Cat: a real cat ──
+    dict(id='sfx/events/meow', kind='set', srcs=['sfx/cat/cat_softmew.wav', 'sfx/cat/cat_mewfood.wav', 'sfx/cat/cat_mewpurr.wav'], max_len=1.4, ch=1, sr=32000,
+         af='highpass=f=180,lowpass=f=7000,afftdn=nf=-35', peak=-4),
+    # ── footsteps (recorded, CC0); peaks kept low: steps are quiet ──
+    dict(id='sfx/player/step-grass', kind='set', srcs=['sfx/steps/leaves01.ogg', 'sfx/steps/leaves02.ogg', 'sfx/steps/Fantozzi-SandL1.ogg', 'sfx/steps/Fantozzi-SandR2.ogg'], max_len=0.45, ch=1, sr=32000,
+         af='highpass=f=150,lowpass=f=7000', peak=-8),
+    dict(id='sfx/player/step-dirt', kind='set', srcs=['sfx/steps/gravel.ogg', 'sfx/steps/mud02.ogg'], max_len=0.45, ch=1, sr=32000, af='highpass=f=100,lowpass=f=6000', peak=-8),
+    dict(id='sfx/player/step-sand', kind='set', srcs=[f'sfx/steps/Fantozzi-Sand{s}.ogg' for s in ('L2', 'L3', 'R1', 'R3')], max_len=0.45, ch=1, sr=32000,
+         af='highpass=f=150,lowpass=f=6000,equalizer=f=2500:t=q:w=1:g=-3', peak=-9),
+    dict(id='sfx/player/step-stone', kind='set', srcs=['sfx/steps/stone01.ogg'] + [f'sfx/steps/Fantozzi-Stone{s}.ogg' for s in ('L1', 'L2', 'L3', 'R1', 'R2')], max_len=0.4, ch=1, sr=32000,
+         af='highpass=f=120,lowpass=f=7000', peak=-8),
+    dict(id='sfx/player/step-wood', kind='set', srcs=['sfx/steps/wood01.ogg', 'sfx/steps/wood02.ogg', 'sfx/steps/wood03.ogg'], max_len=0.35, ch=1, sr=32000,
+         af='highpass=f=90,lowpass=f=6000', peak=-7),
+    # ── music: Chopin nocturnes, Musopen recordings (CC0), streamed; -18 LUFS, gentle fades ──
+    dict(id='music/nocturne-op9-no2', src='music/chopin-nocturne-op9no2.mp3', kind='music', ch=2, sr=44100, af='highpass=f=35', lufs=-18, q=4),
+    dict(id='music/nocturne-op55-no2', src='music/chopin-nocturne-op55no2.mp3', kind='music', ch=2, sr=44100, af='highpass=f=35', lufs=-18, q=4),
+    dict(id='music/nocturne-op72-no1', src='music/chopin-nocturne-op72no1.mp3', kind='music', ch=2, sr=44100, af='highpass=f=35', lufs=-18, q=4),
 ]
 
 # footsteps and music are added from tools/audio/sources.json (written once the sources were chosen)
@@ -189,12 +208,15 @@ def normalise(y, sr, e):
     else:
         y = y * (10 ** ((e.get('peak', -3) - peak_db(y)) / 20))
     p = peak_db(y)
-    if p > -1:
-        y = y * (10 ** ((-1 - p) / 20))
+    # -1.3 before encoding: Vorbis can overshoot a few tenths of a dB, and the decoded file must stay under -1 dBFS
+    if p > -1.3:
+        y = y * (10 ** ((-1.3 - p) / 20))
     return y
 
 
 def bake(e, report):
+    if e['kind'] == 'set':
+        return bake_set(e, report)
     src = os.path.join(RAW, e['src'])
     if not os.path.exists(src):
         print(f"  skip {e['id']}: no master at {e['src']}")
@@ -224,11 +246,34 @@ def bake(e, report):
         for k, (a, b) in enumerate(spans):
             y = normalise(fades(x[a:b].copy(), sr, 0.004, min(0.25, (b - a) / sr / 3)), sr, e)
             outs.append((f"{e['id']}-{k + 1:02d}", y))
-    for oid, y in outs:
+    write_outs(e, outs, sr, ch, report)
+
+
+def bake_set(e, report):
+    """Several files, one variation each: trimmed of leading silence, cut to max_len, faded, normalised."""
+    sr, ch = e.get('sr', 44100), e.get('ch', 1)
+    outs = []
+    for k, rel in enumerate(e['srcs']):
+        src = os.path.join(RAW, rel)
+        if not os.path.exists(src):
+            print(f"  skip {rel}")
+            continue
+        x = decode(src, sr, ch, e.get('af'))
+        env = np.abs(x).max(axis=1)
+        on = np.argmax(env > env.max() * 0.06)
+        a = max(0, on - int(0.004 * sr))
+        b = min(len(x), a + int(e['max_len'] * sr))
+        y = normalise(fades(x[a:b].copy(), sr, 0.003, min(0.12, (b - a) / sr / 3)), sr, e)
+        outs.append((f"{e['id']}-{k + 1:02d}", y))
+    write_outs(e, outs, sr, ch, report, src_of=lambda i: e['srcs'][i])
+
+
+def write_outs(e, outs, sr, ch, report, src_of=None):
+    for i, (oid, y) in enumerate(outs):
         path = os.path.join(OUT, oid + '.ogg')
         encode(y, sr, path, e.get('q', 5))
         back = decode(path, sr, ch, None)  # what the browser will decode
-        rec = dict(file=os.path.relpath(path, ROOT), src=e['src'], seconds=round(len(back) / sr, 3), peak_dbfs=round(peak_db(back), 2), bytes=os.path.getsize(path))
+        rec = dict(file=os.path.relpath(path, ROOT), src=src_of(i) if src_of else e['src'], seconds=round(len(back) / sr, 3), peak_dbfs=round(peak_db(back), 2), bytes=os.path.getsize(path))
         if e['kind'] in ('loop', 'music'):
             rec['lufs'] = lufs(back, sr)
         if e['kind'] == 'loop':

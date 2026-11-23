@@ -1,5 +1,8 @@
 # Music credits
 
+> **Phase 8:** these are source masters only. Nothing in `assets/raw/audio` is bundled; the game ships the baked files in
+> `assets/audio/` (see `docs/audio/ASSET_MANIFEST.csv`). `water-flowing.ogg`, `city-hum.ogg` and the music below are no longer used.
+
 All tracks are CC0 (public domain): no attribution required, credited here anyway.
 
 | File | Source title | Author | Licence | Used |
