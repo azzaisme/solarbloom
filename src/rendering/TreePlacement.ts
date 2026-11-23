@@ -64,7 +64,10 @@ const RULES: Record<string, Rule> = {
   grove: { share: 0.3, grove: [['oak', 4], ['pine', 4], ['birch', 2]], shore: [['willow', 4], ['birch', 1]], specimen: [['oak', 3], ['pine', 1]], groves: 0.9, density: 1.4 },
   canal: { share: 0.12, planterShare: 0.05, grove: [['oak', 3], ['birch', 2], ['cherry', 2]], shore: [['willow', 6], ['cherry', 1]], specimen: [['oak', 2], ['cherry', 2]], groves: 0.4 },
   reservoir: { share: 0.14, grove: [['oak', 3], ['willow', 2], ['birch', 1]], shore: [['willow', 6], ['oak', 1]], specimen: [['oak', 3], ['willow', 1]], groves: 0.8, density: 1.8 },
-  // the start: a beach park of shade oaks and windswept pines, willows on the canal, a blossom tree or two
+  // the start: a beach park of shade oaks and windswept pines, willows on the canal, a blossom tree or two.
+  // Pacing (owner-approved, P7-E29 #737): the beach had no trees before, so these bring songbirds (20 thriving tree
+  // tiles) about 4x sooner round the start: 975 -> 225 restored tiles in the outward-restore proxy (seeds 7 and 21),
+  // and higher early biodiversity (see the commit "P7-E29 pacing record"). TUNING is unchanged by decision.
   beach: { share: 0.1, grove: [['oak', 4], ['pine', 2], ['cherry', 1]], shore: [['willow', 5], ['cherry', 1]], specimen: [['oak', 3], ['cherry', 2]], groves: 0.75 },
   street: { share: 0.1, planterShare: 0.06, grove: [['birch', 3], ['cherry', 2]], shore: [['willow', 3], ['birch', 1]], specimen: [['cherry', 2], ['birch', 1]], groves: 0.2 },
   plaza: { share: 0.1, planterShare: 0.07, grove: [['birch', 3], ['cherry', 3]], shore: [['willow', 3], ['cherry', 1]], specimen: [['cherry', 2], ['oak', 1]], groves: 0.2 },
