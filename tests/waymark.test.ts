@@ -4,6 +4,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import { REGIONS } from '../src/data/oldcity';
 import { WAYMARK } from '../src/data/waymark';
 import { Sim } from '../src/gameplay/Sim';
+import { doneHere, emblemFrame, emblemSymbol, GOAL_KINDS, HEART, LOTUS, lotusLines, lotusSvg, petalOutline, SYMBOL_RADIUS } from '../src/rendering/Emblem';
 import { goalSpot } from '../src/ui/GoalSpot';
 import { pinAt, shutRegions } from '../src/ui/Minimap';
 
@@ -123,5 +124,131 @@ describe('#609: the shut ways in show from the start', () => {
       expect(sim.areas.map.areaOfCell(Math.floor(cx), Math.floor(cz)), r.id).toBe(r.id);
       expect(sim.areas.fog(r.id), r.id).toBe('hidden');
     }
+  });
+});
+
+describe('the waymark emblem: what the goal is for', () => {
+  it('every goal kind has its own symbol, drawn inside its circle', () => {
+    const seen = new Set<string>();
+    for (const k of GOAL_KINDS) {
+      const f = emblemSymbol(k);
+      expect(f.idx.length, k).toBeGreaterThan(0);
+      expect(f.idx.length % 3, k).toBe(0);
+      expect(Math.max(...f.idx), k).toBeLessThan(f.pos.length / 2);
+      expect(f.col.length, k).toBe((f.pos.length / 2) * 4);
+      for (let i = 0; i < f.pos.length; i += 2) expect(Math.hypot(f.pos[i], f.pos[i + 1]), k).toBeLessThanOrEqual(SYMBOL_RADIUS + 1e-6);
+      seen.add(f.pos.map((v) => v.toFixed(3)).join());
+    }
+    expect(seen.size).toBe(GOAL_KINDS.length);
+  });
+
+  it('the lotus: a tall centre petal, side petals fanning wider and lower, on a leaf pad, in a soft halo', () => {
+    const f = emblemFrame();
+    const xs = f.pos.filter((_, i) => i % 2 === 0);
+    const ys = f.pos.filter((_, i) => i % 2 === 1);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(1.4);
+    expect(Math.min(...ys)).toBeGreaterThan(-1);
+    // the centre petal is the tallest; each pair beside it lower and wider out, the pair symmetric
+    const petals = LOTUS.filter((p) => !p.leaf);
+    const centre = petals.find((p) => p.b[0] === 0)!;
+    for (const p of petals.filter((q) => q !== centre)) {
+      expect(p.b[1]).toBeLessThan(centre.b[1]);
+      expect(petals.some((q) => q.b[0] === -p.b[0] && q.b[1] === p.b[1])).toBe(true);
+    }
+    expect(LOTUS.some((p) => p.leaf)).toBe(true);
+    // the halo's edge is see-through, so the lotus has no hard outline round its glow
+    expect(Math.min(...f.col.filter((_, i) => i % 4 === 3))).toBe(0);
+  });
+
+  it('the symbol sits in the heart of the centre petal, inside its edges', () => {
+    const centre = LOTUS.find((p) => !p.leaf && p.b[0] === 0)!;
+    const outline = petalOutline(centre.a[0], centre.a[1], centre.b[0], centre.b[1], centre.w, 32);
+    const halfWidthAt = (y: number) => Math.max(...outline.filter(([, py]) => Math.abs(py - y) < 0.05).map(([x]) => Math.abs(x)));
+    const r = SYMBOL_RADIUS * HEART.scale;
+    expect(halfWidthAt(HEART.y)).toBeGreaterThan(r);
+    expect(HEART.y - r).toBeGreaterThan(centre.a[1]);
+    expect(HEART.y + r).toBeLessThan(centre.b[1]);
+  });
+
+  it('the symbols are gold, painted and glowing, rest in its own blue and cyan', () => {
+    const paint = emblemSymbol('pile', 'paint').col;
+    const light = emblemSymbol('pile', 'light').col;
+    const rest = emblemSymbol('rest', 'paint').col;
+    const restLight = emblemSymbol('rest', 'light').col;
+    expect(paint[0]).toBeGreaterThan(paint[2]);
+    expect(light[0] + light[1] + light[2]).toBeGreaterThan(paint[0] + paint[1] + paint[2]);
+    expect(rest[2]).toBeGreaterThan(rest[0]);
+    expect(restLight[2]).toBeGreaterThan(restLight[0]);
+  });
+
+  it('only the outline: lines along the petals, the stretches behind a petal in front left out', () => {
+    const lines = lotusLines();
+    expect(lines.some((l) => l.leaf)).toBe(true);
+    const petals = LOTUS.map((p) => petalOutline(p.a[0], p.a[1], p.b[0], p.b[1], p.w, 40));
+    const isIn = (x: number, y: number, poly: [number, number][]) => {
+      let hit = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [xi, yi] = poly[i];
+        const [xj, yj] = poly[j];
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
+      }
+      return hit;
+    };
+    // nothing of the leaf pad's edge shows inside the centre petal, which stands in front of it
+    const centre = petals[LOTUS.findIndex((p) => !p.leaf && p.b[0] === 0)];
+    for (const l of lines.filter((q) => q.leaf)) for (const [x, y] of l.pts) expect(isIn(x, y, centre)).toBe(false);
+    // the centre petal's tip, in front of everything behind it, is all there
+    const tip = LOTUS.find((p) => !p.leaf && p.b[0] === 0)!.b;
+    expect(lines.some((l) => !l.leaf && l.pts.some(([x, y]) => Math.hypot(x - tip[0], y - tip[1]) < 1e-6))).toBe(true);
+    // the logo draws strokes only, no fill
+    expect(lotusSvg()).toContain('fill="none"');
+  });
+
+  it('one lotus: the page icon and the title badge are the same lotus as the waymark', async () => {
+    const { readFileSync } = await import('node:fs');
+    const html = readFileSync('index.html', 'utf8');
+    const icon = /<link rel="icon" href="data:image\/svg\+xml,([^"]*)" \/>/.exec(html)?.[1];
+    expect(icon && decodeURIComponent(icon), 'run npx vite-node scripts/lotus-icon.ts').toBe(lotusSvg());
+    expect(readFileSync('src/ui/Title.ts', 'utf8')).toContain('${lotusSvg()}');
+    expect(readFileSync('src/ui/Loading.ts', 'utf8')).toContain('${lotusSvg()}');
+  });
+
+  it('the beam fades as bloombot walks in, so the lotus on the spot is all that is left once it is there', () => {
+    expect(WAYMARK.beam.far).toBeGreaterThan(WAYMARK.beam.close);
+    expect(WAYMARK.beam.close).toBeGreaterThan(WAYMARK.near);
+    expect(WAYMARK.pulse.reach).toBeGreaterThan(WAYMARK.beam.close);
+  });
+});
+
+describe('the Bloom Pulse: the game says the goal the waymark stands on is done', () => {
+  const pile = { roofId: GROUND, x: 10.5, z: 10.5, kind: 'pile' as const };
+  const gate = { roofId: GROUND, x: 7.5, z: 0.5, kind: 'gate' as const };
+  const there = { roofId: GROUND, x: 11, z: 11 };
+  const R = WAYMARK.pulse.reach;
+
+  it('a deed at the spot that finishes its kind of goal: done', () => {
+    expect(doneHere(pile, ['pile'], { x: 10, z: 10 }, undefined, R, true)).toBe(true);
+    // no place given (a gate opened): bloombot standing at it is the place
+    expect(doneHere(gate, ['gate'], undefined, { roofId: GROUND, x: 7.5, z: 2 }, R, true)).toBe(true);
+    expect(doneHere({ ...pile, kind: 'park' }, ['park', 'spot'], { roofId: GROUND, x: 11, z: 10 }, there, R, true)).toBe(true);
+  });
+
+  it('not done: another kind of deed, somewhere else, another layer, or the waymark never showed there', () => {
+    expect(doneHere(pile, ['gate'], undefined, there, R, true)).toBe(false);
+    expect(doneHere(pile, ['pile'], { x: 30, z: 30 }, there, R, true)).toBe(false);
+    expect(doneHere(pile, ['pile'], { roofId: 'roof-1', x: 10.5, z: 10.5 }, there, R, true)).toBe(false);
+    expect(doneHere(gate, ['gate'], undefined, { roofId: GROUND, x: 30, z: 30 }, R, true)).toBe(false);
+    expect(doneHere(pile, ['pile'], { x: 10, z: 10 }, there, R, false)).toBe(false);
+    expect(doneHere(undefined, ['pile'], { x: 10, z: 10 }, there, R, true)).toBe(false);
+  });
+
+  it('resting is not an objective, so it never blooms', () => {
+    expect(doneHere({ ...pile, kind: 'rest' }, ['rest', 'pile'], undefined, there, R, true)).toBe(false);
+  });
+
+  it('every goal but resting has a deed in the game that finishes it', async () => {
+    const src = (await import('node:fs')).readFileSync('src/app/Game.ts', 'utf8');
+    const wired = new Set([...src.matchAll(/waymark\.done\(\[([^\]]+)\]/g)].flatMap((m) => m[1].split(',').map((k) => k.trim().replace(/'/g, ''))));
+    for (const k of GOAL_KINDS.filter((x) => x !== 'rest')) expect(wired, k).toContain(k);
   });
 });
