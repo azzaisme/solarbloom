@@ -19,7 +19,7 @@
 .t-badge.big { width: 72px; height: 72px; }
 .t-badge.big .t-ic { width: 28px; height: 28px; }
 .t-badge.logo { width: 104px; height: 104px; background: var(--paper); color: var(--leaf); box-shadow: var(--shadow); }
-.t-badge.logo .t-ic { width: 58px; height: 58px; }
+.t-badge.logo svg { width: 84px; height: auto; margin-top: 2px; }
 
 /* ───── splash ───── */
 #splash { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: var(--paper); transition: opacity .3s; }
@@ -139,14 +139,15 @@ body.contrast .t-btn { border-color: var(--ink-2); }
 body.contrast .t-btn.quiet { border-color: var(--line-2); }
 body.contrast #title .t-note { background: var(--ink); color: var(--paper); padding: 4px 10px; border-radius: 8px; text-shadow: none; }
 
-/* ───── loading: the painted city, bloombot walking on the spot over a paper card with the leaf bar and a tip ───── */
+/* ───── loading: the painted city, bloombot waddling along a paper card with the leaf bar and a tip ───── */
 #loading { position: fixed; inset: 0; z-index: 50; overflow: hidden; background: var(--paper-2); font-family: var(--font-ui); transition: opacity .45s; }
 #loading.gone { opacity: 0; pointer-events: none; }
 #loading[hidden] { display: none; }
 #loading .ld-art { position: absolute; inset: 0; background: url('./images/loading-still.webp') center / cover no-repeat; }
 #loading .ld-foot { position: absolute; left: 50%; bottom: 4.5vh; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; padding: 16px 22px 18px; border-radius: var(--r); background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); text-align: left; }
 #loading .ld-head { display: flex; align-items: center; gap: 12px; }
-#loading .ld-head .t-badge { width: 36px; height: 36px; }
+#loading .ld-head .t-badge { width: 36px; height: 36px; box-shadow: none; }
+#loading .ld-head .t-badge.logo svg { width: 28px; margin-top: 2px; }
 #loading .ld-head .t-ic { width: 20px; height: 20px; }
 #loading .ld-bar { position: relative; height: 14px; border-radius: 999px; background: var(--paper-3); overflow: hidden; box-shadow: inset 0 1px 2px rgba(70, 50, 10, .15); }
 #loading .ld-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--leaf), var(--leaf-hi)); transition: width .25s; }
@@ -154,29 +155,45 @@ body.contrast #title .t-note { background: var(--ink); color: var(--paper); padd
 #loading .ld-line { font: 900 18px/1.3 var(--font-ui); color: var(--ink); }
 #loading .ld-tip { font: 700 16px/1.45 var(--font-ui); color: var(--ink-2); }
 #loading .ld-tip b { font-weight: 900; color: var(--sun-ink); margin-right: 6px; }
-#loading .ld-bot { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); width: 120px; height: 150px; filter: drop-shadow(0 4px 10px var(--shade)); }
 body.reduced #loading .ld-bar i, #loading.still .ld-bar i { transition: none; }
-/* Bloombot walks on the spot: the legs and arms swing about their tops, the body bobs. */
-.ld-bot .lb-shell { fill: var(--paper); stroke: var(--sun-edge); stroke-width: 1.2; }
-.ld-bot .lb-gold { fill: var(--sun); }
-.ld-bot .lb-gold-line { fill: none; stroke: var(--sun); stroke-width: 3; }
-.ld-bot .lb-dark { fill: var(--bot-joint); }
-.ld-bot .lb-visor { fill: var(--glyph-ink-dark); }
-.ld-bot .lb-eye { fill: none; stroke: var(--bot-glow); stroke-width: 3.2; stroke-linecap: round; }
-.ld-bot .lb-ear { fill: var(--bot-glow); }
-.ld-bot .lb-leaf { fill: var(--leaf); stroke: var(--leaf-ink); stroke-width: 1; }
-.ld-bot .lb-vein { fill: none; stroke: var(--leaf-hi); stroke-width: 1.4; }
-.ld-bot .lb-antenna { stroke: var(--bot-joint); stroke-width: 3; stroke-linecap: round; }
-.ld-bot .lb-bulb { fill: var(--sun); }
-.ld-bot .lb-pack { fill: var(--sun-edge); }
-.ld-bot .lb-roll { fill: var(--leaf); }
-.ld-bot .lb-shadow { fill: var(--shade); }
-.ld-bot .lb-leg, .ld-bot .lb-arm { transform-box: fill-box; transform-origin: 50% 0; animation: botSwing .7s ease-in-out infinite alternate; }
-.ld-bot .lb-leg-b, .ld-bot .lb-arm-f { animation-direction: alternate-reverse; }
-.ld-bot .lb-bob { animation: botBob .35s ease-in-out infinite alternate; }
-@keyframes botSwing { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
-@keyframes botBob { to { transform: translateY(-3px); } }
-#loading.still .lb-leg, #loading.still .lb-arm, #loading.still .lb-bob, body.reduced .ld-bot * { animation: none; }
+/*
+ * Bloombot, the real model (frames from tools/bot-sprite/make.mjs, shown at half size): it walks across the top of
+ * the card, stops, turns to look at us, turns away and walks back, then the same the other way. One 8.8 s loop:
+ * walking 0-35% and 50-85% (3.08 s each, at the speed its feet carry it: about 117 px a second), turning to us
+ * 35-39% / 85-89%, looking 39-46% / 89-96% (it turns round while facing us, unseen), turning away 46-50% / 96-100%.
+ * Only transforms and opacity, so the compositor keeps it smooth while the page is busy loading.
+ */
+#loading .ld-walker { --half: min(150px, calc((100vw - 200px) / 2)); position: absolute; left: 50%; bottom: calc(100% - 8px); width: 120px; height: 150px; margin-left: -60px; animation: ldPath 8.8s linear infinite; }
+#loading .ld-walker::after { content: ''; position: absolute; left: 30px; right: 30px; bottom: 6px; height: 10px; border-radius: 50%; background: var(--shade); filter: blur(3px); z-index: -1; }
+#loading .ld-flip { width: 100%; height: 100%; animation: ldFlip 8.8s step-end infinite; }
+#loading .ld-frame { position: relative; width: 100%; height: 100%; overflow: hidden; filter: drop-shadow(0 3px 6px var(--shade)); }
+#loading .ld-frame img { position: absolute; left: 0; top: 0; height: 150px; max-width: none; user-select: none; }
+#loading .ld-walk { width: 1920px; animation: ldStep .324s steps(16) infinite, ldWalkOn 8.8s step-end infinite; }
+#loading .ld-turn { width: 720px; opacity: 0; animation: ldTurn 8.8s linear infinite, ldTurnOn 8.8s step-end infinite; }
+@keyframes ldPath {
+  0% { transform: translateX(calc(-1 * var(--half))); }
+  35%, 50% { transform: translateX(var(--half)); }
+  85%, 100% { transform: translateX(calc(-1 * var(--half))); }
+}
+@keyframes ldFlip { 0% { transform: scaleX(1); } 42.5% { transform: scaleX(-1); } 92.5% { transform: scaleX(1); } }
+@keyframes ldStep { to { transform: translateX(-1920px); } }
+@keyframes ldWalkOn { 0% { opacity: 1; } 35% { opacity: 0; } 50% { opacity: 1; } 85% { opacity: 0; } }
+@keyframes ldTurnOn { 0% { opacity: 0; } 35% { opacity: 1; } 50% { opacity: 0; } 85% { opacity: 1; } }
+@keyframes ldTurn {
+  0% { transform: translateX(0); }
+  35% { transform: translateX(0); animation-timing-function: steps(5, jump-end); }
+  39% { transform: translateX(-600px); animation-timing-function: step-end; }
+  46% { transform: translateX(-600px); animation-timing-function: steps(5, jump-end); }
+  50% { transform: translateX(0); animation-timing-function: step-end; }
+  85% { transform: translateX(0); animation-timing-function: steps(5, jump-end); }
+  89% { transform: translateX(-600px); animation-timing-function: step-end; }
+  96% { transform: translateX(-600px); animation-timing-function: steps(5, jump-end); }
+  100% { transform: translateX(0); }
+}
+/* reduced motion: it stands in the middle, facing us */
+#loading.still .ld-walker, body.reduced #loading .ld-walker, #loading.still .ld-flip, body.reduced #loading .ld-flip, #loading.still .ld-frame img, body.reduced #loading .ld-frame img { animation: none; }
+#loading.still .ld-walk, body.reduced #loading .ld-walk { opacity: 0; }
+#loading.still .ld-turn, body.reduced #loading .ld-turn { opacity: 1; transform: translateX(-600px); }
 body.contrast #loading .ld-foot { background: var(--paper); border: 2px solid var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
 body.contrast #loading .ld-bar { outline: 1.5px solid var(--ink-2); }
 /* Nothing of the 3D world shows until the loading screen fades. */
