@@ -685,6 +685,11 @@ export const PALETTE = {
   flowerSunflower: [flowers.sunflower, flowers.yellow],
   flowerWild: [flowers.white, flowers.yellow, flowers.blue, flowers.rose],
   flowerCentre: flowers.core,
+  /** P7-E28 (#714): shoreline reeds and rushes: blade base, tip, and the brown seed heads */
+  reed: ['#3f6b2e', '#8fae5a'],
+  reedHead: '#6e4a2a',
+  /** P7-E28: rounded wet bank stones (darker than the dry rock) */
+  wetStone: ['#7d7a70', '#8d8a7d'],
   sunflowerDisc: flowers.sunflowerCore,
   bud: '#5aa045',
   stemDark: '#2f6e2b',
