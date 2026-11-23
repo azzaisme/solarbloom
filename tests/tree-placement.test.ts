@@ -39,6 +39,19 @@ describe('P7-E29 tree placement by zone', () => {
     // shade oaks and willows both show up, and a blossom accent
     const sp = new Set(trees.map(({ x, z }) => spot(x, z)!.species));
     for (const s of ['oak', 'willow', 'cherry'] as const) expect(sp.has(s), s).toBe(true);
+    // a broadleaf coast: pines are a rare accent at most
+    expect(trees.filter(({ x, z }) => spot(x, z)!.species === 'pine').length / trees.length).toBeLessThan(0.1);
+  });
+
+  it('the view off a jetty or bridge is framed, not blocked: only small trees near a deck', () => {
+    for (const { x, z } of cells()) {
+      const sp = spot(x, z);
+      if (!sp || sp.planter) continue;
+      let near = false;
+      for (let dz = -TREES.deckSmall; dz <= TREES.deckSmall && !near; dz++)
+        for (let dx = -TREES.deckSmall; dx <= TREES.deckSmall && !near; dx++) near = deck(x + dx, z + dz);
+      if (near) expect(sp.scale, `tree at ${x},${z} near a deck`).toBeLessThanOrEqual(TREES.deckScale);
+    }
   });
 
   it('nothing on path edges, in landmark or machine clearances, or round a jetty or bridge', () => {

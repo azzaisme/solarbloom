@@ -170,6 +170,16 @@ interface PuffOpts {
   clusters?: number;
   /** Look 3.7: show the foliage shader's leaf pattern on this clump (default: any lumpy clump) */
   leafy?: boolean;
+  /**
+   * P7-E29: a clustered clump's bump height (default 0.14) and narrowness (default 5): higher and narrower bumps
+   * break its outline into a scalloped rim of leaf clusters
+   */
+  scallop?: number;
+  sharp?: number;
+  /** P7-E29: how dark the crown's heart gets (default 0.5; lower is deeper shade inside) */
+  aoMin?: number;
+  /** P7-E29: how dark the crevices between bumps get (default 0.74; lower is deeper) */
+  crevice?: number;
 }
 
 /**
@@ -187,9 +197,9 @@ function puff(B: Buf, o: PuffOpts) {
   const nc = o.clusters ?? 0;
   if (nc) for (let i = 0; i < nc; i++) lobes.push({ d: norm([R() * 2 - 1, R() * 1.4 - 0.4, R() * 2 - 1]), k: 0.7 + R() * 0.3 });
   else for (let i = 0; i < 9; i++) lobes.push({ d: norm([R() * 2 - 1, R() * 0.6 + 0.2, R() * 2 - 1]), k: 0.5 + R() * 0.5 });
-  const lump = nc ? 0.14 : o.lump ?? 0.16;
+  const lump = nc ? o.scallop ?? 0.14 : o.lump ?? 0.16;
   // broad falloff for clusters (rounded bumps); the old narrow lobes made spikes on coarse spheres
-  const sharp = nc ? 5 : 9;
+  const sharp = nc ? o.sharp ?? 5 : 9;
   const base = B.n;
   const leafy = o.leafy ?? o.lump !== 0 ? LEAF_FLAG : 0;
   for (const u of ico.v) {
@@ -211,11 +221,13 @@ function puff(B: Buf, o: PuffOpts) {
     col = mix(col, o.light, sun * sun * 0.3);
     if (o.crown && o.crownR) {
       const out = dot(norm(sub(p, o.crown)), n);
-      const ao = clamp(0.5 + 0.45 * (0.5 + 0.5 * out) + 0.15 * (len(sub(p, o.crown)) / o.crownR), 0.5, 1.08);
+      const lo = o.aoMin ?? 0.5;
+      const ao = clamp(lo + 0.45 * (0.5 + 0.5 * out) + 0.15 * (len(sub(p, o.crown)) / o.crownR), lo, 1.08);
       col = scaleC(col, ao);
     }
     // gentle per-vertex variation so clumps don't look plastic
-    col = scaleC(col, nc ? 0.74 + 0.32 * Math.min(1, top * 1.4) : 0.94 + R() * 0.1);
+    const cv = o.crevice ?? 0.74;
+    col = scaleC(col, nc ? cv + (1.06 - cv) * Math.min(1, top * 1.4) : 0.94 + R() * 0.1);
     B.v(p, n, col, o.flex * (0.75 + 0.25 * up) + leafy);
   }
   for (const [a, b, c] of ico.f) B.tri(base + a, base + b, base + c);
@@ -468,8 +480,14 @@ interface Palette {
   light: C;
   dark: C;
 }
-function leafPalette(sp: Species, R: () => number, stage: TreeStage): Palette {
+/**
+ * P7-E29: each template variant has its own green, so neighbouring trees differ: olive, mid-green, yellow-green and a
+ * deep green (hue, saturation, lightness offsets). Sunlit tops are warm, undersides cool (see `shade`).
+ */
+const LEAF_VARIANT: [number, number, number][] = [[10, -16, -2], [0, 0, 0], [-16, 4, 5], [10, -6, -5]];
+function leafPalette(sp: Species, R: () => number, stage: TreeStage, variant = 1): Palette {
   const j = (a: number, b: number) => lerp(a, b, R());
+  const [dh, ds, dl] = LEAF_VARIANT[variant % LEAF_VARIANT.length];
   switch (sp) {
     case 'cherry': {
       // pink when it first blooms, the full pink crown later; Thriving leafs out a little green
@@ -477,21 +495,22 @@ function leafPalette(sp: Species, R: () => number, stage: TreeStage): Palette {
       return { base: hsl(h, 62, 76), light: hsl(h + 8, 70, 88), dark: hsl(h - 6, 45, 56) };
     }
     case 'birch': {
-      const h = j(...PALETTE.leaf.hue.birch);
-      return { base: hsl(h, 60, 36), light: hsl(h - 12, 68, 50), dark: hsl(h + 18, 50, 19) };
+      const h = j(...PALETTE.leaf.hue.birch) + dh * 0.6;
+      return { base: hsl(h, 60 + ds, 36 + dl), light: hsl(h - 18, 70 + ds, 54 + dl), dark: hsl(h + 24, 46 + ds, 17 + dl) };
     }
     case 'pine': {
       const h = j(...PALETTE.leaf.hue.pine);
       return { base: hsl(h, 42, 32), light: hsl(h - 14, 48, 50), dark: hsl(h + 10, 40, 18) };
     }
     case 'willow': {
-      const h = j(...PALETTE.leaf.hue.willow);
-      return { base: hsl(h, 56, 36), light: hsl(h - 12, 64, 50), dark: hsl(h + 18, 48, 20) };
+      const h = j(...PALETTE.leaf.hue.willow) + dh * 0.6;
+      return { base: hsl(h, 56 + ds, 36 + dl), light: hsl(h - 18, 66 + ds, 53 + dl), dark: hsl(h + 24, 44 + ds, 18 + dl) };
     }
     default: {
-      const h = j(...PALETTE.leaf.hue.oak) - (stage === 4 ? 6 : 0);
-      // Phase 6: brighter crowns with yellow-green sunlit tops and deep green undersides, like the reference
-      return { base: hsl(h, 60, 33), light: hsl(h - 14, 68, 48), dark: hsl(h + 16, 52, 17) };
+      const h = j(...PALETTE.leaf.hue.oak) - (stage === 4 ? 6 : 0) + dh;
+      // Phase 6: yellow-green sunlit tops and deep green undersides, like the reference; P7-E29: warmer tops (the
+      // light leans to yellow) and a deeper, bluer shade, per variant from olive to yellow-green
+      return { base: hsl(h, 54 + ds, 33 + dl), light: hsl(h - 24, 66 + ds, 52 + dl), dark: hsl(h + 26, 48 + ds, 15 + dl) };
     }
   }
 }
@@ -521,7 +540,7 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
   const barkDark = scaleC(bark, sp === 'birch' ? 0.45 : 0.7);
   if (stage === 1) return sapling(B, sp, R, lod).done();
   const S = (stage === 2 ? 0.62 : stage === 4 ? 1.08 : 1) * 1.12; // overall size
-  const pal = leafPalette(sp, R, stage);
+  const pal = leafPalette(sp, R, stage, variant);
   if (sp === 'pine') pine(B, R, S, pal, bark, lod);
   else if (sp === 'willow') willow(B, R, S, pal, bark, barkDark, lod);
   else broadleaf(B, sp, R, S, pal, bark, barkDark, stage, lod);
@@ -615,7 +634,7 @@ function drawCrown(B: Buf, R: () => number, cl: Cluster[], cr: Crown, bark: C, l
   for (let i = 0; i < cl.length; i++) {
     const k = cl[i];
     const pal = shade(shiftPal(cr.alt && (i * 0.618) % 1 < cr.alt.share ? cr.alt.pal : cr.pal, k.tone));
-    puff(B, { c: k.c, r: k.r, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.55 + 0.3 * clamp(len(sub(k.c, cr.heart)) / cr.r, 0, 1), seed: i * 31 + 7, detail: lod === 0 && !bigFar.has(i) ? 0 : q.detail, clusters: k.lobes ?? 6, crown: cr.heart, crownR: cr.r, leafy: true });
+    puff(B, { c: k.c, r: k.r, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.55 + 0.3 * clamp(len(sub(k.c, cr.heart)) / cr.r, 0, 1), seed: i * 31 + 7, detail: lod === 0 && !bigFar.has(i) ? 0 : q.detail, clusters: lod === 0 ? 6 : k.lobes ?? 13, scallop: lod === 0 ? 0.16 : 0.32, sharp: lod === 0 ? 5 : 9, aoMin: cr.alt ? 0.5 : 0.38, crevice: cr.alt ? 0.78 : 0.6, crown: cr.heart, crownR: cr.r, leafy: true });
     if (!q.fringe) continue;
     const size = (k.r[0] + k.r[2]) / 2;
     fringe(B, R, k, Math.round(q.fringe * clamp(size / 0.3, 0.6, 1.6)), pal, cr, o.leafL * q.leaf, o.narrow, o.droop ?? 0.35);
