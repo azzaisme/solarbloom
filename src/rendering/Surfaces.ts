@@ -336,10 +336,10 @@ const RARE: Bloom = ['cosmos', 0];
  * clumps; `shrub`: chance of a medium bush; `reeds`: reed clumps along each water side.
  */
 const ZONE_PLAN: Record<PlantingZone, { flowers: number[]; tufts: number[]; shrub: number[]; reeds?: number[] }> = {
-  flower_garden: { flowers: [0, 3, 8, 14, 16], tufts: [0, 2, 1, 1, 1], shrub: [0, 0, 0.1, 0.3, 0.35] },
-  meadow: { flowers: [0, 0, 2, 5, 6], tufts: [0, 3, 3, 3, 3], shrub: [0, 0, 0, 0.08, 0.1] },
+  flower_garden: { flowers: [0, 2, 8, 14, 16], tufts: [0, 2, 1, 1, 1], shrub: [0, 0, 0.1, 0.3, 0.35] },
+  meadow: { flowers: [0, 0, 3, 6, 7], tufts: [0, 3, 3, 3, 3], shrub: [0, 0, 0, 0.08, 0.1] },
   path_edge: { flowers: [0, 0, 2, 3, 3], tufts: [0, 1, 1, 1, 1], shrub: [0, 0, 0, 0, 0] },
-  shoreline: { flowers: [0, 0, 0, 1, 1], tufts: [0, 2, 2, 2, 2], shrub: [0, 0, 0, 0.08, 0.1], reeds: [0, 1, 2, 2, 3] },
+  shoreline: { flowers: [0, 0, 1, 2, 2], tufts: [0, 2, 2, 2, 2], shrub: [0, 0, 0, 0.08, 0.1], reeds: [0, 1, 2, 2, 3] },
   woodland_understory: { flowers: [0, 0, 1, 2, 3], tufts: [0, 2, 3, 3, 3], shrub: [0, 0.15, 0.4, 0.6, 0.7] },
   open_lawn: { flowers: [0, 0, 1, 1, 1], tufts: [0, 2, 2, 2, 2], shrub: [0, 0, 0, 0, 0] },
   landmark_clearance: { flowers: [0, 0, 0, 1, 1], tufts: [0, 1, 1, 1, 1], shrub: [0, 0, 0, 0, 0] },
@@ -417,11 +417,11 @@ export function zonedPlanting(c: DressCtx, t: TileData, stage: number, x: number
       const px = x + (gx + (Math.round(gz + 1.5) % 2) * 0.25) * 0.24 + (hash01(t.x * 11 + j, t.z, 53) - 0.5) * 0.1;
       const pz = z + gz * 0.24 + (hash01(t.x, t.z * 11 + j, 59) - 0.5) * 0.1;
       const rare = st >= 3 && k === 0 && hash01(t.x, t.z, 49) < 0.025;
-      plant(rare ? RARE : bloomAt(fam, px, pz, st, 61), px, pz, k++, 1.4, st >= 3 || hash01(t.x + j, t.z, 63) < 0.4);
+      plant(rare ? RARE : bloomAt(fam, px, pz, st, 61), px, pz, k++, 1.55, st >= 3 || hash01(t.x + j, t.z, 63) < 0.4);
     }
   } else if (n) {
     // ── loose drifts: meadow, woodland floor, shore and lawn flowers (small, so open lawn stays calm)
-    const size = zone === 'meadow' ? 1.05 : zone === 'woodland_understory' ? 0.85 : 0.7;
+    const size = zone === 'meadow' ? 1.25 : zone === 'woodland_understory' ? 0.85 : 0.7;
     for (let i = 0; i < n; i++) {
       const px = x + (hash01(t.x * 13 + i, t.z, 67) - 0.5) * 0.8;
       const pz = z + (hash01(t.x, t.z * 13 + i, 71) - 0.5) * 0.8;

@@ -54,8 +54,8 @@ export const ZONES = {
   /** size in tiles of the lawn / meadow / garden noise field */
   fieldScale: 6.5,
   /** noise thresholds on the field: below `lawn` open lawn, below `meadow` meadow, above it a flower garden */
-  lawn: 0.5,
-  meadow: 0.67,
+  lawn: 0.48,
+  meadow: 0.635,
   /** a garden is likelier within two cells of a path (flowers in beds along edges) */
   pathBias: 0.07,
   /** copses in parkland and by water: field value above this is woodland understory */
