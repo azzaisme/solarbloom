@@ -232,6 +232,9 @@ void getOpacity() {
 	#ifdef FORWARD_PASS
 		#ifdef STD_OPACITY_VERTEX
 		dAlpha = clamp(vVertexColor.{STD_OPACITY_VERTEX_CHANNEL}, 0.0, 1.0);
+		// a nearly gone tree is gone: the ordered dither keeps 1 pixel in 64 at any alpha above zero, which left a
+		// speckle where a faded crown stood in front of the camera
+		if (dAlpha < 0.08) discard;
 		#endif
 	#else
 		if (vLeaf > 0.5 && uDapple.x > 0.0) {
@@ -248,7 +251,7 @@ void getOpacity() {
 export const DAPPLE_TIER = { low: [0, 3.2, 0, 0], medium: [0.34, 3.2, 0, 0], high: [0.4, 3.2, 0, 0] } as const;
 
 /** P7-E29.3: trees nearer the camera than this (view depth, tiles) fade out: [gone at, whole from] */
-export const NEAR_FADE = [0.9, 2.2] as const;
+export const NEAR_FADE = [1.0, 2.8] as const;
 
 let material: pc.StandardMaterial | undefined;
 /** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 4 cm leaves) */

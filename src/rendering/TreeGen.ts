@@ -484,7 +484,7 @@ interface Palette {
  * P7-E29: each template variant has its own green, so neighbouring trees differ: olive, mid-green, yellow-green and a
  * deep green (hue, saturation, lightness offsets). Sunlit tops are warm, undersides cool (see `shade`).
  */
-const LEAF_VARIANT: [number, number, number][] = [[10, -16, -2], [0, 0, 0], [-16, 4, 5], [10, -6, -5]];
+const LEAF_VARIANT: [number, number, number][] = [[10, -16, -2], [0, 0, 0], [-11, 2, 3], [10, -6, -5]];
 function leafPalette(sp: Species, R: () => number, stage: TreeStage, variant = 1): Palette {
   const j = (a: number, b: number) => lerp(a, b, R());
   const [dh, ds, dl] = LEAF_VARIANT[variant % LEAF_VARIANT.length];
@@ -496,7 +496,7 @@ function leafPalette(sp: Species, R: () => number, stage: TreeStage, variant = 1
     }
     case 'birch': {
       const h = j(...PALETTE.leaf.hue.birch) + dh * 0.6;
-      return { base: hsl(h, 60 + ds, 36 + dl), light: hsl(h - 18, 70 + ds, 54 + dl), dark: hsl(h + 24, 46 + ds, 17 + dl) };
+      return { base: hsl(h, 60 + ds, 36 + dl), light: hsl(h - 13, 64 + ds, 50 + dl), dark: hsl(h + 24, 46 + ds, 17 + dl) };
     }
     case 'pine': {
       const h = j(...PALETTE.leaf.hue.pine);
@@ -504,13 +504,13 @@ function leafPalette(sp: Species, R: () => number, stage: TreeStage, variant = 1
     }
     case 'willow': {
       const h = j(...PALETTE.leaf.hue.willow) + dh * 0.6;
-      return { base: hsl(h, 56 + ds, 36 + dl), light: hsl(h - 18, 66 + ds, 53 + dl), dark: hsl(h + 24, 44 + ds, 18 + dl) };
+      return { base: hsl(h, 56 + ds, 36 + dl), light: hsl(h - 13, 60 + ds, 49 + dl), dark: hsl(h + 24, 44 + ds, 18 + dl) };
     }
     default: {
       const h = j(...PALETTE.leaf.hue.oak) - (stage === 4 ? 6 : 0) + dh;
       // Phase 6: yellow-green sunlit tops and deep green undersides, like the reference; P7-E29: warmer tops (the
       // light leans to yellow) and a deeper, bluer shade, per variant from olive to yellow-green
-      return { base: hsl(h, 54 + ds, 33 + dl), light: hsl(h - 24, 66 + ds, 52 + dl), dark: hsl(h + 26, 48 + ds, 15 + dl) };
+      return { base: hsl(h, 54 + ds, 33 + dl), light: hsl(h - 17, 60 + ds, 48 + dl), dark: hsl(h + 26, 48 + ds, 15 + dl) };
     }
   }
 }
