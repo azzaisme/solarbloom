@@ -131,3 +131,12 @@ describe('P7-E32 ruined skyline', () => {
     });
   });
 });
+
+describe('P7-E32 polish: inland slices', () => {
+  it('from the jetty, inland (north, the island) counts as inland and the open sea south does not', async () => {
+    const { inlandToward } = await import('../src/rendering/Ruins');
+    expect(inlandToward(0, 40, 8, -400)).toBe(true); // north across the island
+    expect(inlandToward(-3.75, 30.5, -3.75, 500)).toBe(false); // due south over the sea
+    expect(inlandToward(-3.75, 30.5, 400, 0)).toBe(true); // east: the island, then the mainland
+  });
+});
