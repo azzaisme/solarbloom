@@ -80,6 +80,11 @@ export class DayNight {
     private scene: SceneBuilder,
     private sky: Sky,
   ) {
+    this.reload();
+  }
+
+  /** P7-E27.7: re-reads the light colours from LOOK and DAY_LIGHT (construction, and live tuning via look.apply()). */
+  reload() {
     this.base.sun = color(LOOK.sun.color);
     this.base.low = color(DAY_LIGHT.lowSunColour);
     this.base.moon = color(DAY_LIGHT.moonColour);

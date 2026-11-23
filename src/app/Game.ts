@@ -407,6 +407,12 @@ export class Game {
     this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
     this.look = new LookController(this.app, this.scene, this.camera);
     this.dayNight = new DayNight(this.app, this.scene, this.sky);
+    // P7-E27.7: live tuning re-reads every lighting knob: the environment bake, the day/night light and the sky dome
+    this.look.onApply.push(() => {
+      this.scene.buildEnvironment();
+      this.dayNight.reload();
+      this.sky.refresh();
+    });
     this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
