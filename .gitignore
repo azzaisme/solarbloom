@@ -14,3 +14,5 @@ dist-base/
 
 # Phase 8: the raw e2e audio capture (a trimmed 60 s excerpt is committed as .ogg)
 docs/audio/captures/*.webm
+# throwaway local probes
+tests/e2e/tmp-*

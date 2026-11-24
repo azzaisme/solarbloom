@@ -69,7 +69,8 @@ try {
   const toast = await page.evaluate(() => [...document.querySelectorAll('.toast')].map((t) => t.innerText).join(' | '));
   check(/old drone wakes up/i.test(toast) && !/\{/.test(toast), `the toast: "${toast.slice(0, 120)}"`);
   await page.screenshot({ path: `${dir}/woken.png` });
-  await wait(15000);
+  // the game's clock runs slower than real time in a software-rendered browser: wait for its first job
+  await page.waitForFunction(() => window.solarbloom.sim.state.stats.droneJobs > 0, null, { timeout: 180_000, polling: 1000 }).catch(() => {});
   s = await state();
   check(s.jobs > 0, `it starts tending the ground (${s.jobs} jobs)`);
   check(s.companion === s.oldId, 'and now keeps Bloombot company');

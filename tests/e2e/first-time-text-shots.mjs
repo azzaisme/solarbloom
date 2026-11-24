@@ -90,7 +90,7 @@ try {
   check(/^A sleeping robot \/ .*Stand beside it and press .+ to stir it\.$/.test(asleep) && !asleep.includes('Pylon'), `asleep, its bubble has no name ("${asleep}")`);
   await page.screenshot({ path: `${dir}/keeper-asleep.png` });
   const stirred = await say('pylon', pylon.say.stirred);
-  check(/Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again\.$/.test(stirred), `stirred, it says what wakes it ("${stirred}")`);
+  check(/Bring me 5 of any one thing, like Scrap or Seeds, then press .+ to talk to me again\.$/.test(stirred), `stirred, it says what wakes it ("${stirred}")`);
   await page.screenshot({ path: `${dir}/keeper-stirred.png` });
   await page.evaluate(() => {
     window.solarbloom.sim.state.salvage.keepers.pylon = { step: 'request1' };

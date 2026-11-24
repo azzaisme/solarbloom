@@ -269,7 +269,9 @@ export class Hud {
   // ───────── the parts' doors (the game calls these) ─────────
   /** Text pass: "{pulse}" → the player's own key or pad button, in every message the game shows. */
   keys(text: string): string {
-    return fillKeys(text, (a) => this.cb.keyFor(a as Action), (a) => a in ACTION);
+    // a mouse button reads as one in a sentence: "press the left mouse button", not "press Left mouse"
+    const name = (a: string) => this.cb.keyFor(a as Action).replace(/^(Left|Right|Middle) mouse$/, (_, b: string) => `the ${b.toLowerCase()} mouse button`);
+    return fillKeys(text, name, (a) => a in ACTION);
   }
   showTip(x: number, y: number, html: string) {
     this.panels.showTip(x, y, this.keys(html));
