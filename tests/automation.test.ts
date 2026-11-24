@@ -122,7 +122,7 @@ describe('E23.6.4: courier routes', () => {
     const sim = park();
     const a = put(sim, 'crate', 14, 16);
     const b = put(sim, 'crate', 22, 20);
-    expect(sim.automation.routeProblem(a.id, b.id)).toMatch(/Couriers open once/);
+    expect(sim.automation.routeProblem(a.id, b.id)).toMatch(/Courier drones come once/);
     carryByHand(sim);
     expect(sim.automation.routeProblem(a.id, a.id)).toBe('Pick another crate to send to');
     expect(sim.automation.addRoute(a.id, b.id).id).toBeDefined();

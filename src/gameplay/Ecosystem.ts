@@ -104,11 +104,11 @@ export function faunaGoal(id: FaunaId, c: BioCounts): { label: string; have: num
   const F = TUNING.ecosystem.fauna;
   switch (id) {
     case 'butterflies':
-      return { label: 'blooming tiles', have: c.stages[2] + c.stages[3] + c.stages[4] + c.pollinators, need: F.butterflies.bloomingTiles };
+      return { label: 'patches of flowering ground', have: c.stages[2] + c.stages[3] + c.stages[4] + c.pollinators, need: F.butterflies.bloomingTiles };
     case 'birds':
-      return { label: 'thriving tree tiles', have: c.thrivingTrees, need: F.birds.thrivingTreeTiles };
+      return { label: 'patches of ground under healthy trees', have: c.thrivingTrees, need: F.birds.thrivingTreeTiles };
     case 'koi':
-      return { label: F.koi.fountain ? 'a flowing fountain or restored water tiles' : 'restored water tiles', have: c.fountain ? F.koi.waterTiles : c.water, need: F.koi.waterTiles };
+      return { label: F.koi.fountain ? 'a flowing fountain or patches of clean water' : 'patches of clean water', have: c.fountain ? F.koi.waterTiles : c.water, need: F.koi.waterTiles };
     case 'robots':
       return { label: 'landmarks woken', have: c.landmarks, need: F.robots.landmarks };
   }
@@ -118,7 +118,7 @@ export const FAUNA_INFO: Record<FaunaId, { name: string; icon: string; line: str
   butterflies: { name: 'Butterflies', icon: '🦋', line: 'They drift between the flowers you grew.' },
   birds: { name: 'Songbirds', icon: '🐦', line: 'They nest in your thriving trees and hop across the lawns.' },
   koi: { name: 'Koi', icon: '🐟', line: 'They glide through the clean water.' },
-  robots: { name: 'Garden robots', icon: '🤖', line: 'Friendly helpers potter about your superstructures. Just for company.' },
+  robots: { name: 'Garden robots', icon: '🤖', line: 'Friendly helpers potter about your big machines. Just for company.' },
 };
 
 interface ChunkTally {

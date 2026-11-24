@@ -160,7 +160,7 @@ describe('E22.1: the new button map', () => {
 
   it('names keys, mouse inputs and pad buttons in plain words', () => {
     expect(['KeyE', 'Mouse0', 'Mouse2', 'Wheel', 'Escape', 'ShiftLeft', 'Space'].map(keyLabel)).toEqual(['E', 'Left mouse', 'Right mouse', 'Mouse wheel', 'Esc', 'Shift', 'Space']);
-    expect([0, 3, 7, 8, 9, 11, 12].map(padLabel)).toEqual(['A', 'Y', 'RT', 'View', 'Menu', 'Right stick click', 'D-pad up']);
+    expect([0, 3, 7, 8, 9, 11, 12].map(padLabel)).toEqual(['A', 'Y', 'RT', 'View', 'Menu', 'Right stick button', 'D-pad up']);
   });
 
   it('keeps a rebound key through a reload (the saved settings round trip)', () => {

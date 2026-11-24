@@ -27,7 +27,7 @@ export const BUILD_TABS: readonly { id: BuildTabId; label: string; icon: IconNam
   { id: 'decorations', label: 'Decorations', icon: 'flower' },
 ];
 
-/** E23.11: the build hotbar's default slots 1–9 (the build board's row; the build menu pins others). */
+/** E23.11: the build bar's default buttons 1–9 (the build board's row; the build menu pins others). */
 export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'battery', 'relay', 'planter', 'compostBin', 'pump', 'pipe', '', ''];
 
 /** Which tab each machine sits under (and the pipe, which is laid from the Water tab). */
@@ -68,23 +68,23 @@ export const BUILD_TAB: Record<BuildableType | 'pipe', BuildTabId> = {
 
 /** One plain line about each piece (the menu's detail pane): what it does for you, no numbers. */
 const LINES: Record<BuildableType | 'pipe', string> = {
-  solar: 'Feeds the grid it stands on while the sun is up. Link it to a battery to keep the lights on after dark.',
-  battery: 'Keeps what the grid has spare and gives it back after dark.',
-  gridBattery: 'A big store for a whole grid: it keeps the lights on through a long night.',
-  relay: 'Carries power along: a line of them reaches a machine far from the panels.',
+  solar: 'Soaks up the sun and powers the machines joined to it. Build a Battery close by to keep the lights on after dark.',
+  battery: 'Saves the power your panels have spare and gives it back after dark.',
+  gridBattery: 'Saves lots of spare power, enough to keep every light on through a long night.',
+  relay: 'Carries power along: build a row of them to reach a machine far from your panels.',
   windTurbine: 'Turns on windy days and in storms, and catches more wind up high.',
-  charger: 'A pad on the grid. Sit on it and bloombot fills up fast.',
-  bioDigester: 'Feed it Greens and it powers its grid, day or night, until it runs empty.',
+  charger: 'A pad that runs on power from your panels. Stand Bloombot on it and its Charge fills up fast.',
+  bioDigester: 'Feed it Greens and it powers the machines joined to it, day or night, until it runs empty.',
   condenser: 'Pulls water from the air, then waters the dry soil beside it into bloom.',
   reservoir: 'Holds water. Rain fills it, and so does a pond on its bank or a pipe from a pump.',
   pump: 'Stands on the bank of a pond or canal and pushes its water along the pipes it touches.',
-  pipe: 'Laid tile by tile, it carries water from a pump or a high tank to where it is needed.',
-  desalination: 'Built on the shore, it turns the sea into fresh water on grid power, in any weather.',
+  pipe: 'Lay it piece by piece to carry water from a pump or a high tank to where it is needed.',
+  desalination: 'Built on the shore and given power, it turns the sea into fresh water in any weather.',
   reservoirGarden: 'Condensers nearby fill its basin. Once it is full, dry ground around it bursts into flower.',
   planter: 'A raised bed: plant seeds in it, keep it watered and pick the food.',
   compostBin: 'Fill it with Greens and food scraps: they rot down into compost, then fertiliser.',
   pollinator: 'Ground you restore near it spreads to the mossy ground next door.',
-  motherTree: 'Every restoration nearby feeds it, until it blooms everything around it at once.',
+  motherTree: 'Every patch you turn green nearby feeds it, until it bursts everything around it into flower at once.',
   beehive: 'Bees settle once flowers or herbs grow nearby. They make honey and speed up the crops around it.',
   fishPond: 'Kept filled from water nearby or a pipe. Its water feeds the planters it reaches, so they need no fertiliser.',
   orchard: 'Planted once, it fruits every few days. Prune it now and then for timber.',
@@ -94,11 +94,11 @@ const LINES: Record<BuildableType | 'pipe', string> = {
   birdBox: 'Songbirds move in when there are trees or tall shrubs nearby.',
   batBox: 'Bats move in near fresh water, and fly at night.',
   hedgehogHouse: 'Hedgehogs move in among shrubs, away from machines.',
-  cultivator: 'A solar tiller that slowly breaks the dead ground near its dock into bloom on its own.',
-  droneHub: 'Sends out a little drone that restores the ground near the hub, on power from the grid.',
+  cultivator: 'A little sun-powered tiller that slowly turns the dead ground near its home green, all on its own.',
+  droneHub: 'Sends out a little drone that turns the ground near it green, as long as it has power.',
   chest: 'A way into the city’s shared store: open it to put things away or take them out.',
-  crate: 'Holds what couriers carry. Builds nearby take from it, and you choose where it sends things.',
-  assembler: 'Makes a recipe on its own from the crates you give it, while bloombot is away.',
+  crate: 'Courier drones carry things from crate to crate, and machines beside it take from it. Open it to choose where it sends things.',
+  assembler: 'Makes one thing over and over by itself, from what is in the crates beside it, even while Bloombot is away.',
 };
 
 /** Names a 74-pixel dock slot has room for (the menu and the prompt use the full name). */
@@ -179,7 +179,7 @@ function machineItem(sim: Sim, t: BuildableType): BuildItem | undefined {
     name: def.name,
     short: SHORT[t] ?? def.name,
     icon: machineIcon(t),
-    kind: def.size > 1 ? `Takes ${def.size} by ${def.size} tiles` : 'Takes one tile',
+    kind: def.size > 1 ? `Takes a patch of ground ${def.size} squares across` : 'Takes one square of ground',
     line: LINES[t],
     locked,
     lockText: locked ? (cr ? unlockText(cr.unlock) : 'Not known yet') : undefined,
@@ -198,7 +198,7 @@ function pipeItem(sim: Sim): BuildItem {
     name: 'Pipe',
     short: 'Pipe',
     icon: ICONS.pipe,
-    kind: 'Laid one tile at a time',
+    kind: 'Laid one square at a time',
     line: LINES.pipe,
     locked,
     lockText: locked ? `Wake ${k?.name ?? 'the Keeper'}` : undefined,

@@ -136,18 +136,18 @@ export interface TierDef {
 }
 
 export const TIERS: TierDef[] = [
-  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Build mode', 'Water Condenser', 'The house plot'], look: 'trickle' },
-  { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Stacks of 60'], look: 'flowing' },
-  { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Stacks of 80'], look: 'lit' },
-  { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Cultivator', 'Stacks of 120'], look: 'lit' },
-  { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom', 'Grid Battery'], look: 'bloom' },
+  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Building machines', 'Water Condenser', 'The house plot'], look: 'trickle' },
+  { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Carry 60 of each thing'], look: 'flowing' },
+  { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Carry 80 of each thing'], look: 'lit' },
+  { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Cultivator', 'Carry 120 of each thing'], look: 'lit' },
+  { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom', 'Big Battery'], look: 'bloom' },
 ];
 
 export const ABILITIES: Record<AbilityId, { name: string; blurb: string }> = {
-  pry: { name: 'Pry', blurb: 'Clears rubble barricades' },
+  pry: { name: 'Pry', blurb: 'Pries rubble out of the way' },
   hover: { name: 'Hover', blurb: 'Crosses deep water' },
   climb: { name: 'Climb', blurb: 'Climbs ladders to the roofs' },
-  glide: { name: 'Glide', blurb: 'Glides across gaps from roof edges' },
+  glide: { name: 'Glide', blurb: 'Glides across gaps from the edge of a roof' },
 };
 
 // ───────────── §10 workbench ─────────────
@@ -170,7 +170,7 @@ export const CAT_REWARD = { standard: 10, golden: 25, rainbow: 60 };
 export function fountainStepNews(t: TierDef): string {
   const gives = tierGives(t);
   const built = gives.filter((g) => Object.values(MACHINES).some((m) => m.name === g));
-  const stack = gives.map((g) => /^Stacks of (\d+)$/.exec(g)?.[1]).find(Boolean);
+  const stack = gives.map((g) => /^Carry (\d+) of each thing$/.exec(g)?.[1]).find(Boolean);
   const list = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0]);
   const out = t.ability ? [] : ['The whole city is in flower.'];
   if (built.length) out.push(`New to build: ${list(built)}.`);

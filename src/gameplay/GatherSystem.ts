@@ -42,7 +42,7 @@ export class GatherSystem {
   /** Why gathering here won't work right now (undefined: it will). */
   problem(t: TileData): string | undefined {
     if (!this.canGather(t)) return 'Nothing to gather here';
-    if (this.sim.inventory.room('biomass') <= 0) return 'Your Greens stack is full: leave some in the storage at the fountain';
+    if (this.sim.inventory.room('biomass') <= 0) return "Bloombot can't carry any more Greens. Leave some at the fountain or in a chest";
     return undefined;
   }
 

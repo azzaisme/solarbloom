@@ -3,8 +3,8 @@ import type { BuildableType, MachineData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import type { Sim } from '../gameplay/Sim';
 import { ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
-import { Prompt } from './Prompt';
-import { plainWords } from './words';
+import { Prompt, setPromptKeys } from './Prompt';
+import { fillKeys, plainWords } from './words';
 import { ObjectiveCard } from './ObjectiveCard';
 import { GuideLine } from './GuideLine';
 import { BuildBar, Hotbar } from './Hotbar';
@@ -109,6 +109,11 @@ export interface Settings {
   noVistas?: boolean;
   /** Third person: a click on the world captures the mouse to look around (on unless switched off) */
   mouseLook?: boolean;
+  /**
+   * Desktop mouse (player feedback: "I had to press Esc to click on menus"): 'hold' (default) keeps the cursor free
+   * for the HUD and captures it only while the look button is held; 'capture' is the older click-to-capture look.
+   */
+  mouseMode?: 'hold' | 'capture';
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];
@@ -127,7 +132,7 @@ export interface Settings {
 }
 
 import { toHud, ui } from './UiScale';
-import type { Action, Bindings, SavedBindings } from '../app/Bindings';
+import { ACTION, type Action, type Bindings, type SavedBindings } from '../app/Bindings';
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 
@@ -222,6 +227,7 @@ export class Hud {
     this.dock.wire();
     this.wire();
     this.prompt = new Prompt(this.root);
+    setPromptKeys((t) => this.keys(t));
     this.backpack = new Backpack(this.root, { sim: this.sim, showWhere: (at) => this.cb.pointTo(at) });
     this.craft = new CraftTable(this.root, { sim: this.sim });
     this.crate = new CratePanel(this.root, { sim: this.sim });
@@ -261,24 +267,30 @@ export class Hud {
   }
 
   // ───────── the parts' doors (the game calls these) ─────────
+  /** Text pass: "{pulse}" → the player's own key or pad button, in every message the game shows. */
+  keys(text: string): string {
+    // a mouse button reads as one in a sentence: "press the left mouse button", not "press Left mouse"
+    const name = (a: string) => this.cb.keyFor(a as Action).replace(/^(Left|Right|Middle) mouse$/, (_, b: string) => `the ${b.toLowerCase()} mouse button`);
+    return fillKeys(text, name, (a) => a in ACTION);
+  }
   showTip(x: number, y: number, html: string) {
-    this.panels.showTip(x, y, html);
+    this.panels.showTip(x, y, this.keys(html));
   }
   hideTip() {
     this.panels.hideTip();
   }
   showFail(msg: string, x?: number, y?: number) {
-    this.panels.showFail(msg, x, y);
+    this.panels.showFail(this.keys(msg), x, y);
   }
   toast(html: string, kind: '' | 'gold' | 'cat' = '', secs = 3.2) {
-    this.toasts.toast(html, kind, secs);
+    this.toasts.toast(this.keys(html), kind, secs);
   }
   /** E22.5: a material picked up ("+3 Copper"; repeats merge). */
   pickup(name: string, n: number) {
     this.toasts.pickup(name, n);
   }
   catReward(title: string, detail: string) {
-    this.panels.catReward(title, detail);
+    this.panels.catReward(this.keys(title), this.keys(detail));
   }
   nudge(sel: string, secs = 4) {
     this.objective.nudge(sel, secs);
@@ -330,7 +342,7 @@ export class Hud {
     return this.panels.statsHtml();
   }
   renderInspect(html: string | null) {
-    this.panels.renderInspect(html);
+    this.panels.renderInspect(html === null ? null : this.keys(html));
   }
   machineHtml(m: MachineData, extra: string): string {
     return this.panels.machineHtml(m, extra);

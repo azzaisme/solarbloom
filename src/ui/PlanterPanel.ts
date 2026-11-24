@@ -58,7 +58,7 @@ export function planterHtml(sim: Sim, m: MachineData): string {
     const cell = (arg: string, ic: string, name: string, use: string) => `<button class="pn-cell oc-crop" data-act="plant" data-arg="${arg}" ${ok ? '' : 'disabled'}><span class="oc-crop-ic">${ic}</span><b>${escHtml(name)}</b><small>${escHtml(use)}</small></button>`;
     const crops = f.known().map((c) => cell(c, CROPS[c].icon, CROPS[c].name, CROPS[c].use));
     // E23.6.2: crossbreeds found, each with both parents' likes
-    for (const [a, b] of f.crosses()) crops.push(cell(`${a}+${b}`, CROPS[a].icon, crossName(a, b), 'A cross: happy with what either likes'));
+    for (const [a, b] of f.crosses()) crops.push(cell(`${a}+${b}`, CROPS[a].icon, crossName(a, b), 'A mix of both: it grows well wherever either one does'));
     return (
       cardHead({ icon: icon('sprout', 'l'), title: 'An empty planter', mood: ok ? 'Choose what to grow. Each planting takes a Seed.' : 'Bring Seeds to plant something.', tone: ok ? '' : 'clay', choose: 'Plant' }) +
       `<div class="oc-content">${garden}<h3 class="pn-label">Next to plant</h3><div class="oc-crops">${crops.join('')}</div>${extras}</div>`

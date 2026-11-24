@@ -108,7 +108,7 @@ describe('E23.12 Lucky Cat rewards (#528)', () => {
     const sim = grownCity(7, 3);
     const restored = () => sim.grid.tilesOf(GROUND).filter((t) => t.ground === 'restored').length;
     const before = restored();
-    expect(apply(sim, 'megaBloom', undefined)).toBe('A Mega Bloom!');
+    expect(apply(sim, 'megaBloom', undefined)).toBe('A Mega Bloom! The ground all around bursts into flower');
     sim.advance(20);
     expect(restored()).toBeGreaterThan(before);
   });
@@ -160,7 +160,7 @@ describe('E23.12 Lucky Cat rewards (#528)', () => {
     const b = put(300 + Math.ceil(range) + TUNING.cat.goldenRelayRange - 2); // just out of a plain relay's reach
     sim.power.tick(1);
     expect(sim.power.networkOf(a)).not.toBe(sim.power.networkOf(b));
-    expect(apply(sim, 'goldenRelay', { roofId: GROUND, x: 299, z: 300 })).toBe('A relay turns gold: it carries power further');
+    expect(apply(sim, 'goldenRelay', { roofId: GROUND, x: 299, z: 300 })).toBe('A power pole turns gold: its power lines reach much further');
     expect(a.golden).toBe(true);
     expect(b.golden).toBeFalsy();
     expect(sim.relays.range(a)).toBe(range + TUNING.cat.goldenRelayRange);
@@ -188,7 +188,7 @@ describe('E23.12 Lucky Cat rewards (#528)', () => {
       ['solarFrenzy', /Charge full/],
       ['megaBloom', /A Mega Bloom!/],
       ['droneParty', /drones nearby work faster/],
-      ['goldenRelay', /relay turns gold/],
+      ['goldenRelay', /power pole turns gold/],
       ['catsGarden', /garden blooms/],
       ['fogWhisker', /fog thins/],
     ];

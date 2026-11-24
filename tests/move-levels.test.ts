@@ -187,7 +187,7 @@ describe('#626: Pry II and the sealed vaults', () => {
     levelTwo(sim, 'pry');
     sim.charge.use('pry', 9999);
     if (sim.charge.canUse('pry')) return; // charge isn't spent by this build: nothing to check
-    expect(sim.moves.vaultProblem(VAULTS[0])).toBe('Out of charge. Eat something, rest or find a charger.');
+    expect(sim.moves.vaultProblem(VAULTS[0])).toBe('Out of Charge: press {eat} for a snack, or sit on a bench to rest.');
   });
 });
 

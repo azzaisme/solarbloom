@@ -84,24 +84,24 @@ export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'inter
   const restored = sim.state.stats.tilesRestored;
   switch (step) {
     case 0:
-      return { text: `You've landed! Salvage the pile in front of you: hold ${keyFor('interact')} 🧱` };
+      return { text: `You've landed! Hold ${keyFor('interact')} beside the pile in front of you to dig through it 🧱` };
     case 1:
-      return { text: `Walk up the steps to the park and pulse dead ground with ${keyFor('pulse')} · ${Math.min(4, restored)} of 4` };
+      return { text: `Walk up the steps to the park and press ${keyFor('pulse')} on the bare ground to turn it green · ${Math.min(4, restored)} of 4` };
     case 2:
       return { text: 'The fountain wants 🌱 Seeds: look for the broken pots in the park' };
     case 3:
-      return { text: `Restore the park around the fountain · ${Math.min(60, park)} of 60`, target: '#obj' };
+      return { text: `Turn the park green all around the fountain · ${Math.min(60, park)} of 60`, target: '#obj' };
     case 4: {
       const s = sim.fountain.remaining('scrap');
       const e = sim.fountain.remaining('seeds');
-      return { text: `Bring the fountain what it asks for (${keyFor('interact')} at the fountain) · still ${s} Scrap, ${e} Seeds`, target: '#obj' };
+      return { text: `Bring the fountain what it asks for: walk up to it and press ${keyFor('interact')} · still ${s} Scrap, ${e} Seeds`, target: '#obj' };
     }
     case 5:
-      return { text: `Water returns! Three beacons glow through the fog, and the Sea Lock waits down the beach. Pry open a barricade: hold ${keyFor('interact')}` };
+      return { text: `Water flows again, and three beacons glow through the fog. Hold ${keyFor('interact')} beside the rubble at the edge of the park to pry it open` };
     case 6: {
       const r = REGIONS.find((q) => q.ring === 1 && sim.gates.isOpen(q.gate.id) && q.gate.opensRegion !== false);
       const k = r ? sim.keepers.def(r.keeper) : undefined;
-      return { text: k ? `A robot sleeps in ${r!.name}: pulse ${k.name}, then hand it 5 of anything` : 'A robot sleeps behind each barricade: wake one' };
+      return { text: k ? `A robot sleeps in ${r!.name}. Press ${keyFor('pulse')} beside ${k.name} to stir it, then press ${keyFor('interact')} to give it any 5 things` : 'A robot sleeps behind each pile of rubble: pry one open and wake it' };
     }
     case 7:
       return panelHint(sim, keyFor);
@@ -149,16 +149,16 @@ function panelHint(sim: Sim, keyFor: (a: 'pulse' | 'interact') => string): { tex
     const r = 'keeper' in u ? REGIONS.find((q) => q.id === u.keeper) : undefined;
     if (!r) return { text: `The ☀️ Solar Panel: ${sim.crafting.unlockLabel(u).replace('🔒 ', '')}` };
     const k = sim.keepers.def(r.keeper);
-    if (!sim.gates.isOpen(r.gate.id)) return { text: `${k.name} in ${r.name} knows how to make a ☀️ Solar Panel: pry open the ${r.name} barricade (hold ${keyFor('interact')})` };
-    return { text: `${k.name} sleeps in ${r.name} and knows the ☀️ Solar Panel: pulse ${k.name}, then hand it 5 of anything` };
+    if (!sim.gates.isOpen(r.gate.id)) return { text: `${k.name} in ${r.name} knows how to make a ☀️ Solar Panel: hold ${keyFor('interact')} beside the rubble into ${r.name} to pry it open` };
+    return { text: `${k.name} sleeps in ${r.name} and knows how to make the ☀️ Solar Panel. Press ${keyFor('pulse')} beside it to stir it, then press ${keyFor('interact')} to give it any 5 things` };
   }
   const need = panelNeeds(sim);
   const m = need.salvage[0];
   if (m) {
     const home = MATERIALS[m].home.includes('park') ? undefined : REGIONS.find((q) => MATERIALS[m].home.includes(q.id));
     const what = `${MATERIALS[m].icon} ${MATERIALS[m].name}`;
-    if (home && !sim.gates.isOpen(home.gate.id)) return { text: `The ☀️ Solar Panel needs ${what}, found in ${home.name}: pry open its barricade (hold ${keyFor('interact')})` };
-    return { text: `Salvage ${what}${home ? ` in ${home.name}` : ''} for the ☀️ Solar Panel` };
+    if (home && !sim.gates.isOpen(home.gate.id)) return { text: `The ☀️ Solar Panel needs ${what}, found in ${home.name}: hold ${keyFor('interact')} beside the rubble into it to pry it open` };
+    return { text: `Dig ${what} out of the glinting piles${home ? ` in ${home.name}` : ''} for the ☀️ Solar Panel: hold ${keyFor('interact')} beside one` };
   }
   if (need.craft.length) return { text: `Make ${need.craft.map((c) => `${itemDef(c).icon} ${itemDef(c).name}`).join(' and ')} at the crafting table in the house, for the ☀️ Solar Panel` };
   return { text: 'Build a ☀️ Solar Panel from the build menu' };

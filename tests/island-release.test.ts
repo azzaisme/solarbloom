@@ -94,7 +94,7 @@ describe('island release: the island needs nothing from the mainland', () => {
       expect(sim.crafting.machineRecipe(r.builds!), r.id).toBeUndefined();
       expect(sim.build.isUnlocked(r.builds!), r.id).toBe(false);
     }
-    for (const t of TIERS) expect(tierGives(t)).not.toContain('Grid Battery');
+    for (const t of TIERS) expect(tierGives(t)).not.toContain('Big Battery');
     expect(itemCells(sim).map((c) => c.id)).not.toContain('steel');
     expect(sim.landmarks.tradeTargets()).not.toContain('steel');
     // Tally's trade panel: neither the give row nor the get row offers Steel
@@ -102,7 +102,7 @@ describe('island release: the island needs nothing from the mainland', () => {
     expect(tradeHtml(sim, 'scrap')).not.toMatch(/Steel|data-arg="steel"/);
     // and they come back with the mainland
     MAINLAND.open = true;
-    expect(tierGives(TIERS[4])).toContain('Grid Battery');
+    expect(tierGives(TIERS[4])).toContain('Big Battery');
     expect(itemCells(sim).map((c) => c.id)).toContain('steel');
     expect(sim.crafting.machines().some((r) => r.builds === 'gridBattery')).toBe(true);
   });

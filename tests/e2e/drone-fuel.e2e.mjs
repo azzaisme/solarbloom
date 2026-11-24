@@ -131,7 +131,7 @@ try {
   st = await status();
   check(st.length > 0 && st.every((x) => x === 'docked'), `no Biomass: the hub's drones dock (${st.join(', ')})`);
   said = await line();
-  check(/docked — waiting for Biomass in the store/.test(said), `the hub's panel says why: "${said}"`);
+  check(/waiting at home for Greens: put some in a chest/.test(said), `the hub's panel says why: "${said}"`);
   // no panel; the drones home on their hub. Photo mode (E19.4.1) frees the camera from bloombot, which steps out
   // of the picture, and the view closes on the hub, its drones and the chest.
   await page

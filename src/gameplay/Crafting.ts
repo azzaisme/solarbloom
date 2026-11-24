@@ -62,7 +62,7 @@ export class Crafting {
     if ('keeper' in u) {
       const k = KEEPERS.find((x) => x.region === u.keeper);
       const r = REGIONS.find((x) => x.id === u.keeper);
-      return `🔒 ${k?.name ?? 'A Keeper'}, ${r?.name ?? u.keeper}`;
+      return `🔒 Wake ${k?.name ?? 'the Keeper'} in ${r?.name ?? u.keeper}`;
     }
     if ('research' in u) return '🔒 Research it at the crafting table';
     if ('tier' in u) return fountainLock(u.tier);

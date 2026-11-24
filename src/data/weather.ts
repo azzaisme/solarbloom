@@ -56,6 +56,6 @@ export const WEATHER_WORDS: Record<WeatherKind, { name: string; forecast: string
   cloudy: { name: 'Cloudy', forecast: 'Tomorrow: cloud. The panels will run a little low.' },
   rain: { name: 'Rain', forecast: 'Tomorrow: rain. Ponds fill and the planters water themselves.' },
   wind: { name: 'Windy', forecast: 'Tomorrow: wind. Turbines will spin, and leaves will blow about.' },
-  storm: { name: 'Storm', forecast: 'Tomorrow: a storm. Turbines at full, no sun, and the wind may blow in salvage.' },
-  fog: { name: 'Fog', forecast: 'Tomorrow: fog. Short views, and strange things about.' },
+  storm: { name: 'Storm', forecast: 'Tomorrow: a storm. The turbines will spin their hardest, there will be no sun, and the wind may wash new things up on the beach.' },
+  fog: { name: 'Fog', forecast: 'Tomorrow: fog. You won’t see far, and strange things will be about.' },
 };

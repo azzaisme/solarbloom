@@ -54,7 +54,7 @@ export class RestSystem {
   /** Mends an old bench with a little scrap. Why not, or undefined when done. */
   mend(b: Bench): string | undefined {
     if (this.usable(b)) return undefined;
-    if (!this.sim.inventory.pay(REST.mendCost)) return 'Needs a little Scrap to mend';
+    if (!this.sim.inventory.pay(REST.mendCost)) return `Needs ${REST.mendCost.scrap ?? 0} Scrap to mend this bench`;
     this.mended.push(b.id);
     this.sim.grid.touch(this.sim.grid.get(GROUND, b.x, b.z)!);
     this.sim.bus.emit('bench.mended', { benchId: b.id, x: b.x, z: b.z });

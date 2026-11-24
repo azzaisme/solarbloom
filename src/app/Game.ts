@@ -101,6 +101,7 @@ import { buildItem, costWords } from '../ui/BuildCatalog';
 import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
+import type { DroneStatus } from '../gameplay/DroneSystem';
 import { EventBus } from './EventBus';
 import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
@@ -744,6 +745,8 @@ export class Game {
       look: (dx, dy) => this.mouseLook(dx, dy),
       // Third person: a press on the world while the mouse is free captures it (and does nothing else).
       capture: () => this.captureMouse(),
+      // Desktop default: holding the look button (right mouse) captures the mouse just while it is held
+      holdLook: (b) => this.holdLook(b),
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
       // E22.1: in build mode the wheel turns the piece (and the camera's zoom waits); otherwise it zooms.
       zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheel(f) : this.camera.zoomBy(f, x, y)),
@@ -796,7 +799,7 @@ export class Game {
     // E23.1.1: a garden from an earlier version starts fresh, said calmly once, when the world is on screen. From the
     // title the new-garden question already said it (and cleared the slot); this is for a start with no title (?slot=)
     if (lr.scrapped) this.openingNotes.push(() => this.hud.toast('Starting fresh 🌱<small>Your garden was from an earlier version, so a new one begins here.</small>', '', 7));
-    if (lr.backedUpAs) this.openingNotes.push(() => this.hud.toast(`This version couldn't read your old save. It's kept as a backup, and a new garden has started.<small>${lr.backedUpAs}</small>`, '', 8));
+    if (lr.backedUpAs) this.openingNotes.push(() => this.hud.toast("A new garden has started 🌱<small>This version couldn't open your old garden, so it's been tucked away safely as a backup.</small>", '', 8));
     else if (loaded) setTimeout(() => this.hud.toast('Welcome back. Your garden is just as you left it 🌱', '', 2.6), 400);
   }
 
@@ -1476,7 +1479,7 @@ export class Game {
       return;
     }
     if (r === 'full') this.hud.showFail('Fully charged');
-    else if (r === 'none') this.hud.showFail('Nothing to eat. Gather Greens from flowering ground first, then try again.');
+    else if (r === 'none') this.hud.showFail('Nothing to eat yet. Walk up to flowering ground and hold {interact} to gather Greens.');
   }
 
   private wireKeys() {
@@ -1686,7 +1689,7 @@ export class Game {
   private useSlot(i: number) {
     const t = (this.settings.hotbar ?? HOTBAR_DEFAULT)[i] as Tool | '' | undefined;
     if (!t) {
-      this.hud.toast(`Nothing on slot ${i + 1} yet. Pin something to it from the build menu.`, '', 2.6);
+      this.hud.toast(`Button ${i + 1} on your build bar is empty<small>Open the build menu with {buildMenu}, choose something and press {pinSlot} to put it here.</small>`, '', 3.5);
       return;
     }
     if (machineTool(t) && !this.sim.build.isUnlocked(t)) {
@@ -1818,7 +1821,7 @@ export class Game {
   /** E22.1: Pin the next request (E21's requests; until they exist there is nothing to pin). */
   private pinNext() {
     const r = pinNext(this.sim);
-    this.hud.toast(r ? `Pinned: ${r.keeper}'s request<small>${esc(r.text)}</small>` : 'No requests to pin yet', '', 2.6);
+    this.hud.toast(r ? `${r.keeper}'s request is on your goal card now<small>${esc(r.text)}</small>` : 'No one has asked you for anything yet', '', 2.6);
   }
 
   /** The mouse wheel: turns the piece in build mode, otherwise zooms the camera (as bound). */
@@ -1889,13 +1892,33 @@ export class Game {
     return typeof document !== 'undefined' && !!document.pointerLockElement && document.pointerLockElement === this.app.graphicsDevice.canvas;
   }
 
-  /** May the mouse be captured now (bloombot's walking view with nothing open on top)? */
-  private mayCapture(): boolean {
-    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen() && this.settings.mouseLook !== false;
+  /**
+   * Player feedback ("the controls on desktop seemed geared for mobile: I had to press Esc to click on menus"): by
+   * default the cursor stays free for the HUD and the mouse is captured only while the look button is held. The older
+   * click-to-capture look is the 'capture' setting (a save that switched mouse look off gets the free cursor too).
+   */
+  private mouseMode(): 'hold' | 'capture' {
+    return this.settings.mouseMode === 'capture' && this.settings.mouseLook !== false ? 'capture' : 'hold';
   }
 
-  /** A press on the free mouse: capture it for looking around. True when the press was used for that. */
+  /** May the mouse be captured now (bloombot's walking view with nothing open on top)? */
+  private mayCapture(): boolean {
+    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen();
+  }
+
+  /** Hold to look: the look button pressed on the world captures the mouse until it is let go. */
+  private holdLook(button: number): boolean {
+    if (this.mouseMode() !== 'hold' || !this.bindings.keys.look.includes(`Mouse${button}`)) return false;
+    return this.lockMouse();
+  }
+
+  /** A press on the free mouse ('capture' mode): capture it for looking around. True when the press was used for that. */
   private captureMouse(): boolean {
+    if (this.mouseMode() !== 'capture') return false;
+    return this.lockMouse();
+  }
+
+  private lockMouse(): boolean {
     if (this.lockRefused || this.mouseCaptured() || !this.mayCapture()) return false;
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     if (!c.requestPointerLock) return false;
@@ -1929,7 +1952,9 @@ export class Game {
     if (this.bot) this.bot.strafe = aiming; // aiming: bloombot faces where the camera looks and steps sideways
     if (!this.lookHinted && this.bot && this.mayCapture() && !this.mouseCaptured() && this.bot.lastInput === 'keys' && typeof matchMedia !== 'undefined' && matchMedia('(any-pointer: fine)').matches) {
       this.lookHinted = true;
-      this.hud.toast('Press a mouse button over the world to look around with the mouse<small>Esc frees the mouse again.</small>', '', 5);
+      // say what the player will see: the pointer hides, the camera turns, the pointer comes back
+      if (this.mouseMode() === 'capture') this.hud.toast('Press a mouse button on the world to turn the camera with the mouse<small>The mouse pointer hides while you look around. Press Esc to bring it back, ready for the menus.</small>', '', 6);
+      else this.hud.toast('Hold the right mouse button and move the mouse to turn the camera<small>Let go and your mouse pointer comes back, ready for the menus.</small>', '', 6);
     }
   }
 
@@ -2047,7 +2072,7 @@ export class Game {
     // a new concept: one short introduction, once a save (the classic park has no salvage save: once a session)
     if (this.waterView && (this.sim.state.salvage ? this.sim.salvage.see('tip:waterView') : !this.waterViewSeen)) {
       this.waterViewSeen = true;
-      this.hud.toast('Water view: pumps, tanks and pipes holding water glow blue, with arrows the way it flows. Each pond and tank shows how full it is.', 'gold', 4.5);
+      this.hud.toast('💧 Water view: everything holding water glows blue<small>Arrows show which way it flows, and each pond and tank shows how full it is.</small>', 'gold', 4.5);
     }
   }
 
@@ -2066,7 +2091,7 @@ export class Game {
     // A new concept gets one short introduction, the first time only.
     if (this.powerView && !this.powerViewSeen) {
       this.powerViewSeen = true;
-      this.hud.toast('Power view: machines that share power glow the same colour. Red means a machine has no power.', 'gold', 4);
+      this.hud.toast('⚡ Power view: machines that share power glow the same colour<small>A machine glowing red has no power yet.</small>', 'gold', 4);
     }
   }
   private powerViewSeen = false;
@@ -2352,6 +2377,9 @@ export class Game {
         kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
         run: () => this.botAnim(this.removeDecorAt(p, sc().x, sc().y, true)),
       });
+    } else if (occ && this.sim.drones.oldAsleep && occ.id === this.sim.drones.oldHomeId()) {
+      // the old drone sleeps on this lamp in a new garden: Interact wakes it
+      out.push({ kind: 'machine', id: `m:${occ.id}`, verb: 'Wake', name: 'the old drone', distance: dist, at: tile, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => this.wakeOldDrone() });
     } else if (occ && !out.some((c) => c.id.endsWith(`:${occ.id}`))) {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
@@ -2464,7 +2492,7 @@ export class Game {
     }
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
-      out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
+      out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'Greens', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
     // E23.6.4: a supply crate opens its own panel (its things, and the courier routes from it)
     if (occ?.type === 'crate')
       out.push({
@@ -2636,11 +2664,13 @@ export class Game {
       b.visuals.play('interact');
       this.wakeLandmark(m);
     });
+    const area = this.sim.areas.areaOf(m);
+    const what = area ? `the ${this.sim.areas.info(area).landmarkName}` : 'it';
     if (go) {
-      this.hud.toast(`Bloombot is on its way to wake it`, '', 2.2);
+      this.hud.toast(`Bloombot is on its way to wake ${what}`, '', 2.2);
       const [x, y, z] = b.world();
       this.camera.glide(x, y - SLAB_TOP, z, Math.max(this.camera.zoom, BOT_ZOOM * 0.8));
-    } else this.hud.toast(m.roofId !== b.pose.roofId ? 'Ride the rooftop lift first: bloombot has to be there to wake it' : "Bloombot can't find a way there yet", '', 3);
+    } else this.hud.toast(m.roofId !== b.pose.roofId ? `Ride the lift up to that rooftop first, then Bloombot can wake ${what}` : "Bloombot can't find a way there yet", '', 3);
   }
 
   /** G.12: is this landmark awake (its area cleared), so bloombot can travel to it from the overview? */
@@ -3302,7 +3332,8 @@ export class Game {
     if (this.droneHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>🛸 Drone</b>Press ${this.hudKey('interact')} beside it to see where it works and what it's doing`);
+      if (this.sim.drones.oldAsleep) this.hud.showTip(x, y, `<b>🛸 A sleeping drone</b>It's fast asleep on the old lamp. Walk up to the lamp and press ${this.hudKey('interact')} to wake it`);
+      else this.hud.showTip(x, y, `<b>🛸 Drone</b>Press ${this.hudKey('interact')} beside it to see where it works and what it's doing`);
       document.body.style.cursor = 'pointer';
       return;
     }
@@ -3372,8 +3403,8 @@ export class Game {
       const ready = occ.type === 'core' && this.landmarkReady(occ);
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : undefined;
-      const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Boosted: its next chain goes one bloom further</span>' : '';
-      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? `<span class="ok">Ready! ${this.press('Q')} to awaken.</span>` : `${this.press('Q')} to inspect`}${boost}`);
+      const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Your pulse gave it a boost: the next flowers to spread from here go a little further</span>' : '';
+      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? `<span class="ok">Ready! Press ${this.press('Q')} to wake it.</span>` : `Press ${this.press('Q')} to see what it does`}${boost}`);
       return;
     }
     if (tool === 'inspect') {
@@ -3392,7 +3423,7 @@ export class Game {
     if (fp.length) this.overlays.showRadius([t, ...fp.map((f) => f.tile)], 'ok');
     else if (!this.selected) this.overlays.hideRadius();
     if (this.sim.salvage.describe(t)) action = '';
-    else if (chk.ok) action = `<span class="ok">${t.ground === 'restored' ? 'Pulse to help it flower' : 'Pulse to bring it back'}</span>`;
+    else if (chk.ok) action = `<span class="ok">${t.ground === 'restored' ? 'Press {pulse} to help it flower' : 'Press {pulse} to bring it back to life'}</span>`;
     else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}${this.plotLine(t.roofId, t)}`);
   }
@@ -3507,7 +3538,7 @@ export class Game {
       else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'bad');
     } else this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
     const how = line ? `${this.press('E')} to hang it on this pole` : `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
-    const kindNote = LIGHT[kind]?.line ? 'On the pole’s lines' : o?.solid ? 'Solid' : 'Walk over it';
+    const kindNote = LIGHT[kind]?.line ? 'On the pole’s lines' : o?.solid ? 'Bloombot walks around it' : 'Bloombot can walk over it';
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
   }
 
@@ -3767,7 +3798,7 @@ export class Game {
     if (chosen) return `<br><span class="ok">${chosen.icon} ${chosen.name} · ${k} to change it</span>`;
     if (this.cozy.ready(p)) return `<br><span class="ok">🌱 An empty plot · ${k} to choose what it becomes</span>`;
     if (this.cozy.choice(p.id)) return '';
-    return '<br><small>🌱 A plot: restore all four tiles to choose what it becomes</small>';
+    return '<br><small>🌱 A plot: turn all four squares of ground here green, then choose what grows</small>';
   }
 
   /** E19.1.2: opens the picker for a plot (bloombot is beside it). */
@@ -3909,15 +3940,15 @@ export class Game {
     switch (t.ground) {
       case 'polluted': {
         const left = this.sim.cultivators.remaining(t);
-        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Pulse it to knock it along.`;
-        return 'Dead and grey. A pulse brings it back.';
+        if (left !== undefined) return `🚜 The Cultivator is softening this slab${left > 10 ? '' : ': nearly there'}. Press {pulse} on it to hurry it along.`;
+        return 'Dead and grey. Press {pulse} to bring it back to life.';
       }
       case 'prepared':
-        return zone ? '🌸 Near a Pollinator Garden: a bloom here can spread' : 'Mossy: it takes less charge to bring back';
+        return zone ? '🌸 Near a Pollinator Garden: flowers here will spread' : 'Mossy: one more pulse and it starts to grow';
       case 'growing':
-        return `${this.stageName(t) ?? 'Roots are breaking through'} — ${Math.max(1, Math.ceil(t.growthRemainingSec))} s`;
+        return `${this.stageName(t) ?? 'Roots are breaking through'}${t.growthRemainingSec > 5 ? '' : ': nearly there'}`;
       case 'restored':
-        return t.bloom >= TUNING.restore.fullBloom ? 'In flower.' : 'Alive again. Pulse it again to help it flower.';
+        return t.bloom >= TUNING.restore.fullBloom ? 'In flower.' : 'Alive again. Press {pulse} once more to help it flower.';
     }
   }
 
@@ -4077,27 +4108,33 @@ export class Game {
   }
 
   /** E18: what a drone of this role is doing, in words. */
-  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy' | 'docked', short?: string, lit = false): string {
+  /** Interact at the lamp: wake the old drone (a new garden starts with it asleep). */
+  private wakeOldDrone() {
+    if (this.sim.drones.wakeOld()) this.bot?.visuals.play('interact');
+  }
+
+  private droneLabel(role: DroneRole, status: DroneStatus, short?: string, lit = false): string {
+    if (status === 'asleep') return `fast asleep on the old lamp: press ${this.hudKey('interact')} at the lamp to wake it`;
     const work: Record<DroneRole, string> = {
-      restorer: 'restoring a tile',
-      gardener: 'watering tiles',
+      restorer: 'turning grey ground green',
+      gardener: 'watering the ground',
       scout: 'pushing back the fog',
-      courier: 'delivering charge',
-      spark: 'sparking a chain',
-      harvester: 'gathering Greens for the store',
+      courier: 'carrying power to a machine',
+      spark: 'starting a wave of flowers',
+      harvester: 'gathering Greens for your chests',
     };
     const idle: Record<DroneRole, string> = {
-      restorer: 'napping — nothing to do in range',
-      gardener: 'napping — nothing in reach can grow',
-      scout: 'napping — nothing left to restore in reach',
-      courier: 'napping — no machine needs charge yet',
-      spark: 'resting: it starts a chain every 30 s, when gardens are in reach',
-      harvester: 'napping — nothing in reach has flowered',
+      restorer: 'napping: nothing nearby needs it',
+      gardener: 'napping: nothing nearby can grow',
+      scout: 'napping: no fog left nearby',
+      courier: 'napping: no machine needs power yet',
+      spark: 'resting: every so often it sets the flowers spreading from a garden nearby',
+      harvester: 'napping: nothing nearby has flowered yet',
     };
     // E23.3.3: the only wait is the grid: off it, or (E23.6.3) on a line with no room left for one more drone at work
-    const wait = lit ? 'waiting at home — not enough power on its line' : 'waiting at home — its hub has no power';
+    const wait = lit ? 'waiting at home: build another Solar Panel to give it more power' : 'waiting at home: its Drone Hub has no power';
     // E23.6.3: docked until its hub has what the role runs on again
-    if (status === 'docked') return `docked — waiting for ${short === 'water' ? 'water beside the hub (a pond, canal or pipe)' : short === 'biomass' ? 'Greens in the store, through a chest beside the hub' : 'power'}`;
+    if (status === 'docked') return `waiting at home for ${short === 'water' ? 'water: a pond, canal or pipe next to its Drone Hub' : short === 'biomass' ? 'Greens: put some in a chest next to its Drone Hub' : 'power'}`;
     return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
   }
 
@@ -4118,10 +4155,10 @@ export class Game {
       }).join('');
     const tier = m.tier ?? 1;
     const current = r.roleOf(m);
-    let html = `<div class="roles"><p class="rh">${tier >= 2 ? 'First role' : 'Role'}: <b>${ROLE_INFO[current].icon} ${ROLE_INFO[current].name}</b>. ${esc(ROLE_INFO[current].job)}</p><div class="role-row">${row(1, current)}</div>`;
+    let html = `<div class="roles"><p class="rh">${tier >= 2 ? 'Main job' : 'Job'}: <b>${ROLE_INFO[current].icon} ${ROLE_INFO[current].name}</b>. ${esc(ROLE_INFO[current].job)}</p><div class="role-row">${row(1, current)}</div>`;
     if (tier === 2) {
       const second = m.role2 ?? current;
-      html += `<p class="rh">Second role (half the drones): <b>${ROLE_INFO[second].icon} ${ROLE_INFO[second].name}</b></p><div class="role-row">${row(2, second)}</div>`;
+      html += `<p class="rh">Job for the other half of its drones: <b>${ROLE_INFO[second].icon} ${ROLE_INFO[second].name}</b></p><div class="role-row">${row(2, second)}</div>`;
     }
     if (tier >= 3) {
       const ds = s.state.drones.filter((d) => d.hubId === m.id).slice(0, TUNING.super.megahub.drones);
@@ -4131,12 +4168,12 @@ export class Game {
           const opts = ROLES.filter((x) => r.owns(m, x) || r.check(m.id, x).ok)
             .map((x) => `<button class="role-btn mini${mine === x ? ' on' : ''}" data-role="${m.id}|${x}|drone|${i}" ${mine === x ? 'disabled' : ''} title="${ROLE_INFO[x].name}">${ROLE_INFO[x].icon}</button>`)
             .join('');
-          return `<p class="rh">Drone ${i + 1}: ${mine ? ROLE_INFO[mine].name : 'hub role'} ${mine ? `<button class="role-btn mini" data-role="${m.id}|-|drone|${i}">↺</button>` : ''}</p><div class="role-row">${opts}</div>`;
+          const reset = `<button class="role-btn mini" data-role="${m.id}|-|drone|${i}">↺</button>`;
+          return `<p class="rh">Drone ${i + 1}: ${mine ? ROLE_INFO[mine].name : 'same job as its Drone Hub'} ${mine ? reset : ''}</p><div class="role-row">${opts}</div>`;
         })
         .join('');
     }
-    const reach = current === 'scout' ? r.scoutReach(m) : s.upgrades.droneRadius(m);
-    html += `<p>Works within ${reach} tiles (highlighted). ${esc(ROLE_INFO[current].upgrades)}. A new role costs the Greens on its button, the first time only. Switching back to one it already knows is free.</p></div>`;
+    html += `<p>Its drones work in the lit-up area around it. ${esc(ROLE_INFO[current].upgrades)}.</p><p>A new job costs the Greens shown on its button, just the first time. Going back to a job it already knows is free.</p></div>`;
     return html;
   }
 
@@ -4150,21 +4187,21 @@ export class Game {
         // E23.1.4: in words (no rates); what it makes goes into the grid
         const shining = s.power.output(m) > 0;
         const boosted = m.boostUntil > s.time;
-        extra = `<p class="stat">${shining ? 'Shining into the grid' : 'Resting until the sun is up'}${boosted ? ' · a bloom beside it makes it shine brighter' : ''}${inSurge(s, m) ? ' · the Lucky Cat’s sunshine' : ''}</p><p>Restore tiles right next to it and it shines brighter for a few seconds.</p>`;
+        extra = `<p class="stat">${shining ? 'Soaking up the sun and powering your machines' : 'Resting until the sun is up'}${boosted ? ' · flowers beside it make it shine brighter' : ''}${inSurge(s, m) ? ' · the Lucky Cat’s sunshine' : ''}</p><p>Turn the ground right next to it green and it shines brighter for a little while.</p>`;
         break;
       }
       case 'condenser': {
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
         const mossy = near.filter((t) => t.ground === 'prepared').length;
         const pct = Math.round(((m.charge ?? 0) / TUNING.condenser.threshold) * 100);
-        extra = `<p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>`;
+        extra = `<p class="stat">🌧️ ${pct}% full · ${mossy} mossy patch${mossy === 1 ? '' : 'es'} beside it</p><p>When it fills up, it waters the mossy ground next to it and flowers spread from there.${mossy ? '' : ' Press {pulse} on the grey ground beside it and moss appears.'}</p>`;
         break;
       }
       case 'pollinator': {
         const zone = s.grid.tilesNear(m, s.upgrades.pollinatorReach(m));
         const mossy = zone.filter((t) => t.ground === 'prepared').length;
         const green = zone.filter((t) => t.ground === 'restored').length;
-        extra = `<p class="stat">🌸 Reaches ${s.upgrades.pollinatorReach(m)} tiles · ${green} of ${zone.length} blooming</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${s.upgrades.pollinatorTriggers} times in a chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>`;
+        extra = `<p class="stat">🌸 ${green} of ${zone.length} patches in the lit-up area are green</p><p class="stat">✨ ${mossy} mossy patch${mossy === 1 ? '' : 'es'} waiting for flowers</p><p>Turn the ground beside it green and the flowers spread to the mossy ground around it. Build gardens, panels and the Mother Tree close together and the flowers carry on from one to the next.</p>`;
         break;
       }
       case 'droneHub': {
@@ -4172,7 +4209,7 @@ export class Game {
         extra = ds
           .map((d, i) => {
             const role = s.roles.roleFor(d, m);
-            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d), s.droneFuel.short(m, role), s.power.isPowered(m))} · ${d.jobs} jobs</p>`;
+            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (a visitor, here for a while)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d), s.droneFuel.short(m, role), s.power.isPowered(m))} · ${d.jobs} jobs done</p>`;
           })
           .join('') +
           this.rolePicker(m);
@@ -4181,19 +4218,19 @@ export class Game {
       case 'relay': {
         const linked = s.relays.linked(m);
         const ready = linked.filter((o) => s.relays.ready(relayLinkId(m, o))).length;
-        extra = `<p class="stat">📡 Linked to ${linked.length} relay${linked.length === 1 ? '' : 's'} within ${s.relays.range(m)} tiles · ${ready} ready</p><p>Each pulse blooms ${s.relays.targets(m)} tiles around this relay when a chain arrives, and can pass it on. Links recharge for ${TUNING.relay.cooldown} s.${linked.length ? '' : ' <b>Build another Bloom Relay within range to link them.</b>'}</p>`;
+        extra = `<p class="stat">📡 Joined to ${linked.length} other Bloom Relay${linked.length === 1 ? '' : 's'} · ${ready} ready</p><p>When flowers spread to this relay, the ground around it bursts into flower and the next relay joins in. Then it rests for a moment.${linked.length ? '' : ' <b>Build another Bloom Relay nearby and the two join up.</b>'}</p>`;
         break;
       }
       case 'motherTree': {
         const pct = Math.round(((m.charge ?? 0) / TUNING.motherTree.threshold) * 100);
-        extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius(m)} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>`;
+        extra = `<p class="stat">🌳 ${pct}% full</p><p>Every patch you turn green or bring into flower in the lit-up area fills it a little. When it's full, everything around it bursts into flower at once.</p>`;
         break;
       }
       case 'reservoirGarden': {
         const R = TUNING.neighbourhood.reservoir;
         const conds = s.state.machines.filter((x) => x.type === 'condenser' && x.roofId === m.roofId && distToFootprint(x.x, x.z, m.x, m.z, m.size) <= R.condenserRange).length;
         const dry = s.chains.overflowTargets(m, 99).length;
-        extra = `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom.${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
+        extra = `<p class="stat">⛲ Basin ${Math.round(((m.charge ?? 0) / R.threshold) * 100)}% full · ${conds} 💧 Water Condenser${conds === 1 ? '' : 's'} filling it</p><p class="stat">🌱 ${dry} dry patch${dry === 1 ? '' : 'es'} in the lit-up area</p><p>Water Condensers right next to it fill the basin. When it's full, water spills out and the nearest dry ground grows lush.${conds ? '' : ' <b>Build a Water Condenser right next to it to fill it.</b>'}</p>`;
         break;
       }
       // E23.6.4: a supply crate, and (E23.6.5) the Assembler and what it makes
@@ -4226,7 +4263,7 @@ export class Game {
         return;
       }
     }
-    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat boost">⚡ Boosted by your pulse: its next chain goes one bloom further (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
+    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat boost">⚡ Your pulse gave it a boost: the next flowers to spread from here go a little further</p>` + extra;
     this.hud.renderInspect(this.hud.machineHtml(m, extra));
   }
 
@@ -4275,7 +4312,7 @@ export class Game {
       const info = s.areas.info(areaId);
       // E21.5: an Old City region names itself; its backstreets open quietly
       if (info.region) this.hud.toast(`🔓 ${s.gates.regionById(info.region)!.name} is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>`, 'gold', 4);
-      else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>Pulse its ground green to wake the ${info.landmarkName}.</small>`, 'gold', 4);
+      else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>Press {pulse} on its grey ground to turn it green, and the ${info.landmarkName} will wake.</small>`, 'gold', 4);
       if (!info.noLandmark) this.sfx.areaOpen();
       this.save();
     });
@@ -4302,7 +4339,7 @@ export class Game {
     b.on('area.specialty', ({ areaId, met }) => {
       if (!met || s.areas.ready(areaId) || this.specialtyToasted.has(areaId)) return;
       this.specialtyToasted.add(areaId);
-      this.hud.toast(`✓ ${s.areas.info(areaId).landmarkName}: that's the hard part done<small>Pulse the rest of the ground here green to wake it.</small>`, 'gold', 3.5);
+      this.hud.toast(`✓ ${s.areas.info(areaId).landmarkName}: that's the hard part done<small>Press {pulse} on the grey ground left around it to wake it.</small>`, 'gold', 3.5);
     });
     b.on('tile.restoring', ({ tile, source }) => {
       this.grid.refresh(tile, true);
@@ -4320,7 +4357,7 @@ export class Game {
       else if (source === 'drone') this.vfx.ring(p, PALETTE.leafFin, 0.8, 0.5);
     });
     b.on('mega.ready', () => {
-      this.hud.toast('💥 Mega Pulse ready<small>Your next pulse blooms a huge patch of the city around that tile.</small>', 'gold', 4);
+      this.hud.toast('💥 Your next pulse is a big one<small>Press {pulse} and a huge patch of ground around Bloombot bursts into flower.</small>', 'gold', 4);
       this.hud.nudge('[data-tool="pulse"]', 4);
     });
     b.on('mega.released', ({ tileId }) => {
@@ -4451,13 +4488,13 @@ export class Game {
       if ((machine.tier ?? 1) >= 3) return; // a superstructure's foundation: its own messages (super.stage)
       const first = s.state.machines.filter((m) => m.type === machine.type && !m.starter).length === 1;
       const msg: Partial<Record<MachineData['type'], string>> = {
-        solar: '☀️ Your Solar Panel is working: it powers the machines it\'s linked to.',
-        condenser: '💧 Water Condenser running: water comes in on its own now.',
-        pollinator: '🌸 Pollinator Garden planted. Restore a tile right beside it and the bloom spreads.',
-        droneHub: '🛸 Drone Hub built. Your drone takes the small jobs now, and you can plant a Mother Tree 🌳',
-        motherTree: '🌳 Mother Tree planted. Restore tiles around it to charge its Bloom Pulse.',
-        relay: '📡 Bloom Relay built. Put another in reach: a bloom by one sends a pulse to the other.',
-        reservoirGarden: '⛲ Reservoir Garden built. Water Condensers within 2 tiles fill its basin, and a full basin spills over.',
+        solar: '☀️ Your Solar Panel is soaking up the sun and powering the machines joined to it.',
+        condenser: '💧 Your Water Condenser is running: it gathers water from the air all on its own.',
+        pollinator: '🌸 Pollinator Garden planted. Turn the ground beside it green and watch the flowers spread.',
+        droneHub: '🛸 Drone Hub built. A little drone flies out and helps turn the ground green nearby.',
+        motherTree: '🌳 Mother Tree planted. Turn the ground around it green and, in time, everything nearby bursts into flower.',
+        relay: '📡 Bloom Relay built. Build a second one nearby, and flowers reaching one will bloom at the other too.',
+        reservoirGarden: '⛲ Reservoir Garden built. Put a Water Condenser right next to it to fill its basin.',
       };
       if (first && msg[machine.type]) this.hud.toast(msg[machine.type]!, 'gold', 4);
     });
@@ -4476,15 +4513,15 @@ export class Game {
       this.machines.pulseTree(machineId);
       this.camera.shake(0.08);
       this.sfx.chainEnd(10);
-      if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 Mother Tree Bloom Pulse!<small>Everything around it bursts into life.</small>', 'gold', 3);
+      if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 The Mother Tree is full!<small>Everything around it bursts into flower.</small>', 'gold', 3);
     });
     b.on('chain.ended', ({ chainId, combo, areas }) => {
-      if (areas >= 6 && !potterPace(this.settings)) this.hud.toast(`🌸 A city-wide bloom: ${combo} in a row<small>It swept across ${areas} areas.</small>`, 'gold', 3);
+      if (areas >= 6 && !potterPace(this.settings)) this.hud.toast('🌸 A wave of flowers swept right across the city!', 'gold', 3);
       this.tileFx.release(`chain${chainId}`);
       if (combo < 2) return;
       this.sfx.chainEnd(combo);
       if (combo >= 5 && !potterPace(this.settings)) {
-        this.hud.toast(`🌸 ${combo} blooms in a row!`, 'gold', 2.6);
+        this.hud.toast('🌸 Look at the flowers spread!', 'gold', 2.6);
         this.camera.shake(0.04);
       }
     });
@@ -4511,6 +4548,21 @@ export class Game {
       if (d) this.drones.add(d, true);
     });
     b.on('drone.despawned', ({ droneId }) => this.drones.remove(droneId));
+    // the old drone wakes: it lights up, chirps and lifts off its lamp, and from now on keeps Bloombot company
+    b.on('drone.woken', ({ droneId }) => {
+      const d = s.state.drones.find((x) => x.id === droneId);
+      const w = d && s.drones.worldOf(d);
+      const p = w ? new pc.Vec3(w[0], w[1], w[2]) : undefined;
+      if (p) {
+        this.vfx.ring(p, PALETTE.eyeCyan, 1.1, 0.6);
+        this.vfx.burst(p, 14, { up: 1.8, speed: 1.1, size: 0.05, life: 0.9, hex: PALETTE.leafFin });
+      }
+      this.drones.wake(droneId);
+      this.sfx.at(p, (q) => q.powerUp());
+      this.tweens.add(0.01, () => {}, { delay: 0.45, done: () => this.sfx.at(p, (q) => q.drone('restorer')) });
+      this.hud.toast('🛸 The old drone wakes up!<small>It tends the ground around its lamp, turning it green bit by bit, and keeps Bloombot company.</small>', 'gold', 5);
+      this.save();
+    });
     b.on('drone.jobStarted', ({ droneId }) => {
       const d = s.state.drones.find((x) => x.id === droneId);
       const w = d && this.sim.drones.worldOf(d);
@@ -4557,7 +4609,7 @@ export class Game {
       const f = s.state.stats.firsts;
       if (f.chargeEmpty !== undefined) return;
       f.chargeEmpty = Math.round(s.time);
-      this.hud.toast(`Out of charge<small>Bloombot walks slower and can't pulse. Press ${this.hudKeys('eat')} to eat Greens or Food, or rest.</small>`, '', 6);
+      this.hud.toast(`Bloombot is out of Charge<small>It walks slowly and can't pulse. Press ${this.hudKeys('eat')} for a snack of Greens or Food, or sit on a bench to rest.</small>`, '', 6);
     });
     // E23.2.2.1: the load wheel is a new concept: one short introduction the first time bloombot carries something
     // to load (the ring shows with it); after that the wheel and the chip show it
@@ -4565,8 +4617,7 @@ export class Game {
       if (!s.pulseLoad.introDue()) return;
       s.pulseLoad.introduced();
       this.hud.loadWheel.show(LOAD_WHEEL.introSeconds);
-      const arrows = this.bot?.lastInput === 'pad' ? 'the d-pad' : 'the arrow keys';
-      this.hud.toast(`Bloombot can load its pulse<small>Press ${this.hudKeys('loadNext')} or ${this.hudKeys('loadPrev')} to choose what a pulse grows, or use ${arrows} while the wheel's up. Each pulse uses up one of what you load.</small>`, '', LOAD_WHEEL.introSeconds);
+      this.hud.toast(`Bloombot can choose what its pulse grows<small>Press ${this.hudKeys('loadNext')} or ${this.hudKeys('loadPrev')} to pick from the ring of cards on screen. Each pulse uses one.</small>`, '', LOAD_WHEEL.introSeconds);
     };
     b.on('pack.changed', introWheel);
     introWheel();
@@ -4677,7 +4728,7 @@ export class Game {
       }
       this.camera.shake(0.09);
       this.sfx.chainEnd(10);
-      if ((s.state.progression.canopyBursts ?? 0) <= 1) this.hud.toast(`🌳 Canopy Burst!<small>The Elder Tree releases its charge.${gardens.length ? ` ${gardens.length} 🌸 garden${gardens.length > 1 ? 's' : ''} carried it further!` : ' 🌸 Gardens inside its reach would carry it further.'}</small>`, 'gold', 3.5);
+      if ((s.state.progression.canopyBursts ?? 0) <= 1) this.hud.toast(`🌳 The Elder Tree bursts into flower!<small>${gardens.length ? 'Your gardens nearby carried the flowers even further.' : 'Plant 🌸 gardens near it and the flowers will travel further.'}</small>`, 'gold', 3.5);
     });
   }
 
@@ -4935,7 +4986,7 @@ export class Game {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      this.hud.toast('⛲ Water returns!<small>Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open.</small>', 'gold', 7);
+      this.hud.toast('⛲ Water returns!<small>Rubble still blocks the streets leading away from the fountain. Walk up to a pile and hold {interact} to pry it out of the way.</small>', 'gold', 7);
       // E21.12: a 4 s vista turning past the beacons around the park (skippable; a still with reduced motion)
       if (!this.settings.noVistas) setTimeout(() => this.vista(8, 8, 4, (seen) => seen.forEach((r) => this.sim.salvage.see(`beacon:${r}`)), 300), 200);
       this.save();
@@ -5084,7 +5135,7 @@ export class Game {
   /** A soft cyan ring keeps pulsing on machines your taps have boosted. */
   /** Why a raised layer can't be played yet (city rooftops wait for a Bloom Relay). */
   private lockedReason(_id: string): string {
-    return `Out of reach: build a 📡 Bloom Relay on the street within ${this.sim.relays.range()} tiles of this rooftop.`;
+    return 'This rooftop is still closed. Build a 📡 Bloom Relay on the street close by to open it.';
   }
 
   private updateBoostRings(dt: number) {

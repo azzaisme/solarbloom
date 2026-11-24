@@ -145,8 +145,8 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   // Drones (E23.6.3 and E18's roles read these)
   { id: 'droneRange', branch: 'drones', name: 'Further wings', each: 'Drones work further from their hub', per: 2, needs: 'drones', levels: [{ cost: { glassPane: 2, wire: 2 } }, { cost: { glassPane: 4, motor: 1 } }, { cost: { sunCell: 1, motor: 2 } }] },
   { id: 'droneSpeed', branch: 'drones', name: 'Quicker wings', each: 'Drones fly a little faster', per: 0.15, needs: 'drones', levels: [{ cost: { motor: 1 } }, { cost: { motor: 2, gears: 4 } }, { cost: { motor: 3, sunstone: 4 } }] },
-  { id: 'droneCarry', branch: 'drones', name: 'Bigger baskets', each: 'Couriers carry 5 more on each trip', per: 5, needs: 'couriers', levels: [{ cost: { planks: 6 } }, { cost: { planks: 10, wire: 4 } }, { cost: { planks: 14, motor: 1 } }] },
-  { id: 'droneThrift', branch: 'drones', name: 'Lighter drones', each: 'Drones draw less from their hub', per: 0.15, needs: 'drones', levels: [{ cost: { batteryCell: 1, wire: 4 } }, { cost: { batteryCell: 2, glassPane: 4 } }, { cost: { batteryCell: 3, sunCell: 1 } }] },
+  { id: 'droneCarry', branch: 'drones', name: 'Bigger baskets', each: 'Courier drones carry 5 more on each trip', per: 5, needs: 'couriers', levels: [{ cost: { planks: 6 } }, { cost: { planks: 10, wire: 4 } }, { cost: { planks: 14, motor: 1 } }] },
+  { id: 'droneThrift', branch: 'drones', name: 'Lighter drones', each: 'Drones need less power from their Drone Hub', per: 0.15, needs: 'drones', levels: [{ cost: { batteryCell: 1, wire: 4 } }, { cost: { batteryCell: 2, glassPane: 4 } }, { cost: { batteryCell: 3, sunCell: 1 } }] },
 ];
 
 /** Every project, by branch. A branch's first project opens from a find; the rest follow on. */
@@ -174,7 +174,7 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'pw-battery', branch: 'power', name: 'Deep cells', about: 'Batteries that keep the night going.', cost: { scrap: 16, copper: 10 }, days: 0.2, opens: { project: 'pw-lines' }, gives: { upgrade: 'batteryStore' } },
   { id: 'pw-station', branch: 'power', name: 'A second bench', about: 'Room in the house to work on two things at once.', cost: { timber: 16, glass: 10, gears: 6 }, days: 0.3, opens: { project: 'pw-battery' }, gives: { station: 2 } },
   // Water
-  { id: 'wt-pump', branch: 'water', name: 'Old pump drawings', about: 'How the old city lifted water, kindly.', cost: { clay: 10, copper: 6 }, days: 0.15, opens: { keeper: 'cistern' }, gives: { upgrade: 'pumpRate' } },
+  { id: 'wt-pump', branch: 'water', name: 'Old pump drawings', about: 'How the city used to lift water, kindly.', cost: { clay: 10, copper: 6 }, days: 0.15, opens: { keeper: 'cistern' }, gives: { upgrade: 'pumpRate' } },
   { id: 'wt-reservoir', branch: 'water', name: 'Fired clay', about: 'Tighter walls for bigger reservoirs.', cost: { clay: 16 }, days: 0.15, opens: { material: 'clay' }, gives: { upgrade: 'reservoirSize' } },
   { id: 'wt-shade', branch: 'water', name: 'Shaded water', about: 'Keeping the sun off what we store.', cost: { glass: 10, clay: 10 }, days: 0.25, opens: { creature: 'koi' }, gives: { upgrade: 'evaporation' } },
   // Farm
@@ -185,7 +185,7 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'dr-range', branch: 'drones', name: 'Wing notes', about: 'Drones that fly further from home.', cost: { glass: 6, copper: 6 }, days: 0.1, opens: { keeper: 'clockPlaza' }, gives: { upgrade: 'droneRange' } },
   { id: 'dr-speed', branch: 'drones', name: 'Oiled gears', about: 'Drones that hurry, a little.', cost: { gears: 10 }, days: 0.15, opens: { project: 'dr-range' }, gives: { upgrade: 'droneSpeed' } },
   { id: 'dr-carry', branch: 'drones', name: 'Baskets', about: 'Couriers that carry more.', cost: { timber: 10, copper: 4 }, days: 0.15, opens: { project: 'dr-range' }, gives: { upgrade: 'droneCarry' } },
-  { id: 'dr-thrift', branch: 'drones', name: 'Light frames', about: 'Drones that take less from their hub.', cost: { glass: 8, gears: 6 }, days: 0.2, opens: { project: 'dr-speed' }, gives: { upgrade: 'droneThrift' } },
+  { id: 'dr-thrift', branch: 'drones', name: 'Light frames', about: 'Drones that need less power from home.', cost: { glass: 8, gears: 6 }, days: 0.2, opens: { project: 'dr-speed' }, gives: { upgrade: 'droneThrift' } },
   // Decor
   { id: 'dc-topiary', branch: 'decor', name: 'Clipped shapes', about: 'Shrubs grown into shapes.', cost: { seeds: 8 }, days: 0.05, opens: { tech: 'c-glasshouse-1' }, gives: { recipes: ['topiary'] } },
   // E23.3.5: the lights that wait for research (data/lights `research: 'dc-lights'`): fairy lights, uplights, table lamps

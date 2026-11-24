@@ -76,7 +76,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
   } else {
     const steps = [
       { done: d.fog !== 'hidden', label: 'Out of the fog, beside ground you cleared' },
-      { done: cleared || d.restored >= d.need, label: `Restore ${d.need} tiles (${Math.min(d.restored, d.need)} of ${d.need})` },
+      { done: cleared || d.restored >= d.need, label: `Turn ${d.need} patches of ground green (${Math.min(d.restored, d.need)} of ${d.need})` },
       { done: cleared, label: `Wake the ${esc(a.landmarkName)}` },
     ];
     checklist = steps.map((x) => `<li>${x.done ? '✅' : '⬜'} ${x.label}</li>`).join('');
@@ -90,7 +90,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
   const mode = s.areas.mode(id) ?? '';
   const modes: [string, string, string][] = [
     ['', '⚙️ Normal', 'Drones work wherever is best'],
-    ['bloom', '🌸 Keep blooming', 'Drones nurture this area first'],
+    ['bloom', '🌸 Keep blooming', 'Drones tend the flowers here first'],
     ['frontier', '🌫️ Push into the fog', "This area's drones push into the fog"],
     ['off', '✋ Leave alone', 'Drones skip this area'],
   ];
@@ -108,7 +108,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<ul class="ap-steps">${checklist}</ul>` +
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
     oldCityShare(s, id) +
-    (cultivating(s, id) ? `<p class="stat" data-cultivating="${esc(id)}">🚜 ${cultivating(s, id)} tile${cultivating(s, id) === 1 ? '' : 's'} being cultivated</p>` : '') +
+    (cultivating(s, id) ? `<p class="stat" data-cultivating="${esc(id)}">🚜 A Cultivator is turning ${cultivating(s, id) === 1 ? 'a patch' : `${cultivating(s, id)} patches`} of ground green</p>` : '') +
     switches +
     wake
   );
@@ -119,5 +119,5 @@ function oldCityShare(s: Sim, id: string): string {
   if (id === PARK || s.areas.info(id).noLandmark || s.areas.fog(id) === 'cleared') return '';
   const have = s.state.areas[id]?.byBot ?? 0;
   const need = s.areas.shareTarget(id);
-  return s.areas.shareMet(id) ? `<p class="stat" data-share="${esc(id)}">🛸 Helpers can work here</p>` : `<p class="stat" data-share="${esc(id)}">🤖 Your share: ${Math.min(have, need)} of ${need}</p>`;
+  return s.areas.shareMet(id) ? `<p class="stat" data-share="${esc(id)}">🛸 Drones can help out here now</p>` : `<p class="stat" data-share="${esc(id)}">🤖 Turn some ground green here yourself and the drones will join in: ${Math.min(have, need)} of ${need}</p>`;
 }

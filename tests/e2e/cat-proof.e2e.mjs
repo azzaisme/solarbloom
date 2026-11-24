@@ -607,7 +607,7 @@ try {
     [/Charge full/, 'surge'],
     [/A Mega Bloom!/, 'mega'],
     [/drones nearby work faster/, 'party'],
-    [/relay turns gold/, 'golden'],
+    [/power pole turns gold/, 'golden'],
     [/little garden blooms/, 'garden'],
     [/fog thins/, 'whisker'],
     [/ripen/, 'ripe'],

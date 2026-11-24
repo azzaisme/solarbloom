@@ -15,7 +15,7 @@ import type { Sim } from '../gameplay/Sim';
  */
 export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'build' | 'pry' | 'keepers';
 
-/** What the key function gives for an action on the mouse's left button: the line says "Click" instead. */
+/** What the key function gives for an action on the mouse's left button: the line names "the left mouse button" instead. */
 export const CLICK = 'Click';
 
 /** #620: kept in the same list: the first Bloombot moment has pointed at its page (later ones don't). */
@@ -54,6 +54,9 @@ export function stillWanted(sim: Sim): string[] {
     .map((k) => MATERIALS[k as MaterialId].name);
 }
 
+/** The key to press, in words: the mouse's left button by name (never "click"), else its glyph. */
+const btn = (k: (a: Action) => string, a: Action) => (k(a) === CLICK ? 'the left mouse button' : k(a));
+
 const listWords = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0]);
 
 export const IDEAS: readonly Idea[] = [
@@ -65,13 +68,13 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'pulse',
-    text: (k) => (k('pulse') === CLICK ? 'Click to turn the bare ground around Bloombot green.' : `Press ${k('pulse')} to turn the bare ground around Bloombot green.`),
+    text: (k) => `Press ${btn(k, 'pulse')} to turn the bare ground around Bloombot green.`,
     comes: salvaged,
     known: (sim) => (sim.state.stats.pulses ?? 0) > 0,
   },
   {
     id: 'park',
-    text: () => 'Keep pulsing the ground around the fountain. Every green patch adds to Park on the goal card.',
+    text: (k) => `Keep pressing ${btn(k, 'pulse')} around the fountain. Every green patch adds to Park on the card at the top.`,
     // after the player's own first pulse (a drone's tile at the start is not the moment)
     comes: (sim) => (sim.state.stats.pulses ?? 0) > 0,
     known: (sim) => (sv(sim)?.tier ?? 0) >= 1 || sim.areas.counts(PARK).restored >= (sim.fountain.next()?.needs.parkTiles ?? Infinity),
@@ -111,7 +114,7 @@ export const IDEAS: readonly Idea[] = [
   },
   {
     id: 'keepers',
-    text: (k) => (k('pulse') === CLICK ? 'A robot sleeps past the rubble. Stand beside it and click to pulse it, then talk to it.' : `A robot sleeps past the rubble. Stand beside it and press ${k('pulse')} to pulse it, then talk to it.`),
+    text: (k) => `A robot sleeps past the rubble. Press ${btn(k, 'pulse')} beside it to stir it, then press ${k('interact')} to say hello.`,
     comes: pried,
     known: keeperAwake,
   },

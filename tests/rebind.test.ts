@@ -22,7 +22,7 @@ describe('E22.4: rebinding', () => {
     const b = new Bindings();
     const r = b.bindKey('interact', 'ShiftLeft');
     expect(r).toEqual({ ok: false, reason: 'clash', other: 'sprint' });
-    expect(bindMessage(r, 'interact')).toBe('Swap with Hover (sprint, hold)?');
+    expect(bindMessage(r, 'interact')).toBe('Swap with Hover to move faster (hold)?');
     expect(b.keys.interact).toEqual(['KeyE']); // nothing changed yet
     const s = b.bindKey('interact', 'ShiftLeft', true);
     expect(s).toEqual({ ok: true, swapped: 'sprint' });
@@ -70,7 +70,7 @@ describe('E22.4: rebinding', () => {
 
   it('E23.11: the build dock pad controls are listed in plain words, and can go on keys too', () => {
     const build = ACTIONS.filter((a) => a.group === 'build').map((a) => a.label);
-    expect(build).toEqual(expect.arrayContaining(['Previous build slot', 'Next build slot', 'Change the view', 'Pin to a hotbar slot']));
+    expect(build).toEqual(expect.arrayContaining(['Previous button on the build bar', 'Next button on the build bar', 'Switch between the water, power and normal views', 'Put this on the build bar']));
     expect([ACTION.slotPrev.keys, ACTION.slotNext.keys, ACTION.viewCycle.keys]).toEqual([true, true, true]);
     const b = new Bindings();
     expect(b.bindKey('slotNext', 'KeyT')).toEqual({ ok: true, swapped: undefined });

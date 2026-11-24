@@ -136,7 +136,7 @@ export const GARDEN_REQUESTS: Record<string, GardenRequest[]> = {
   pylon: [{ crop: 'radish', ask: 'Grow me a radish? I like how fast they come up.', reward: { kind: 'decor', id: 'birdbath', name: 'Bird bath' } }],
   tally: [
     { crop: 'tomato', ask: 'A tomato, please. Everyone wants tomatoes.', reward: { kind: 'seeds', crop: 'sunflower' } },
-    { crop: 'potato', ask: 'Potatoes keep. Grow some in my bed?', reward: { kind: 'decor', id: 'cratestack', name: 'Crate stack' } },
+    { crop: 'potato', ask: 'Potatoes keep. Grow some in my bed?', reward: { kind: 'decor', id: 'cratestack', name: 'Stacked crates' } },
   ],
   tide: [{ crop: 'seaKale', ask: 'Sea kale, from the beach. It reminds me of the old harbour.', reward: { kind: 'seeds', crop: 'watercress' } }],
   moss: [

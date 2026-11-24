@@ -252,7 +252,17 @@ export class DroneVisuals {
   /** The drone that keeps bloombot company: the park's old drone if there is one, else the first. */
   companionId(): string | undefined {
     const ds = this.sim.state.drones;
-    return (ds.find((d) => d.old) ?? ds.find((d) => !d.swarm && d.expiresAt === undefined))?.id;
+    // the old drone keeps Bloombot company once it is awake (asleep on its lamp, it stays there)
+    const old = this.sim.drones.oldAsleep ? undefined : ds.find((d) => d.old);
+    return (old ?? ds.find((d) => !d.swarm && d.expiresAt === undefined && !d.old))?.id;
+  }
+
+  /** The old drone woke on its lamp: a happy hop and excited eyes. */
+  wake(id: string) {
+    const v = this.views.get(id);
+    if (!v) return;
+    v.bounce = BOUNCE_S;
+    v.celebrate = CELEBRATE_S;
   }
 
   /** Bloombot (G.6): the companion hops for a pulse, and cheers for bigger moments. */
@@ -722,10 +732,11 @@ export class DroneVisuals {
       v.lastMode = d.mode;
       const idle = d.mode === 'idle' || d.mode === 'returning';
       const status = this.sim.drones.statusOf(d);
-      const napping = d.mode === 'idle' && status === 'napping';
+      const asleep = status === 'asleep'; // the old drone in a new garden: settled on its lamp, eyes shut, until woken
+      const napping = d.mode === 'idle' && (status === 'napping' || asleep);
       // E23.6.3: docked for want of power, water or Biomass: it settles on its hub, still, under a dim glyph of what's missing
-      const docked = d.mode === 'idle' && !d.old && (status === 'docked' || status === 'waitingEnergy');
-      this.updateGlyph(d, v, hub, docked, status, dt, t);
+      const docked = d.mode === 'idle' && (asleep || (!d.old && (status === 'docked' || status === 'waitingEnergy')));
+      this.updateGlyph(d, v, hub, docked && !asleep, status, dt, t); // asleep: no sign of anything missing
       this.updateBasket(d, v);
       const c = d.id === buddy && idle && !docked ? this.companion : undefined; // a docked drone stays on its hub
       if (c) {

@@ -539,6 +539,11 @@ export interface GameState {
   /** Phase 5 E14: Superstructure Cores waiting to be placed (from merging three tier-2 machines). */
   cores?: { type: MachineType; upg?: Record<string, number>; role?: DroneRole; roles?: DroneRole[] }[];
   drones: DroneData[];
+  /**
+   * The park's old drone sleeps on its old solar lamp in a new garden until the player wakes it (press Interact at
+   * the lamp). false: asleep. Unset (gardens saved before it could sleep) counts as awake, so no drone falls asleep.
+   */
+  oldDroneAwake?: boolean;
   upgrades: Record<string, number>;
   buffs: Buff[];
   /** City areas that have been revealed (frontier or further). Static area data comes from the seed. */

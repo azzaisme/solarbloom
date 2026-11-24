@@ -142,7 +142,7 @@ export class CompostSystem {
   feed(m: MachineData): number {
     const n = Math.min(this.sim.inventory.count('biomass'), Math.floor(DIGESTER.capacity - this.fuel(m) + 1e-9));
     if (n <= 0) {
-      this.sim.bus.emit('action.failed', { reason: this.fuel(m) >= DIGESTER.capacity - 1e-9 ? 'The hopper is full' : 'No Greens to feed it' });
+      this.sim.bus.emit('action.failed', { reason: this.fuel(m) >= DIGESTER.capacity - 1e-9 ? 'It can’t take any more Greens' : 'No Greens to feed it' });
       return 0;
     }
     this.sim.inventory.take('biomass', n);

@@ -85,7 +85,7 @@ export class AreaSystem {
   sealText(id: string): string {
     const r = regionById(id);
     if (r) return `${r.name} is behind the clouds. ${r.gate.how}`;
-    return 'The clouds hide this street. Open the way into a place beside it first.';
+    return 'Clouds hide this street. Turn the ground green in the place next to it, and the clouds will lift.';
   }
 
   /** E21.5: after GateSystem lifts an Old City seal. */
@@ -125,7 +125,7 @@ export class AreaSystem {
     if (t.roofId !== GROUND || this.canTouch(t)) return undefined;
     const id = this.map.areaOfCell(t.x, t.z);
     if (this.sealed(id)) return this.sealText(id);
-    return this.fog(id) === 'hidden' ? 'The fog is too thick here. Bring the place next to it back to life first.' : 'Thick fog. Pulse the ground next to the living ground to push it back.';
+    return this.fog(id) === 'hidden' ? 'The fog is too thick here. Bring the place next to it back to life first.' : 'Thick fog. Press {pulse} on the ground beside the green ground to push it back.';
   }
 
   // ───────────── progress ─────────────
@@ -234,7 +234,7 @@ export class AreaSystem {
   clear(id: string, force = false): boolean {
     const s = this.sim;
     if (!force && !this.ready(id)) {
-      s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : 'Pulse more of the ground here green first' });
+      s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : 'Press {pulse} to turn more of the ground here green first' });
       return false;
     }
     if (this.fog(id) === 'cleared') return false;

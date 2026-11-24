@@ -53,7 +53,7 @@ export class MoveSpots {
   }
 
   private outOfCharge(a: AbilityId): string | undefined {
-    return this.sim.charge.canUse(a) ? undefined : 'Out of charge. Eat something, rest or find a charger.';
+    return this.sim.charge.canUse(a) ? undefined : 'Out of Charge: press {eat} for a snack, or sit on a bench to rest.';
   }
 
   /** Why a vault can't be forced now, or undefined. */

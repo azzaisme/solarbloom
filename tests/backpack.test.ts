@@ -90,7 +90,7 @@ describe('E22.6: the backpack', () => {
     const sim = oldCity();
     sim.state.salvage!.blueprints = ['packFrame'];
     const rows = blueprintRows(sim);
-    expect(rows.find((r) => r.id === 'packFrame')).toMatchObject({ found: true, name: 'Pack Frame (+40 to every stack)' });
+    expect(rows.find((r) => r.id === 'packFrame')).toMatchObject({ found: true, name: 'Pack Frame (Bloombot carries 40 more of each thing)' });
     expect(rows.filter((r) => !r.found).every((r) => r.name === 'Not found yet')).toBe(true);
   });
 
