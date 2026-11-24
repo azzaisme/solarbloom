@@ -252,6 +252,36 @@ export class TileFx {
     this.place(f, t, color, 0.005);
   }
 
+  private objectiveFrames = new Map<string, pc.Entity>();
+  private objectiveMaterial?: pc.StandardMaterial;
+
+  /** Steady, separate from the transient pulse and chain effects pool. */
+  showObjectiveTiles(tiles: readonly TileData[]) {
+    const active = new Set(tiles.map(tile => tile.id));
+    for (const [id, frame] of this.objectiveFrames) {
+      if (active.has(id)) continue;
+      frame.destroy();
+      this.objectiveFrames.delete(id);
+    }
+    for (const tile of tiles) {
+      if (this.objectiveFrames.has(tile.id)) continue;
+      if (!this.objectiveMaterial) {
+        this.objectiveMaterial = glowMaterial('#ffce65', 1.35);
+        this.objectiveMaterial.opacity = 0.74;
+        this.objectiveMaterial.update();
+      }
+      const frame = new pc.Entity('objective-tile');
+      frame.addComponent('render', {
+        meshInstances: [new pc.MeshInstance(glowTileMesh(this.device, 1, 0.48), this.objectiveMaterial)],
+        castShadows: false, receiveShadows: false,
+      });
+      const p = this.tilePos(tile);
+      frame.setPosition(p.x, p.y + 0.016, p.z);
+      this.root.addChild(frame);
+      this.objectiveFrames.set(tile.id, frame);
+    }
+  }
+
   /** Persistent gold outline on the tile that started a chain, until released. */
   hold(key: string, t: TileData, color = PALETTE.trim.amber) {
     const f = this.take();

@@ -1709,7 +1709,7 @@ export class Game {
   }
 
   /**
-   * #605 (E24): Show me where. A trail of glowing dots runs along the ground from bloombot to the current goal spot
+   * #605 (E24): Show me where. A trail of gold leaves runs along the ground from bloombot to the current goal spot
    * (ui/GoalSpot.ts) by a way bloombot can walk (#632), to where the waymark's light stands on it (#609; for a while
    * it shows even at the potter-about pace, which otherwise keeps the world unmarked). The camera stays with
    * bloombot. When nothing walkable gets there yet, the trail goes as close as it can and a note says why. False
@@ -5412,7 +5412,15 @@ export class Game {
       this.waymark.held = this.cinematic;
       const marked = this.wayMarked();
       const shown = !this.cinematic && !this.photo.active && !this.building() && (!this.settings.potter || marked);
-      this.waymark.update(dt, this.goal, shown, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
+      const patchId = this.goal?.patchKeeperId;
+      const canSeePatch = patchId && this.goal && this.bot.pose.roofId === GROUND
+        && this.sim.keepers.step(patchId) === 'request2'
+        && Math.hypot(this.goal.x - this.bot.pose.x, this.goal.z - this.bot.pose.z) < 9
+        && !this.cinematic && !this.photo.active && !this.building();
+      this.waymark.update(dt, this.goal, shown && !canSeePatch, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
+      this.tileFx.showObjectiveTiles(canSeePatch && patchId
+        ? [...this.sim.keepers.patchTiles(patchId)].filter(tile => tile.ground !== 'restored')
+        : []);
       this.trail.reducedMotion = !!this.settings.reducedMotion;
       this.trail.update(dt, !this.cinematic && !this.photo.active && !this.building(), this.bot.pose, 1 - this.dayNight.light, this.camera.entity.getPosition());
       const [cx, cy, cz] = this.bot.world();

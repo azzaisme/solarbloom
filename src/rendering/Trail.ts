@@ -9,7 +9,7 @@ import { group } from './Shapes';
 import { glowMaterial } from './TileFx';
 
 /** Each dot: a centre, then rings at the core's edge, in the dark rim, and at the halo's edge. */
-const SEG = 12;
+const SEG = 16;
 const RINGS = 3;
 const PER_DOT = 1 + SEG * RINGS;
 
@@ -19,8 +19,8 @@ const smooth = (a: number) => {
 };
 
 /**
- * #632: Show me where's trail. Soft glowing dots lie on the ground along the walkable way from bloombot to the goal
- * (gameplay/TrailRoute.ts). It runs out from bloombot when asked, a faint glow drifts along it towards the goal, the
+ * #632: Show me where's trail. Warm gold leaves lie on the ground along the walkable way from bloombot to the goal
+ * (gameplay/TrailRoute.ts). It runs out from bloombot when asked, a soft pulse leads the first reveal, the
  * dots bloombot walks past fade behind it, and the whole trail fades after a while or once bloombot gets there.
  * Pressing again draws it afresh. It ignores the fog (as the waymark does), so it reads in mist and at night.
  * Reduced motion: it appears at once and nothing runs along it.
@@ -29,7 +29,7 @@ export class Trail {
   private root: pc.Entity;
   private material: pc.StandardMaterial;
   private mesh?: pc.Mesh;
-  private dots: { x: number; z: number; s: number }[] = [];
+  private dots: { x: number; z: number; s: number; heading: number }[] = [];
   private colors = new Uint8Array(0);
   /** each dot's centre in the world, and the vertex positions (rebuilt as the dots grow with distance) */
   private centres: number[] = [];
@@ -68,6 +68,27 @@ export class Trail {
     return this.dots.length;
   }
 
+  /** Round shoulders taper to a tip along the route heading. */
+  private leafVertices(pos: number[] | Float32Array, offset: number, x: number, y: number, z: number, heading: number, scale: number) {
+    const T = WAYMARK.trail;
+    const sideX = Math.cos(heading);
+    const sideZ = -Math.sin(heading);
+    pos[offset++] = x;
+    pos[offset++] = y;
+    pos[offset++] = z;
+    for (const radius of [T.dot, T.rim, T.halo]) {
+      for (let i = 0; i < SEG; i++) {
+        const a = i / SEG * Math.PI * 2;
+        const forward = Math.cos(a);
+        const along = forward * (forward > 0 ? 1.16 : 0.83) * radius * scale;
+        const across = Math.sin(a) * (1 - forward * 0.35) * radius * 0.46 * scale;
+        pos[offset++] = x - sideZ * along + sideX * across;
+        pos[offset++] = y;
+        pos[offset++] = z + sideX * along + sideZ * across;
+      }
+    }
+  }
+
   /** Lays a new trail along `route` (replacing any trail already down). */
   show(route: TrailRoute) {
     this.clear();
@@ -90,12 +111,7 @@ export class Trail {
       const z = layer.origin[2] + d.z;
       const base = pos.length / 3;
       this.centres.push(x, y, z);
-      pos.push(x, y, z);
-      for (const r of [T.dot, T.rim, T.halo])
-        for (let k = 0; k < SEG; k++) {
-          const a = (k / SEG) * Math.PI * 2;
-          pos.push(x + Math.cos(a) * r, y, z + Math.sin(a) * r);
-        }
+      this.leafVertices(pos, pos.length, x, y, z, d.heading, 1);
       for (let k = 0; k < SEG; k++) {
         const k1 = (k + 1) % SEG;
         idx.push(base, base + 1 + k, base + 1 + k1);
@@ -142,23 +158,11 @@ export class Trail {
     const T = WAYMARK.trail;
     const c = this.centres;
     const p = this.positions;
-    let o = 0;
-    for (let i = 0; i < c.length; i += 3) {
-      const x = c[i];
-      const y = c[i + 1];
-      const z = c[i + 2];
+    for (let i = 0; i < this.dots.length; i++) {
+      const x = c[i * 3], y = c[i * 3 + 1], z = c[i * 3 + 2];
       const d = Math.hypot(x - camera.x, y - camera.y, z - camera.z);
       const k = Math.min(T.farScale, Math.max(1, 1 + (d - T.nearDistance) * T.growth));
-      p[o++] = x;
-      p[o++] = y;
-      p[o++] = z;
-      for (const r of [T.dot, T.rim, T.halo])
-        for (let j = 0; j < SEG; j++) {
-          const a = (j / SEG) * Math.PI * 2;
-          p[o++] = x + Math.cos(a) * r * k;
-          p[o++] = y;
-          p[o++] = z + Math.sin(a) * r * k;
-        }
+      this.leafVertices(p, i * PER_DOT * 3, x, y, z, this.dots[i].heading, k);
     }
     this.mesh!.setPositions(p);
   }
@@ -192,7 +196,7 @@ export class Trail {
     if (!show) return;
     const speed = Math.max(T.draw, total / T.drawMax);
     const front = this.reducedMotion ? Infinity : this.age * speed;
-    const run = this.reducedMotion ? -Infinity : ((this.age * T.run) % (total + T.runLength * 2)) - T.runLength;
+    const run = this.reducedMotion ? -Infinity : this.age * speed - T.runLength;
     const c = this.colors;
     const dark = Math.max(0, Math.min(1, night));
     const shade = Math.round(255 * T.rimShade);

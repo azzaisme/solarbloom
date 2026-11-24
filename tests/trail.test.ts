@@ -256,3 +256,39 @@ describe('#632: the dots along the way', () => {
     expect(dots[0].x).toBeCloseTo(0.7);
   });
 });
+
+describe('#781: leaving the fountain for the market', () => {
+  it('blocks intact rail and lets Bloombot and the trail use the open market gap', () => {
+    const sim = fresh();
+    const walker = new Walker(sim);
+    const region = REGIONS.find(region => region.id === 'oldMarket')!;
+    const closed = { roofId: GROUND, x: 15.5, z: 7.5, facing: 0 };
+    expect(walker.move(closed, 1, 0)).toBeLessThan(0.5);
+    sim.gates.open(region.gate.id, true);
+    expect(walker.walkable(GROUND, 15, 10)).toBe(true);
+    expect(walker.walkable(GROUND, 16, 10)).toBe(true);
+    expect(walker.fits(GROUND, 15.94, 10.5)).toBe(false);
+    const gap = { roofId: GROUND, x: 15.5, z: 7.5, facing: 0 };
+    expect(walker.move(gap, 1, 0)).toBeCloseTo(1);
+
+    const [x, z] = sim.areas.info(PARK).landmark;
+    const start = { roofId: GROUND, x: x + 2.5, z: z + 0.5, facing: 0 };
+    const patch = region.patch;
+    const goal = { ...at(patch.x + 2, patch.z + 1), patchKeeperId: 'tally' };
+    const route = trailRoute(sim, walker, start, goal);
+    expect(route.reached).toBe(true);
+    const crossing = route.points.find((point, index) => index > 0 && point.x >= 16 && route.points[index - 1].x < 16);
+    expect(crossing?.z).toBeGreaterThanOrEqual(7.5);
+    expect(crossing?.z).toBeLessThanOrEqual(8.5);
+    expect(trailDots(route.points).every(point => walker.fits(GROUND, point.x, point.z, 0.06))).toBe(true);
+    expect([...sim.keepers.patchTiles('tally')].some(tile =>
+      Math.abs(tile.x - Math.floor(end(route).x)) + Math.abs(tile.z - Math.floor(end(route).z)) <= 1
+    )).toBe(true);
+  });
+
+  it('derives leaf direction from the route', () => {
+    const leaves = trailDots([{ x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 3 }], 0.5);
+    expect(leaves[0].heading).toBeCloseTo(Math.PI / 2);
+    expect(leaves.at(-1)?.heading).toBeCloseTo(0);
+  });
+});

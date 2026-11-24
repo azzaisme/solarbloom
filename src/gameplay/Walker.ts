@@ -1,3 +1,4 @@
+import { hitsParkFence } from '../core/ParkFence';
 import { decorKeyOf, parseDecorValue } from '../core/Decor';
 import { GROUND } from '../core/GameState';
 import { DECOR_OPTION } from '../data/cozy';
@@ -86,6 +87,7 @@ export class Walker {
 
   /** Does a bloombot-sized circle at (x, z) touch only walkable cells (E21.24: on its own terrace)? */
   fits(roofId: string, x: number, z: number, r: number = BOT.radius): boolean {
+    if (roofId === GROUND && hitsParkFence(x, z, r)) return false;
     const terraced = this.sim.grid.terraced(roofId);
     const ox = Math.floor(x);
     const oz = Math.floor(z);
@@ -228,6 +230,7 @@ export class Walker {
         const nz = z + dz;
         if (!this.walkable(roofId, nx, nz)) continue;
         if (dx && dz && (!this.walkable(roofId, x + dx, z) || !this.walkable(roofId, x, z + dz))) continue;
+        if (roofId === GROUND && hitsParkFence(x + 0.5 + dx * 0.5, z + 0.5 + dz * 0.5, BOT.radius)) continue;
         if (terraced && !(dx && dz ? canStep(x, z, x + dx, z) && canStep(x + dx, z, nx, nz) && canStep(x, z, x, z + dz) && canStep(x, z + dz, nx, nz) : canStep(x, z, nx, nz))) continue;
         const nk = key(nx, nz);
         const ng = gk + (dx && dz ? Math.SQRT2 : 1);
@@ -286,6 +289,7 @@ export class Walker {
         const nz = z + dz;
         if (!this.walkable(roofId, nx, nz)) continue;
         if (dx && dz && (!this.walkable(roofId, x + dx, z) || !this.walkable(roofId, x, z + dz))) continue;
+        if (roofId === GROUND && hitsParkFence(x + 0.5 + dx * 0.5, z + 0.5 + dz * 0.5, BOT.radius)) continue;
         if (terraced && !(dx && dz ? canStep(x, z, x + dx, z) && canStep(x + dx, z, nx, nz) && canStep(x, z, x, z + dz) && canStep(x, z + dz, nx, nz) : canStep(x, z, nx, nz))) continue;
         const nk = key(nx, nz);
         const ng = gk + (dx && dz ? Math.SQRT2 : 1);
