@@ -32,6 +32,28 @@ export const BANNED: readonly { word: string; re: RegExp; instead?: string }[] =
   { word: 'seam', re: /\bseams?\b/i },
   { word: 'old-city', re: /\bold[- ]city\b/i },
   { word: 'classic', re: /\bclassic\b/i },
+  // Text pass (the golden rule, docs/design/PLAIN_WORDS.md): system words a player was never shown
+  { word: 'tile', re: /\btiles?\b/i, instead: 'ground' },
+  { word: 'chain', re: /\bchains?\b/i, instead: 'the flowers spread' },
+  { word: 'grid', re: /\bgrid\b/i, instead: 'power lines' },
+  { word: 'network', re: /\bnetworks?\b/i, instead: 'power lines' },
+  { word: 'stack', re: /\bstacks?\b/i, instead: "can't carry any more" },
+  { word: 'cache', re: /\bcaches?\b/i, instead: 'a buried box' },
+  { word: 'radius', re: /\bradius\b/i, instead: 'nearby' },
+  { word: 'zone', re: /\bzones?\b/i, instead: 'around it' },
+  { word: 'superstructure', re: /\bsuperstructures?\b/i, instead: 'a big machine' },
+  { word: 'merge', re: /\bmerg(e|es|ed|ing)\b/i, instead: 'join' },
+  { word: 'hotbar', re: /\bhotbar\b/i, instead: 'the build bar' },
+  { word: 'debug', re: /\bdebug\b/i },
+  { word: 'overlay', re: /\boverlays?\b/i, instead: 'view' },
+  { word: 'restoration', re: /\brestorations?\b/i, instead: 'turning green' },
+  { word: 'role', re: /\broles?\b/i, instead: 'job' },
+  { word: 'in range', re: /\b(in|out of) range\b/i, instead: 'nearby' },
+  { word: 'recharge', re: /\brecharg(e|es|ed|ing)\b/i, instead: 'rests for a moment' },
+  { word: 'click', re: /\b(click|clicks|clicked|clicking|tap|taps|tapped|tapping)\b/i, instead: 'press' },
+  { word: 'N s', re: /\b\d+(\.\d+)?\s?s\b/, instead: 'a few seconds' },
+  { word: 'Interact', re: /\bInteract\b/, instead: '{interact}' },
+  { word: 'as usual', re: /\bas usual\b/i },
 ];
 
 /** The banned words in a piece of text (empty when it reads plainly). Markup is ignored. */
@@ -67,6 +89,15 @@ export const RESOURCE_NAME = { energy: 'Energy', water: 'Water', biomass: 'Green
  * The goal card and the hint line use it, so a card line can say what to press without knowing the device.
  */
 export const withKeys = (text: string, keyFor: (a: never) => string) => text.replace(/\{(\w+)\}/g, (_, a: string) => keyFor(a as never));
+
+/**
+ * Text pass (the golden rule: say which key, and what the player will see): any string from anywhere (a Keeper's
+ * line, a refusal, a machine card) may say "Press {pulse}" or "hold {interact}"; the HUD fills in the player's own
+ * key or pad button as it draws. Only real action names are replaced, so other braces pass through untouched.
+ */
+export function fillKeys(text: string, keyFor: (a: string) => string, isAction: (a: string) => boolean): string {
+  return text.indexOf('{') < 0 ? text : text.replace(/\{(\w+)\}/g, (m, a: string) => (isAction(a) ? keyFor(a) : m));
+}
 
 /** Old-city strings: the objective card, the gauges, the prompt's refusals, the menu and the loading tips. */
 export const WORDS = {

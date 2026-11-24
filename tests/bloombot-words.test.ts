@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
@@ -129,7 +129,7 @@ describe('E22.10: plain words', () => {
     expect(bannedIn('Restore tiles 14/130 · reward at 20')).toEqual(['reward at']);
     expect(bannedIn('+71/min')).toContain('/min');
     expect(bannedIn('Bloom Frenzy ×3 combo')).toEqual(expect.arrayContaining(['Frenzy', 'combo', '×N']));
-    expect(BANNED.length).toBe(23);
+    expect(BANNED.length).toBe(44);
   });
 });
 
@@ -194,5 +194,34 @@ describe('#606: plain words when something is blocked', () => {
         }
       expect(bad).toEqual([]);
     });
+  });
+});
+
+/**
+ * Text pass (the golden rule: a player doesn't know what they are doing, but they can see things;
+ * docs/design/PLAIN_WORDS.md): every file with player text, not just a chosen few, is free of the banned words.
+ * Developer-only tools are left out. Code strings (ids, events, classes, selectors) have no capital and no space.
+ */
+describe('Text pass: plain words everywhere a player reads', () => {
+  const DEV = /(DevTools|LightPanel|RoadDebug|DebugLog|Metrics)\.ts$/;
+  const files = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(`${dir}/${e.name}`) : e.name.endsWith('.ts') ? [`${dir}/${e.name}`] : []));
+
+  it('no banned word in any player-facing string in src/ui, src/app, src/data or src/gameplay', async () => {
+    const { bannedIn } = await import('../src/ui/words');
+    const bad: string[] = [];
+    for (const f of ['src/ui', 'src/app', 'src/data', 'src/gameplay'].flatMap(files)) {
+      if (DEV.test(f)) continue;
+      for (const lit of literals(stripComments(readFileSync(f, 'utf8')))) {
+        let s = lit;
+        for (let i = 0; i < 4; i++) s = s.replace(/\$\{[^{}]*\}/g, ' ');
+        s = s.replace(/<[^>]*>/g, ' ');
+        // words a player reads: a space between two letters (code ids, events, classes and keys have none)
+        if (!/[a-z] [a-z]/i.test(s) || /^[#.[]/.test(s.trim())) continue;
+        const b = bannedIn(s);
+        if (b.length) bad.push(`${f}: ${s.trim().slice(0, 90)} (${b.join(', ')})`);
+      }
+    }
+    expect(bad).toEqual([]);
   });
 });
