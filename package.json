@@ -50,6 +50,7 @@
     "shots:decor": "vite build && node tests/e2e/decor-shots.mjs"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "playcanvas": "^2.23.0"
   },
   "devDependencies": {
@@ -72,6 +73,14 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "azzaisme",
+        "repo": "solarbloom",
+        "releaseType": "release"
+      }
+    ],
     "linux": {
       "target": [
         "AppImage"

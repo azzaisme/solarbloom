@@ -22,11 +22,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # "0.1.<build>": a plain number, so in-game updates (electron-updater) compare builds simply and look for
+      # latest-linux.yml (a "-build.N" suffix would put them on a separate "build" channel). It sorts after the old
+      # "0.1.0-build.N" releases, so those installs see it as newer.
       - name: Version this build
         id: version
         run: |
-          base=$(node -p "require('./package.json').version")
-          version="$base-build.${{ github.run_number }}"
+          base=$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")
+          version="$base.${{ github.run_number }}"
           npm version "$version" --no-git-tag-version --allow-same-version
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Typecheck and build the game
@@ -42,7 +45,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ steps.version.outputs.version }}" release/*.AppImage tools/steamdeck/add-to-steam.sh \
+          # latest-linux.yml is what the game's updater reads to find this build
+          test -f release/latest-linux.yml || { echo "release/latest-linux.yml missing: in-game updates need it"; exit 1; }
+          gh release create "v${{ steps.version.outputs.version }}" release/*.AppImage release/latest-linux.yml tools/steamdeck/add-to-steam.sh \
             --target "${{ github.sha }}" \
             --title "Solarbloom ${{ steps.version.outputs.version }} (Steam Deck)" \
-            --notes "Steam Deck build of commit ${{ github.sha }}. To install: on the Deck in Desktop Mode, download both files and run: bash ~/Downloads/add-to-steam.sh ~/Downloads/Solarbloom-*-steamdeck.AppImage (details in docs/STEAM_DECK.md)."
+            --notes "Steam Deck build of commit ${{ github.sha }}. Games installed from this release on update themselves (the title screen shows the version). First install: on the Deck in Desktop Mode, download both files and run: bash ~/Downloads/add-to-steam.sh ~/Downloads/Solarbloom-*-steamdeck.AppImage (details in docs/STEAM_DECK.md)."

@@ -1,3 +1,4 @@
+import { appVersion, updates } from './version';
 import type { Row, SettingsTab } from './SettingsScreen';
 import { canFullScreen, isFullScreen, setFullScreen } from '../app/FullScreen';
 import { GLOW_STEPS } from '../data/look';
@@ -22,6 +23,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
   switch (tab) {
     case 'game':
       return [
+        { kind: 'html', html: `<p class="set-version">Solarbloom version ${appVersion()}${updates.ready() ? ` · version ${updates.ready()} is ready: quit to the title screen and choose Restart to update` : ''}</p>` },
         { kind: 'check', key: 'hints', label: 'Tips on what to do next' },
         { kind: 'check', key: 'realClock', label: 'Follow my clock', hint: c.inGame ? 'The sky and the sun keep your local time; everything grows at the same pace' : 'New gardens offer to follow your local time first' },
         { kind: 'check', key: 'potter', label: 'Potter about', hint: 'Just wander: no tips or pointers, and the flowers spread more gently' },

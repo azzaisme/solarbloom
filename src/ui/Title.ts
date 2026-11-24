@@ -1,3 +1,4 @@
+import { appVersion, updates } from './version';
 import type { Slot, SlotHeader } from '../app/SaveService';
 import { TIERS } from '../data/salvage';
 import { lotusSvg } from '../rendering/Emblem';
@@ -108,6 +109,16 @@ export class Title {
     this.focus = new PadFocus(this.el, ['#settings.open', '.t-confirm', '.t-gardens', '.t-menu']);
     this.el.addEventListener('click', (e) => this.click(e));
     window.addEventListener('keydown', this.onKey);
+    // a new version finished downloading while the title is up: show "Restart to update" straight away
+    updates.onReady(() => {
+      if (this.el.isConnected && this.view !== 'press') this.render();
+    });
+  }
+
+  /** The line under the menu: which build this is, and whether a newer one is waiting. */
+  private note(): string {
+    const ready = updates.ready();
+    return ready ? `Version ${appVersion()} · version ${ready} is ready to install · saves on this device` : `Early build · version ${appVersion()} · saves on this device`;
   }
 
   /** The splash: up to 2 s, any key, click or pad button skips it. */
@@ -188,9 +199,11 @@ export class Title {
           : `<nav class="t-menu" aria-label="Main menu">` +
             `<button id="tPlay" class="t-btn primary" data-t="play">${ICON.play}Play</button>` +
             `<button id="tSettings" class="t-btn" data-t="settings">${ICON.gear}Settings</button>` +
+            // in-game updates (the Deck build): a newer version has downloaded and is ready to install
+            (updates.ready() ? `<button id="tUpdate" class="t-btn" data-t="update">${ICON.play}Restart to update</button>` : '') +
             (this.host.quit ? `<button id="tQuit" class="t-btn" data-t="quit">${ICON.door}Quit</button>` : '') +
             `</nav>`;
-      html += `<div class="t-side">${brand}${body}</div><p class="t-note">Early build · saves on this device</p>`;
+      html += `<div class="t-side">${brand}${body}</div><p class="t-note">${esc(this.note())}</p>`;
     }
     if (this.confirm) html += this.askHtml(this.confirm);
     // Keep Settings (if open) where it is: it lives in its own element. So does the are-you-sure dialog.
@@ -303,6 +316,8 @@ export class Title {
         return this.host.settings(this.el, () => this.render('tSettings'));
       case 'quit':
         return this.host.quit?.();
+      case 'update':
+        return updates.restart();
       case 'back':
         return this.toMenu();
       case 'loadSlot':

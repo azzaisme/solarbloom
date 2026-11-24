@@ -17,6 +17,13 @@ contextBridge.exposeInMainWorld('solarbloomDesktop', {
   },
   // E22.11: the menu's "Quit to desktop", and pausing while the Deck sleeps.
   quit: () => ipcRenderer.send('sb:quit'),
+  // the release this build is (for the title screen and Settings), and in-game updates
+  version: ipcRenderer.sendSync('sb:version'),
+  update: {
+    ready: () => ipcRenderer.sendSync('sb:update-ready'),
+    onReady: (cb) => ipcRenderer.on('sb:update', (_e, version) => cb(version)),
+    restart: () => ipcRenderer.send('sb:update-restart'),
+  },
   onPower: (cb) => ipcRenderer.on('sb:power', (_e, state) => cb(state)),
 });
 
