@@ -306,6 +306,16 @@ export class Advisor {
     if (carried.length) return take();
     const c = s.fountain.condition(t);
     if (!c.done && t.needs.parkTiles !== undefined) {
+      // the old drone sleeps on its lamp: once a few patches are green, point the player to it (a helper for the park)
+      const lamp = s.drones.oldAsleep && c.have >= 4 ? s.machine(s.drones.oldHomeId()) : undefined;
+      if (lamp)
+        return {
+          topic: 'restore',
+          text: 'An old drone is fast asleep on the lamp by the fountain. Walk up to the lamp and press {interact} to wake it, and it will help you turn the park green.',
+          label: '🛸 Show me where',
+          action: { kind: 'focus', x: lamp.x, z: lamp.z },
+          place: { kind: 'machine', name: 'the old lamp' },
+        };
       const tile = this.parkTile();
       if (tile) return { topic: 'restore', text: `Press {pulse} on the bare ground around the fountain to bring it back to life (${Math.min(c.have, c.need)} of ${c.need}).`, label: '🌱 Show me where', action: { kind: 'focus', x: tile.x, z: tile.z }, place: { kind: 'park', name: 'the park' } };
     }

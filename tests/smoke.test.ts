@@ -40,16 +40,33 @@ describe('smoke: the game works', () => {
     expect(sim.areas.counts('park').restored).toBeGreaterThan(before);
   });
 
-  it('three minutes of play: tiles keep getting restored, the charge and backpack stay sane, the old drone turns up and works', () => {
+  it('three minutes of play: tiles keep getting restored, the charge and backpack stay sane, the old drone sleeps until woken, then works', () => {
     const sim = new Sim(createInitialState(42));
     const start = sim.areas.counts('park').restored;
     for (let s = 0; s < 180; s++) {
+      if (s === 60) {
+        // a minute in: the old drone has slept on its lamp all along, doing nothing; the player wakes it
+        expect(sim.drones.oldAsleep).toBe(true);
+        expect(sim.state.stats.droneJobs).toBe(0);
+        expect(sim.drones.statusOf(sim.state.drones.find((d) => d.old)!)).toBe('asleep');
+        expect(sim.drones.wakeOld()).toBe(true);
+        expect(sim.drones.wakeOld()).toBe(false); // once
+      }
       pulseOne(sim);
       sim.advance(1);
       expect(finite(sim)).toBe(true);
     }
     expect(sim.areas.counts('park').restored).toBeGreaterThan(start + 10);
     expect(sim.state.drones.length).toBeGreaterThanOrEqual(1);
+    expect(sim.state.stats.droneJobs).toBeGreaterThan(0);
+  });
+
+  it('a garden saved before the old drone could sleep keeps it awake', () => {
+    const st = createInitialState(42);
+    delete st.oldDroneAwake; // an older save has no such field
+    const sim = new Sim(st);
+    expect(sim.drones.oldAsleep).toBe(false);
+    sim.advance(30);
     expect(sim.state.stats.droneJobs).toBeGreaterThan(0);
   });
 

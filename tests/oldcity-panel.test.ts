@@ -84,6 +84,8 @@ describe('E23.1.4: the first Solar Panel', () => {
     // and the panel is built beside home
     expect(hint()).toBe('Build a ☀️ Solar Panel from the build menu');
     sim.areas.clear(PARK, true);
+    // the green ground the player has pulsed by now (the old drone sleeps until woken, so nothing else made it)
+    for (const t of sim.areas.tiles(PARK).filter((q) => q.ground !== 'restored' && !q.blocked && !q.occupantId).slice(0, 12)) sim.restoration.complete(t, 'pulse');
     const spot = sim.areas.tiles(PARK).find((t) => t.ground === 'restored' && !t.occupantId && !t.blocked && sim.build.check('solar', GROUND, t.x, t.z).ok)!;
     expect(sim.build.place('solar', GROUND, spot.x, spot.z)).toBeDefined();
     expect(oldCityStep(sim)).toBe(FIRST_STEPS - 1); // every first step done: the advisor takes over

@@ -5,7 +5,7 @@ import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
 /** E23.6.3: 'docked' = its hub is short of power, water or biomass; it waits at home and starts again by itself. */
-export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling' | 'docked';
+export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling' | 'docked' | 'asleep';
 
 /**
  * Drone AI runs purely on grid targets. Positions are roof-local continuous coordinates;
@@ -67,6 +67,30 @@ export class DroneSystem {
     const f = d.far!;
     const k = f.t1 > f.t0 ? Math.min(1, Math.max(0, (this.sim.time - f.t0) / (f.t1 - f.t0))) : 1;
     return [f.fx + (t.x + 0.5 - f.fx) * k, f.fz + (t.z + 0.5 - f.fz) * k];
+  }
+
+  /** The old drone still sleeps on its lamp (a new garden, until the player wakes it). */
+  get oldAsleep(): boolean {
+    return this.sim.state.oldDroneAwake === false && !!this.oldHome();
+  }
+
+  /** The lamp the old drone sleeps on (and works from), if any. */
+  oldHomeId(): string | undefined {
+    return this.oldHome()?.id;
+  }
+
+  /** Wakes the old drone: it lifts off its lamp and starts tending the ground around it. True if it was asleep. */
+  wakeOld(): boolean {
+    if (!this.oldAsleep) return false;
+    this.sim.state.oldDroneAwake = true;
+    const d = this.sim.state.drones.find((x) => x.old);
+    if (d) {
+      this.status.delete(d.id);
+      d.mode = 'idle';
+      d.timer = 1.2; // a moment to stretch before its first job
+    }
+    this.sim.bus.emit('drone.woken', { droneId: d?.id ?? '' });
+    return true;
   }
 
   statusOf(d: DroneData): DroneStatus {
@@ -436,6 +460,14 @@ export class DroneSystem {
         s.state.drones = s.state.drones.filter((x) => x !== d);
         this.status.delete(d.id);
         s.bus.emit('drone.despawned', { droneId: d.id });
+        continue;
+      }
+      // asleep on its lamp: it stays put and does nothing until it is woken
+      if (d.old && this.oldAsleep) {
+        this.status.set(d.id, 'asleep');
+        d.mode = 'idle';
+        d.px = hub.x + hub.size / 2;
+        d.pz = hub.z + hub.size / 2;
         continue;
       }
       switch (d.mode) {

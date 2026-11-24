@@ -101,6 +101,7 @@ import { buildItem, costWords } from '../ui/BuildCatalog';
 import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
+import type { DroneStatus } from '../gameplay/DroneSystem';
 import { EventBus } from './EventBus';
 import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
@@ -2376,6 +2377,9 @@ export class Game {
         kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
         run: () => this.botAnim(this.removeDecorAt(p, sc().x, sc().y, true)),
       });
+    } else if (occ && this.sim.drones.oldAsleep && occ.id === this.sim.drones.oldHomeId()) {
+      // the old drone sleeps on this lamp in a new garden: Interact wakes it
+      out.push({ kind: 'machine', id: `m:${occ.id}`, verb: 'Wake', name: 'the old drone', distance: dist, at: tile, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => this.wakeOldDrone() });
     } else if (occ && !out.some((c) => c.id.endsWith(`:${occ.id}`))) {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
@@ -3328,7 +3332,8 @@ export class Game {
     if (this.droneHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>🛸 Drone</b>Press ${this.hudKey('interact')} beside it to see where it works and what it's doing`);
+      if (this.sim.drones.oldAsleep) this.hud.showTip(x, y, `<b>🛸 A sleeping drone</b>It's fast asleep on the old lamp. Walk up to the lamp and press ${this.hudKey('interact')} to wake it`);
+      else this.hud.showTip(x, y, `<b>🛸 Drone</b>Press ${this.hudKey('interact')} beside it to see where it works and what it's doing`);
       document.body.style.cursor = 'pointer';
       return;
     }
@@ -4103,7 +4108,13 @@ export class Game {
   }
 
   /** E18: what a drone of this role is doing, in words. */
-  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy' | 'docked', short?: string, lit = false): string {
+  /** Interact at the lamp: wake the old drone (a new garden starts with it asleep). */
+  private wakeOldDrone() {
+    if (this.sim.drones.wakeOld()) this.bot?.visuals.play('interact');
+  }
+
+  private droneLabel(role: DroneRole, status: DroneStatus, short?: string, lit = false): string {
+    if (status === 'asleep') return `fast asleep on the old lamp: press ${this.hudKey('interact')} at the lamp to wake it`;
     const work: Record<DroneRole, string> = {
       restorer: 'turning grey ground green',
       gardener: 'watering the ground',
@@ -4537,6 +4548,21 @@ export class Game {
       if (d) this.drones.add(d, true);
     });
     b.on('drone.despawned', ({ droneId }) => this.drones.remove(droneId));
+    // the old drone wakes: it lights up, chirps and lifts off its lamp, and from now on keeps Bloombot company
+    b.on('drone.woken', ({ droneId }) => {
+      const d = s.state.drones.find((x) => x.id === droneId);
+      const w = d && s.drones.worldOf(d);
+      const p = w ? new pc.Vec3(w[0], w[1], w[2]) : undefined;
+      if (p) {
+        this.vfx.ring(p, PALETTE.eyeCyan, 1.1, 0.6);
+        this.vfx.burst(p, 14, { up: 1.8, speed: 1.1, size: 0.05, life: 0.9, hex: PALETTE.leafFin });
+      }
+      this.drones.wake(droneId);
+      this.sfx.at(p, (q) => q.powerUp());
+      this.tweens.add(0.01, () => {}, { delay: 0.45, done: () => this.sfx.at(p, (q) => q.drone('restorer')) });
+      this.hud.toast('🛸 The old drone wakes up!<small>It tends the ground around its lamp, turning it green bit by bit, and keeps Bloombot company.</small>', 'gold', 5);
+      this.save();
+    });
     b.on('drone.jobStarted', ({ droneId }) => {
       const d = s.state.drones.find((x) => x.id === droneId);
       const w = d && this.sim.drones.worldOf(d);
