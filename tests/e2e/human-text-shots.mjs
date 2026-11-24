@@ -4,7 +4,7 @@
 // - lock-refusal: the refusal when a locked hotbar slot is chosen (BuildSystem.lockLabel), before the fountain wakes
 // - build-menu: the build menu once the fountain is awake, a card locked until fountain step 2 selected
 // - toast-*: rewritten toasts, one at a time, at their real size in the toast column
-// - settings: the Game tab with "Skip the view when a new place opens"
+// - settings: the Game tab with "Stay with Bloombot when a new place opens"
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
@@ -96,13 +96,13 @@ try {
     await page.evaluate((tab) => (window.solarbloom.settingsUi.isOpen ? window.solarbloom.settingsUi.show(tab) : window.solarbloom.settingsUi.open(tab)), tab);
     await page.waitForTimeout(400);
     row = await page.evaluate(() => {
-      const el = [...document.querySelectorAll('#settings *')].filter((e) => !e.children.length).find((e) => e.textContent.trim() === 'Skip the view when a new place opens');
+      const el = [...document.querySelectorAll('#settings *')].filter((e) => !e.children.length).find((e) => e.textContent.trim() === 'Stay with Bloombot when a new place opens');
       el?.scrollIntoView({ block: 'center' });
       return !!el;
     });
     if (row) break;
   }
-  check(row, 'Settings shows "Skip the view when a new place opens"');
+  check(row, 'Settings shows "Stay with Bloombot when a new place opens"');
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${dir}/settings.png` });
   await page.evaluate(() => window.solarbloom.settingsUi.close());

@@ -1,4 +1,3 @@
-import { TUNING } from './tuning';
 import type { BuildableType, GroundState, MachineType } from '../core/types';
 
 export interface MachineDef {
@@ -27,7 +26,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '☀️',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Feeds the grid in sunlight. A bloom beside it makes it shine twice as bright for a few seconds.',
+    blurb: 'Makes power in the sunshine for the machines on its power lines. When flowers open right beside it, it shines twice as bright for a few seconds.',
     hotkey: '3',
   },
   condenser: {
@@ -36,7 +35,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '💧',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Its charge meter fills, then it waters the dry soil beside it into bloom, starting a chain.',
+    blurb: 'Its little meter fills, then it waters the dry ground beside it into flower, and the flowers spread from there.',
     hotkey: '4',
   },
   pollinator: {
@@ -45,7 +44,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🌸',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Restorations inside its zone spread to mossy neighbours: Bloom Chains!',
+    blurb: 'Turn the ground beside it green and the flowers spread to the mossy ground around it.',
     hotkey: '5',
   },
   droneHub: {
@@ -54,7 +53,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🛸',
     size: 2,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Launches a little drone that restores tiles within 3 tiles of the hub. It runs on the grid.',
+    blurb: 'Sends out a little drone that turns the ground around it green. It needs a power line.',
     hotkey: '6',
   },
   motherTree: {
@@ -63,7 +62,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🌳',
     size: 2,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Every restoration within 2 tiles charges it. At full charge it releases a Bloom Pulse that restores and grows everything around it.',
+    blurb: 'Every patch that turns green nearby fills it up. When it is full, it lets out a Bloom Pulse that turns everything around it green and lush.',
     hotkey: '7',
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
   },
@@ -73,7 +72,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '⛲',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom.',
+    blurb: 'Water Condensers right beside it fill its pool. When the pool is full, the dry ground around it bursts into flower.',
     hotkey: '8',
     areaTypes: ['reservoir'],
   },
@@ -83,7 +82,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '📡',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Links with every other relay in range. A bloom right beside it sends a pulse to each linked relay, which blooms the ground there (once per link per chain, then it recharges).',
+    blurb: 'Joins up with the other Bloom Relays nearby. When flowers open right beside it, the ground by each of those relays flowers too, and then it rests for a moment.',
     hotkey: '9',
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
     cityOnly: true,
@@ -94,7 +93,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🚜',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: `A solar tiller: drives over dead ground within ${TUNING.cultivator.radius} tiles of its dock and slowly breaks it into bloom on its own, on power from the grid.`,
+    blurb: 'A solar tiller: it trundles out from its home over the dead ground nearby and slowly breaks it into flower on its own. It needs a power line.',
     hotkey: '0',
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
     cityOnly: true,
@@ -106,7 +105,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '📦',
     size: 1,
     allowedGround: ['restored', 'prepared', 'polluted'],
-    blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
+    blurb: 'Walk up to it to put things away or take them out. Anything in one chest can be taken out of any chest.',
   },
   // E23.5.2: a planter box: crops grow in it over game days.
   planter: {
@@ -124,7 +123,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🟫',
     size: 1,
     allowedGround: ['restored', 'prepared', 'polluted'],
-    blurb: 'Fill it with biomass and food scraps: they rot down into compost, and compost left inside becomes fertiliser.',
+    blurb: 'Fill it with Greens and food scraps: they rot down into compost, and compost left inside becomes fertiliser.',
   },
   // E23.5.3: biomass into grid power, day or night, while fed.
   bioDigester: {
@@ -133,7 +132,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '⚡',
     size: 1,
     allowedGround: ['restored', 'prepared', 'polluted'],
-    blurb: 'Feed it biomass and it powers its grid, day or night. When it runs empty it simply stops.',
+    blurb: 'Feed it Greens and it powers the machines on its power lines, day or night. When the Greens run out it simply stops.',
   },
   // E23.5.4: beyond planters (wild creatures attracted, never kept)
   beehive: {
@@ -215,7 +214,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🔋',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Stores what the grid has spare and gives it back after dark.',
+    blurb: 'Saves the power your machines don’t use and gives it back after dark.',
   },
   windTurbine: {
     type: 'windTurbine',
@@ -232,16 +231,16 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🔌',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
+    blurb: 'A pad on a power line. Sit on it and Bloombot’s Charge fills up fast.',
   },
   // E23.8.3.2: the mainland's big machines (behaviour in gameplay/MainlandSystem, numbers in data/mainland)
   gridBattery: {
     type: 'gridBattery',
-    name: 'Grid Battery',
+    name: 'Big Battery',
     icon: '🔋',
     size: 2,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'A grid-scale battery: stores a whole network’s sun and wind for the night. Mainland only.',
+    blurb: 'A huge battery: it saves the sun and wind from all your power lines for the night. Mainland only.',
     mainlandOnly: true,
   },
   // E23.4.2: the water network's storage and its pump (crafting-table recipes: data/crafting).
@@ -259,7 +258,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🌊',
     size: 2,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Built on the shore. Turns the sea into fresh water on grid power, in any weather, into a pond or canal beside it or the pipes it touches. A heavy load on the grid.',
+    blurb: 'Built on the shore. Turns the sea into fresh water in any weather, into a pond or canal beside it or the pipes it touches. It needs a power line, and it uses a lot of power.',
   },
   pump: {
     type: 'pump',
@@ -267,7 +266,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '⛲',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Stands on the bank of a pond or canal and pushes its water along the pipes it touches, uphill or far away. Runs on grid power.',
+    blurb: 'Stands on the bank of a pond or canal and pushes its water along the pipes it touches, uphill or far away. It needs a power line.',
   },
   // E23.6.4: a box with its own contents, for machines and couriers (old-city rules only)
   crate: {
@@ -276,7 +275,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🧺',
     size: 1,
     allowedGround: ['restored', 'prepared', 'polluted'],
-    blurb: 'A box of its own: couriers carry between crates, and machines take from and put into the crates beside them.',
+    blurb: 'A crate for things on the move. Courier drones carry things from crate to crate, and machines beside it take from it and put into it.',
   },
   // E23.6.5: crafts a component by itself, from the crate beside it into another (old-city rules only)
   assembler: {
@@ -285,7 +284,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🛠️',
     size: 2,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Makes the component you choose by itself, from one supply crate beside it into another (you pick which), on grid power.',
+    blurb: 'Makes the part you choose all by itself, from one supply crate beside it into another (you pick which). It needs a power line.',
   },
   core: {
     type: 'core',
@@ -293,7 +292,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '✨',
     size: 2,
     allowedGround: ['polluted', 'prepared', 'restored'],
-    blurb: 'An ancient bloom engine. Awaken it to restore the whole building.',
+    blurb: 'An old flower engine. Wake it and the whole building turns green.',
   },
 };
 
@@ -311,10 +310,10 @@ export interface TierDef {
   blurb: string;
 }
 export const TIER2: Partial<Record<MachineType, TierDef>> = {
-  solar: { name: 'Solar Array', icon: '🔆', blurb: `×${TUNING.merge.solarMult} energy (and ×${TUNING.merge.solarMult} bloom bursts)` },
-  condenser: { name: 'Condenser Array', icon: '💠', blurb: `×${TUNING.merge.waterMult} water, and each watering wets ${TUNING.merge.condenserExtraTargets} more tiles` },
-  pollinator: { name: 'Bloom Garden', icon: '💮', blurb: `Biomass bonus ×${TUNING.merge.gardenBiomassMult} (was ×${TUNING.pollinator.biomassMult}) and zone radius +${TUNING.merge.gardenReachBonus}` },
-  droneHub: { name: 'Fleet Hub', icon: '🚀', blurb: '×3 drones (up to 12) and work radius +2' },
+  solar: { name: 'Solar Array', icon: '🔆', blurb: 'Three panels joined into one: much more power, and bigger bursts of flowers' },
+  condenser: { name: 'Condenser Array', icon: '💠', blurb: 'Much more water, and each watering wets more of the ground around it' },
+  pollinator: { name: 'Bloom Garden', icon: '💮', blurb: 'More Greens from the flowers around it, and it reaches a little further' },
+  droneHub: { name: 'Fleet Hub', icon: '🚀', blurb: 'Three times as many drones, up to 12, and they work further out' },
 };
 /** Phase 5 E14: three tier-2 machines merge into a Superstructure Core, placed and built as a tier 3. */
 export interface SuperDef extends TierDef {
@@ -323,10 +322,10 @@ export interface SuperDef extends TierDef {
   ability: string;
 }
 export const TIER3: Partial<Record<MachineType, SuperDef>> = {
-  solar: { name: 'Solar Megaflower', icon: '🌻', size: 2, blurb: `×${TUNING.super.outputMult} a panel’s energy`, ability: 'Solar Burst: every panel’s energy ×3 for 15 s' },
-  condenser: { name: 'Water Nexus', icon: '🌊', size: 2, blurb: `×${TUNING.super.outputMult} a condenser’s water`, ability: 'Irrigation Wave: up to 24 connected dry or growing tiles bloom' },
-  pollinator: { name: 'Tree of Life', icon: '🌲', size: 3, blurb: `Biomass ×${TUNING.super.treeOfLife.gardenMult} within ${TUNING.pollinator.reach + TUNING.super.treeOfLife.gardenReachBonus} tiles`, ability: 'Evolution: the 12 least-grown tiles nearby grow a stage (stores up to 3)' },
-  droneHub: { name: 'Drone Megahub', icon: '🛰️', size: 2, blurb: 'Fleet drones, work radius +4', ability: 'Swarm: 6 extra drones for 30 s, each restoring several tiles per job' },
+  solar: { name: 'Solar Megaflower', icon: '🌻', size: 2, blurb: 'Much more power than any panel', ability: 'Solar Burst: every solar panel shines much brighter for a little while' },
+  condenser: { name: 'Water Nexus', icon: '🌊', size: 2, blurb: 'Much more water than any condenser', ability: 'Irrigation Wave: the dry and growing ground joined to it bursts into flower' },
+  pollinator: { name: 'Tree of Life', icon: '🌲', size: 3, blurb: 'Many more Greens from all the ground around it', ability: 'Evolution: the least-grown ground nearby grows up a little (it saves up to 3 goes)' },
+  droneHub: { name: 'Drone Megahub', icon: '🛰️', size: 2, blurb: 'Fleet drones that work much further out', ability: 'Swarm: extra drones join in for a little while, each turning plenty of ground green' },
 };
 /** The highest tier a machine can merge from (three tier 2s make a core). */
 export const MAX_MERGE_TIER = 2;

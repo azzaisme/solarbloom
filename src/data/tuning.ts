@@ -166,7 +166,7 @@ export const TUNING = {
      */
     nearBotBonus: 60,
     nearBotRadius: 9,
-    focusMult: 6, // "Focus the frontier": the fog edge counts this many times more
+    focusMult: 6, // "Focus the fog edge": the fog edge counts this many times more
     bloomBonus: 60, // "Keep this area blooming": its green tiles beat restoring up to ~8 tiles further away
     /**
      * Phase 4 E01: the old drone that lives by the park's old solar lamp from the very start. Slow, short-ranged

@@ -53,7 +53,7 @@ export class MoveSpots {
   }
 
   private outOfCharge(a: AbilityId): string | undefined {
-    return this.sim.charge.canUse(a) ? undefined : 'Out of charge. Eat something, rest or find a charger.';
+    return this.sim.charge.canUse(a) ? undefined : 'Out of Charge: press {eat} for a snack, or sit on a bench to rest.';
   }
 
   /** Why a vault can't be forced now, or undefined. */
@@ -61,7 +61,7 @@ export class MoveSpots {
     if (this.opened(v.id)) return 'Already open';
     const lv = this.level('pry');
     if (lv === 0) return 'A heavy iron door, shut tight. Bloombot has to learn to pry at the fountain first.';
-    if (lv === 1) return 'This door is too heavy to pry open yet. The crafting table in the house can work out Pry II.';
+    if (lv === 1) return 'This door is too heavy to pry open yet. Bloombot can learn Pry II at the crafting table in the house.';
     return this.outOfCharge('pry');
   }
 
@@ -114,7 +114,7 @@ export class MoveSpots {
     const lv = this.level(t.move);
     const name = ABILITIES[t.move].name;
     const learn = `Bloombot has to learn ${name} at the fountain first.`;
-    const workshop = `The crafting table in the house can work out ${name} II.`;
+    const workshop = `Bloombot can learn ${name} II at the crafting table in the house.`;
     if (t.move === 'hover') {
       if (lv === 0) return `Too far to wade. ${learn}`;
       if (lv === 1) return `Too far to hover yet. ${workshop}`;

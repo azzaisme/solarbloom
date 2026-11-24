@@ -209,7 +209,7 @@ export class Advisor {
       if (id === PARK || s.areas.fog(id) === 'cleared' || !s.areas.ready(id)) continue;
       const lm = s.areas.landmark(id);
       const name = s.areas.info(id).landmarkName;
-      if (lm) return { topic: 'keeper', text: `The ${name} has all it needs. Wake it to see what it does.`, label: `✨ Wake the ${name}`, action: { kind: 'wake', machineId: lm.id }, place: { kind: 'landmark', name: `the ${name}` } };
+      if (lm) return { topic: 'keeper', text: `The ${name} has all it needs. Walk up to it and press {interact} to wake it.`, label: `✨ Wake the ${name}`, action: { kind: 'wake', machineId: lm.id }, place: { kind: 'landmark', name: `the ${name}` } };
     }
     return undefined;
   }
@@ -220,7 +220,7 @@ export class Advisor {
     if (!p) return undefined;
     const dark = this.nearest(this.sim.state.machines.filter((m) => !m.starter && m.type !== 'core' && !p.isPowered(m)));
     if (!dark) return undefined;
-    return { topic: 'grid', text: 'A machine has gone dark. Run a power pole to it, or add a panel or a turbine.', label: '⚡ Show me where', action: { kind: 'focus', x: dark.x, z: dark.z }, place: { kind: 'machine', name: `the ${machineName(dark).toLowerCase()}` } };
+    return { topic: 'grid', text: 'A machine has gone dark. Join it to a Solar Panel or a Wind Turbine with power poles.', label: '⚡ Show me where', action: { kind: 'focus', x: dark.x, z: dark.z }, place: { kind: 'machine', name: `the ${machineName(dark).toLowerCase()}` } };
   }
 
   /** E23.4: an open area whose water is low (its land fading). */
@@ -240,7 +240,7 @@ export class Advisor {
     for (const m of s.state.machines) {
       if (!FARM.has(m.type)) continue;
       const t = s.grid.tilesNear(m, 1).find((n) => n.ground !== 'restored' && s.restoration.checkPulse(n).ok);
-      if (t) return { topic: 'farm', text: 'Your farm needs green ground around it. Pulse the bare soil next to it.', label: '🌱 Show me where', action: { kind: 'focus', x: t.x, z: t.z }, place: { kind: 'spot', name: 'the ground by your farm' } };
+      if (t) return { topic: 'farm', text: 'Your farm needs green ground around it. Press {pulse} on the bare soil next to it.', label: '🌱 Show me where', action: { kind: 'focus', x: t.x, z: t.z }, place: { kind: 'spot', name: 'the ground by your farm' } };
     }
     return undefined;
   }
@@ -307,7 +307,7 @@ export class Advisor {
     const c = s.fountain.condition(t);
     if (!c.done && t.needs.parkTiles !== undefined) {
       const tile = this.parkTile();
-      if (tile) return { topic: 'restore', text: `Pulse the bare ground around the fountain to bring it back (${Math.min(c.have, c.need)} of ${c.need}).`, label: '🌱 Show me where', action: { kind: 'focus', x: tile.x, z: tile.z }, place: { kind: 'park', name: 'the park' } };
+      if (tile) return { topic: 'restore', text: `Press {pulse} on the bare ground around the fountain to bring it back to life (${Math.min(c.have, c.need)} of ${c.need}).`, label: '🌱 Show me where', action: { kind: 'focus', x: tile.x, z: tile.z }, place: { kind: 'park', name: 'the park' } };
     }
     return undefined;
   }
@@ -330,7 +330,7 @@ export class Advisor {
     const edge = (goal ? s.areas.entryTiles(goal).find((t) => s.restoration.checkPulse(t).ok) : undefined) ?? this.parkTile();
     if (!edge) return undefined;
     const where = goal && s.areas.areaOf(edge) === goal ? `the ${AREA_TYPES[s.areas.info(goal).type].name.toLowerCase()}` : 'the park';
-    return { topic: 'restore', text: `Pulse the bare ground in ${where}: each green patch pushes the fog back.`, label: '🌱 Show me where', action: { kind: 'focus', x: edge.x, z: edge.z }, place: { kind: where === 'the park' ? 'park' : 'spot', name: where } };
+    return { topic: 'restore', text: `Press {pulse} on the bare ground in ${where}: each green patch pushes the fog back.`, label: '🌱 Show me where', action: { kind: 'focus', x: edge.x, z: edge.z }, place: { kind: where === 'the park' ? 'park' : 'spot', name: where } };
   }
 
   private explore(): Suggestion {

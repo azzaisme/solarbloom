@@ -1,5 +1,6 @@
 import { NIGHT_FIND_GIVES, NIGHT_FINDS, type NightFindDef } from '../data/time';
 import type { Sim } from './Sim';
+import { itemDef } from '../data/items';
 
 /**
  * E23.7.1.3 (#447): night-only finds: glowing plants and glinting salvage. Each is out whenever the sky is dark (the
@@ -42,7 +43,7 @@ export class NightFinds {
     const f = NIGHT_FINDS.find((n) => n.id === id);
     if (!f || !this.visible(id)) return 'Nothing here';
     const g = NIGHT_FIND_GIVES[f.kind];
-    if (this.sim.state.salvage && this.sim.inventory.room(g.material) <= 0) return 'Your stack is full: leave some in the storage at the fountain';
+    if (this.sim.state.salvage && this.sim.inventory.room(g.material) <= 0) return `Bloombot can't carry any more ${itemDef(g.material).name}. Leave some at the fountain or in a chest`;
     return undefined;
   }
 

@@ -1,5 +1,26 @@
 import { lotusSvg } from '../rendering/Emblem';
-import { TIPS } from './words';
+import { ACTION, type Action, Bindings, keyLabel, migrateBindings } from '../app/Bindings';
+import { parseSettings, SETTINGS_KEY } from '../app/Settings';
+import { padName } from './Glyphs';
+import { fillKeys, TIPS } from './words';
+
+/**
+ * Text pass: a tip's "{pulse}" as the player's own key (or pad button, when the button pictures are set to a pad),
+ * read from the saved settings: the loading screen comes up before the game and its bindings exist.
+ */
+function tipKeys(tip: string): string {
+  let b = new Bindings();
+  let pad: 'xbox' | 'ps' | 'deck' | undefined;
+  try {
+    const s = parseSettings(localStorage.getItem(SETTINGS_KEY));
+    b = new Bindings(migrateBindings(s.keys || s.pad ? { v: s.bindingsV, keys: s.keys, pad: s.pad } : undefined).saved);
+    if (s.glyphs === 'xbox' || s.glyphs === 'ps' || s.glyphs === 'deck') pad = s.glyphs;
+  } catch {
+    /* no storage: the default keys */
+  }
+  const key = (a: Action) => (pad ? padName(pad, b.pad[a]) : keyLabel(b.keys[a][0] ?? '')) || 'its key';
+  return fillKeys(tip, (a) => key(a as Action), (a) => a in ACTION);
+}
 
 /**
  * E22.12 (#350): the loading screen. A painted still of the city, bloombot waddling to and fro (frames rendered from
@@ -72,7 +93,7 @@ export class Loading {
       BLOOMBOT +
       `<div class="ld-head"><div class="t-badge logo" aria-hidden="true">${lotusSvg()}</div><p class="ld-line">Unpacking the city</p></div>` +
       `<div class="ld-bar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>` +
-      `<p class="ld-tip"><b>Tip</b>${tip.replace(/[&<>"]/g, '')}</p></div>`;
+      `<p class="ld-tip"><b>Tip</b>${tipKeys(tip).replace(/[&<>"]/g, '')}</p></div>`;
     if (!this.el.parentElement) document.body.appendChild(this.el);
     this.bar = this.el.querySelector<HTMLElement>('.ld-bar')!;
     this.line = this.el.querySelector<HTMLElement>('.ld-line')!;

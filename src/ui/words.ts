@@ -7,15 +7,21 @@
  * one sentence per card or toast. A count only for things gathered or restored by hand, as "12 of 20".
  */
 
+/**
+ * A banned phrase's name, its words joined here: the text pass reads this file's own literals, and a phrase written
+ * whole would flag the very list that bans it.
+ */
+const phrase = (...words: string[]) => words.join(' ');
+
 /** Words (and patterns) never on screen, each with what to say instead where there is one. */
 export const BANNED: readonly { word: string; re: RegExp; instead?: string }[] = [
   { word: 'rate', re: /\brates?\b/i },
   { word: '/min', re: /\/\s*min\b/i },
   { word: '/s', re: /\/\s*s\b/i },
-  { word: 'per second', re: /\bper second\b/i },
+  { word: phrase('per', 'second'), re: /\bper second\b/i },
   { word: 'cap', re: /\bcaps?\b/i },
   { word: 'overflow', re: /\boverflow(s|ed|ing)?\b/i },
-  { word: 'reward at', re: /\breward at\b/i },
+  { word: phrase('reward', 'at'), re: /\breward at\b/i },
   { word: 'frontier', re: /\bfrontiers?\b/i },
   { word: 'sealed', re: /\bsealed\b/i },
   { word: 'specialty', re: /\bspecialt(y|ies)\b/i },
@@ -26,7 +32,7 @@ export const BANNED: readonly { word: string; re: RegExp; instead?: string }[] =
   { word: '×N', re: /[×x]\s?\d+(\.\d+)?\b|\b\d+(\.\d+)?\s?×/ },
   { word: 'buff', re: /\bbuffs?\b/i },
   { word: 'Frenzy', re: /\bfrenzy\b/i },
-  { word: 'full bloom', re: /\bfull[- ]bloom\b/i, instead: 'in flower' },
+  { word: phrase('full', 'bloom'), re: /\bfull[- ]bloom\b/i, instead: 'in flower' },
   { word: 'biomass', re: /\bbiomass\b/i, instead: 'Greens' },
   { word: 'node', re: /\bnodes?\b/i },
   { word: 'seam', re: /\bseams?\b/i },
@@ -48,12 +54,12 @@ export const BANNED: readonly { word: string; re: RegExp; instead?: string }[] =
   { word: 'overlay', re: /\boverlays?\b/i, instead: 'view' },
   { word: 'restoration', re: /\brestorations?\b/i, instead: 'turning green' },
   { word: 'role', re: /\broles?\b/i, instead: 'job' },
-  { word: 'in range', re: /\b(in|out of) range\b/i, instead: 'nearby' },
+  { word: phrase('in', 'range'), re: /\b(in|out of) range\b/i, instead: 'nearby' },
   { word: 'recharge', re: /\brecharg(e|es|ed|ing)\b/i, instead: 'rests for a moment' },
   { word: 'click', re: /\b(click|clicks|clicked|clicking|tap|taps|tapped|tapping)\b/i, instead: 'press' },
   { word: 'N s', re: /\b\d+(\.\d+)?\s?s\b/, instead: 'a few seconds' },
   { word: 'Interact', re: /\bInteract\b/, instead: '{interact}' },
-  { word: 'as usual', re: /\bas usual\b/i },
+  { word: phrase('as', 'usual'), re: /\bas usual\b/i },
 ];
 
 /** The banned words in a piece of text (empty when it reads plainly). Markup is ignored. */
@@ -186,26 +192,26 @@ export const WORDS = {
   },
 };
 
-/** E22.12: one plain line under the loading bar, from these twenty. */
+/** E22.12: one plain line under the loading bar, from these twenty. `{pulse}` and the like become the player's own keys (Loading.ts). */
 export const TIPS: readonly string[] = [
-  'Interact does the obvious thing to whatever is in front of bloombot.',
-  'The prompt at the bottom says what Interact will do.',
-  'Pulse a grey tile to bring it back to life.',
-  'Pulse a green tile again to help it flower.',
-  'Your backpack holds what you carry, your requests and your journal.',
-  'The map shows every place you have woken.',
+  'Walk up to something and press {interact} to use it, open it or say hello.',
+  'The words at the bottom of the screen show what {interact} will do right now.',
+  'Press {pulse} on grey ground to bring it back to life.',
+  'Press {pulse} on green ground again and it bursts into flower.',
+  'Press {backpack} to open your backpack: what you carry, your requests and your journal.',
+  'Press {map} to see every place you have woken.',
   'Energy and water fill up again on their own.',
-  'Harvest Sunlight when energy runs low.',
-  'Pin a request to keep it at the top of the screen.',
-  'Open the build menu to make machines, storage and decorations.',
-  'Turn a piece in build mode before you place it.',
+  'When your Charge runs low, press {eat} for a snack.',
+  'Choose a request in your backpack and it stays at the top of the screen.',
+  'Press {buildMenu} to open the build menu: machines, storage and decorations.',
+  'While you build, press {rotate} to turn a piece before you put it down.',
   'Walk up to a landmark that hums and wake it.',
-  'Helpers keep working the ground you have restored.',
-  'Hold Interact beside a pile of old things to salvage it.',
+  'Little drones keep tending the ground you have turned green.',
+  'Hold {interact} beside a pile of old things to dig through it.',
   'The game pauses while the menu or the backpack is open.',
   'Every key and button can be changed in Settings.',
   'Settings can make the text bigger and the colours stronger.',
   'Photo mode is in the menu.',
-  'Each region wakes when its landmark wakes.',
+  'Wake the landmark in each part of the city, and everything around it wakes too.',
   'There is no rush: the city waits for you.',
 ];

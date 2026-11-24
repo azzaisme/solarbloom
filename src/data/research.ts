@@ -174,7 +174,7 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'pw-battery', branch: 'power', name: 'Deep cells', about: 'Batteries that keep the night going.', cost: { scrap: 16, copper: 10 }, days: 0.2, opens: { project: 'pw-lines' }, gives: { upgrade: 'batteryStore' } },
   { id: 'pw-station', branch: 'power', name: 'A second bench', about: 'Room in the house to work on two things at once.', cost: { timber: 16, glass: 10, gears: 6 }, days: 0.3, opens: { project: 'pw-battery' }, gives: { station: 2 } },
   // Water
-  { id: 'wt-pump', branch: 'water', name: 'Old pump drawings', about: 'How the old city lifted water, kindly.', cost: { clay: 10, copper: 6 }, days: 0.15, opens: { keeper: 'cistern' }, gives: { upgrade: 'pumpRate' } },
+  { id: 'wt-pump', branch: 'water', name: 'Old pump drawings', about: 'How the city used to lift water, kindly.', cost: { clay: 10, copper: 6 }, days: 0.15, opens: { keeper: 'cistern' }, gives: { upgrade: 'pumpRate' } },
   { id: 'wt-reservoir', branch: 'water', name: 'Fired clay', about: 'Tighter walls for bigger reservoirs.', cost: { clay: 16 }, days: 0.15, opens: { material: 'clay' }, gives: { upgrade: 'reservoirSize' } },
   { id: 'wt-shade', branch: 'water', name: 'Shaded water', about: 'Keeping the sun off what we store.', cost: { glass: 10, clay: 10 }, days: 0.25, opens: { creature: 'koi' }, gives: { upgrade: 'evaporation' } },
   // Farm

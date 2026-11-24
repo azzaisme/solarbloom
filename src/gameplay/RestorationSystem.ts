@@ -43,13 +43,13 @@ export class RestorationSystem {
     const piece = t.blocked ? this.sim.salvage?.describe(t) : undefined; // E21: a pile, a gate, a Keeper
     if (piece) return { ok: false, reason: piece.detail };
     if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent: nothing grows here' };
-    if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core: wake it when it\'s ready' };
+    if (this.sim.isCoreTile(t)) return { ok: false, reason: 'An old flower engine: it wakes once the ground around it is green' };
     if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in flower' };
     // E23.2.1: out of charge, no pulse (bloombot walks on; eat, sit or find a charger)
-    if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of charge. Eat something, rest or find a charger' };
+    if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of Charge: press {eat} for a snack, or sit on a bench to rest' };
     if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through: ${seconds(t.growthRemainingSec)}` };
     const tilling = this.sim.cultivators?.remaining(t);
-    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab: ${Math.max(1, Math.ceil(tilling))}s` };
+    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this ground: ${seconds(tilling)}` };
     if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here' };
     return { ok: true };
   }

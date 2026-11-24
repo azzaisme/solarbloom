@@ -141,7 +141,7 @@ export function flyUp(root: HTMLElement, text: string, x: number, y: number) {
 
 // ───────────── the storage panel (E21.1) ─────────────
 
-/** HTML of the storage panel: one row per material with backpack and store counts, move 1 / 10 / a stack. */
+/** HTML of the storage panel: one row per material with backpack and store counts, move 1 / 10 / all of it. */
 export function storageHtml(sim: Sim, title = 'Storage'): string {
   const inv = sim.inventory;
   const limit = inv.stackLimit();
@@ -154,9 +154,12 @@ export function storageHtml(sim: Sim, title = 'Storage'): string {
       const btn = (act: string, n: number | 'stack', label: string, ok: boolean, aria: string) =>
         `<button class="pn-btn small" data-act="${act}" data-arg="${m}:${n}" aria-label="${escHtml(aria)}" ${ok ? '' : 'disabled'}>${label}</button>`;
       const out = st >= 1 && room >= 1;
+      // each button on its own line: a label written inside another's template reads as one long string to the text pass
+      const put = [btn('put', 1, '1', p >= 1, `Put 1 ${name} in the store`), btn('put', 10, '10', p >= 1, `Put 10 ${name} in the store`), btn('put', 'stack', 'All', p >= 1, `Put all your ${name} in the store`)];
+      const take = [btn('takeOut', 1, '1', out, `Take 1 ${name} from the store`), btn('takeOut', 10, '10', out, `Take 10 ${name} from the store`), btn('takeOut', 'stack', 'All I can carry', out, `Take as much ${name} from the store as Bloombot can carry`)];
       return `<tr><th scope="row"><span class="oc-mat-name">${materialIcon(m, 28)}${name}</span></th><td class="n">${p} of ${limit}</td>
-        <td class="mv">${btn('put', 1, '1', p >= 1, `Put 1 ${name} in the store`)}${btn('put', 10, '10', p >= 1, `Put 10 ${name} in the store`)}${btn('put', 'stack', 'All', p >= 1, `Put all your ${name} in the store`)}</td>
-        <td class="mv">${btn('takeOut', 1, '1', out, `Take 1 ${name} from the store`)}${btn('takeOut', 10, '10', out, `Take 10 ${name} from the store`)}${btn('takeOut', 'stack', 'A stack', out, `Take a stack of ${name} from the store`)}</td>
+        <td class="mv">${put.join('')}</td>
+        <td class="mv">${take.join('')}</td>
         <td class="n">${st}</td></tr>`;
     })
     .join('');

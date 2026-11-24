@@ -50,7 +50,7 @@ export class BuildMenu extends HudPart {
       `<header class="bm-head"><span class="bm-badge" aria-hidden="true">${ICONS.build}</span><h2 id="bmTitle">Build</h2><span class="bm-grow"></span><button class="bm-act bm-back" data-back><span class="bm-g" data-g="back"></span>Back</button></header>` +
       `<div class="bm-tabrow"><span class="bm-g bm-bump" data-g="prev" aria-hidden="true"></span><div class="bm-tabs" role="tablist" aria-label="Kinds of build"></div><span class="bm-g bm-bump" data-g="next" aria-hidden="true"></span></div>` +
       `<div class="bm-body"><div class="bm-cells" id="bmCells" role="tabpanel"></div><aside class="bm-detail" id="bmDetail" aria-live="polite"></aside></div>` +
-      `<footer class="bm-foot"><p class="bm-live" role="status" aria-live="polite"></p><span class="bm-grow"></span><button class="bm-act" data-do="take"><span class="bm-g" data-g="take"></span><span class="bm-al">Build</span></button><button class="bm-act" data-do="pin"><span class="bm-g" data-g="pin"></span><span class="bm-al">Pin to a slot</span></button><button class="bm-act" data-back><span class="bm-g" data-g="back"></span>Back</button></footer>` +
+      `<footer class="bm-foot"><p class="bm-live" role="status" aria-live="polite"></p><span class="bm-grow"></span><button class="bm-act" data-do="take"><span class="bm-g" data-g="take"></span><span class="bm-al">Build</span></button><button class="bm-act" data-do="pin"><span class="bm-g" data-g="pin"></span><span class="bm-al">Put on the build bar</span></button><button class="bm-act" data-back><span class="bm-g" data-g="back"></span>Back</button></footer>` +
       `</section>`;
     this.root.appendChild(el);
     this.el = el;
@@ -182,7 +182,7 @@ export class BuildMenu extends HudPart {
     this.cb.setHotbar(slots);
     this.picking = false;
     const wasItem = was ? this.items.find((x) => x.tool === was) : undefined;
-    this.say(`${it.name} is on slot ${i + 1}${wasItem ? ` instead of the ${wasItem.name}` : ''}.`);
+    this.say(`${it.name} is on button ${i + 1} of the build bar${wasItem ? `, in place of the ${wasItem.name}` : ''}.`);
     this.renderCells();
     this.renderDetail();
     this.renderFoot();
@@ -270,8 +270,8 @@ export class BuildMenu extends HudPart {
       .filter((i) => i.tab === this.current)
       .map((i) => {
         const at = slots.indexOf(i.tool);
-        const note = i.locked ? `<span class="bm-why">${esc(i.lockText ?? '')}</span>` : at >= 0 ? `<span class="bm-slot">Slot ${at + 1}</span>` : '';
-        const label = `${i.name}${i.locked ? `, locked: ${i.lockText}` : at >= 0 ? `, on hotbar slot ${at + 1}` : ''}${!i.locked && !i.affordable ? ', not enough yet' : ''}`;
+        const note = i.locked ? `<span class="bm-why">${esc(i.lockText ?? '')}</span>` : at >= 0 ? `<span class="bm-slot">Button ${at + 1}</span>` : '';
+        const label = `${i.name}${i.locked ? `, locked: ${i.lockText}` : at >= 0 ? `, on build bar button ${at + 1}` : ''}${!i.locked && !i.affordable ? ', not enough yet' : ''}`;
         return `<button class="bm-card t-${i.tab}${i.tool === this.sel ? ' sel' : ''}${i.locked ? ' locked' : ''}${!i.locked && !i.affordable ? ' short' : ''}" id="bm-${esc(i.tool.replace(':', '-'))}" data-tool="${esc(i.tool)}" aria-label="${esc(label)}"${i.locked ? ' aria-disabled="true"' : ''}><span class="bm-ic" aria-hidden="true">${i.locked ? ICONS.lock : i.icon}</span><span class="bm-nm">${esc(i.name)}</span>${note}</button>`;
       })
       .join('');
@@ -292,17 +292,17 @@ export class BuildMenu extends HudPart {
     let foot: string;
     if (this.picking) {
       foot =
-        `<div class="bm-label" id="bmPickLabel">Pick a slot for the ${esc(it.name)}</div>` +
+        `<div class="bm-label" id="bmPickLabel">Choose a button on the build bar for the ${esc(it.name)}</div>` +
         `<div class="bm-pick" role="group" data-pad-trap aria-labelledby="bmPickLabel">${slots
           .map((t, i) => {
             const there = t ? this.items.find((x) => x.tool === t) : undefined;
             const what = there ? there.name : t ? 'something' : 'empty';
-            return `<button class="bm-pslot${t === it.tool ? ' here' : ''}${t ? '' : ' empty'}" data-pin="${i}" aria-label="Slot ${i + 1}, ${esc(what)}"><span class="bm-pn">${i + 1}</span><span class="bm-pi" aria-hidden="true">${there ? (there.locked ? ICONS.lock : there.icon) : ''}</span></button>`;
+            return `<button class="bm-pslot${t === it.tool ? ' here' : ''}${t ? '' : ' empty'}" data-pin="${i}" aria-label="Button ${i + 1}, ${esc(what)}"><span class="bm-pn">${i + 1}</span><span class="bm-pi" aria-hidden="true">${there ? (there.locked ? ICONS.lock : there.icon) : ''}</span></button>`;
           })
           .join('')}</div>`;
     } else {
       const key = at >= 0 && this.style === 'keys' && this.b ? actionGlyph(this.b, SLOTS[at], 'keys') : `<span class="bm-n">${at + 1}</span>`;
-      foot = at >= 0 ? `<div class="bm-onbar">${key}<span>On your hotbar, slot ${at + 1}</span></div>` : `<div class="bm-onbar off"><span>Not on your hotbar</span></div>`;
+      foot = at >= 0 ? `<div class="bm-onbar">${key}<span>On your build bar, button ${at + 1}</span></div>` : `<div class="bm-onbar off"><span>Not on your build bar yet</span></div>`;
     }
     this.detail.innerHTML =
       `<div class="bm-dhead"><span class="bm-dic t-${it.tab}" aria-hidden="true">${it.locked ? ICONS.lock : it.icon}</span><div><h3 class="bm-dname">${esc(it.name)}</h3><div class="bm-kind">${esc(it.kind)}</div></div></div>` +
@@ -317,7 +317,7 @@ export class BuildMenu extends HudPart {
     const can = !!it && !it.locked && it.affordable;
     take.classList.toggle('dim', !can);
     take.setAttribute('aria-disabled', String(!can));
-    $(take, '.bm-al').textContent = this.picking ? 'Pin here' : 'Build';
+    $(take, '.bm-al').textContent = this.picking ? 'Put it here' : 'Build';
     pin.hidden = this.picking;
     pin.classList.toggle('dim', !it || it.locked);
     pin.setAttribute('aria-disabled', String(!it || it.locked));
