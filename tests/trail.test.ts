@@ -7,7 +7,7 @@ import { WAYMARK } from '../src/data/waymark';
 import { Sim } from '../src/gameplay/Sim';
 import { trailDots, trailRoute, type TrailRoute } from '../src/gameplay/TrailRoute';
 import { spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
-import { leafFlight } from '../src/rendering/TrailLeaf';
+import { leafFlight, randomLeafLaunch } from '../src/rendering/TrailLeaf';
 import { pavingOverlayLift, RAISED_PAVING_LIFT, RESTORED_PATH_LIFT } from '../src/rendering/PavingSurface';
 import { goalSpot, type GoalSpot } from '../src/ui/GoalSpot';
 import { WORDS } from '../src/ui/words';
@@ -297,10 +297,22 @@ describe('#781: leaving the fountain for the market', () => {
 
 describe('falling route leaves and raised paving', () => {
   it('flutters while descending and settles exactly onto the trail', () => {
-    const samples = [0, 0.25, 0.5, 0.75, 1].map(t => leafFlight(t, 0.43, 1.4));
+    const samples = [0, 0.25, 0.5, 0.75, 1].map(t => leafFlight(t, 0.43, 0.66, { yaw: -2.1, pitch: 0.5, roll: 0.3 }));
     for (let i = 1; i < samples.length; i++) expect(samples[i].height).toBeLessThan(samples[i - 1].height);
     expect(samples[1].roll).not.toBe(samples[2].roll);
     expect(Object.values(samples.at(-1)!).every(value => value === 0)).toBe(true);
+  });
+
+  it('starts at the light with an independent initial direction for each leaf', () => {
+    const first = randomLeafLaunch(() => 0.12);
+    const second = randomLeafLaunch(() => 0.83);
+    expect(first.yaw).not.toBe(second.yaw);
+    for (const launch of [first, second]) {
+      const start = leafFlight(0, 1.3, 0.66, launch);
+      expect(start).toMatchObject(launch);
+      expect(start.height).toBe(0.66);
+      expect(Math.abs(start.sideways) + Math.abs(start.along)).toBe(0);
+    }
   });
 
   it('clears brick tops and rounded paving corners without lifting plain ground', () => {

@@ -45,18 +45,33 @@ export const smooth = (v: number) => {
   return t * t * (3 - 2 * t);
 };
 
+export interface LeafLaunch {
+  yaw: number;
+  pitch: number;
+  roll: number;
+}
+
+export function randomLeafLaunch(random = Math.random): LeafLaunch {
+  return {
+    yaw: (random() * 2 - 1) * Math.PI,
+    pitch: (random() * 2 - 1) * 0.95,
+    roll: (random() * 2 - 1) * 1.15,
+  };
+}
+
 /** World-space drift from the landing point. Offset and flutter ease into the same pose as the settled leaf. */
-export function leafFlight(progress: number, phase: number, height: number) {
+export function leafFlight(progress: number, phase: number, height: number, launch: LeafLaunch) {
   const t = clamp01(progress);
   const envelope = 1 - smooth(t);
   const sway = Math.sin(phase + t * Math.PI * 3.2);
+  const flutter = Math.sin(Math.PI * t) * envelope;
   const turn = Math.cos(phase * 0.7 + t * Math.PI * 2.2);
   return {
     height: height * Math.pow(1 - t, 1.18),
-    sideways: 0.29 * sway * envelope,
-    along: 0.15 * turn * envelope,
-    yaw: 0.65 * turn * envelope,
-    pitch: (0.48 + 0.44 * turn) * envelope,
-    roll: 1.05 * sway * envelope,
+    sideways: 0.48 * sway * flutter,
+    along: 0.25 * turn * flutter,
+    yaw: launch.yaw * envelope + 0.48 * turn * flutter,
+    pitch: launch.pitch * envelope + 0.69 * turn * flutter,
+    roll: launch.roll * envelope + 1.24 * sway * flutter,
   };
 }

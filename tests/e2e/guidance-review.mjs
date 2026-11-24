@@ -75,32 +75,50 @@ try {
       update(0, ...args);
     };
   });
-  await shot('fountain-exit');
-
-  await at(25.5, 19.5, Math.PI / 2);
   if (!before) {
-    await page.waitForFunction(() => window.solarbloom.tileFx.objectiveFrames?.size > 0);
-    const overlays = await page.evaluate(() => {
-      const g = window.solarbloom;
-      const tile = [...g.sim.keepers.patchTiles('tally')].find(tile => tile.ground !== 'restored' && tile.feature === 'paving');
-      g.overlays.showFrame(tile.roofId, tile.x, tile.z, 1, 'hover');
-      const slab = g.sim.grid.tileWorld(tile)[1] + 0.08;
+    const guide = await page.evaluate(() => {
+      const { trail } = window.solarbloom;
+      const aligned = trail.leaves.every(leaf => {
+        const p = trail.light.points.find(point => Math.abs(point.s - leaf.s) < 0.0001);
+        return p && Math.hypot(leaf.x - p.x, leaf.z - p.z) < 0.001 && Math.abs(p.y - leaf.y - 0.635) < 0.001;
+      });
       return {
-        picker: g.overlays.frame.getPosition().y - slab,
-        objective: g.tileFx.objectiveFrames.get(tile.id).getPosition().y - slab,
+        aligned,
+        directions: new Set(trail.leaves.map(leaf => leaf.launch.yaw)).size,
+        leaves: trail.leaves.length,
       };
     });
-    assert.ok(overlays.picker > 0.05 && overlays.objective > 0.036, 'Picker and objective sit above the brick surface');
+    assert.ok(guide.aligned, 'Leaves originate from the light at visor height');
+    assert.equal(guide.directions, guide.leaves, 'Every initial leaf direction is sampled independently');
   }
-  await shot('market-tiles');
-  if (!before) {
-    const removed = await page.evaluate(() => {
-      const g = window.solarbloom;
-      const tile = [...g.sim.keepers.patchTiles('tally')].find(tile => tile.ground !== 'restored');
-      g.sim.restoration.complete(tile, 'pulse');
-      return tile.id;
-    });
-    await page.waitForFunction(id => !window.solarbloom.tileFx.objectiveFrames.has(id), removed);
+  await shot('fountain-exit');
+
+  if (!process.env.ART_TRAIL_ONLY) {
+    await at(25.5, 19.5, Math.PI / 2);
+    if (!before) {
+      await page.waitForFunction(() => window.solarbloom.tileFx.objectiveFrames?.size > 0);
+      const overlays = await page.evaluate(() => {
+        const g = window.solarbloom;
+        const tile = [...g.sim.keepers.patchTiles('tally')].find(tile => tile.ground !== 'restored' && tile.feature === 'paving');
+        g.overlays.showFrame(tile.roofId, tile.x, tile.z, 1, 'hover');
+        const slab = g.sim.grid.tileWorld(tile)[1] + 0.08;
+        return {
+          picker: g.overlays.frame.getPosition().y - slab,
+          objective: g.tileFx.objectiveFrames.get(tile.id).getPosition().y - slab,
+        };
+      });
+      assert.ok(overlays.picker > 0.05 && overlays.objective > 0.036, 'Picker and objective sit above the brick surface');
+    }
+    await shot('market-tiles');
+    if (!before) {
+      const removed = await page.evaluate(() => {
+        const g = window.solarbloom;
+        const tile = [...g.sim.keepers.patchTiles('tally')].find(tile => tile.ground !== 'restored');
+        g.sim.restoration.complete(tile, 'pulse');
+        return tile.id;
+      });
+      await page.waitForFunction(id => !window.solarbloom.tileFx.objectiveFrames.has(id), removed);
+    }
   }
   assert.deepEqual(errors, []);
 } finally {

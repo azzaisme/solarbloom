@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { heightAt, levelY } from '../core/Height';
+import { BLOOMBOT_EYE_HEIGHT } from '../data/botProps';
 import { WAYMARK } from '../data/waymark';
 import type { Sim } from '../gameplay/Sim';
 import { trailDots, type TrailRoute } from '../gameplay/TrailRoute';
@@ -8,7 +9,8 @@ import { PALETTE } from './Palette';
 import { pavingOverlayLift } from './PavingSurface';
 import { group } from './Shapes';
 import { glowMaterial } from './TileFx';
-import { clamp01, leafColor, leafFlight, LEAF_INDICES, LEAF_VERTICES, smooth } from './TrailLeaf';
+import { clamp01, leafColor, leafFlight, LEAF_INDICES, LEAF_VERTICES, randomLeafLaunch, smooth, type LeafLaunch } from './TrailLeaf';
+import { TrailLight } from './TrailLight';
 
 interface Landing {
   x: number;
@@ -19,15 +21,17 @@ interface Landing {
   routeX: number;
   routeZ: number;
   phase: number;
+  launch: LeafLaunch;
 }
 
-/** Show me where: real curled leaves fall onto the walkable route, then rest there until Bloombot passes. */
+/** Show me where: a light ribbon at visor height sheds leaves onto the walkable route. */
 export class Trail {
   private root: pc.Entity;
   private material: pc.StandardMaterial;
+  private light: TrailLight;
   private mesh?: pc.Mesh;
   private leaves: Landing[] = [];
-  private flurries: number[] = [];
+  private flurries: { leafIndex: number; launch: LeafLaunch; cycle: number }[] = [];
   private colors = new Uint8Array(0);
   private positions = new Float32Array(0);
   private route?: TrailRoute;
@@ -41,6 +45,7 @@ export class Trail {
     parent: pc.Entity,
   ) {
     this.root = group(parent, 'trail');
+    this.light = new TrailLight(this.root);
     this.material = glowMaterial(PALETTE.pure.white, WAYMARK.trail.glow);
     this.root.enabled = false;
   }
@@ -64,25 +69,37 @@ export class Trail {
     const dots = trailDots(route.points);
     if (!layer || !dots.length) return;
     const terraced = this.sim.grid.terraced(route.roofId);
+    const surface = (x: number, z: number) => {
+      const tile = this.sim.grid.peek(route.roofId, Math.floor(x), Math.floor(z));
+      return layer.origin[1] + layer.height + SLAB_TOP + pavingOverlayLift(this.sim.grid, tile) +
+        (terraced ? levelY(heightAt(x, z)) : 0);
+    };
     this.route = route;
     this.leaves = dots.map((dot, index) => ({
       x: layer.origin[0] + dot.x,
-      y: layer.origin[1] + layer.height + SLAB_TOP + WAYMARK.trail.lift +
-        pavingOverlayLift(this.sim.grid, this.sim.grid.peek(route.roofId, Math.floor(dot.x), Math.floor(dot.z))) + (terraced ? levelY(heightAt(dot.x, dot.z)) : 0),
+      y: surface(dot.x, dot.z) + WAYMARK.trail.lift,
       z: layer.origin[2] + dot.z,
       s: dot.s,
       routeX: dot.x,
       routeZ: dot.z,
       heading: dot.heading,
       phase: index * 2.399963,
+      launch: randomLeafLaunch(),
     }));
+    this.light.show(trailDots(route.points, WAYMARK.trail.spacing / 4, WAYMARK.trail.max * 4).map(dot => ({
+      x: layer.origin[0] + dot.x,
+      y: surface(dot.x, dot.z) + BLOOMBOT_EYE_HEIGHT,
+      z: layer.origin[2] + dot.z,
+      s: dot.s,
+      heading: dot.heading,
+    })));
     this.age = this.progress = this.leaving = 0;
     // A few extra drifting leaves keep the next stretch alive. They share the mesh and never replace the route.
     this.flurries = [];
-    for (let i = 2; i < this.leaves.length; i += 4) this.flurries.push(i);
+    for (let i = 2; i < this.leaves.length; i += 4) this.flurries.push({ leafIndex: i, launch: randomLeafLaunch(), cycle: -1 });
 
     const mesh = new pc.Mesh(pc.AppBase.getApplication()!.graphicsDevice);
-    const slots = [...this.leaves.map((_, i) => i), ...this.flurries];
+    const slots = [...this.leaves.map((_, i) => i), ...this.flurries.map(flurry => flurry.leafIndex)];
     const count = slots.length * LEAF_VERTICES.length;
     this.positions = new Float32Array(count * 3);
     this.colors = new Uint8Array(count * 4);
@@ -101,6 +118,7 @@ export class Trail {
   }
 
   clear() {
+    this.light.clear();
     if (this.root.render) this.root.removeComponent('render');
     this.mesh?.destroy();
     this.mesh = undefined;
@@ -122,26 +140,33 @@ export class Trail {
       const alpha = (this.reducedMotion ? 1 : smooth(elapsed / T.fadeIn)) *
         smooth((leaf.s - this.progress + T.behind * 0.5) / T.behind) *
         (this.route!.reached ? 1 : 0.55 + 0.45 * smooth((total - leaf.s) / 3)) * (1 - fade);
-      this.drawLeaf(i, leaf, fraction, alpha, camera);
+      this.drawLeaf(i, leaf, leaf.launch, fraction, alpha, camera);
     }
     for (let i = 0; i < this.flurries.length; i++) {
-      const leaf = this.leaves[this.flurries[i]];
+      const flurry = this.flurries[i];
+      const leaf = this.leaves[flurry.leafIndex];
       const ahead = leaf.s - this.progress;
-      const cycle = (this.age + leaf.phase) % 8.4;
+      const clock = this.age + leaf.phase;
+      const lap = Math.floor(clock / 8.4);
+      if (lap !== flurry.cycle) {
+        flurry.cycle = lap;
+        flurry.launch = randomLeafLaunch();
+      }
+      const cycle = clock % 8.4;
       const fraction = clamp01(cycle / 3.8);
       const alpha = this.reducedMotion || this.age < 4 ? 0 :
         0.72 * smooth(cycle / 0.6) * (1 - smooth((fraction - 0.76) / 0.24)) *
         smooth(ahead / 2) * (1 - smooth((ahead - 8) / 5)) * (1 - fade);
-      this.drawLeaf(this.leaves.length + i, leaf, fraction, alpha, camera, 0.72, 2.7);
+      this.drawLeaf(this.leaves.length + i, leaf, flurry.launch, fraction, alpha, camera, 0.72, 2.7);
     }
     this.mesh!.setPositions(this.positions);
     this.mesh!.setColors32(this.colors);
   }
 
-  private drawLeaf(index: number, leaf: Landing, fraction: number, alpha: number, camera?: pc.Vec3, size = 1, phaseOffset = 0) {
+  private drawLeaf(index: number, leaf: Landing, launch: LeafLaunch, fraction: number, alpha: number, camera?: pc.Vec3, size = 1, phaseOffset = 0) {
     const T = WAYMARK.trail;
     const phase = leaf.phase + phaseOffset;
-    const flight = leafFlight(fraction, phase, T.fallHeight + 0.45 * Math.cos(phase * 0.8));
+    const flight = leafFlight(fraction, phase, BLOOMBOT_EYE_HEIGHT - T.lift, launch);
     const heading = leaf.heading + Math.sin(phase) * 0.16;
     const x = leaf.x + Math.cos(heading) * flight.sideways + Math.sin(heading) * flight.along;
     const z = leaf.z - Math.sin(heading) * flight.sideways + Math.cos(heading) * flight.along;
@@ -197,6 +222,7 @@ export class Trail {
     this.root.enabled = show;
     if (!show) return;
     this.draw(fade, camera);
+    this.light.update(this.age, this.progress, Math.max(T.draw, total / T.drawMax), fade, this.reducedMotion, camera);
     this.mesh.update(pc.PRIMITIVE_TRIANGLES);
     this.material.emissiveIntensity = T.glow + (T.nightGlow - T.glow) * clamp01(night);
     this.material.update();

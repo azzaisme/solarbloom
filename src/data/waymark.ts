@@ -100,7 +100,6 @@ export const WAYMARK = {
     /** Reveal the way in order, leaving time for each leaf to settle. */
     draw: 11,
     drawMax: 2.2,
-    fallHeight: 1.28,
     fallSeconds: 3.1,
     fadeIn: 0.48,
     /** how long it stays (s), long enough to walk a good way of it, then how long it takes to fade (s) */
