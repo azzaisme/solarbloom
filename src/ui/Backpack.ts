@@ -266,17 +266,17 @@ export class Backpack {
     const canPut = near && c.count > 0;
     const canTake = near && c.stored > 0 && room > 0;
     // each button on its own line: a label written inside another's template reads as one long string to the text pass
-    const put = [btn('put', '1', '1', canPut, `Put 1 ${c.name} in the store`), btn('put', '10', '10', canPut, `Put 10 ${c.name} in the store`), btn('put', 'stack', 'All of it', canPut, `Put all your ${c.name} in the store`)];
-    const take = [btn('takeOut', '1', '1', canTake, `Take 1 ${c.name} from the store`), btn('takeOut', '10', '10', canTake, `Take 10 ${c.name} from the store`), btn('takeOut', 'stack', 'All I can carry', canTake, `Take as much ${c.name} from the store as Bloombot can carry`)];
-    const all = btn('depositAll', 'all', 'Deposit everything', itemCells(sim).some((x) => x.count > 0), 'Put everything you carry in the store', ' primary');
+    const put = [btn('put', '1', '1', canPut, `Put 1 ${c.name} away`), btn('put', '10', '10', canPut, `Put 10 ${c.name} away`), btn('put', 'stack', 'All of it', canPut, `Put all your ${c.name} away`)];
+    const take = [btn('takeOut', '1', '1', canTake, `Take 1 ${c.name} out`), btn('takeOut', '10', '10', canTake, `Take 10 ${c.name} out`), btn('takeOut', 'stack', 'All I can carry', canTake, `Take out as much ${c.name} as Bloombot can carry`)];
+    const all = btn('depositAll', 'all', 'Deposit everything', itemCells(sim).some((x) => x.count > 0), 'Put away everything you carry', ' primary');
     const moves = near
-      ? `<h4 id="bpPutH">Put in the store</h4><div class="pn-moves" role="group" aria-labelledby="bpPutH">${put.join('')}</div>` +
-        `<h4 id="bpTakeH">Take from the store</h4><div class="pn-moves" role="group" aria-labelledby="bpTakeH">${take.join('')}</div>` +
+      ? `<h4 id="bpPutH">Put away</h4><div class="pn-moves" role="group" aria-labelledby="bpPutH">${put.join('')}</div>` +
+        `<h4 id="bpTakeH">Take out</h4><div class="pn-moves" role="group" aria-labelledby="bpTakeH">${take.join('')}</div>` +
         `<div class="pn-moves bp-all">${all}</div>`
-      : `<p class="pn-note bp-note">Stand by the fountain, a chest or a woken landmark to move things to and from the store.</p>`;
+      : `<p class="pn-note bp-note">Stand by the fountain, a chest or a woken landmark to put things away or take them out. Whatever you put away waits for you at all of them.</p>`;
     return (
       `<h3><span class="pn-tile">${materialIcon(c.id, 40)}</span>${esc(c.name)}</h3>` +
-      `<dl><dt>In your backpack</dt><dd>${c.count} of ${c.limit}</dd><dt>In the store</dt><dd>${c.stored}</dd></dl>` +
+      `<dl><dt>In your backpack</dt><dd>${c.count} of ${c.limit}</dd><dt>Put away</dt><dd>${c.stored}</dd></dl>` +
       `<h4>Where it comes from</h4><p>${esc(c.from)}.</p><h4>Needed next</h4><p>${esc(c.next)}.</p>` +
       moves
     );

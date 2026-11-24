@@ -155,8 +155,8 @@ export function storageHtml(sim: Sim, title = 'Storage'): string {
         `<button class="pn-btn small" data-act="${act}" data-arg="${m}:${n}" aria-label="${escHtml(aria)}" ${ok ? '' : 'disabled'}>${label}</button>`;
       const out = st >= 1 && room >= 1;
       // each button on its own line: a label written inside another's template reads as one long string to the text pass
-      const put = [btn('put', 1, '1', p >= 1, `Put 1 ${name} in the store`), btn('put', 10, '10', p >= 1, `Put 10 ${name} in the store`), btn('put', 'stack', 'All', p >= 1, `Put all your ${name} in the store`)];
-      const take = [btn('takeOut', 1, '1', out, `Take 1 ${name} from the store`), btn('takeOut', 10, '10', out, `Take 10 ${name} from the store`), btn('takeOut', 'stack', 'All I can carry', out, `Take as much ${name} from the store as Bloombot can carry`)];
+      const put = [btn('put', 1, '1', p >= 1, `Put 1 ${name} away`), btn('put', 10, '10', p >= 1, `Put 10 ${name} away`), btn('put', 'stack', 'All', p >= 1, `Put all your ${name} away`)];
+      const take = [btn('takeOut', 1, '1', out, `Take 1 ${name} out`), btn('takeOut', 10, '10', out, `Take 10 ${name} out`), btn('takeOut', 'stack', 'All I can carry', out, `Take out as much ${name} as Bloombot can carry`)];
       return `<tr><th scope="row"><span class="oc-mat-name">${materialIcon(m, 28)}${name}</span></th><td class="n">${p} of ${limit}</td>
         <td class="mv">${put.join('')}</td>
         <td class="mv">${take.join('')}</td>
@@ -164,8 +164,8 @@ export function storageHtml(sim: Sim, title = 'Storage'): string {
     })
     .join('');
   return (
-    cardHead({ icon: icon('pack', 'l'), title, mood: 'Move things between your backpack and the store.', dock: 'sheet', choose: 'Move' }) +
-    `<div class="oc-content"><table class="oc-store"><thead><tr><th scope="col">Material</th><th scope="col">With you</th><th scope="col">Put in the store</th><th scope="col">Take out</th><th scope="col">In the store</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="oc-empty">Nothing found yet. Dig in the glinting piles to fill your backpack.</td></tr>'}</tbody></table>
+    cardHead({ icon: icon('pack', 'l'), title, mood: 'Put things away or take them out. They wait for you at the fountain and in every chest.', dock: 'sheet', choose: 'Move' }) +
+    `<div class="oc-content"><table class="oc-store"><thead><tr><th scope="col">Material</th><th scope="col">With you</th><th scope="col">Put away</th><th scope="col">Take out</th><th scope="col">Put away</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="oc-empty">Nothing found yet. Dig in the glinting piles to fill your backpack.</td></tr>'}</tbody></table>
     <div class="oc-row"><button class="pn-btn primary" data-act="depositAll" ${MATERIAL_IDS.some((m) => inv.count(m)) ? '' : 'disabled'}>Deposit everything</button></div></div>`
   );
 }

@@ -19,6 +19,7 @@ mkdirSync(dir, { recursive: true });
 const port = Number(process.env.PORT ?? 4256);
 const server = await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({
+  executablePath: process.env.CHROME || undefined,
   args: process.env.GPU ? ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
 const failures = [];
