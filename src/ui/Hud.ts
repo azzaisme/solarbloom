@@ -109,6 +109,11 @@ export interface Settings {
   noVistas?: boolean;
   /** Third person: a click on the world captures the mouse to look around (on unless switched off) */
   mouseLook?: boolean;
+  /**
+   * Desktop mouse (player feedback: "I had to press Esc to click on menus"): 'hold' (default) keeps the cursor free
+   * for the HUD and captures it only while the look button is held; 'capture' is the older click-to-capture look.
+   */
+  mouseMode?: 'hold' | 'capture';
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];

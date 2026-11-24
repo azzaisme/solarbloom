@@ -744,6 +744,8 @@ export class Game {
       look: (dx, dy) => this.mouseLook(dx, dy),
       // Third person: a press on the world while the mouse is free captures it (and does nothing else).
       capture: () => this.captureMouse(),
+      // Desktop default: holding the look button (right mouse) captures the mouse just while it is held
+      holdLook: (b) => this.holdLook(b),
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
       // E22.1: in build mode the wheel turns the piece (and the camera's zoom waits); otherwise it zooms.
       zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheel(f) : this.camera.zoomBy(f, x, y)),
@@ -1889,13 +1891,33 @@ export class Game {
     return typeof document !== 'undefined' && !!document.pointerLockElement && document.pointerLockElement === this.app.graphicsDevice.canvas;
   }
 
-  /** May the mouse be captured now (bloombot's walking view with nothing open on top)? */
-  private mayCapture(): boolean {
-    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen() && this.settings.mouseLook !== false;
+  /**
+   * Player feedback ("the controls on desktop seemed geared for mobile: I had to press Esc to click on menus"): by
+   * default the cursor stays free for the HUD and the mouse is captured only while the look button is held. The older
+   * click-to-capture look is the 'capture' setting (a save that switched mouse look off gets the free cursor too).
+   */
+  private mouseMode(): 'hold' | 'capture' {
+    return this.settings.mouseMode === 'capture' && this.settings.mouseLook !== false ? 'capture' : 'hold';
   }
 
-  /** A press on the free mouse: capture it for looking around. True when the press was used for that. */
+  /** May the mouse be captured now (bloombot's walking view with nothing open on top)? */
+  private mayCapture(): boolean {
+    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen();
+  }
+
+  /** Hold to look: the look button pressed on the world captures the mouse until it is let go. */
+  private holdLook(button: number): boolean {
+    if (this.mouseMode() !== 'hold' || !this.bindings.keys.look.includes(`Mouse${button}`)) return false;
+    return this.lockMouse();
+  }
+
+  /** A press on the free mouse ('capture' mode): capture it for looking around. True when the press was used for that. */
   private captureMouse(): boolean {
+    if (this.mouseMode() !== 'capture') return false;
+    return this.lockMouse();
+  }
+
+  private lockMouse(): boolean {
     if (this.lockRefused || this.mouseCaptured() || !this.mayCapture()) return false;
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     if (!c.requestPointerLock) return false;
@@ -1929,7 +1951,8 @@ export class Game {
     if (this.bot) this.bot.strafe = aiming; // aiming: bloombot faces where the camera looks and steps sideways
     if (!this.lookHinted && this.bot && this.mayCapture() && !this.mouseCaptured() && this.bot.lastInput === 'keys' && typeof matchMedia !== 'undefined' && matchMedia('(any-pointer: fine)').matches) {
       this.lookHinted = true;
-      this.hud.toast('Press a mouse button over the world to look around with the mouse<small>Esc frees the mouse again.</small>', '', 5);
+      if (this.mouseMode() === 'capture') this.hud.toast('Press a mouse button over the world to look around with the mouse<small>Esc frees the mouse again.</small>', '', 5);
+      else this.hud.toast('Hold the right mouse button to look around<small>Let go and the pointer is free for menus. Settings › Accessibility › Mouse look.</small>', '', 5);
     }
   }
 
