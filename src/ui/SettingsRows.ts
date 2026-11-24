@@ -17,6 +17,8 @@ export interface RowContext {
   stats?: string;
   /** #633: the graphics tier in use draws no glow (Low): the Glow row says so */
   glowOff?: boolean;
+  /** whether the game's sound is running, in plain words (in game only) */
+  sound?: string;
 }
 
 export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
@@ -62,6 +64,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
       ];
     case 'sound':
       return [
+        ...(c.sound ? [{ kind: 'html', html: `<p class="set-version">${c.sound}</p>` } as Row] : []),
         { kind: 'range', key: 'masterVolume', label: 'Master volume', min: 0, max: 100, step: 5, fallback: 100, unit: ' percent' },
         { kind: 'check', key: 'music', label: 'Music' },
         { kind: 'range', key: 'musicVolume', label: 'Music volume', min: 0, max: 100, step: 5, fallback: 100, unit: ' percent' },
