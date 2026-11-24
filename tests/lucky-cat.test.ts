@@ -168,7 +168,7 @@ describe('lucky cat', () => {
       sim.bus.on('cat.found', (e) => (summary = e.summary));
       sim.cat.claim();
       expect(summary).toMatch(/JACKPOT/);
-      const kinds = [/A gift in your backpack/, /Charge full/, /A Mega Bloom!/, /drones nearby work faster/, /relay turns gold/, /garden blooms/, /fog thins/].filter((r) => r.test(summary)).length;
+      const kinds = [/A gift in your backpack/, /Charge full/, /A Mega Bloom!/, /drones nearby work faster/, /power pole turns gold/, /garden blooms/, /fog thins/].filter((r) => r.test(summary)).length;
       expect(kinds).toBeGreaterThanOrEqual(2);
     }
   });

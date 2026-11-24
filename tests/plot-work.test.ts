@@ -99,7 +99,7 @@ describe('E27.2: the gather, prune and regrow loop', () => {
   it('a full Greens stack refuses, and a nearly full one takes what fits', () => {
     const { sim, p } = plot('meadow');
     sim.inventory.add('biomass', 1000);
-    expect(sim.plotWork.problem(p)).toBe('Your Greens stack is full: leave some in the storage at the fountain');
+    expect(sim.plotWork.problem(p)).toBe("Bloombot can't carry any more Greens. Leave some at the fountain or in a chest");
     const fails: string[] = [];
     sim.bus.on('action.failed', (e) => fails.push(e.reason));
     expect(sim.plotWork.work(p)).toBe(0);

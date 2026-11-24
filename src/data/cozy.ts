@@ -103,7 +103,7 @@ export const DECOR_OPTIONS: DecorOption[] = [
   { id: 'trough', name: 'Planter trough', icon: '🌿', blurb: 'A long stone trough of herbs.', solid: true, unlock: { parkStage: 1 } },
   { id: 'birdbath', name: 'Bird bath', icon: '🐦', blurb: 'A stone bowl of water on a pedestal.', solid: true, unlock: { parkStage: 2 } },
   { id: 'bunting', name: 'Bunting pole', icon: '🎏', blurb: 'A pole with a bright banner.', solid: true, unlock: { areas: 1 } },
-  { id: 'cratestack', name: 'Crate stack', icon: '📦', blurb: 'Two old crates, one on the other.', solid: true, unlock: { areas: 2 } },
+  { id: 'cratestack', name: 'Stacked crates', icon: '📦', blurb: 'Two old crates, one on the other.', solid: true, unlock: { areas: 2 } },
   { id: 'barrel', name: 'Barrel planter', icon: '🛢️', blurb: 'A barrel cut down and filled with flowers.', solid: true, unlock: { areas: 2 } },
   { id: 'rug', name: 'Picnic rug', icon: '🧺', blurb: 'A checked rug and a basket.', solid: false, unlock: { areas: 3 } },
   { id: 'topiary', name: 'Topiary', icon: '🌳', blurb: 'A clipped round shrub in a square tub.', solid: true, unlock: { areas: 4 } },

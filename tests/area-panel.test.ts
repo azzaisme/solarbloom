@@ -36,7 +36,7 @@ describe('area panel (City 14.2)', () => {
     expect(d.need).toBe(sim.areas.need(id));
     let html = areaPanelHtml(sim, id, lm.id);
     expect(html).toContain(AREA_SPECIALTY[a.type]);
-    expect(html).toContain(`Restore ${d.need} tiles (0 of ${d.need})`);
+    expect(html).toContain(`Turn ${d.need} patches of ground green (0 of ${d.need})`);
     const NO_COUNTERS = /Bonus|\/min|⚡|💧|energy|biomass/i; // E23.1.4: no counters for an area to add to
     expect(html).not.toMatch(NO_COUNTERS);
     expect(html).toContain('Machines: none yet');

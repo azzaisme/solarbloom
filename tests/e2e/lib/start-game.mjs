@@ -31,8 +31,11 @@ export function gameUrl(base, { slot = 1, fresh = true, query = '' } = {}) {
   return `${base.replace(/\/$/, '')}/?slot=${slot}${fresh ? '&new=1' : ''}${q ? `&${q}` : ''}`;
 }
 
+/** How long a game may take to load: E2E_TIMEOUT (ms) for slow software-rendered browsers, else 4 minutes. */
+const LOAD_MS = Number(process.env.E2E_TIMEOUT) || 240_000;
+
 /** Waits until the game is built and the loading screen has faded. */
-export async function waitForGame(page, timeout = 240_000) {
+export async function waitForGame(page, timeout = LOAD_MS) {
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout });
 }
 
@@ -41,7 +44,7 @@ export async function waitForGame(page, timeout = 240_000) {
  * `solarbloom.settings`) in place before the game reads them, and waits until it is on screen. Clears the
  * page's localStorage first unless `keepStorage`. Leaves the blur pause cleared, so a headless page runs.
  */
-export async function startGame(page, base, { slot = 1, fresh = true, query = '', settings, keepStorage = false, timeout = 240_000 } = {}) {
+export async function startGame(page, base, { slot = 1, fresh = true, query = '', settings, keepStorage = false, timeout = LOAD_MS } = {}) {
   await page.addInitScript(
     ([settings, keep]) => {
       if (sessionStorage.getItem('sb.e2e.seeded')) return;

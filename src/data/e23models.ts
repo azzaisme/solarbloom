@@ -39,7 +39,7 @@ export const FENCE_STYLES = {
 export const E23_MODELS: E23Model[] = [
   // Power (#464)
   { name: 'charger', group: 'power', route: 'image', tris: 3000, batch: 'A', what: 'Charger: bloombot meditates on it' },
-  { name: 'battery', group: 'power', route: 'text', tris: 2000, batch: 'B1', what: 'Battery (big battery is 1.6× with a second cell bank)' },
+  { name: 'battery', group: 'power', route: 'text', tris: 2000, batch: 'B1', what: 'Battery (the big battery is about half as big again, with a second bank of cells)' },
   { name: 'wind-turbine', group: 'power', route: 'image', tris: 4000, batch: 'B1', what: 'Wind turbine (turbine fields are several)' },
   { name: 'large-solar-array', group: 'power', route: 'image', tris: 3000, batch: 'B1', what: 'Large solar array: four panels on a low cream frame, one whole model' },
   { name: 'power-pole', group: 'power', route: 'reuse', from: 'bloom-relay', what: 'Power pole (relays become poles)' },
@@ -48,7 +48,7 @@ export const E23_MODELS: E23Model[] = [
   // Water (#465)
   { name: 'pump', group: 'water', route: 'text', tris: 2000, batch: 'B1', what: 'Pump' },
   { name: 'pipe-joint', group: 'water', route: 'reuse', from: 'copper-pipe', what: 'Pipe joints and valves; straight, corner, tee, cross and end runs are procedural tubes' },
-  { name: 'reservoir', group: 'water', route: 'reuse', from: 'reservoir-basin', what: 'Reservoir (large reservoir at 1.6×)' },
+  { name: 'reservoir', group: 'water', route: 'reuse', from: 'reservoir-basin', what: 'Reservoir (the large reservoir is about half as big again)' },
   { name: 'desalination-plant', group: 'water', route: 'image', tris: 5000, batch: 'B1', what: 'Desalination plant' },
   { name: 'sprinkler', group: 'water', route: 'text', tris: 600, batch: 'B1', what: 'Sprinkler' },
   { name: 'feed-tank', group: 'water', route: 'text', tris: 1500, batch: 'B1', what: 'Feed tank' },
@@ -67,7 +67,7 @@ export const E23_MODELS: E23Model[] = [
   { name: 'greenhouse', group: 'farm', route: 'image', tris: 5000, batch: 'B2', what: 'Greenhouse (Glasshouse Gardens)' },
   { name: 'watering-can', group: 'farm', route: 'text', tris: 500, batch: 'A', what: 'Watering can' },
   { name: 'orchard-tree', group: 'farm', route: 'procedural', what: 'Orchard trees (TreeGen, procedural fruit)' },
-  { name: 'trellis', group: 'farm', route: 'built', tris: 800, what: 'Bean trellis: two posts and a diamond lattice, stands on a planter or farmland tile' },
+  { name: 'trellis', group: 'farm', route: 'built', tris: 800, what: 'Bean trellis: two posts and a diamond lattice, stands on a planter or on farmland' },
   // Fences (#466): decoration only, snapped along tile edges; each style has a run, a corner/end post and a gate
   // whose part "gate" swings on its hinge (the part's origin). The hedge's part "leaves" sways in the wind.
   ...(['picket', 'willow', 'pipe', 'stone', 'hedge'] as const).flatMap((style) =>

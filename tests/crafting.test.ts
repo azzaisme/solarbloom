@@ -160,7 +160,7 @@ describe('E23.6.1: the crafting table', () => {
     }
     expect(sim.build.recipe('solar')).toEqual({ scrap: 4, glassPane: 2, wire: 1 });
     expect(sim.build.isUnlocked('solar')).toBe(false);
-    expect(sim.build.lockLabel('solar')).toBe('🔒 Tally, Old Market');
+    expect(sim.build.lockLabel('solar')).toBe('🔒 Wake Tally in Old Market');
     sim.state.salvage!.keepers.tally = { step: 'request1' };
     expect(sim.build.isUnlocked('solar')).toBe(true);
     sim.inventory.add('scrap', 4);

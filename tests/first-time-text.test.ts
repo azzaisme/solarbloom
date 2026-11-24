@@ -16,8 +16,8 @@ describe('#610: lines for a first-time player', () => {
 
   it('a sleeping Keeper says how to stir it, and a stirred one says exactly what wakes it', () => {
     for (const k of KEEPERS) {
-      expect(k.say.asleep.join(' '), k.id).toMatch(/Give it a pulse to stir it\.$/);
-      expect(k.say.stirred.join(' '), k.id).toMatch(/Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again\.$/);
+      expect(k.say.asleep.join(' '), k.id).toMatch(/Stand beside it and press \{pulse\} to stir it\.$/);
+      expect(k.say.stirred.join(' '), k.id).toMatch(/Bring me 5 of any one thing, like Scrap or Seeds, then press \{interact\} to talk to me again\.$/);
       for (const line of [...k.say.asleep, ...k.say.stirred]) expect(line, k.id).not.toContain(k.name); // not met yet
     }
   });
@@ -38,9 +38,9 @@ describe('#610: lines for a first-time player', () => {
   it('the card names a sleeping Keeper as a robot until it has woken, and says what to do', () => {
     const sim = new Sim(createInitialState(7));
     const id = KEEPERS[0].id;
-    expect(sim.keepers.hint(id)).toBe('A robot is asleep here. Pulse it to stir it.');
+    expect(sim.keepers.hint(id)).toBe('A robot is asleep here. Stand beside it and press {pulse} to stir it.');
     sim.state.salvage!.keepers[id] = { step: 'asleep', pulsed: true };
-    expect(sim.keepers.hint(id)).toBe('A robot is stirring. Bring it 5 of any one thing, like Scrap or Seeds, and talk to it.');
+    expect(sim.keepers.hint(id)).toBe('A robot is stirring. Bring it 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to it.');
     sim.state.salvage!.keepers[id] = { step: 'request1' };
     expect(sim.keepers.hint(id)).toBe(`Bring ${KEEPERS[0].name} 8 Seeds.`);
   });

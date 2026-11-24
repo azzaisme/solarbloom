@@ -94,7 +94,7 @@ export class Panels extends HudPart {
     $(this.root, '#ppTitle').innerHTML = iconize(esc(m.title));
     $(this.root, '#ppSub').textContent = m.sub;
     const rows = m.choices.map((c) => {
-      const tag = c.solid ? 'Solid' : 'Walk over it';
+      const tag = c.solid ? 'Blocks the way' : 'Walk over it';
       if (!c.unlocked) return `<div class="pp-opt locked"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}</span><span class="cd2">Unlocks when ${esc(c.hint ?? '')}</span></div>`;
       const on = c.id === m.current;
       return `<button class="pp-opt${on ? ' on' : ''}" data-opt="${c.id}" aria-pressed="${on}"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}${c.fresh ? '<em class="pp-new">New</em>' : ''}${on ? '<em>Chosen</em>' : ''}</span><span class="cd2">${esc(c.blurb)} <i>${tag}</i></span></button>`;
@@ -132,8 +132,9 @@ export class Panels extends HudPart {
     const s = this.sim.state.stats;
     const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
     return iconize(
-      `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Biggest chain: <b>${s.maxCombo} blooms</b> · Blooms in an average chain: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b>${this.sim.cat.known ? ` · Lucky Cats: <b>${s.catsFound}</b>` : ''}</p>` + // E23.12.3: no cat line before one is found
-        `<details class="set-timings"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre></details>`,
+      `<p class="set-stats">Patches of ground turned green: <b>${s.tilesRestored}</b> · Times the flowers spread: <b>${s.chains}</b> · Most flowers in one go: <b>${s.maxCombo}</b> · Flowers each time, on average: <b>${avg}</b><br>Jobs done by drones: <b>${s.droneJobs}</b>${this.sim.cat.known ? ` · Lucky Cats: <b>${s.catsFound}</b>` : ''}</p>` + // E23.12.3: no cat line before one is found
+        // the playtest timings are a developer's: only with the developer numbers (F3) on
+        (this.settings.debug ? `<details class="set-timings"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre></details>` : ''),
     );
   }
 
@@ -217,8 +218,8 @@ export class Panels extends HudPart {
     const t2 = tier === 2 ? TIER2[m.type] : undefined;
     const name = t3?.name ?? t2?.name ?? def.name;
     const icon = t3?.icon ?? t2?.icon ?? def.icon;
-    const blurb = t3 ? `Superstructure (nine machines in one): ${t3.blurb}.` : t2 ? `Three merged into one: ${t2.blurb}. ${def.blurb}` : def.blurb;
-    return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small class="dim">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
+    const blurb = t3 ? `A big machine, nine joined into one: ${t3.blurb}.` : t2 ? `Three joined into one: ${t2.blurb}. ${def.blurb}` : def.blurb;
+    return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small class="dim">(here from the start)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
   }
 
   private glyphKey = '';

@@ -62,7 +62,7 @@ export type Context = 'world' | 'build' | 'panel' | 'any';
 export type Group = 'move' | 'act' | 'build' | 'menus';
 export const GROUPS: readonly { id: Group; label: string }[] = [
   { id: 'move', label: 'Move and look' },
-  { id: 'act', label: 'Act' },
+  { id: 'act', label: 'Do things' },
   { id: 'build', label: 'Build' },
   { id: 'menus', label: 'Menus' },
 ];
@@ -86,41 +86,41 @@ export const ACTIONS: readonly ActionDef[] = [
   A('down', 'Move back', 'move', 'world', true, false),
   A('left', 'Move left', 'move', 'world', true, false),
   A('right', 'Move right', 'move', 'world', true, false),
-  A('sprint', 'Hover (sprint, hold)', 'move', 'world'),
-  A('sprintToggle', 'Hover on or off', 'move', 'world'),
-  A('look', 'Look around (hold and drag)', 'move', 'world', true, false),
+  A('sprint', 'Hover to move faster (hold)', 'move', 'world'),
+  A('sprintToggle', 'Hover to move faster: on or off', 'move', 'world'),
+  A('look', 'Look around (hold and move)', 'move', 'world', true, false),
   A('zoomCamera', 'Zoom the camera', 'move', 'world'),
-  A('recentre', 'Recentre the camera', 'move', 'world'),
-  A('interact', 'Interact', 'act', 'world'),
-  A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
-  A('eat', 'Eat a snack (recharge)', 'act', 'world'),
-  A('loadNext', 'Pulse load: next', 'act', 'world'),
-  A('loadPrev', 'Pulse load: previous', 'act', 'world'),
-  A('pinNext', 'Pin the next request', 'act', 'world'),
+  A('recentre', 'Bring the camera back behind Bloombot', 'move', 'world'),
+  A('interact', 'Talk, pick up or use (the prompt says which)', 'act', 'world'),
+  A('pulse', 'Pulse the ground green, or use what you hold', 'act', 'world'),
+  A('eat', 'Eat a snack to fill up your Charge', 'act', 'world'),
+  A('loadNext', 'Choose what your pulse grows: next', 'act', 'world'),
+  A('loadPrev', 'Choose what your pulse grows: previous', 'act', 'world'),
+  A('pinNext', 'Put the next request on your goal card', 'act', 'world'),
   // #605 (E24): the objective card's Show me where
-  A('showWhere', 'Show me where (the goal)', 'act', 'world'),
+  A('showWhere', 'Show me where to go next', 'act', 'world'),
   A('buildMenu', 'Build menu', 'build', 'world'),
   A('place', 'Place (in build mode)', 'build', 'build'),
   A('rotate', 'Turn the piece', 'build', 'build'),
   A('rotateBack', 'Turn the piece back', 'build', 'build'),
-  A('removeMode', 'Remove mode', 'build', 'build'),
+  A('removeMode', 'Take things down', 'build', 'build'),
   A('waterOverlay', 'Water view (in build mode)', 'build', 'build'),
   A('powerOverlay', 'Power view (in build mode)', 'build', 'build'),
   // E23.11: the pad's build dock: d-pad up changes the view, left and right walk the hotbar slots
-  A('viewCycle', 'Change the view', 'build', 'build'),
-  A('slotPrev', 'Previous build slot', 'build', 'build'),
-  A('slotNext', 'Next build slot', 'build', 'build'),
-  A('slot1', 'Hotbar slot 1', 'build', 'world'),
-  A('slot2', 'Hotbar slot 2', 'build', 'world'),
-  A('slot3', 'Hotbar slot 3', 'build', 'world'),
-  A('slot4', 'Hotbar slot 4', 'build', 'world'),
-  A('slot5', 'Hotbar slot 5', 'build', 'world'),
-  A('slot6', 'Hotbar slot 6', 'build', 'world'),
-  A('slot7', 'Hotbar slot 7', 'build', 'world'),
-  A('slot8', 'Hotbar slot 8', 'build', 'world'),
-  A('slot9', 'Hotbar slot 9', 'build', 'world'),
+  A('viewCycle', 'Switch between the water, power and normal views', 'build', 'build'),
+  A('slotPrev', 'Previous button on the build bar', 'build', 'build'),
+  A('slotNext', 'Next button on the build bar', 'build', 'build'),
+  A('slot1', 'Build bar button 1', 'build', 'world'),
+  A('slot2', 'Build bar button 2', 'build', 'world'),
+  A('slot3', 'Build bar button 3', 'build', 'world'),
+  A('slot4', 'Build bar button 4', 'build', 'world'),
+  A('slot5', 'Build bar button 5', 'build', 'world'),
+  A('slot6', 'Build bar button 6', 'build', 'world'),
+  A('slot7', 'Build bar button 7', 'build', 'world'),
+  A('slot8', 'Build bar button 8', 'build', 'world'),
+  A('slot9', 'Build bar button 9', 'build', 'world'),
   // E23.11 (#344): in the build menu, pin the piece shown to a hotbar slot
-  A('pinSlot', 'Pin to a hotbar slot', 'build', 'panel'),
+  A('pinSlot', 'Put this on the build bar', 'build', 'panel'),
   A('backpack', 'Backpack', 'menus', 'world'),
   A('map', 'Map', 'menus', 'world'),
   A('photo', 'Photo mode', 'menus', 'world'),
@@ -128,7 +128,7 @@ export const ACTIONS: readonly ActionDef[] = [
   A('menu', 'Pause and menu', 'menus', 'any'),
   A('prevTab', 'Previous tab', 'menus', 'panel'),
   A('nextTab', 'Next tab', 'menus', 'panel'),
-  A('debug', 'Debug overlay', 'menus', 'any', true, false),
+  A('debug', 'Show developer numbers', 'menus', 'any', true, false),
 ];
 export const ACTION: Record<Action, ActionDef> = Object.fromEntries(ACTIONS.map((a) => [a.id, a])) as Record<Action, ActionDef>;
 
@@ -258,7 +258,7 @@ export function migrateBindings(saved: SavedBindings | undefined): { saved: Save
   return { saved: { v: BINDINGS_VERSION }, reset: had };
 }
 
-const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'Left stick click', 'Right stick click', 'D-pad up', 'D-pad down', 'D-pad left', 'D-pad right'];
+const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'Left stick button', 'Right stick button', 'D-pad up', 'D-pad down', 'D-pad left', 'D-pad right'];
 
 /** A key code as a short label ("KeyE" → "E", "ShiftLeft" → "Shift", "Mouse0" → "Left mouse"). */
 export function keyLabel(code: string): string {

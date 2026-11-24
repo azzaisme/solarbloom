@@ -46,7 +46,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Solar Wings',
     icon: '☀️',
     maxLevel: Infinity,
-    describe: (n) => `This panel feeds the grid ×${fmtMult(powerMult(0.5, n))} (from ×${fmtMult(powerMult(0.5, n - 1))}); doubles every 10 levels`,
+    describe: () => 'This panel makes more power, and a lot more every tenth time',
   },
   {
     id: 'broadPulse',
@@ -55,8 +55,7 @@ export const UPGRADES: UpgradeDef[] = [
     maxLevel: 4,
     describe: (n) => {
       const t = TUNING.pulseTiers[n];
-      const tiles = [1, 9, 25, 69, 161][n];
-      return `${t.name}: each pulse restores up to ${tiles} tiles around it for free`;
+      return `${t.name}: each pulse turns more of the ground around it green, for no extra Charge`;
     },
   },
   {
@@ -65,15 +64,15 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Drone Dash',
     icon: '🛸',
     maxLevel: DRONE_DASH.length - 1,
-    describe: (n) => `This hub's drones fly and recharge ${DRONE_DASH[n]} times as fast`,
+    describe: () => "This hub's drones fly faster and rest for less time",
   },
   {
     id: 'pollinatorReach',
     machine: 'pollinator',
-    name: 'Pollinator Reach',
+    name: 'Wider Garden',
     icon: '🦋',
     maxLevel: 3,
-    describe: (n) => `This garden's zone radius ${TUNING.pollinator.reach + n} (from ${TUNING.pollinator.reach + n - 1})`,
+    describe: () => "This garden's flowers spread a little further around it",
   },
   {
     id: 'waterBloom',
@@ -81,7 +80,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Water Bloom',
     icon: '🌧️',
     maxLevel: 4,
-    describe: () => 'This condenser charges 25% faster, waters 1 more tile and also grows green tiles beside it',
+    describe: () => 'This condenser fills faster, waters a little more ground, and helps the green ground beside it grow',
   },
   {
     id: 'treeResonance',
@@ -89,37 +88,37 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Mother Tree Resonance',
     icon: '🌳',
     maxLevel: 3,
-    describe: () => 'This Mother Tree charges from, and pulses, 1 tile further',
+    describe: () => 'This Mother Tree fills up from, and sends its pulse over, a little more of the ground around it',
   },
   {
     id: 'overcharge',
     name: 'Overcharge',
     icon: '🌟',
     maxLevel: 3,
-    describe: (n) => `Every ${7 - n}th pulse is Overcharged: it restores everything within 2 tiles`,
+    describe: (n) => `Every ${7 - n}th pulse is extra strong: all the ground right around it turns green`,
   },
   {
     id: 'chainHops',
-    name: 'Chain Hops',
+    name: 'Flowers Travel',
     icon: '🔗',
     maxLevel: 5,
-    describe: (n) => `Each Pollinator Garden passes a chain on up to ${TUNING.pollinator.triggersPerChain + 2 * n} times (from ${TUNING.pollinator.triggersPerChain + 2 * (n - 1)})`,
+    describe: () => 'The flowers spread on from each Pollinator Garden a few more times',
   },
   {
     id: 'droneRadius',
     machine: 'droneHub',
-    name: 'Drone Work Radius',
+    name: 'Drones Work Further',
     icon: '📡',
     maxLevel: 4,
-    describe: (n) => `This hub's drones reach ${2 * n} tiles further`,
+    describe: () => "This hub's drones work further from home",
   },
   {
     id: 'chainIntel',
     machine: 'droneHub',
-    name: 'Chain Intelligence',
+    name: 'Smarter Drones',
     icon: '🧠',
     maxLevel: 1,
-    describe: () => "This hub's drones pick tiles next to gardens, idle solar panels and charged Mother Trees first",
+    describe: () => "This hub's drones go first to the ground beside gardens, resting solar panels and full Mother Trees",
   },
   {
     id: 'secondDrone',
@@ -135,7 +134,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Drone Sweep',
     icon: '🧹',
     maxLevel: 4,
-    describe: (n) => `Each tile this hub's drones restore also restores up to ${2 * n} tiles around it for free`,
+    describe: () => "Each patch this hub's drones turn green brings a little of the ground around it back too",
   },
   // ───────────── the endless city ─────────────
   {
@@ -143,7 +142,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Green Corridors',
     icon: '🛤️',
     maxLevel: 2,
-    describe: (n) => `Street gardens pass a chain to the next one up to ${6 + 2 * n} tiles away (from ${6 + 2 * (n - 1)})`,
+    describe: () => 'The flowers spread from one street garden to the next, even further apart',
   },
   {
     id: 'relayLens',
@@ -151,21 +150,21 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Relay Lens',
     icon: '📡',
     maxLevel: 4,
-    describe: (n) => `This relay links up to ${16 + 6 * n} tiles away (from ${16 + 6 * (n - 1)}) and blooms ${2 + n} tiles per pulse`,
+    describe: () => 'This relay joins up with relays further away, and brings more ground into flower each time',
   },
   {
     id: 'droneMesh',
     name: 'Drone Mesh',
     icon: '🕸️',
     maxLevel: 2,
-    describe: (n) => `Drone Hubs up to ${12 + 4 * n} tiles apart share one network (from ${12 + 4 * (n - 1)}), so their drones roam all of it`,
+    describe: () => 'Drone Hubs further apart work together, so their drones roam the ground around all of them',
   },
   {
     id: 'fogLantern',
     name: 'Fog Lanterns',
     icon: '🏮',
     maxLevel: 3,
-    describe: (n) => `Landmarks wake with ${10 * n}% fewer tiles restored`,
+    describe: () => 'Landmarks wake sooner, with less green ground around them',
   },
   // Look 6.8: the Cultivator's own upgrades (per machine). Width and speed are paid in energy (it runs on sun),
   // the seed mix, routing and a second tiller in biomass.
@@ -175,7 +174,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Tiller Speed',
     icon: '⚙️',
     maxLevel: 3,
-    describe: (n) => `This Cultivator works and drives ${Math.round(TUNING.cultivator.speedPerLevel * n * 100)}% faster`,
+    describe: () => 'This Cultivator works and drives faster',
   },
   {
     id: 'cultWidth',
@@ -183,7 +182,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Wide Tines',
     icon: '🔱',
     maxLevel: 2,
-    describe: (n) => `Works ${n + 1} tiles side by side`,
+    describe: (n) => `Works ${n + 1} rows of ground side by side`,
   },
   {
     id: 'cultSeed',
@@ -191,7 +190,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Seed Mix',
     icon: '🌱',
     maxLevel: 1,
-    describe: () => `Tiles it restores start at bloom ${TUNING.cultivator.seedBloom}`,
+    describe: () => 'The ground it clears comes back already in leaf',
   },
   {
     id: 'cultRoute',
@@ -199,7 +198,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Fog Seeker',
     icon: '🧭',
     maxLevel: 1,
-    describe: () => `Seeks out the fog's edge, up to ${TUNING.cultivator.routeRadius} tiles from the dock`,
+    describe: () => 'Heads for the edge of the fog nearby all by itself',
   },
   {
     id: 'cultSecond',
@@ -207,7 +206,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Second Tiller',
     icon: '🚜',
     maxLevel: 1,
-    describe: () => 'A second tiller works from the same dock',
+    describe: () => 'A second tiller works from the same home',
   },
 ];
 

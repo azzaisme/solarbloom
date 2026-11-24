@@ -155,6 +155,8 @@ export interface GameEvents {
   'upgrade.granted': { id: string; level: number; machineId?: string };
   'drone.spawned': { droneId: string };
   'drone.despawned': { droneId: string };
+  /** the park's old drone woke on its lamp (the player woke it) */
+  'drone.woken': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };
   /** E18: a hub took a role (`refit` = it paid for it just now; otherwise a free switch). */
   'drone.roleChanged': { hubId: string; role: import('../core/types').DroneRole; refit: boolean; slot?: number };

@@ -51,7 +51,7 @@ export class GateSystem {
     if (n.repair) return this.sim.inventory.canPay(n.repair) ? undefined : `${gateText(g)}${this.missing(n.repair)}`;
     if (n.ability && !this.has(n.ability)) return gateText(g);
     // E23.2.1: abilities cost charge; at zero bloombot can't use them (it walks on, nothing is lost)
-    if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of charge. Eat a snack, or stand still by the fountain for a while.';
+    if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of Charge: press {eat} for a snack, or stand still by the fountain for a while.';
     return undefined;
   }
 

@@ -115,7 +115,7 @@ export function oneOffItems(sim: Sim): { id: string; name: string; from: string 
   const items = (sim.state.salvage?.items ?? []).map((id) => ({ id, name: ITEMS[id]?.name ?? id, from: `From ${regionName(ITEMS[id]?.from ?? '')}` }));
   const basket = Object.entries(sim.state.salvage?.basket ?? {})
     .filter(([, n]) => n > 0)
-    .map(([crop, n]) => ({ id: `basket:${crop}`, name: `${giftLabel(crop).name}${n > 1 ? ` ×${n}` : ''}`, from: 'Kept for a friend' }));
+    .map(([crop, n]) => ({ id: `basket:${crop}`, name: n > 1 ? `${giftLabel(crop).name}, ${n} of them` : giftLabel(crop).name, from: 'Kept for a friend' }));
   return [...items, ...basket];
 }
 
@@ -181,7 +181,7 @@ export interface BlueprintRow {
 
 export function blueprintRows(sim: Sim): BlueprintRow[] {
   const found = new Set(sim.state.salvage?.blueprints ?? []);
-  return BLUEPRINTS.map((b) => ({ id: b.id, found: found.has(b.id), name: found.has(b.id) ? b.name : 'Not found yet', where: found.has(b.id) ? `Found in ${regionName(b.region)}` : 'A blueprint waits in a cache somewhere' }));
+  return BLUEPRINTS.map((b) => ({ id: b.id, found: found.has(b.id), name: found.has(b.id) ? b.name : 'Not found yet', where: found.has(b.id) ? `Found in ${regionName(b.region)}` : 'A blueprint is tucked away in a buried box somewhere' }));
 }
 
 export interface CollectionGroup {

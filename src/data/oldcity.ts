@@ -951,11 +951,11 @@ export const KEEPERS: KeeperDef[] = [
     id: 'pylon', name: 'Pylon', region: 'mastRow', x: 10, z: -4, tint: '#d08a4c', prop: 'copper-pipe',
     request1: { seeds: 8 }, landmark: { copper: 20, scrap: 10 }, reward: 'beacons', rewardText: 'Every landmark beacon shows on the minimap',
     say: {
-      asleep: ['Slumped against a lamp post. Give it a pulse to stir it.'],
-      stirred: ['…bzzt. Signal? Is someone there?', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
+      asleep: ['Slumped against a lamp post. Stand beside it and press {pulse} to stir it.'],
+      stirred: ['…bzzt. Signal? Is someone there?', 'Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again.'],
       woke: ['Pylon, signal keeper of Mast Row! You woke me!'],
       request1: ["Could you bring me 8 Seeds? The broken pots round the fountain have them. I'd like to plant the verges."],
-      request2: ['The old tram stop just here was the busiest spot on the street.', 'Pulse the ground around it until every bit is green.'],
+      request2: ['The old tram stop just here was the busiest spot on the street.', 'Press {pulse} on the ground around it until every bit is green.'],
       landmark: ['The Signal Mast is ready to sing.', 'Bring 20 Copper and 10 Scrap to the mast to wake it.'],
       settled: ['Every big landmark shows a light on your map now. Go and find them.'],
     },
@@ -964,8 +964,8 @@ export const KEEPERS: KeeperDef[] = [
     id: 'tally', name: 'Tally', region: 'oldMarket', x: 19, z: 10, tint: '#7fb8c4', prop: 'lantern',
     request1: { timber: 10 }, landmark: { glass: 20, timber: 10 }, reward: 'trade', rewardText: 'Tally trades any 3 of one material for 1 of another',
     say: {
-      asleep: ['Asleep behind a broken stall. Give it a pulse to stir it.'],
-      stirred: ['A customer? Let\'s talk business.', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
+      asleep: ['Asleep behind a broken stall. Stand beside it and press {pulse} to stir it.'],
+      stirred: ['A customer? Let\'s talk business.', 'Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again.'],
       woke: ['Tally, keeper of the Old Market. Everything here had a price.'],
       request1: ["The stalls need mending. 10 Timber, please: the driftwood on the beach will do. I'll put it on your account."],
       request2: ['Pulse the market square green again, so the stalls have somewhere nice to stand.'],
@@ -977,8 +977,8 @@ export const KEEPERS: KeeperDef[] = [
     id: 'tide', name: 'Tide', region: 'saltwind', x: 10, z: 19, tint: '#5f9ec0', prop: 'barrel',
     request1: { copper: 10 }, landmark: { timber: 20, copper: 10 }, reward: 'lockBridge', rewardText: 'The lock bridge to Clock Plaza rises; the canals fill',
     say: {
-      asleep: ['Half buried in the sand, facing the sea. Give it a pulse to stir it.'],
-      stirred: ['…the tide? Is it in?', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
+      asleep: ['Half buried in the sand, facing the sea. Stand beside it and press {pulse} to stir it.'],
+      stirred: ['…the tide? Is it in?', 'Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again.'],
       woke: ['Tide, keeper of Saltwind Beach. I kept the Sea Lock.'],
       request1: ["The lock's hinges are gone. 10 Copper, please. Try the street with the tall mast."],
       request2: ['Pulse the ground along the boardwalk green again, so the beach can be walked.'],
@@ -990,8 +990,8 @@ export const KEEPERS: KeeperDef[] = [
     id: 'moss', name: 'Moss', region: 'elderGrove', x: -4, z: 10, tint: '#7aa05a', prop: 'planter-pot',
     request1: { glass: 10 }, landmark: { seeds: 20, biomass: 40 }, reward: 'seedsDouble', rewardText: 'Loose Seeds piles give double',
     say: {
-      asleep: ['Curled up in the dead leaves. Give it a pulse to stir it.'],
-      stirred: ['Mm. Five more minutes…', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
+      asleep: ['Curled up in the dead leaves. Stand beside it and press {pulse} to stir it.'],
+      stirred: ['Mm. Five more minutes…', 'Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again.'],
       woke: ['Moss, keeper of Elder Grove. Mm. Good morning.'],
       request1: ['The seedlings need cloches. 10 Glass, if you would. The old market stalls have some.'],
       request2: ['Pulse the ring of stumps green again. That\'s where the grove began.'],
@@ -1003,21 +1003,21 @@ export const KEEPERS: KeeperDef[] = [
     id: 'sluice', name: 'Sluice', region: 'cistern', x: 38, z: 37, tint: '#6a8fb0', prop: 'dry-drain',
     request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water Condensers fill twice as fast',
     say: {
-      asleep: ['Asleep on the rim of a dry basin. Give it a pulse to stir it.'],
-      stirred: ['Water? No… just you.', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
+      asleep: ['Asleep on the rim of a dry basin. Stand beside it and press {pulse} to stir it.'],
+      stirred: ['Water? No… just you.', 'Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again.'],
       woke: ['Sluice, keeper of Cistern Basin. Is it raining? It never rains.'],
       request1: ['The valves are seized. 12 Gears, please, from the square with the big clock. Sorry. Please.'],
       request2: ['Pulse the spillway green again, so the water has somewhere to go.'],
       landmark: ['Bring 30 Clay and 15 Copper to the old cistern to wake it.'],
-      settled: ['Your water tanks hold twice as much now.'],
+      settled: ['Your Water Condensers fill twice as fast now.'],
     },
   },
   {
     id: 'tock', name: 'Tock', region: 'clockPlaza', x: 52, z: 8, tint: '#c4a85a', prop: 'vent',
     request1: { glass: 12 }, landmark: { gears: 30, glass: 15 }, reward: 'helpersFast', rewardText: 'Helpers work 25% faster',
     say: {
-      asleep: ['Frozen mid-step at the foot of the stair. Give it a pulse to stir it.'],
-      stirred: ['Tick… tick… Who\'s there? Promptly, please.', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
+      asleep: ['Frozen mid-step at the foot of the stair. Stand beside it and press {pulse} to stir it.'],
+      stirred: ['Tick… tick… Who\'s there? Promptly, please.', 'Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again.'],
       woke: ["Tock, keeper of Clock Plaza. You're late. The clock stopped at twenty past four."],
       request1: ['The clock face is shattered. 12 Glass, please. The old market stalls have it.'],
       request2: ['Pulse the plaza round the tower green again.'],
@@ -1029,8 +1029,8 @@ export const KEEPERS: KeeperDef[] = [
     id: 'gable', name: 'Gable', region: 'terraces', x: 10, z: -36, tint: '#b07a8a', prop: 'planter-trough',
     request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Batteries hold twice as much',
     say: {
-      asleep: ['Asleep against a chimney. Give it a pulse to stir it.'],
-      stirred: ["Up here? Someone climbed all the way up here?", "Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again."],
+      asleep: ['Asleep against a chimney. Stand beside it and press {pulse} to stir it.'],
+      stirred: ["Up here? Someone climbed all the way up here?", "Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again."],
       woke: ['Gable, keeper of The Terraces! Mind the edge.'],
       request1: ['The roof beds need clay. 15 Clay, please, from the dry basin by the water.'],
       request2: ['Pulse the roof garden green again.'],
@@ -1042,8 +1042,8 @@ export const KEEPERS: KeeperDef[] = [
     id: 'fern', name: 'Fern', region: 'glasshouse', x: -38, z: 4, tint: '#5aa07a', prop: 'planter-bed',
     request1: { sunstone: 15 }, landmark: { glass: 40, seeds: 40, clay: 20 }, reward: 'heartSeed', rewardText: 'The Heart Seed',
     say: {
-      asleep: ['Asleep among cracked glass. Give it a pulse to stir it.'],
-      stirred: ["Oh. Oh! Hello? I can't quite see you.", "Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again."],
+      asleep: ['Asleep among cracked glass. Stand beside it and press {pulse} to stir it.'],
+      stirred: ["Oh. Oh! Hello? I can't quite see you.", "Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again."],
       woke: ['Fern, keeper of the Glasshouse Gardens. Hello. Sorry. Hello.'],
       request1: ['The heaters need light. 15 Sunstone, please. It glints on the beach and up on the roofs.'],
       request2: ['Pulse the nursery beds green again.'],
@@ -1053,23 +1053,23 @@ export const KEEPERS: KeeperDef[] = [
   },
   {
     id: 'vega', name: 'Vega', region: 'observatory', x: 36, z: -46, tint: '#8a7ac4', prop: 'satellite-dish',
-    request1: { glass: 20 }, landmark: { sunstone: 40, copper: 30, gears: 20 }, reward: 'starLens', rewardText: 'The Star Lens; caches show on the map',
+    request1: { glass: 20 }, landmark: { sunstone: 40, copper: 30, gears: 20 }, reward: 'starLens', rewardText: 'The Star Lens; buried boxes show on the map',
     say: {
-      asleep: ['Staring at the sky, not moving. Give it a pulse to stir it.'],
-      stirred: ['Someone down there? I\'ll look down. For once.', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
+      asleep: ['Staring at the sky, not moving. Stand beside it and press {pulse} to stir it.'],
+      stirred: ['Someone down there? I\'ll look down. For once.', 'Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again.'],
       woke: ['Vega, keeper of Observatory Hill.'],
       request1: ['The telescope needs lenses. 20 Glass, please. The old market stalls have it.'],
       request2: ['Pulse the hilltop green again.'],
       landmark: ['Bring 40 Sunstone, 30 Copper and 20 Gears to the observatory dome to wake it.'],
-      settled: ['Take the Star Lens. Hidden caches show on your map now: go and dig them up.'],
+      settled: ['Take the Star Lens. Buried boxes show on your map now: go and dig them up.'],
     },
   },
   {
     id: 'atlas', name: 'Atlas', region: 'spireHeights', x: -24, z: -36, tint: '#9aa6b8', prop: 'lamp-post',
     request1: { clay: 20 }, landmark: { glass: 40, gears: 30, sunstone: 20 }, reward: 'lifts', rewardText: 'Every tower lift runs; the Spire\'s top becomes a travel point',
     say: {
-      asleep: ['Tall, and asleep under a fallen skybridge. Give it a pulse to stir it.'],
-      stirred: ['Floors… so many floors. Who\'s that?', 'Bring me 5 of any one thing, like Scrap or Seeds, and talk to me again.'],
+      asleep: ['Tall, and asleep under a fallen skybridge. Stand beside it and press {pulse} to stir it.'],
+      stirred: ['Floors… so many floors. Who\'s that?', 'Bring me 5 of any one thing, like Scrap or Seeds, then press {interact} to talk to me again.'],
       woke: ['Atlas, keeper of Spire Heights. I ran the lifts.'],
       request1: ['The planters on the terraces are bare. 20 Clay, please, from the dry basin by the water.'],
       request2: ['Pulse the square at the foot of the towers green again.'],
@@ -1083,15 +1083,15 @@ export const KEEPERS: KeeperDef[] = [
 
 /** One blueprint per region, in map order. */
 export const BLUEPRINTS: { id: string; name: string; region: RegionId }[] = [
-  { id: 'networks', name: 'Networks workbench group', region: 'mastRow' },
-  { id: 'fog', name: 'Fog workbench group', region: 'oldMarket' },
+  { id: 'networks', name: 'Power line plans', region: 'mastRow' },
+  { id: 'fog', name: 'Fog-clearing plans', region: 'oldMarket' },
   { id: 'pulse3', name: 'Pulse, level 3', region: 'saltwind' },
   { id: 'machines3', name: 'Machines, level 3', region: 'elderGrove' },
   { id: 'drones3', name: 'Drones, level 3', region: 'cistern' },
   { id: 'storage3', name: 'Storage, level 3', region: 'clockPlaza' },
   { id: 'salvageLore', name: 'Salvage Lore (piles refill twice as fast)', region: 'terraces' },
-  { id: 'packFrame', name: 'Pack Frame (+40 to every stack)', region: 'glasshouse' },
-  { id: 'sprintServos', name: 'Sprint Servos (faster sprint)', region: 'observatory' },
+  { id: 'packFrame', name: 'Pack Frame (Bloombot carries 40 more of each thing)', region: 'glasshouse' },
+  { id: 'sprintServos', name: 'Sprint Servos (Bloombot hovers along faster)', region: 'observatory' },
   { id: 'longGlide', name: 'Long Glide (glides from a tower top reach twice as far)', region: 'spireHeights' },
 ];
 
@@ -1186,7 +1186,7 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
   // E23.8.3.2: the mainland's steel and its big machines (E23.10.2 makes the real models)
   'salvage-steel': { standIn: 'procedural', what: 'A heap of steel girders from the industrial ruins' },
-  'grid-battery': { standIn: 'storage-chest', what: 'The Grid Battery: a grid-scale battery bank, two tiles square' },
+  'grid-battery': { standIn: 'storage-chest', what: 'The Big Battery: a huge bank of batteries, two squares across' },
   // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
   'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },
   'salvage-driftwood': { standIn: 'barrel', what: 'A Timber (driftwood) pile' },
@@ -1204,7 +1204,7 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'tower-lift': { standIn: 'procedural', what: 'A tower lift' },
   'lookout-telescope': { standIn: 'procedural', what: 'A lookout\'s telescope' },
   // finds
-  'cache-box': { standIn: 'crate', what: 'A cache' },
+  'cache-box': { standIn: 'crate', what: 'A buried box' },
   'journal-page-post': { standIn: 'procedural', what: 'A journal page on its post' },
   // keepsakes
   'keepsake-tram-sign': { standIn: 'procedural', what: 'Keepsake: tram sign (Mast Row)' },

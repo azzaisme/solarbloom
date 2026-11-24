@@ -75,7 +75,7 @@ export class BuildBar extends HudPart {
 
   static template(): string {
     return (
-      `<nav id="buildbar" class="bdock" aria-label="Build hotbar" hidden></nav>` +
+      `<nav id="buildbar" class="bdock" aria-label="Build bar" hidden></nav>` +
       `<div id="buildStop" class="bstop" hidden><span class="bstop-g" aria-hidden="true"></span><span>Stop building</span></div>`
     );
   }
@@ -172,9 +172,9 @@ export class BuildBar extends HudPart {
       .map((t, i) => {
         const it = buildItem(this.sim, t);
         const key = pad ? '' : `<span class="bg" aria-hidden="true">${this.glyph(SLOTS[i])}</span>`;
-        if (!it) return `<button class="bslot empty" data-slot="${i}" aria-label="Slot ${i + 1}: empty"><span class="bl">Empty</span>${key}</button>`;
+        if (!it) return `<button class="bslot empty" data-slot="${i}" aria-label="Button ${i + 1}: empty"><span class="bl">Empty</span>${key}</button>`;
         const on = t === tool;
-        const tip = `Slot ${i + 1}: ${it.name}${it.locked ? `, locked: ${it.lockText}` : ''}`;
+        const tip = `Button ${i + 1}: ${it.name}${it.locked ? `, locked: ${it.lockText}` : ''}`;
         return `<button class="bslot${on ? ' on' : ''}${it.locked ? ' locked' : ''}${` t-${it.tab}`}" data-slot="${i}" aria-label="${esc(tip)}" aria-pressed="${on}" title="${esc(tip)}"><span class="si" aria-hidden="true">${it.locked ? ICONS.lock : it.icon}</span><span class="bl">${esc(it.short)}</span>${key}</button>`;
       })
       .join('');

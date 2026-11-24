@@ -174,7 +174,7 @@ try {
     await press(page, 0);
     await press(page, 10); // left stick click: Sprint on or off has it, so the row asks
     const asked = await page.evaluate(() => document.querySelector('.ctl-ask')?.textContent ?? '');
-    check(/Swap with Hover on or off/.test(asked), `E22.4 pad: a clash asks first (${asked})`);
+    check(/Swap with Hover to move faster: on or off/.test(asked), `E22.4 pad: a clash asks first (${asked})`);
     check(await padTo(page, '#ctlSwap'), 'E22.4 pad: reach Swap');
     await press(page, 0);
     const pb = await page.evaluate(() => [window.solarbloom.bindings.pad.interact, window.solarbloom.bindings.pad.sprintToggle]);

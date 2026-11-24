@@ -526,12 +526,12 @@ export class KeeperSystem {
     const st = this.state(id);
     switch (st.step) {
       case 'asleep':
-        return st.pulsed ? `A robot is stirring. Bring it ${WAKE_GIFT} of any one thing, like Scrap or Seeds, and talk to it.` : 'A robot is asleep here. Pulse it to stir it.';
+        return st.pulsed ? `A robot is stirring. Bring it ${WAKE_GIFT} of any one thing, like Scrap or Seeds, then press {interact} to talk to it.` : 'A robot is asleep here. Stand beside it and press {pulse} to stir it.';
       case 'request1':
         return `Bring ${d.name} ${costText(this.wants(id) ?? {})}.`;
       case 'request2': {
         const p = this.patch(id);
-        return `Pulse ${this.region(id).patch.name.toLowerCase()} green for ${d.name}: ${p.restored} of ${p.total}.`;
+        return `Press {pulse} to turn ${this.region(id).patch.name.toLowerCase()} green for ${d.name}: ${p.restored} of ${p.total}.`;
       }
       case 'landmark':
         return `Bring ${costText(this.wants(id) ?? {})} to the ${this.region(id).landmark.name} to wake it.`;

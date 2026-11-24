@@ -222,12 +222,12 @@ export class Automation {
   routeProblem(from: string, to: string): string | undefined {
     const a = this.sim.machine(from);
     const b = this.sim.machine(to);
-    if (!this.handDone('carry')) return `Couriers open once you have moved things to and from the store ${HAND_JOBS.carry.times} times`;
+    if (!this.handDone('carry')) return `Courier drones come once you have put things into a chest, or taken them out, ${HAND_JOBS.carry.times} times`;
     if (!a || a.type !== 'crate' || !b || b.type !== 'crate') return 'A route runs from one supply crate to another';
     if (a.id === b.id) return 'Pick another crate to send to';
     if (this.routes().some((r) => r.from === from && r.to === to)) return 'These crates are already linked';
-    if (this.routes().filter((r) => r.from === from).length >= AUTOMATION.route.perCrate) return `At most ${AUTOMATION.route.perCrate} routes from one crate`;
-    if (this.routes().length >= AUTOMATION.route.max) return `At most ${AUTOMATION.route.max} routes`;
+    if (this.routes().filter((r) => r.from === from).length >= AUTOMATION.route.perCrate) return `One crate can send to ${AUTOMATION.route.perCrate} others at most`;
+    if (this.routes().length >= AUTOMATION.route.max) return `You can join up ${AUTOMATION.route.max} pairs of crates at most`;
     return undefined;
   }
 
@@ -472,7 +472,7 @@ export class Automation {
     const { input, output } = this.io(m);
     if (!input) return 'Put a supply crate beside it for what it uses';
     if (this.stateOf(m)?.left === undefined) for (const [k, v] of Object.entries(r.cost) as [ItemId, number][]) if (this.count(input.id, k) < v) return `Waiting for ${itemDef(k).name}`;
-    if (output && this.room(output.id) < r.makes) return 'Its output crate is full';
+    if (output && this.room(output.id) < r.makes) return 'The crate it fills is full';
     if (!this.sim.power.isPowered(m)) return 'Waiting for power';
     return undefined;
   }

@@ -89,7 +89,7 @@ export class PlotWork {
       const when = mins === 1 ? 'in about a minute' : `in about ${mins} minutes`;
       return w.verb === 'prune' ? `Pruned not long ago. It grows back ${when}.` : `Picked not long ago. It grows back ${when}.`;
     }
-    if (this.sim.inventory.room('biomass') <= 0) return 'Your Greens stack is full: leave some in the storage at the fountain';
+    if (this.sim.inventory.room('biomass') <= 0) return "Bloombot can't carry any more Greens. Leave some at the fountain or in a chest";
     return undefined;
   }
 

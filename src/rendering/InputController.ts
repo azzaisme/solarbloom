@@ -17,6 +17,13 @@ export interface InputHandlers {
   look?(dx: number, dy: number): void;
   /** A press on the canvas while the mouse is free. Return true to swallow it (it captured the mouse). */
   capture?(button: number): boolean;
+  /**
+   * Desktop "hold to look": a press with `button` on the free mouse. Return true to capture the mouse only while that
+   * button is held (the view turns with it); the cursor comes back, where it was, the moment it is let go.
+   */
+  holdLook?(button: number): boolean;
+  /** The held look button was let go (the mouse is free again). */
+  holdLookEnd?(): void;
 }
 
 /**
@@ -48,9 +55,25 @@ export class InputController {
     el.addEventListener('wheel', this.wheel, { passive: false });
     // Captured, a mouse button acts the moment it goes down (every button, also pressed together with another).
     el.addEventListener('mousedown', (e) => {
-      if (this.locked) this.h.click(this.el.clientWidth / 2, this.el.clientHeight / 2, e.button);
+      if (this.locked && e.button !== this.holdButton) this.h.click(this.el.clientWidth / 2, this.el.clientHeight / 2, e.button);
     });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Hold to look: letting go of the held button frees the mouse (mouseup reaches the locked canvas, and the window
+    // in case the lock was already lost)
+    const release = (e: MouseEvent) => {
+      if (this.holdButton === undefined || e.button !== this.holdButton) return;
+      this.holdButton = undefined;
+      if (this.locked) document.exitPointerLock?.();
+      this.h.holdLookEnd?.();
+    };
+    window.addEventListener('mouseup', release);
+    // the lock was lost some other way (Esc, the window lost focus): the hold is over
+    document.addEventListener('pointerlockchange', () => {
+      if (!this.locked && this.holdButton !== undefined) {
+        this.holdButton = undefined;
+        this.h.holdLookEnd?.();
+      }
+    });
   }
 
   private local(e: PointerEvent | WheelEvent) {
@@ -65,9 +88,16 @@ export class InputController {
 
   /** a press that captured the mouse: its release does nothing */
   private swallowUp = false;
+  /** the button held to look (hold-to-look mode), while it is held */
+  private holdButton?: number;
 
   private down = (e: PointerEvent) => {
     if (e.pointerType === 'mouse' && this.locked) return; // captured: the press acted already (mousedown)
+    if (e.pointerType === 'mouse' && this.h.holdLook?.(e.button)) {
+      this.holdButton = e.button;
+      this.swallowUp = true;
+      return;
+    }
     if (e.pointerType === 'mouse' && this.h.capture?.(e.button)) {
       this.swallowUp = true;
       return;

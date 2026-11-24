@@ -21,12 +21,12 @@ import type { Sim } from './Sim';
 export const ROLES: DroneRole[] = ['restorer', 'gardener', 'scout', 'courier', 'spark', 'harvester'];
 
 export const ROLE_INFO: Record<DroneRole, { name: string; icon: string; job: string; upgrades: string }> = {
-  restorer: { name: 'Restorer', icon: '🛸', job: 'Restores grey ground, then grows green tiles', upgrades: 'Every drone upgrade applies' },
-  gardener: { name: 'Gardener', icon: '🌱', job: 'Waters green tiles so 3 grow at once; runs on water only', upgrades: 'Sweep: +1 tile grown per level' },
-  scout: { name: 'Scout', icon: '🔭', job: 'Pushes the fog back from further away; the further it goes, the more energy it uses', upgrades: 'Chain Intelligence has no effect' },
-  courier: { name: 'Courier', icon: '📦', job: 'Carries charge to Mother Trees, panels, relays and condensers', upgrades: 'Sweep: one more machine per 2 levels' },
-  spark: { name: 'Spark', icon: '✨', job: 'Starts a Bloom Chain among gardens close together (once every 30 s)', upgrades: 'Dash, Radius and Squad apply' },
-  harvester: { name: 'Harvester', icon: '🧺', job: 'When your stores are full, turns what spills over into Greens', upgrades: 'Squad applies' },
+  restorer: { name: 'Restorer', icon: '🛸', job: 'Turns grey ground green, then helps the green ground grow', upgrades: 'Every drone upgrade helps it' },
+  gardener: { name: 'Gardener', icon: '🌱', job: 'Waters the green ground, a few patches at once; it runs on water alone', upgrades: 'Drone Sweep: it grows a little more ground each time' },
+  scout: { name: 'Scout', icon: '🔭', job: 'Pushes the fog back from further away; the further it goes, the more energy it uses', upgrades: 'Smarter Drones makes no difference to it' },
+  courier: { name: 'Courier', icon: '📦', job: 'Carries charge to Mother Trees, Solar Panels, Bloom Relays and Water Condensers', upgrades: 'Drone Sweep: it reaches one more machine every second upgrade' },
+  spark: { name: 'Spark', icon: '✨', job: 'Sets the flowers spreading through gardens close together, then rests for a moment', upgrades: 'Drone Dash, Drones Work Further and Drone Squad help it' },
+  harvester: { name: 'Harvester', icon: '🧺', job: 'When your chests are full, it turns the extra into Greens', upgrades: 'Drone Squad helps it' },
 };
 
 /** Machines a Courier serves. */
@@ -81,11 +81,11 @@ export class DroneRoles {
         return undefined;
       case 'gardener':
         if (!has('condenser')) return 'Build a Water Condenser first';
-        if (!s.state.progression.coreActivated && s.progression.fullBloomCount(HOME) < R.gardener.unlockFullBloom) return `Get ${R.gardener.unlockFullBloom} tiles in flower first`;
+        if (!s.state.progression.coreActivated && s.progression.fullBloomCount(HOME) < R.gardener.unlockFullBloom) return `Bring ${R.gardener.unlockFullBloom} patches of ground into flower first`;
         return undefined;
       case 'scout':
         // While any open area still has fog (Saltwind, from the start); once a hub owns it, it never locks again.
-        return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'No fog to scout: open a gate to the next region first';
+        return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'No fog nearby to scout: get past the next blocked way first';
       case 'courier':
         // E23.6.4: couriers open once things have been carried to and from the store by hand
         if (s.automation?.handDone('carry')) return undefined;
@@ -114,8 +114,8 @@ export class DroneRoles {
   check(hubId: string, role: DroneRole, slot = 1): { ok: boolean; reason?: string; price: number } {
     const hub = this.sim.machine(hubId);
     if (!hub || hub.type !== 'droneHub') return { ok: false, reason: 'That hub is gone', price: 0 };
-    if (!ROLES.includes(role)) return { ok: false, reason: 'Unknown role', price: 0 };
-    if (slot === 2 && tierOf(hub) < 2) return { ok: false, reason: 'Only a Fleet Hub has a second role', price: 0 };
+    if (!ROLES.includes(role)) return { ok: false, reason: 'Unknown job', price: 0 };
+    if (slot === 2 && tierOf(hub) < 2) return { ok: false, reason: 'Only a Fleet Hub can do a second job', price: 0 };
     const price = this.refitPrice(hub, role);
     const locked = this.owns(hub, role) ? undefined : this.lockedReason(role);
     if (locked) return { ok: false, reason: locked, price };

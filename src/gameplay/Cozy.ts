@@ -145,9 +145,9 @@ export class Cozy {
     if ('start' in u) return '';
     if ('cat' in u) return 'it turns up somewhere'; // never names what leaves it (epic rule 8)
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
-    if ('find' in u) return 'you find it in an old cache';
-    if ('research' in u) return 'Decor research';
-    return `${u.areas} area${u.areas === 1 ? '' : 's'} cleared`;
+    if ('find' in u) return 'you dig it out of a buried box';
+    if ('research' in u) return 'you work it out at the crafting table in the house';
+    return `the fog lifts from ${u.areas} place${u.areas === 1 ? '' : 's'}`;
   }
 
   /**
@@ -204,7 +204,7 @@ export class Cozy {
     const c = this.choices(p).find((q) => q.option.id === optionId);
     if (!c) return 'That doesn’t suit this plot';
     if (!c.unlocked) return `Unlocks when ${c.hint}`;
-    if (!this.ready(p) && !this.choice(id)) return 'Restore every tile of the plot first';
+    if (!this.ready(p) && !this.choice(id)) return 'Turn all the ground of this plot green first';
     const s = this.write();
     // Sparse and in a stable order (sorted ids), so save → load → save is byte-identical.
     const plots = { ...(s.plots ?? {}), [id]: optionId };
@@ -296,7 +296,7 @@ export class Cozy {
     if (!t) return 'Nothing to stand it on here';
     if (t.feature === 'water' && !t.blocked) return 'Not in the water';
     const why = this.sim.build.footprintProblem(roofId, x, z, 1, ['restored']);
-    if (why) return why === 'Needs green or mossy ground: pulse it first' ? 'Pulse the ground here green first' : why;
+    if (why) return why === 'Needs green or mossy ground: press {pulse} on it first' ? 'Press {pulse} to turn the ground here green first' : why;
     if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
     return undefined;
   }

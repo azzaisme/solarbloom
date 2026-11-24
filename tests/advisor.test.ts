@@ -151,7 +151,9 @@ describe('objective advisor (City 14.1)', () => {
         sim.bot = { roofId: a.layer ?? GROUND, x: a.x, z: a.z }; // walking there (the walk itself is E23.10.1's proof)
         const pile = sim.salvage.pileAt(a.x, a.z);
         const t = sim.grid.get(a.layer ?? GROUND, a.x, a.z);
+        const lamp = sim.drones.oldHomeId() ? sim.machine(sim.drones.oldHomeId()) : undefined;
         if (pile) while (sim.salvage.left(pile.id) > 0 && !sim.salvage.problem(pile.id) && sim.salvage.salvage(pile.id) > 0) sim.advance(1);
+        else if (lamp && a.x === lamp.x && a.z === lamp.z) sim.drones.wakeOld(); // "press Interact at the lamp to wake it"
         else if (a.x === fx && a.z === fz) {
           sim.bot = { roofId: GROUND, x: fountain.x - 1, z: fountain.z };
           sim.fountain.giveAll();

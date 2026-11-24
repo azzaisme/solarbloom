@@ -44,7 +44,7 @@ export class FountainSystem {
   condition(t: TierDef = this.next()!): { label: string; have: number; need: number; done: boolean } {
     if (t.needs.parkTiles !== undefined) {
       const have = this.sim.areas.counts(PARK).restored;
-      return { label: 'Park tiles restored', have, need: t.needs.parkTiles, done: have >= t.needs.parkTiles };
+      return { label: 'Green ground in the park', have, need: t.needs.parkTiles, done: have >= t.needs.parkTiles };
     }
     const have = this.landmarksAwake();
     const need = t.needs.landmarks ?? 0;

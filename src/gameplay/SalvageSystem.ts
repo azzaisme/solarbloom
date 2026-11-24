@@ -48,8 +48,8 @@ export class SalvageSystem {
     if (!p) return 'Nothing to salvage here';
     if (this.left(id) <= 0) return 'Nothing left here';
     const area = this.sim.areas.map.areaOfCell(p.x, p.z);
-    if (this.sim.areas.fog(area) === 'hidden') return 'Hidden in the fog. Find the way in first';
-    if (this.sim.inventory.room(p.material) <= 0) return `Your ${MATERIALS[p.material].name} stack is full: leave some in the storage at the fountain`;
+    if (this.sim.areas.fog(area) === 'hidden') return 'Hidden in the fog. Turn the ground next to it green to push the fog back';
+    if (this.sim.inventory.room(p.material) <= 0) return `Bloombot can't carry any more ${MATERIALS[p.material].name}. Leave some at the fountain or in a chest`;
     return undefined;
   }
 
@@ -234,13 +234,13 @@ export class SalvageSystem {
     if (!sp) return undefined;
     if (sp.kind === 'pile' && this.left(sp.pile.id) > 0) {
       const m = MATERIALS[sp.pile.material];
-      return { title: `${m.icon} ${m.name} pile`, detail: `${this.left(sp.pile.id)} ${m.name} left. Hold Interact to salvage it, 3 at a time.` };
+      return { title: `${m.icon} ${m.name} pile`, detail: `${this.left(sp.pile.id)} ${m.name} left. Hold {interact} to dig it out, 3 at a time.` };
     }
     if (sp.kind === 'gate' && !this.sim.gates.isOpen(sp.gate.id)) return { title: 'In the way', detail: gateText(sp.gate) };
     if (sp.kind === 'keeper') return { title: `🤖 ${sp.keeper.name}`, detail: this.sim.keepers.hint(sp.keeper.id) };
     if (sp.kind === 'page') return { title: 'A page on a post', detail: this.sim.journal.found(sp.id) ? "A page of the maker's journal. You have read this one." : "A page in the maker's handwriting." };
     if (sp.kind === 'shed') return { title: 'A ruined shed', detail: 'Bloombot\'s house, one day.' };
-    if (sp.kind === 'lookout') return { title: 'A lookout', detail: 'A bench and an old telescope. Interact to look out over the city.' };
+    if (sp.kind === 'lookout') return { title: 'A lookout', detail: 'A bench and an old telescope. Press {interact} to look out over the city.' };
     return undefined;
   }
 }

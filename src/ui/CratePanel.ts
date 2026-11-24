@@ -117,7 +117,8 @@ export class CratePanel {
         const name = itemDef(i).name;
         const pack = sim.inventory.count(i);
         const box = sim.automation.count(id, i);
-        return `<button class="bp-cell" role="option" id="ctitem-${i}" data-item="${i}" aria-selected="${i === this.sel}" aria-label="${esc(`${name}, ${pack} in backpack, ${box} in the crate`)}">${materialIcon(i, 40)}<span class="bp-name">${esc(name)}</span><span class="bp-count">${pack}</span><span class="bp-stored">Crate ${box}</span></button>`;
+        const label = `${name}, ${pack} in backpack, ${box} in the crate`;
+        return `<button class="bp-cell" role="option" id="ctitem-${i}" data-item="${i}" aria-selected="${i === this.sel}" aria-label="${esc(label)}">${materialIcon(i, 40)}<span class="bp-name">${esc(name)}</span><span class="bp-count">${pack}</span><span class="bp-stored">Crate ${box}</span></button>`;
       })
       .join('');
     return (
@@ -174,13 +175,13 @@ export class CratePanel {
       return (
         `<li><b>${dir === 'to' ? 'To' : 'From'} ${esc(other)}</b>` +
         `<button id="ct-item-${r.id}" data-route-item="${r.id}" aria-label="${esc(`Carries ${what(r.item)}: change what it carries`)}">${esc(what(r.item))}</button>` +
-        `<button id="ct-drop-${r.id}" data-route-drop="${r.id}" aria-label="${esc(`Take away the route ${dir} ${other}`)}">Take away</button>` +
-        (flying ? '' : `<span class="ct-warn">No courier hub reaches both crates</span>`) +
+        `<button id="ct-drop-${r.id}" data-route-drop="${r.id}" aria-label="${esc(`Stop sending things ${dir} ${other}`)}">Stop</button>` +
+        (flying ? '' : `<span class="ct-warn">No Drone Hub with Courier drones is close to both crates</span>`) +
         `</li>`
       );
     };
     const list = out.length || into.length ? `<ul class="cr-machines ct-routes">${out.map((r) => row(r, 'to')).join('')}${into.map((r) => row(r, 'from')).join('')}</ul>` : '';
-    return `<h3 class="set-h">Couriers</h3>${list}${send}`;
+    return `<h3 class="set-h">Courier drones</h3>${list}${send}`;
   }
 
   private select() {
@@ -223,7 +224,7 @@ export class CratePanel {
     const sd = t.closest<HTMLElement>('[data-send]');
     if (sd) {
       const res = a.addRoute(id, sd.dataset.send!);
-      this.say(res.id ? `Couriers will carry everything to ${crateName(sim, sd.dataset.send!)}` : (res.why ?? ''));
+      this.say(res.id ? `Courier drones will carry everything to ${crateName(sim, sd.dataset.send!)}` : (res.why ?? ''));
       this.refresh();
       // the new route's "what it carries" button, so the next press can change it
       if (res.id) this.body.querySelector<HTMLElement>(`#ct-item-${CSS.escape(res.id)}`)?.focus({ focusVisible: true } as FocusOptions);
@@ -232,7 +233,7 @@ export class CratePanel {
     const rd = t.closest<HTMLElement>('[data-route-drop]');
     if (rd) {
       a.removeRoute(rd.dataset.routeDrop!);
-      this.say('Route taken away');
+      this.say('Stopped: nothing more goes that way');
       return this.refresh();
     }
     const cell = t.closest<HTMLElement>('[data-item]');

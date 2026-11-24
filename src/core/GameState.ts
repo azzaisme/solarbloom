@@ -50,6 +50,7 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
     layers: [groundLayer(true, OLD_CITY_GEN)],
     machines: holder.machines,
     drones: [],
+    oldDroneAwake: false, // the old drone sleeps on its lamp until the player wakes it
     upgrades: {},
     buffs: [],
     links: {},
