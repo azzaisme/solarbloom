@@ -74,6 +74,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
       ];
     case 'access':
       return [
+        { kind: 'select', key: 'messageTime', label: 'How long messages stay on screen', hint: 'Tips and messages stay long enough to read; choose longer to take your time', options: [['1', 'Long enough to read'], ['1.6', 'Longer'], ['2.5', 'Much longer']], fallback: '1', numeric: true },
         { kind: 'select', key: 'uiScale', label: 'Text and interface size', options: [['100', '100%'], ['125', '125%'], ['150', '150%']], fallback: '100', numeric: true },
         { kind: 'check', key: 'highContrast', label: 'High contrast', hint: 'Stronger colours and clearer edges on the menus and cards' },
         { kind: 'check', key: 'reducedMotion', label: 'Reduced motion and effects', hint: 'Less shaking, flashing and bouncing on screen' },

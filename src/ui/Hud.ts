@@ -88,6 +88,8 @@ export interface Settings {
   gfx?: 'auto' | 'deck' | 'low' | 'medium' | 'high';
   /** Steam Deck (#243): HUD size in percent (100, 125 or 150). */
   uiScale?: number;
+  /** How long messages stay on screen: 1 (long enough to read), 1.6 (longer) or 2.5 (much longer) */
+  messageTime?: number;
   /** Phase 5 E16: fireflies over lush tiles (ambience only). */
   fireflies?: boolean;
   /** #633: the glow round lamps and lit windows (bloom): 0 Off, 0.5 Soft, 1 Normal (unset), 1.6 Strong. */
@@ -319,6 +321,8 @@ export class Hud {
     if (b) this.bindings = b;
     this.keyMapVersion++;
   }
+  /** "How long messages stay" (Settings › Accessibility): scales every toast's and note's time on screen */
+  messageScale = 1;
   /** bumped by every setKeyMap (a rebind keeps the same Bindings object, so parts compare this) */
   keyMapVersion = 0;
   /** E22.6: the backpack screen (Tab / I, d-pad up). */
