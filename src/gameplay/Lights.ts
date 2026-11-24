@@ -116,7 +116,7 @@ export class Lights {
     if (!def?.line) return 'That light stands on the ground';
     const pole = this.poleNear(roofId, x, z);
     if (!pole) return 'Hang it on a power pole: aim at one';
-    if (!this.sim.power.networkOf(pole)?.links.some(([a, b]) => a === pole || b === pole)) return 'This pole has no lines yet: link it to another pole';
+    if (!this.sim.power.networkOf(pole)?.links.some(([a, b]) => a === pole || b === pole)) return 'This pole has no power lines yet: build another power pole close by and they join up';
     return undefined;
   }
 

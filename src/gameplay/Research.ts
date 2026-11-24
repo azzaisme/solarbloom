@@ -188,7 +188,7 @@ export class Research {
     if (!p || !this.on) return 'Unknown project';
     if (this.done(id)) return 'Already done';
     if (this.running(id)) return 'Already on the bench';
-    if (!this.isOpen(p)) return 'project' in p.opens ? 'Finish the project before it first' : 'move' in p.opens ? `Learn ${this.findName(p.opens)} at the fountain first` : 'Look closely at the find it comes from first';
+    if (!this.isOpen(p)) return 'project' in p.opens ? `Work out ${this.project(p.opens.project)?.name ?? 'the one before it'} first` : 'move' in p.opens ? `Learn ${this.findName(p.opens)} at the fountain first` : `First find ${this.findName(p.opens)}, then look at it closely at the bench`;
     if ((this.sv?.research?.running.length ?? 0) >= this.stations()) return 'The bench is busy';
     const short = this.sim.inventory.shortfall(p.cost);
     if (short) return `Needs ${itemDef(short).name}`;

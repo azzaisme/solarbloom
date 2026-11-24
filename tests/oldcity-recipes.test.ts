@@ -89,7 +89,7 @@ describe('E21.3: recipes', () => {
     sim.state.areas.clockPlaza = { fog: 'frontier', revealedAt: 0, sealed: true };
     expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️ from Clock Plaza');
     // E23.3: the power pole is a Bloom Relay, from Pylon in Mast Row
-    expect(sim.build.lockLabel('relay')).toBe('🔒 Pylon, Mast Row');
+    expect(sim.build.lockLabel('relay')).toBe('🔒 Wake Pylon in Mast Row');
   });
 
   it('the store only counts within reach of it', () => {

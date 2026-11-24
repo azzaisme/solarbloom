@@ -224,7 +224,7 @@ export function parkRows(sim: Sim): BloombotRow[] {
 export function knackRows(sim: Sim): BloombotRow[] {
   return KNACKS.map((k) => {
     const d = keeperById(k.keeper)!;
-    const place = regionById(d.region)?.name ?? 'the old city';
+    const place = regionById(d.region)?.name ?? 'the city';
     const have = sim.knacks.has(k.keeper);
     const reach = sim.keepers.visible(k.keeper);
     const stirred = !!sim.state.salvage?.keepers?.[k.keeper]?.pulsed;

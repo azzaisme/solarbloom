@@ -55,9 +55,9 @@ describe('E23.1.4: the first Solar Panel', () => {
     sim.keepers.interact(moss.id);
     expect(oldCityStep(sim)).toBe(7);
     // the panel is Tally's craft: first the Old Market's barricade, then Tally
-    expect(hint()).toMatch(/Tally in Old Market knows how to make a ☀️ Solar Panel: pry open the Old Market barricade/);
+    expect(hint()).toMatch(/Tally in Old Market knows how to make a ☀️ Solar Panel: hold \S+ beside the rubble into Old Market to pry it open/);
     expect(sim.gates.open(oldMarket.gate.id)).toBe(true);
-    expect(hint()).toMatch(/Tally sleeps in Old Market and knows the ☀️ Solar Panel: pulse Tally/);
+    expect(hint()).toMatch(/Tally sleeps in Old Market and knows how to make the ☀️ Solar Panel\. Press \S+ beside it to stir it/);
     const tally = sim.keepers.def(oldMarket.keeper);
     sim.inventory.add('scrap', 5);
     sim.keepers.pulse(tally.id);
@@ -66,13 +66,13 @@ describe('E23.1.4: the first Solar Panel', () => {
     // the panel's own Scrap, then the Old Market's glass (for the panes)
     sim.inventory.add('scrap', 10);
     expect(panelNeeds(sim).salvage).toContain('glass');
-    expect(hint()).toMatch(/Salvage 🪟 Glass in Old Market for the ☀️ Solar Panel/);
+    expect(hint()).toMatch(/Dig 🪟 Glass out of the glinting piles in Old Market for the ☀️ Solar Panel/);
     expect(salvageUntil(sim, 'oldMarket', 'glass', 4)).toBe(true);
     // then copper (for the wire), on Mast Row behind its barricade
     expect(panelNeeds(sim).salvage).toEqual(['copper']);
-    expect(hint()).toMatch(/needs 🔧 Copper, found in Mast Row: pry open its barricade/);
+    expect(hint()).toMatch(/needs 🔧 Copper, found in Mast Row: hold \S+ beside the rubble into it to pry it open/);
     expect(sim.gates.open(mastRow.gate.id)).toBe(true);
-    expect(hint()).toMatch(/Salvage 🔧 Copper in Mast Row/);
+    expect(hint()).toMatch(/Dig 🔧 Copper out of the glinting piles in Mast Row/);
     expect(salvageUntil(sim, 'mastRow', 'copper', 2)).toBe(true);
     // the table makes the panes and the wire
     expect(panelNeeds(sim)).toEqual({ craft: ['glassPane', 'wire'], salvage: [] });
@@ -95,7 +95,7 @@ describe('E23.1.4: the first Solar Panel', () => {
     sim.state.salvage!.abilities.push('pry');
     const text = oldCityHint(sim, 7, () => 'E').text;
     // nothing open yet: the hint is to pry the Keeper's own barricade, never to salvage or make anything
-    expect(text).toMatch(/pry open the Old Market barricade/);
+    expect(text).toMatch(/beside the rubble into Old Market to pry it open/);
     expect(text).not.toMatch(/Salvage|Make|Build/);
   });
 });

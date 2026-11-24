@@ -270,7 +270,7 @@ describe('E23.3.5 night lighting', () => {
     sim.power.register('gen', { source: () => 5 });
     put('gen', 0, 0);
     const a = put('relay', 1, 0);
-    expect(sim.lights.hang('festoon', GROUND, 1, 1)).toMatch(/no lines/);
+    expect(sim.lights.hang('festoon', GROUND, 1, 1)).toMatch(/no power lines/);
     const b = put('relay', 11, 0);
     run(1);
     expect(sim.lights.hang('festoon', GROUND, 20, 20)).toMatch(/power pole/);

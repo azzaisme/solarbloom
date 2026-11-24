@@ -563,7 +563,7 @@ export class LuckyCatSystem {
     // inside a jackpot (`fallback` false), does nothing so the jackpot can pick another.
     const mega = (fallback = true): boolean => {
       const ok = s.chains.startMega(Math.min(TUNING.cat.megaBloomMax, Math.round(TUNING.cat.megaBloomTiles * mult)));
-      if (ok) parts.push('A Mega Bloom!');
+      if (ok) parts.push('A Mega Bloom! The ground all around bursts into flower');
       else if (fallback) harvest(); // everything nearby already blooms
       return ok;
     };
@@ -587,7 +587,7 @@ export class LuckyCatSystem {
       relay.golden = true;
       s.power.invalidate();
       s.bus.emit('cat.goldenRelay', { machineId: relay.id });
-      parts.push('A relay turns gold: it carries power further');
+      parts.push('A power pole turns gold: its power lines reach much further');
       return true;
     };
     const garden = (fallback = true): boolean => {

@@ -162,7 +162,7 @@ try {
   }), { spots });
   const [gx, gz] = spots[Math.max(0, clear)];
   await face(gx, gz);
-  check(/Gather clippings/.test(await promptFor(/Gather clippings/, () => face(gx, gz, 1))), `the prompt offers "Gather clippings" (${await prompt()})`);
+  check(/Gather Greens/.test(await promptFor(/Gather Greens/, () => face(gx, gz, 1))), `the prompt offers "Gather Greens" (${await prompt()})`);
   await snap('gather-prompt');
   const before = await game((g, s) => s.inventory.count('biomass'));
   // held like a player holds it, until the hold completes (slow software-rendered frames stretch it; 8 s at most)

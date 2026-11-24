@@ -66,7 +66,9 @@ export class OldCityController {
     host.sim.bus.on('keeper.said', ({ keeperId, lines, then }) => {
       this.speaker = keeperId;
       // #610: a Keeper's name is learned when it wakes and says it; until then it's just a sleeping robot
-      this.bubble.say(host.sim.keepers.step(keeperId) === 'asleep' ? 'A sleeping robot' : host.sim.keepers.def(keeperId).name, lines, undefined, then);
+      // Text pass: a Keeper's line can name a control as {pulse} / {interact}: fill in the player's own key or button
+      const keyed = (ls: string[]) => ls.map((l) => host.hud.keys(l));
+      this.bubble.say(host.sim.keepers.step(keeperId) === 'asleep' ? 'A sleeping robot' : host.sim.keepers.def(keeperId).name, keyed(lines), undefined, then && keyed(then));
     });
     host.sim.bus.on('keeper.step', ({ keeperId, step }) => {
       if (step === 'request1') host.sound('wake');

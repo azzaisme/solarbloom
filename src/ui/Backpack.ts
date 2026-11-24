@@ -346,7 +346,7 @@ export class Backpack {
     const rows = bloombotRows(this.host.sim);
     if (!rows.some((r) => r.id === this.selBot)) this.selBot = (rows.find((r) => r.state === 'next') ?? rows[0])?.id;
     const row = (r: BloombotRow) =>
-      `<button class="bb-row ${r.state}" role="option" id="bb-${r.id}" data-bb="${r.id}" aria-selected="${r.id === this.selBot}" aria-label="${esc(`${r.name}, ${stateWords(r)}`)}">` +
+      `<button class="bb-row ${r.state}" role="option" id="bb-${r.id}" data-bb="${r.id}" aria-selected="${r.id === this.selBot}" aria-label="${esc(r.name + ', ' + stateWords(r))}">` +
       `<b class="bb-name">${esc(r.name)}</b>` +
       (r.kind === 'upgrade' ? `<span class="bb-pips" aria-hidden="true">${pips(r.level ?? 0, r.max ?? 3)}</span>` : '') +
       `<span class="bb-state">${esc(stateWords(r))}</span></button>`;

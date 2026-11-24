@@ -141,7 +141,7 @@ try {
   // the first time bloombot carries something to load, the wheel introduces itself once
   check(await until(page, () => window.solarbloom.sim.state.stats.firsts.loadWheel !== undefined && !document.getElementById('loadWheel').hidden), 'carrying seeds for the first time shows the wheel and its one-time note');
   const note = await page.evaluate(() => document.getElementById('toasts')?.innerText.replace(/\s+/g, ' ') ?? '');
-  check(/load its pulse/.test(note), `the note says what the wheel is for: "${note}"`);
+  check(/choose what its pulse grows/.test(note), `the note says what the wheel is for: "${note}"`);
   await shot(page, '02-load-wheel-intro', 'the one-time introduction: the load wheel shows with a short note the first time bloombot carries something to load');
   await key(page, 'KeyV');
   check((await page.evaluate(() => window.solarbloom.sim.pulseLoad.choice)) === 'seeds', 'V turns the wheel to Seeds');

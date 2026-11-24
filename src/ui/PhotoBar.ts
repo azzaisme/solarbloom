@@ -58,18 +58,22 @@ export class PhotoBar {
     };
     const tog = (a: Action, label: string, on: boolean) => `<button data-photo="${a}" aria-pressed="${on}">${label}${k(a)}</button>`;
     const pad = this.keyFor('up') === '—'; // the pad moves and zooms with its sticks
-    const move = pad ? 'left stick' : `${this.keyFor('up')}${this.keyFor('left')}${this.keyFor('down')}${this.keyFor('right')}`;
-    const zoom = pad ? 'right stick' : 'the mouse wheel';
+    const move = `${this.keyFor('up')}${this.keyFor('left')}${this.keyFor('down')}${this.keyFor('right')}`;
+    const tilt = `${this.keyFor('rotateBack')} and ${this.keyFor('rotate')}`;
+    // one sentence for the hands in use: what moves the camera, and how
+    const help = pad
+      ? `Move with the left stick, turn and zoom with the right stick, and tilt with ${tilt}.`
+      : `Move with ${move}, zoom with the mouse wheel, tilt with ${tilt}, and hold the right mouse button to turn.`;
     const html =
       `<div class="pb-row"><span class="pb-title"><span class="pn-badge sky" aria-hidden="true">${icon('camera')}</span>Photo mode</span>` +
       `<button data-photo="pulse">${icon('camera', 's')}Save picture${k('pulse')}</button>` +
       tog('interact', 'Hide bloombot', s.hideBot) +
       tog('buildMenu', 'Freeze the garden', s.freeze) +
-      tog('eat', 'Depth of field', s.dof) +
+      tog('eat', 'Blur the background', s.dof) +
       `</div><div class="pb-row">${this.sceneHtml(s, k)}</div>` +
       `<div class="pb-row"><button data-photo="backpack">Hide this bar${k('backpack')}</button>` +
       `<button data-photo="cancel">${icon('door', 's')}Leave${k('cancel')}</button></div>` +
-      `<p class="pb-help">Move ${move} · zoom ${zoom} · tilt ${this.keyFor('rotateBack')} ${this.keyFor('rotate')} · turn with a right-button drag or the right stick</p>`;
+      `<p class="pb-help">${help}</p>`;
     if (html !== this.shown) {
       const focused = document.activeElement?.closest?.('#photoBar') ? (document.activeElement as HTMLElement).dataset : undefined;
       this.el.innerHTML = html;

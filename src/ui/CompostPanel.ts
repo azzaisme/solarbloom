@@ -24,7 +24,7 @@ export function compostHtml(sim: Sim, m: MachineData): string {
     : feed >= COMPOST.perCompost
       ? 'Rotting down nicely.'
       : compost
-        ? 'Maturing into fertiliser.'
+        ? 'Slowly turning into Fertiliser.'
         : 'Waiting for Greens and food scraps.';
   const room = sim.compost.room(m);
   const btn = (act: string, arg: string, mat: MaterialIconId, label: string, ok: boolean) => `<button class="pn-btn oc-mat-btn" data-act="${act}"${arg ? ` data-arg="${arg}"` : ''} ${ok ? '' : 'disabled'}>${materialIcon(mat, 24)}${label}</button>`;
@@ -34,7 +34,7 @@ export function compostHtml(sim: Sim, m: MachineData): string {
     `<h3 class="pn-label">Put in</h3><div class="oc-row oc-col">` +
     btn('fill', 'biomass', 'biomass', 'All my Greens', !!inv.count('biomass') && room >= 1) +
     btn('fill', 'food', 'food', 'All my Food', !!inv.count('food') && room >= COMPOST.foodWorth) +
-    btn('return', '', 'compost', 'My Compost, to mature', !!inv.count('compost') && !full) +
+    btn('return', '', 'compost', 'My Compost, to turn into Fertiliser', !!inv.count('compost') && !full) +
     `</div><h3 class="pn-label">Take</h3><div class="oc-row">` +
     btn('take', 'fertiliser', 'fertiliser', 'Fertiliser', fert > 0) +
     btn('take', 'compost', 'compost', 'Compost', compost > 0) +
@@ -47,15 +47,15 @@ export function digesterHtml(sim: Sim, m: MachineData): string {
   const mood = sim.compost.mood(m);
   const state =
     mood === 'running'
-      ? 'Running: it is powering its grid.'
+      ? 'Running: it powers the machines joined to it.'
       : mood === 'idle'
-        ? 'Fed and waiting: its grid has all the power it needs right now.'
+        ? 'Fed and waiting: the machines joined to it have all the power they need right now.'
         : 'Empty, so it has stopped. Feed it Greens to start it.';
   const full = sim.compost.fuel(m) >= DIGESTER.capacity - 1e-9;
   const ok = !!sim.inventory.count('biomass') && !full;
   return (
     cardHead({ icon: icon('bolt', 'l'), title: 'Bio Digester', mood: state, tone: mood === 'running' ? 'leaf' : mood === 'idle' ? '' : 'clay', badge: 'sun', choose: 'Feed' }) +
-    `<div class="oc-content"><div class="oc-tile"><div class="pn-bar sun" aria-hidden="true"><i style="width:${Math.round(Math.min(1, sim.compost.fuel(m) / DIGESTER.capacity) * 100)}%"></i></div><p class="pn-note">${full ? 'The hopper is full.' : 'It turns Greens into power for its grid, day and night.'}</p></div>` +
-    `<div class="oc-row"><button class="pn-btn primary oc-mat-btn" data-act="feed" ${ok ? '' : 'disabled'}>${materialIcon('biomass', 24)}${full ? 'The hopper is full' : 'Feed it Greens'}</button></div></div>`
+    `<div class="oc-content"><div class="oc-tile"><div class="pn-bar sun" aria-hidden="true"><i style="width:${Math.round(Math.min(1, sim.compost.fuel(m) / DIGESTER.capacity) * 100)}%"></i></div><p class="pn-note">${full ? 'It is full to the top.' : 'It turns Greens into power for the machines joined to it, day and night.'}</p></div>` +
+    `<div class="oc-row"><button class="pn-btn primary oc-mat-btn" data-act="feed" ${ok ? '' : 'disabled'}>${materialIcon('biomass', 24)}${full ? 'It is full' : 'Feed it Greens'}</button></div></div>`
   );
 }

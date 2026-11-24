@@ -23,7 +23,7 @@ export class ChargeMeter extends HudPart {
         <span class="pct">100%</span>
       </div>
       <span class="sg-bar" aria-hidden="true"><i></i></span>
-      <div class="ch-eat"><span class="ch-g"></span><span>Eat</span></div>
+      <div class="ch-eat"><span class="ch-g"></span><span>Eat a snack</span></div>
     </div>`;
   }
 

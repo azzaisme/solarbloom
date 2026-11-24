@@ -126,7 +126,7 @@ describe('E22.10: plain words', () => {
 
   it('bannedIn catches every banned word and the rate slash', async () => {
     const { bannedIn, BANNED } = await import('../src/ui/words');
-    expect(bannedIn('Restore tiles 14/130 · reward at 20')).toEqual(['reward at']);
+    expect(bannedIn('Restore tiles 14/130 · reward at 20')).toEqual(['reward at', 'tile']);
     expect(bannedIn('+71/min')).toContain('/min');
     expect(bannedIn('Bloom Frenzy ×3 combo')).toEqual(expect.arrayContaining(['Frenzy', 'combo', '×N']));
     expect(BANNED.length).toBe(44);

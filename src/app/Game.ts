@@ -798,7 +798,7 @@ export class Game {
     // E23.1.1: a garden from an earlier version starts fresh, said calmly once, when the world is on screen. From the
     // title the new-garden question already said it (and cleared the slot); this is for a start with no title (?slot=)
     if (lr.scrapped) this.openingNotes.push(() => this.hud.toast('Starting fresh 🌱<small>Your garden was from an earlier version, so a new one begins here.</small>', '', 7));
-    if (lr.backedUpAs) this.openingNotes.push(() => this.hud.toast(`This version couldn't read your old save. It's kept as a backup, and a new garden has started.<small>${lr.backedUpAs}</small>`, '', 8));
+    if (lr.backedUpAs) this.openingNotes.push(() => this.hud.toast("A new garden has started 🌱<small>This version couldn't open your old garden, so it's been tucked away safely as a backup.</small>", '', 8));
     else if (loaded) setTimeout(() => this.hud.toast('Welcome back. Your garden is just as you left it 🌱', '', 2.6), 400);
   }
 

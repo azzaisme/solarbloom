@@ -32,9 +32,9 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 /** What the rebinding screen says about a refused or clashing bind. */
 export function bindMessage(r: BindResult, action: Action): string {
   if (r.ok) return r.swapped ? `${ACTION[action].label} and ${ACTION[r.swapped].label} swapped` : `${ACTION[action].label} changed`;
-  if (r.reason === 'locked') return r.other ? `That is kept for ${ACTION[r.other].label}, which can't be changed` : `${ACTION[action].label} can't be changed`;
+  if (r.reason === 'locked') return r.other ? `That one already does ${ACTION[r.other].label}, and that can't be moved` : `${ACTION[action].label} can't be changed`;
   if (r.reason === 'clash') return `Swap with ${ACTION[r.other!].label}?`;
-  return 'That input can’t do this';
+  return 'That key or button can’t be used for this one. Try another.';
 }
 
 export class ControlsTable {
@@ -68,7 +68,7 @@ export class ControlsTable {
     const gs = this.host.glyphSetting();
     this.listening(undefined);
     this.body.innerHTML =
-      `<div class="ctl-top"><p class="ctl-help">Choose a key or button, then press the new one. Esc (or Menu on the pad) cancels; Backspace clears a key.</p>` +
+      `<div class="ctl-top"><p class="ctl-help">Choose a control, then press its new key or button. Press Esc (Menu on a gamepad) to stop, or Backspace to take a key off.</p>` +
       `<div class="ctl-glyphs" data-ring-host><span id="set-glyphs-l">Button pictures</span>${stepperHtml({ id: 'set-glyphs', label: 'Button pictures', options: GLYPH_SETTINGS, value: gs, attrs: 'data-key="glyphs" aria-labelledby="set-glyphs-l"' })}</div></div>` +
       `<p class="ctl-note" role="status" aria-live="polite">${esc(this.note)}</p>${ask}` +
       `<div class="ctl-table" role="table" aria-label="Controls"><div class="ctl-row ctl-headrow" role="row"><span role="columnheader">Action</span><span role="columnheader">Keyboard and mouse</span><span role="columnheader">Gamepad</span></div>` +

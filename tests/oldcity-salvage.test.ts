@@ -50,7 +50,7 @@ describe('E21.2: salvage piles', () => {
     sim.bus.on('action.failed', (e) => fails.push(e.reason));
     expect(sim.salvage.salvage('pk-s3')).toBe(0);
     expect(sim.salvage.left('pk-s3')).toBe(12);
-    expect(fails[0]).toMatch(/stack is full: leave some in the storage at the fountain/); // #606: plain words
+    expect(fails[0]).toMatch(/can't carry any more .+\. Leave some at the fountain or in a chest/); // #606: plain words
     // one unit of room takes one unit
     sim.inventory.take('scrap', 1);
     expect(sim.salvage.salvage('pk-s3')).toBe(1);

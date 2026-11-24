@@ -92,7 +92,7 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
     // the rest behind gates) there is no fog to scout until the next gate opens
     expect(sim.roles.lockedReason('scout')).toBeUndefined();
     for (const id of sim.areas.revealed()) sim.areas.clear(id, true);
-    expect(sim.roles.lockedReason('scout')).toMatch(/gate/);
+    expect(sim.roles.lockedReason('scout')).toMatch(/blocked way/);
     expect(sim.roles.lockedReason('courier')).toMatch(/Mother Tree|Relay/);
     expect(sim.roles.lockedReason('spark')).toMatch(/3 Pollinator/);
     expect(sim.roles.lockedReason('harvester')).toMatch(/Gather some Greens by hand/);
