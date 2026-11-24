@@ -760,6 +760,9 @@ export class Game {
     const unlock = () => this.sfx.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
+    // The Steam Deck build may start its sound straight away (no key or mouse press there: the controller is the only
+    // input, and a pad button isn't a browser "gesture"). In a browser the first pad button press tries too.
+    if (desktopApi()) unlock();
     // E22.11: a window without focus pauses the game (setting, on by default). E23.1: a hidden page always does,
     // and the time away is never counted or caught up.
     const pauseOnBlur = () => this.settings.pauseOnBlur !== false;
@@ -1164,7 +1167,7 @@ export class Game {
     this.settingsUi = new SettingsScreen(this.hud.root, {
       settings: this.settings,
       set: (k, v) => this.changeSetting(k, v),
-      rows: (tab) => settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml(), glowOff: !LOOK.tiers[this.gfxTier].bloom }),
+      rows: (tab) => settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml(), glowOff: !LOOK.tiers[this.gfxTier].bloom, sound: this.soundStatus() }),
       controls: (body) => this.renderControls(body),
       onClose: () => {
         this.cancelListen();
@@ -5234,6 +5237,23 @@ export class Game {
    * the crafting table counts real seconds even when frames are slow, up to a second at a time (a long stall, such as
    * a hidden window, doesn't finish a queue at once).
    */
+  /** The first controller button press starts the sound (a browser only allows it after a press). */
+  private padUnlock() {
+    if (this.sfx.director.ready && this.sfx.director.ctx?.state === 'running') return;
+    const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
+    if ([...pads].some((p) => p?.buttons.some((b) => b.pressed))) this.sfx.unlock();
+  }
+
+  /** Settings › Sound: is the sound running? In plain words, so a silent Deck can be told apart from a muted one. */
+  private soundStatus(): string {
+    const st = this.sfx.director.ctx?.state;
+    if (!st) return 'The sound starts when you press any key or button.';
+    if (st !== 'running') return 'The sound is waiting: press any key or button to start it.';
+    const s = this.settings;
+    if ((s.masterVolume ?? 100) === 0) return 'The sound is running, but the master volume is at 0.';
+    return 'The sound is running.';
+  }
+
   private realDt(): number {
     const now = performance.now();
     const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
@@ -5318,6 +5338,7 @@ export class Game {
       this.senseSoundscape();
     }
     this.audioHud.update(realDt);
+    this.padUnlock();
     this.drones.update(paused || this.photo.frozen ? 0 : dt); // drone personality freezes with the game
     this.cat.update(wdt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
