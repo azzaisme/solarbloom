@@ -1,7 +1,11 @@
 // Desktop wrapper for the Steam Deck build (#243): shows the built game (dist/) full screen.
 // The game is served from app://solarbloom/ instead of file://, so its fetches (models, textures) work and the
 // save in localStorage always belongs to the same origin.
-const { app, BrowserWindow, ipcMain, net, powerMonitor, protocol } = require('electron');
+// Audio on the Steam Deck (player report: "no audio, and my Bluetooth headphones act as if I'm on a phone call").
+// The game's sound is game audio, never a call: label every stream the game opens that way for PipeWire/PulseAudio,
+// so the Deck keeps Bluetooth headphones in their stereo music profile. (Set before Chromium's audio starts.)
+process.env.PULSE_PROP = [process.env.PULSE_PROP, 'media.role=game', 'application.name=Solarbloom'].filter(Boolean).join(' ');
+const { app, BrowserWindow, ipcMain, net, powerMonitor, protocol, session } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -92,6 +96,12 @@ ipcMain.on('sb:save-remove', (e, key) => {
 });
 
 app.whenReady().then(() => {
+  // The game never uses a microphone or a camera: refuse any request outright, so nothing can open the headset's
+  // microphone (which is what switches Bluetooth headphones into call mode).
+  const ses = session.defaultSession;
+  const capture = (permission) => permission === 'media' || permission === 'audioCapture' || permission === 'videoCapture';
+  ses.setPermissionRequestHandler((_wc, permission, cb) => cb(!capture(permission))); // pointer lock and full screen still work
+  ses.setPermissionCheckHandler((_wc, permission) => !capture(permission));
   protocol.handle('app', (request) => {
     const { pathname } = new URL(request.url);
     const file = path.normalize(path.join(DIST, decodeURIComponent(pathname === '/' ? '/index.html' : pathname)));
@@ -105,7 +115,8 @@ app.whenReady().then(() => {
     fullscreen: !process.argv.includes('--windowed'),
     autoHideMenuBar: true,
     backgroundColor: '#0e2224',
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
+    // sound starts without a key or mouse press (on the Deck the controller is the only input)
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required' },
   });
   win.setMenuBarVisibility(false);
   // The game opens no other pages: block new windows and navigation away from it.
