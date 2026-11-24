@@ -1951,8 +1951,9 @@ export class Game {
     if (this.bot) this.bot.strafe = aiming; // aiming: bloombot faces where the camera looks and steps sideways
     if (!this.lookHinted && this.bot && this.mayCapture() && !this.mouseCaptured() && this.bot.lastInput === 'keys' && typeof matchMedia !== 'undefined' && matchMedia('(any-pointer: fine)').matches) {
       this.lookHinted = true;
-      if (this.mouseMode() === 'capture') this.hud.toast('Press a mouse button over the world to look around with the mouse<small>Esc frees the mouse again.</small>', '', 5);
-      else this.hud.toast('Hold the right mouse button to look around<small>Let go and the pointer is free for menus. Settings › Accessibility › Mouse look.</small>', '', 5);
+      // say what the player will see: the pointer hides, the camera turns, the pointer comes back
+      if (this.mouseMode() === 'capture') this.hud.toast('Press a mouse button on the world to turn the camera with the mouse<small>The mouse pointer hides while you look around. Press Esc to bring it back, ready for the menus.</small>', '', 6);
+      else this.hud.toast('Hold the right mouse button and move the mouse to turn the camera<small>Let go and your mouse pointer comes back, ready for the menus.</small>', '', 6);
     }
   }
 

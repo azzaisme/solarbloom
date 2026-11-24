@@ -55,7 +55,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         { kind: 'check', key: 'lowFog', label: 'Simple fog (faster on small devices)' },
         { kind: 'check', key: 'fireflies', label: 'Fireflies at night', defaultOn: true },
         // in a browser: the page's own full screen keeps Esc for the game (the browser's F11 takes Esc for itself)
-        ...(canFullScreen() ? [{ kind: 'toggle', id: 'fullScreen', label: 'Full screen', hint: 'Esc stays with the game. Hold Esc to leave full screen', get: isFullScreen, set: setFullScreen } as Row] : []),
+        ...(canFullScreen() ? [{ kind: 'toggle', id: 'fullScreen', label: 'Full screen', hint: 'Pressing Esc opens the game menu, as usual. To leave full screen, hold Esc down for a moment', get: isFullScreen, set: setFullScreen } as Row] : []),
       ];
     case 'sound':
       return [
@@ -80,11 +80,12 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         {
           kind: 'select',
           key: 'mouseMode',
-          label: 'Mouse look',
-          hint: 'Hold the right mouse button: look while it is held, the pointer stays free for menus. Always: a click takes the mouse, Esc frees it',
+          // the golden rule: say what the player will see happen, not what the code does
+          label: 'Turning the camera with the mouse',
+          hint: 'Hold to look: hold the right mouse button and move the mouse to turn the camera; let go and the mouse pointer is back for the menus. Mouse capture: press a mouse button on the world and the pointer disappears, so the mouse always turns the camera; press Esc to bring the pointer back',
           options: [
-            ['hold', 'Hold right mouse button'],
-            ['capture', 'Always (Esc frees it)'],
+            ['hold', 'Hold to look'],
+            ['capture', 'Mouse capture'],
           ],
           fallback: 'hold',
         },
