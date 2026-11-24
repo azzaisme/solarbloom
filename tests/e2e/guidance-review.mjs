@@ -66,10 +66,32 @@ try {
   console.log('Fountain exit staged');
   assert.equal(await page.evaluate(() => window.solarbloom.hud.objective.showWhere()), true);
   await page.waitForFunction(() => window.solarbloom.trail.showing);
+  if (!before) await page.evaluate(() => {
+    const { trail } = window.solarbloom;
+    const update = trail.update.bind(trail);
+    trail.update = (_, ...args) => {
+      trail.reducedMotion = false;
+      trail.age = 1.85;
+      update(0, ...args);
+    };
+  });
   await shot('fountain-exit');
 
   await at(25.5, 19.5, Math.PI / 2);
-  if (!before) await page.waitForFunction(() => window.solarbloom.tileFx.objectiveFrames?.size > 0);
+  if (!before) {
+    await page.waitForFunction(() => window.solarbloom.tileFx.objectiveFrames?.size > 0);
+    const overlays = await page.evaluate(() => {
+      const g = window.solarbloom;
+      const tile = [...g.sim.keepers.patchTiles('tally')].find(tile => tile.ground !== 'restored' && tile.feature === 'paving');
+      g.overlays.showFrame(tile.roofId, tile.x, tile.z, 1, 'hover');
+      const slab = g.sim.grid.tileWorld(tile)[1] + 0.08;
+      return {
+        picker: g.overlays.frame.getPosition().y - slab,
+        objective: g.tileFx.objectiveFrames.get(tile.id).getPosition().y - slab,
+      };
+    });
+    assert.ok(overlays.picker > 0.05 && overlays.objective > 0.036, 'Picker and objective sit above the brick surface');
+  }
   await shot('market-tiles');
   if (!before) {
     const removed = await page.evaluate(() => {

@@ -7,6 +7,8 @@ import { WAYMARK } from '../src/data/waymark';
 import { Sim } from '../src/gameplay/Sim';
 import { trailDots, trailRoute, type TrailRoute } from '../src/gameplay/TrailRoute';
 import { spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
+import { leafFlight } from '../src/rendering/TrailLeaf';
+import { pavingOverlayLift, RAISED_PAVING_LIFT, RESTORED_PATH_LIFT } from '../src/rendering/PavingSurface';
 import { goalSpot, type GoalSpot } from '../src/ui/GoalSpot';
 import { WORDS } from '../src/ui/words';
 
@@ -290,5 +292,27 @@ describe('#781: leaving the fountain for the market', () => {
     const leaves = trailDots([{ x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 3 }], 0.5);
     expect(leaves[0].heading).toBeCloseTo(Math.PI / 2);
     expect(leaves.at(-1)?.heading).toBeCloseTo(0);
+  });
+});
+
+describe('falling route leaves and raised paving', () => {
+  it('flutters while descending and settles exactly onto the trail', () => {
+    const samples = [0, 0.25, 0.5, 0.75, 1].map(t => leafFlight(t, 0.43, 1.4));
+    for (let i = 1; i < samples.length; i++) expect(samples[i].height).toBeLessThan(samples[i - 1].height);
+    expect(samples[1].roll).not.toBe(samples[2].roll);
+    expect(Object.values(samples.at(-1)!).every(value => value === 0)).toBe(true);
+  });
+
+  it('clears brick tops and rounded paving corners without lifting plain ground', () => {
+    const sim = fresh();
+    const tile = { ...sim.grid.get(GROUND, 8, 8)!, blocked: false, occupantId: undefined, feature: 'lawn' as const };
+    const brick = { ...tile, feature: 'paving' as const, ground: 'polluted' as const };
+    const flat = { peek: () => undefined };
+    expect(pavingOverlayLift(flat, tile)).toBe(0);
+    expect(pavingOverlayLift(flat, brick)).toBeGreaterThan(RAISED_PAVING_LIFT);
+    expect(pavingOverlayLift(flat, { ...brick, ground: 'restored' })).toBeGreaterThan(RESTORED_PATH_LIFT + 0.004);
+    const corner = { peek: (_: string, x: number, z: number) =>
+      (x === tile.x + 1 && z === tile.z) || (x === tile.x && z === tile.z + 1) ? brick : undefined };
+    expect(pavingOverlayLift(corner, tile)).toBeGreaterThan(RESTORED_PATH_LIFT + 0.004);
   });
 });

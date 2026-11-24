@@ -4,7 +4,9 @@ In both captures, the Old Market gate is open and Bloombot has Tally’s restora
 
 | View | Before | After |
 | --- | --- | --- |
-| Fountain exit | [Trail to Tally](before-fountain-exit.png) | [Gold leaves through the opening](after-fountain-exit.png) |
-| Market square | [Paving at arrival](before-market-tiles.png) | [Remaining tiles outlined](after-market-tiles.png) |
+| Fountain exit | [Trail to Tally](before-fountain-exit.png) | [Leaves drifting through the opening](drifting-fountain-exit.png) |
+| Market square | [Paving at arrival](before-market-tiles.png) | [High-contrast restoration outlines](outlined-market-tiles.png) |
+
+The [motion preview](drifting-leaves.gif) uses the game’s trail renderer on a small test path. The previous pass is available for comparison in the [flat trail](after-fountain-exit.png) and [faint tile outlines](after-market-tiles.png) captures.
 
 The [capture script](../../../tests/e2e/guidance-review.mjs) records both views and checks that restoring a marked tile removes its outline. Set `ART_BASELINE=1` and `ART_BUILD` to the baseline build directory to capture the before views.

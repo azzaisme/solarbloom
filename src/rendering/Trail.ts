@@ -1,170 +1,172 @@
 import * as pc from 'playcanvas';
-import { levelY } from '../core/Height';
+import { heightAt, levelY } from '../core/Height';
 import { WAYMARK } from '../data/waymark';
 import type { Sim } from '../gameplay/Sim';
 import { trailDots, type TrailRoute } from '../gameplay/TrailRoute';
-import { PALETTE } from './Materials';
 import { SLAB_TOP } from './SceneBuilder';
+import { PALETTE } from './Palette';
+import { pavingOverlayLift } from './PavingSurface';
 import { group } from './Shapes';
 import { glowMaterial } from './TileFx';
+import { clamp01, leafColor, leafFlight, LEAF_INDICES, LEAF_VERTICES, smooth } from './TrailLeaf';
 
-/** Each dot: a centre, then rings at the core's edge, in the dark rim, and at the halo's edge. */
-const SEG = 16;
-const RINGS = 3;
-const PER_DOT = 1 + SEG * RINGS;
+interface Landing {
+  x: number;
+  y: number;
+  z: number;
+  s: number;
+  heading: number;
+  routeX: number;
+  routeZ: number;
+  phase: number;
+}
 
-const smooth = (a: number) => {
-  const t = Math.max(0, Math.min(1, a));
-  return t * t * (3 - 2 * t);
-};
-
-/**
- * #632: Show me where's trail. Warm gold leaves lie on the ground along the walkable way from bloombot to the goal
- * (gameplay/TrailRoute.ts). It runs out from bloombot when asked, a soft pulse leads the first reveal, the
- * dots bloombot walks past fade behind it, and the whole trail fades after a while or once bloombot gets there.
- * Pressing again draws it afresh. It ignores the fog (as the waymark does), so it reads in mist and at night.
- * Reduced motion: it appears at once and nothing runs along it.
- */
+/** Show me where: real curled leaves fall onto the walkable route, then rest there until Bloombot passes. */
 export class Trail {
   private root: pc.Entity;
   private material: pc.StandardMaterial;
   private mesh?: pc.Mesh;
-  private dots: { x: number; z: number; s: number; heading: number }[] = [];
+  private leaves: Landing[] = [];
+  private flurries: number[] = [];
   private colors = new Uint8Array(0);
-  /** each dot's centre in the world, and the vertex positions (rebuilt as the dots grow with distance) */
-  private centres: number[] = [];
   private positions = new Float32Array(0);
   private route?: TrailRoute;
   private age = 0;
-  /** how far along the way bloombot has got (cells), never going back */
   private progress = 0;
-  /** 0 … 1 while it fades out early (bloombot got there) */
   private leaving = 0;
   reducedMotion = false;
-  private dayColor = new pc.Color().fromString(PALETTE.signal.trailDay);
-  private nightColor = new pc.Color().fromString(PALETTE.signal.trail);
 
   constructor(
     private sim: Sim,
     parent: pc.Entity,
   ) {
     this.root = group(parent, 'trail');
-    this.material = glowMaterial(PALETTE.signal.trail, WAYMARK.trail.glow);
+    this.material = glowMaterial(PALETTE.pure.white, WAYMARK.trail.glow);
     this.root.enabled = false;
   }
 
-  /** Is a trail on the ground now (tests and screenshots read it)? */
   get showing(): boolean {
     return this.root.enabled && !!this.route;
   }
 
-  /** The way it is drawing, while it shows. */
   get way(): TrailRoute | undefined {
     return this.showing ? this.route : undefined;
   }
 
-  /** How many dots it laid. */
   get count(): number {
-    return this.dots.length;
+    return this.leaves.length;
   }
 
-  /** Round shoulders taper to a tip along the route heading. */
-  private leafVertices(pos: number[] | Float32Array, offset: number, x: number, y: number, z: number, heading: number, scale: number) {
-    const T = WAYMARK.trail;
-    const sideX = Math.cos(heading);
-    const sideZ = -Math.sin(heading);
-    pos[offset++] = x;
-    pos[offset++] = y;
-    pos[offset++] = z;
-    for (const radius of [T.dot, T.rim, T.halo]) {
-      for (let i = 0; i < SEG; i++) {
-        const a = i / SEG * Math.PI * 2;
-        const forward = Math.cos(a);
-        const along = forward * (forward > 0 ? 1.16 : 0.83) * radius * scale;
-        const across = Math.sin(a) * (1 - forward * 0.35) * radius * 0.46 * scale;
-        pos[offset++] = x - sideZ * along + sideX * across;
-        pos[offset++] = y;
-        pos[offset++] = z + sideX * along + sideZ * across;
-      }
-    }
-  }
-
-  /** Lays a new trail along `route` (replacing any trail already down). */
+  /** Lays the landing points out once and uses a single mesh for all of the leaves. */
   show(route: TrailRoute) {
     this.clear();
-    this.centres = [];
     const layer = this.sim.grid.layer(route.roofId);
     const dots = trailDots(route.points);
     if (!layer || !dots.length) return;
+    const terraced = this.sim.grid.terraced(route.roofId);
     this.route = route;
-    this.dots = dots;
-    this.age = 0;
-    this.progress = 0;
-    this.leaving = 0;
-    const T = WAYMARK.trail;
-    const pos: number[] = [];
-    const idx: number[] = [];
-    for (const d of dots) {
-      const lv = this.sim.grid.peek(route.roofId, Math.floor(d.x), Math.floor(d.z))?.level;
-      const y = layer.origin[1] + layer.height + SLAB_TOP + (lv !== undefined ? levelY(lv) : 0) + T.lift;
-      const x = layer.origin[0] + d.x;
-      const z = layer.origin[2] + d.z;
-      const base = pos.length / 3;
-      this.centres.push(x, y, z);
-      this.leafVertices(pos, pos.length, x, y, z, d.heading, 1);
-      for (let k = 0; k < SEG; k++) {
-        const k1 = (k + 1) % SEG;
-        idx.push(base, base + 1 + k, base + 1 + k1);
-        for (let ring = 0; ring < RINGS - 1; ring++) {
-          const i0 = base + 1 + ring * SEG + k;
-          const i1 = base + 1 + ring * SEG + k1;
-          idx.push(i0, i0 + SEG, i1 + SEG, i0, i1 + SEG, i1);
-        }
-      }
+    this.leaves = dots.map((dot, index) => ({
+      x: layer.origin[0] + dot.x,
+      y: layer.origin[1] + layer.height + SLAB_TOP + WAYMARK.trail.lift +
+        pavingOverlayLift(this.sim.grid, this.sim.grid.peek(route.roofId, Math.floor(dot.x), Math.floor(dot.z))) + (terraced ? levelY(heightAt(dot.x, dot.z)) : 0),
+      z: layer.origin[2] + dot.z,
+      s: dot.s,
+      routeX: dot.x,
+      routeZ: dot.z,
+      heading: dot.heading,
+      phase: index * 2.399963,
+    }));
+    this.age = this.progress = this.leaving = 0;
+    // A few extra drifting leaves keep the next stretch alive. They share the mesh and never replace the route.
+    this.flurries = [];
+    for (let i = 2; i < this.leaves.length; i += 4) this.flurries.push(i);
+
+    const mesh = new pc.Mesh(pc.AppBase.getApplication()!.graphicsDevice);
+    const slots = [...this.leaves.map((_, i) => i), ...this.flurries];
+    const count = slots.length * LEAF_VERTICES.length;
+    this.positions = new Float32Array(count * 3);
+    this.colors = new Uint8Array(count * 4);
+    const indices: number[] = [];
+    for (let i = 0; i < slots.length; i++) {
+      const base = i * LEAF_VERTICES.length;
+      for (const index of LEAF_INDICES) indices.push(base + index);
+      LEAF_VERTICES.forEach((vertex, j) => this.colors.set(leafColor(slots[i] + (i < this.leaves.length ? 0 : 1), vertex), (base + j) * 4));
     }
-    const device = pc.AppBase.getApplication()!.graphicsDevice;
-    const mesh = new pc.Mesh(device);
-    this.positions = new Float32Array(pos);
-    mesh.setPositions(this.positions);
-    mesh.setNormals(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)));
-    this.colors = new Uint8Array(dots.length * PER_DOT * 4);
-    mesh.setColors32(this.colors);
-    mesh.setIndices(idx);
-    mesh.update();
     this.mesh = mesh;
+    this.draw(0);
+    mesh.setIndices(indices);
+    mesh.update();
     this.root.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, this.material)], castShadows: false, receiveShadows: false });
     this.root.enabled = true;
   }
 
-  /** Takes the trail up at once. */
   clear() {
-    this.root.removeComponent('render');
+    if (this.root.render) this.root.removeComponent('render');
     this.mesh?.destroy();
     this.mesh = undefined;
     this.route = undefined;
-    this.dots = [];
+    this.leaves = [];
+    this.flurries = [];
     this.root.enabled = false;
   }
 
-  /**
-   * Each frame. `show`: false while something else owns the screen (building, photo mode, a cutscene); it hides
-   * then, and is gone afterwards if it ran out meanwhile. `bot`: bloombot's position. `night`: 0 by day … 1 at night.
-   */
-  /**
-   * Seen from the low follow camera a flat dot shrinks to a sliver a few metres off, so each dot grows with its
-   * distance from the camera (up to `farScale`), and the stretch ahead stays readable.
-   */
-  private size(camera: pc.Vec3) {
+  private draw(fade: number, camera?: pc.Vec3) {
     const T = WAYMARK.trail;
-    const c = this.centres;
-    const p = this.positions;
-    for (let i = 0; i < this.dots.length; i++) {
-      const x = c[i * 3], y = c[i * 3 + 1], z = c[i * 3 + 2];
-      const d = Math.hypot(x - camera.x, y - camera.y, z - camera.z);
-      const k = Math.min(T.farScale, Math.max(1, 1 + (d - T.nearDistance) * T.growth));
-      this.leafVertices(p, i * PER_DOT * 3, x, y, z, this.dots[i].heading, k);
+    const total = this.leaves[this.leaves.length - 1].s;
+    const revealSpeed = Math.max(T.draw, total / T.drawMax);
+    for (let i = 0; i < this.leaves.length; i++) {
+      const leaf = this.leaves[i];
+      const elapsed = this.age - leaf.s / revealSpeed;
+      const fallTime = T.fallSeconds + 0.64 * (0.5 + 0.5 * Math.sin(leaf.phase));
+      const fraction = this.reducedMotion ? 1 : clamp01(elapsed / fallTime);
+      const alpha = (this.reducedMotion ? 1 : smooth(elapsed / T.fadeIn)) *
+        smooth((leaf.s - this.progress + T.behind * 0.5) / T.behind) *
+        (this.route!.reached ? 1 : 0.55 + 0.45 * smooth((total - leaf.s) / 3)) * (1 - fade);
+      this.drawLeaf(i, leaf, fraction, alpha, camera);
     }
-    this.mesh!.setPositions(p);
+    for (let i = 0; i < this.flurries.length; i++) {
+      const leaf = this.leaves[this.flurries[i]];
+      const ahead = leaf.s - this.progress;
+      const cycle = (this.age + leaf.phase) % 8.4;
+      const fraction = clamp01(cycle / 3.8);
+      const alpha = this.reducedMotion || this.age < 4 ? 0 :
+        0.72 * smooth(cycle / 0.6) * (1 - smooth((fraction - 0.76) / 0.24)) *
+        smooth(ahead / 2) * (1 - smooth((ahead - 8) / 5)) * (1 - fade);
+      this.drawLeaf(this.leaves.length + i, leaf, fraction, alpha, camera, 0.72, 2.7);
+    }
+    this.mesh!.setPositions(this.positions);
+    this.mesh!.setColors32(this.colors);
+  }
+
+  private drawLeaf(index: number, leaf: Landing, fraction: number, alpha: number, camera?: pc.Vec3, size = 1, phaseOffset = 0) {
+    const T = WAYMARK.trail;
+    const phase = leaf.phase + phaseOffset;
+    const flight = leafFlight(fraction, phase, T.fallHeight + 0.45 * Math.cos(phase * 0.8));
+    const heading = leaf.heading + Math.sin(phase) * 0.16;
+    const x = leaf.x + Math.cos(heading) * flight.sideways + Math.sin(heading) * flight.along;
+    const z = leaf.z - Math.sin(heading) * flight.sideways + Math.cos(heading) * flight.along;
+    const y = leaf.y + flight.height;
+    const distance = camera ? Math.hypot(x - camera.x, y - camera.y, z - camera.z) : 0;
+    const scale = size * (0.83 + 0.17 * Math.cos(phase + 0.6)) *
+      Math.min(T.farScale, Math.max(1, 1 + (distance - T.nearDistance) * T.growth));
+    this.placeLeaf(index, x, y, z, heading + flight.yaw, flight.pitch, flight.roll, scale, alpha);
+  }
+
+  private placeLeaf(index: number, x: number, y: number, z: number, yaw: number, pitch: number, roll: number, scale: number, alpha: number) {
+    const sinYaw = Math.sin(yaw), cosYaw = Math.cos(yaw);
+    const sinPitch = Math.sin(pitch), cosPitch = Math.cos(pitch);
+    const sinRoll = Math.sin(roll), cosRoll = Math.cos(roll);
+    let offset = index * LEAF_VERTICES.length;
+    for (const vertex of LEAF_VERTICES) {
+      const side = vertex.x * cosRoll - vertex.y * sinRoll;
+      const lift = vertex.x * sinRoll + vertex.y * cosRoll;
+      const forward = lift * sinPitch + vertex.z * cosPitch;
+      this.positions[offset * 3] = x + (side * cosYaw + forward * sinYaw) * scale;
+      this.positions[offset * 3 + 1] = y + (lift * cosPitch - vertex.z * sinPitch) * scale;
+      this.positions[offset * 3 + 2] = z + (forward * cosYaw - side * sinYaw) * scale;
+      this.colors[offset * 4 + 3] = Math.round(255 * alpha);
+      offset++;
+    }
   }
 
   update(dt: number, show: boolean, bot: { roofId: string; x: number; z: number } | undefined, night: number, camera?: pc.Vec3) {
@@ -172,64 +174,31 @@ export class Trail {
     if (!route || !this.mesh) return;
     const T = WAYMARK.trail;
     this.age += dt;
-    const total = this.dots[this.dots.length - 1].s;
-    // bloombot walking the way: the nearest dot ahead of what it has passed marks its progress
+    const total = this.leaves[this.leaves.length - 1].s;
     if (bot && bot.roofId === route.roofId) {
       let best = Infinity;
       let at = this.progress;
-      for (const d of this.dots) {
-        if (d.s < this.progress - 2 || d.s > this.progress + 8) continue;
-        const dd = Math.hypot(d.x - bot.x, d.z - bot.z);
-        if (dd < best) {
-          best = dd;
-          at = d.s;
+      for (const leaf of this.leaves) {
+        if (leaf.s < this.progress - 2 || leaf.s > this.progress + 8) continue;
+        const distance = Math.hypot(leaf.routeX - bot.x, leaf.routeZ - bot.z);
+        if (distance < best) {
+          best = distance;
+          at = leaf.s;
         }
       }
       if (best < 1.2) this.progress = Math.max(this.progress, at);
       const end = route.points[route.points.length - 1];
-      const there = Math.hypot(end.x - bot.x, end.z - bot.z) < T.reach * 0.75 && this.progress > total - T.reach * 2;
-      if (there) this.leaving = Math.min(1, this.leaving + dt / T.fade);
+      if (Math.hypot(end.x - bot.x, end.z - bot.z) < T.reach * 0.75 && this.progress > total - T.reach * 2) {
+        this.leaving = Math.min(1, this.leaving + dt / T.fade);
+      }
     }
-    const out = Math.max(this.leaving, smooth((this.age - T.life) / T.fade));
-    if (out >= 1) return this.clear();
-    if (this.root.enabled !== show) this.root.enabled = show;
+    const fade = Math.max(this.leaving, smooth((this.age - T.life) / T.fade));
+    if (fade >= 1) return this.clear();
+    this.root.enabled = show;
     if (!show) return;
-    const speed = Math.max(T.draw, total / T.drawMax);
-    const front = this.reducedMotion ? Infinity : this.age * speed;
-    const run = this.reducedMotion ? -Infinity : this.age * speed - T.runLength;
-    const c = this.colors;
-    const dark = Math.max(0, Math.min(1, night));
-    const shade = Math.round(255 * T.rimShade);
-    const rimA = T.rimAlpha * (1 - dark);
-    for (let i = 0; i < this.dots.length; i++) {
-      const d = this.dots[i];
-      const drawn = smooth((front - d.s) / 1.5);
-      const behind = smooth((d.s - this.progress + T.behind * 0.5) / T.behind);
-      // the last few dots soften into the goal's light
-      const tail = route.reached ? 1 : 0.55 + 0.45 * smooth((total - d.s) / 3);
-      const a = drawn * behind * tail * (1 - out);
-      const lift = 1 + T.runLift * Math.exp(-(((d.s - run) / T.runLength) ** 2) * 2);
-      const bright = Math.min(255, Math.round(200 * lift));
-      let o = i * PER_DOT * 4;
-      const put = (rgb: number, alpha: number, n: number) => {
-        for (let k = 0; k < n; k++) {
-          c[o++] = rgb;
-          c[o++] = rgb;
-          c[o++] = rgb;
-          c[o++] = Math.round(255 * alpha);
-        }
-      };
-      put(bright, a, 1);
-      put(bright, a * 0.95, SEG);
-      // the dark rim: strong by day on pale ground, gone at night (the glow carries it there); its edge fades to nothing
-      put(shade, a * rimA, SEG);
-      put(shade, 0, SEG);
-    }
-    this.mesh.setColors32(c);
-    if (camera) this.size(camera);
-    this.mesh.update(pc.PRIMITIVE_TRIANGLES, !!camera);
-    this.material.emissive.lerp(this.dayColor, this.nightColor, dark);
-    this.material.emissiveIntensity = T.glow + (T.nightGlow - T.glow) * dark;
+    this.draw(fade, camera);
+    this.mesh.update(pc.PRIMITIVE_TRIANGLES);
+    this.material.emissiveIntensity = T.glow + (T.nightGlow - T.glow) * clamp01(night);
     this.material.update();
   }
 }

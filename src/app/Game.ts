@@ -1709,7 +1709,7 @@ export class Game {
   }
 
   /**
-   * #605 (E24): Show me where. A trail of gold leaves runs along the ground from bloombot to the current goal spot
+   * #605 (E24): Show me where. Gold leaves drift down along the route from bloombot to the current goal spot
    * (ui/GoalSpot.ts) by a way bloombot can walk (#632), to where the waymark's light stands on it (#609; for a while
    * it shows even at the potter-about pace, which otherwise keeps the world unmarked). The camera stays with
    * bloombot. When nothing walkable gets there yet, the trail goes as close as it can and a note says why. False

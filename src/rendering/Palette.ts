@@ -501,10 +501,10 @@ const signal = {
     logoEdge: '#e09a1c',
     logoLeafEdge: '#4f9e3f',
   },
-  /** #632: Show me where's trail of glowing dots on the ground: mint, like the waymark's light it leads to */
-  trail: '#ffe4a0',
-  /** by day: a deeper mint, so it reads on pale ground */
-  trailDay: '#ffce65',
+  /** Compass leaves and the restoration target stroke. */
+  trailLeaves: ['#ffb035', '#ffc95d', '#f4aa3d', '#ffdd87'],
+  trailVein: '#ffea9c',
+  objectiveTile: '#ffc04e',
   /** E19: the build hologram bloombot projects */
   holo: '#a6ff86',
   /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
