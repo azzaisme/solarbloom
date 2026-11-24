@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
+
+/** The build's version (the Steam Deck release workflow stamps package.json with "0.1.<build>" first). */
+const VERSION = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 
@@ -76,6 +80,7 @@ const QUICK = [
 export default defineConfig(({ mode }) => ({
   base: './',
   server: { host: true },
+  define: { __APP_VERSION__: JSON.stringify(VERSION) },
   build: { target: 'es2022', chunkSizeWarningLimit: 2500 },
   // Benchmarks (tests/perf/*.perf.ts) run separately with `npm run test:perf`.
   // The soak (tests/soak/*.soak.ts) runs with `npm run test:soak`.

@@ -93,3 +93,14 @@ npm run package:deck
 
 The AppImage lands in `release/`. `npm run desktop` opens the built game in a window on any OS; add `-- --deck`
 to try the Deck preset.
+
+## Which version am I on? Updates
+
+- The title screen shows the version under the menu ("Early build · version 0.1.19"), and so does Settings › Game.
+  Each Steam Deck release is numbered `0.1.<build>`, matching the GitHub release.
+- From version 0.1.19 on, the game updates itself. A few seconds after it starts (when the Deck is online) it checks
+  the GitHub releases, downloads a newer build quietly, and says "A new version of Solarbloom is ready". It installs
+  the next time you start the game, or straight away with **Restart to update** on the title screen. The update
+  replaces `~/Applications/Solarbloom.AppImage` in place, so the Steam shortcut keeps working.
+- Builds before 0.1.19 (`0.1.0-build.N`) can't update themselves: install 0.1.19 or later once by hand (above).
+- Offline, or if anything goes wrong, the game simply plays the version it has and tries again next time.

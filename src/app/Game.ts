@@ -1,3 +1,4 @@
+import { updates } from '../ui/version';
 import { CHUNK } from '../core/Hash';
 import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
@@ -1181,6 +1182,10 @@ export class Game {
       },
     });
     this.hud.modalCheck = () => this.menu.isOpen || this.settingsUi.isOpen;
+    // in-game updates (the Deck build): say once, calmly, that a newer version is ready and how it arrives
+    updates.onReady((v) =>
+      this.hud.toast(`🌱 A new version of Solarbloom is ready (version ${esc(v)})<small>It installs the next time you start the game. To update now, quit to the title screen and choose Restart to update.</small>`, '', 9),
+    );
   }
 
   /** "Auto (High)", "Auto (Steam Deck)": what Auto picked, beside it in Settings › Display. */
