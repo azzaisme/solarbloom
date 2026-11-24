@@ -39,6 +39,49 @@ ipcMain.on('sb:save-set', (e, key, value) => {
   }
 });
 ipcMain.on('sb:quit', () => app.quit());
+
+// The version this build was released as (the release workflow stamps package.json with it).
+ipcMain.on('sb:version', (e) => {
+  e.returnValue = app.getVersion();
+});
+
+/**
+ * In-game updates (the Steam Deck build): on launch the game quietly checks the GitHub releases for a newer build,
+ * downloads it in the background and tells the game when it is ready. It installs when the player chooses
+ * "Restart to update", or on its own the next time the game closes. Only a packaged AppImage updates itself (it
+ * replaces the file in place, ~/Applications/Solarbloom.AppImage, so the Steam shortcut keeps working); offline,
+ * or anything going wrong, simply means no update this time: the game is never held up by it.
+ */
+let updater;
+let updateReady;
+function startUpdates(win) {
+  if (!app.isPackaged || !process.env.APPIMAGE || process.argv.includes('--no-update')) return;
+  try {
+    updater = require('electron-updater').autoUpdater;
+  } catch {
+    return;
+  }
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.allowPrerelease = false;
+  updater.logger = null;
+  updater.on('update-downloaded', (info) => {
+    updateReady = info.version;
+    if (!win.isDestroyed()) win.webContents.send('sb:update', updateReady);
+  });
+  updater.on('error', () => {
+    /* offline or no release yet: try again next launch */
+  });
+  // a few seconds after launch, so the check never competes with loading the game
+  setTimeout(() => updater.checkForUpdates().catch(() => {}), 8000);
+}
+// a page that loads later (the title after a reload) asks whether an update is already waiting
+ipcMain.on('sb:update-ready', (e) => {
+  e.returnValue = updateReady ?? null;
+});
+ipcMain.on('sb:update-restart', () => {
+  if (updater && updateReady) updater.quitAndInstall(true, true);
+});
 ipcMain.on('sb:save-remove', (e, key) => {
   try {
     fs.rmSync(saveFile(key), { force: true });
@@ -74,6 +117,7 @@ app.whenReady().then(() => {
   // E22.11: the game pauses while the Deck (or computer) sleeps.
   powerMonitor.on('suspend', () => win.webContents.send('sb:power', 'suspend'));
   powerMonitor.on('resume', () => win.webContents.send('sb:power', 'resume'));
+  startUpdates(win);
 });
 
 app.on('window-all-closed', () => app.quit());
