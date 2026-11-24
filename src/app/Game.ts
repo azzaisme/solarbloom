@@ -985,6 +985,7 @@ export class Game {
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     this.sfx.setReduced(!!s.reducedRepetitive);
+    this.hud.messageScale = Number(s.messageTime) || 1;
     document.body.classList.toggle('contrast', !!s.highContrast);
     this.look.highContrast = !!s.highContrast;
     // Look 5.11: HUD glass without live blur (cheaper on phones). Look 1's Low graphics tier can set it too.

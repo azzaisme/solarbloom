@@ -36,7 +36,7 @@ async function toasts() {
   (globalThis as { document?: unknown }).document = { createElement: () => new Box() };
   (globalThis as { window?: unknown }).window = globalThis;
   const { Toasts } = await import('../src/ui/Toasts');
-  const hud = { root: { querySelector: () => box }, words: (s: string) => s } as unknown as Hud;
+  const hud = { root: { querySelector: () => box }, words: (s: string) => s, messageScale: 1 } as unknown as Hud;
   const t = new Toasts(hud);
   t.now = () => clock;
   const showing = () => box.children.filter((c) => c.style.opacity !== '0').map((c) => c.dataset.head);
@@ -56,16 +56,19 @@ describe('#662: toasts wait their turn', () => {
 
   it('a park milestone, Bloombot growing and a new plot option each get read, in the order they came', async () => {
     const { t, showing } = await toasts();
+    const { readSecs } = await import('../src/ui/Toasts');
+    const first = readSecs('💡 Three quarters of the way there<small>The lamps are lit again.</small>') * 1000;
+    const second = readSecs('The park helped Bloombot grow: Nimble hands<small>Digging takes a quarter less time.</small>') * 1000;
     t.toast('💡 Three quarters of the way there<small>The lamps are lit again.</small>', 'gold', 4);
     t.toast('The park helped Bloombot grow: Nimble hands<small>Digging takes a quarter less time.</small>', 'gold', 5);
     t.toast('☕ New plot option: Café terrace<small>Tables and parasols.</small>', 'gold', 4.5);
     expect(showing()).toEqual(['💡 Three quarters of the way there']);
     expect(t.waiting()).toEqual(['The park helped Bloombot grow: Nimble hands', '☕ New plot option: Café terrace']);
-    tick(1000);
-    expect(showing()).toEqual(['💡 Three quarters of the way there']); // not cut short
-    tick(1500);
+    tick(first - 100);
+    expect(showing()).toEqual(['💡 Three quarters of the way there']); // not cut short: it has its whole reading time
+    tick(100);
     expect(showing()).toEqual(['The park helped Bloombot grow: Nimble hands']);
-    tick(2500);
+    tick(second);
     expect(showing()).toEqual(['☕ New plot option: Café terrace']);
     expect(t.waiting()).toEqual([]);
   });
@@ -74,7 +77,7 @@ describe('#662: toasts wait their turn', () => {
     const { t, showing } = await toasts();
     t.toast('🔓 Mast Row is open!', 'gold', 4);
     expect(showing()).toEqual(['🔓 Mast Row is open!']);
-    tick(3000);
+    tick(5000);
     t.toast('Bloombot got better: Keen eye, level 1 of 3', 'gold', 3.5);
     expect(showing()).toEqual(['Bloombot got better: Keen eye, level # of #']);
     expect(t.waiting()).toEqual([]);
@@ -88,7 +91,7 @@ describe('#662: toasts wait their turn', () => {
     t.toast('Bloombot got better: Quick hands, level 1 of 3', 'gold', 3.5);
     t.toast('Bloombot got better: Quick hands, level 2 of 3', 'gold', 3.5);
     expect(t.waiting()).toEqual(['Bloombot got better: Quick hands, level # of #']);
-    tick(2400);
+    tick(5000);
     expect(showing()).toEqual(['Bloombot got better: Quick hands, level # of #']);
   });
 
@@ -98,8 +101,20 @@ describe('#662: toasts wait their turn', () => {
     t.pickup('Copper', 3);
     t.pickup('Copper', 3);
     expect(t.waiting()).toEqual(['pickup:Copper']);
-    tick(2400);
+    tick(5000);
     expect(box.children[0].dataset.n).toBe('6');
+  });
+
+  it('player feedback "hints disappear way too quickly": every message stays long enough to read, longer with the setting', async () => {
+    const { readSecs } = await import('../src/ui/Toasts');
+    expect(readSecs('🔓 Mast Row is open!')).toBe(5); // even a short one: 5 seconds
+    const long = 'Rubble still blocks the streets leading away from the fountain.<small>Walk up to a pile and hold E to pry it out of the way.</small>';
+    expect(readSecs(long)).toBeGreaterThan(8); // about 200 words a minute, plus a moment to notice
+    expect(readSecs('word '.repeat(200))).toBe(14); // never stuck on screen
+    const { t, showing } = await toasts();
+    t.toast(long, 'gold', 3); // asked for 3 s: it still gets its reading time
+    tick(readSecs(long) * 1000 - 200);
+    expect(showing()).toHaveLength(1);
   });
 
   it('never more than a few wait: the oldest goes first', async () => {

@@ -184,7 +184,9 @@ export class Panels extends HudPart {
     const py = y !== undefined ? toHud(y) : hudHeight() - 160;
     el.style.left = `${Math.max(8, Math.min(hudWidth() - 290, px - 20))}px`;
     el.style.top = `${Math.max(8, py - 48)}px`;
-    this.failTimer = 2.2;
+    // a short "can't do that" note, long enough to read (it was 2.2 s for any length)
+    const words = msg.trim().split(/\s+/).length;
+    this.failTimer = Math.min(10, Math.max(3.5, 2 + 0.3 * words)) * this.hud.messageScale;
   }
 
   renderInspect(html: string | null) {
