@@ -17,9 +17,16 @@ const LEAD = /^\s*(\p{Extended_Pictographic}️?(?:‍\p{Extended_Pictographic}�
  * #662: each toast gets READ_SECS on screen before another may take its place. One that comes sooner waits its turn
  * (a park milestone, Bloombot growing and a new plot option used to wipe each other out in the same second).
  */
+/**
+ * How long a message needs on screen (player feedback: "hints disappear way too quickly"): a moment to notice it,
+ * then about 200 words a minute. At least 5 seconds, at most 14; the "How long messages stay" setting scales it.
+ */
+export function readSecs(html: string): number {
+  const words = html.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+  return Math.min(14, Math.max(5, 2.5 + 0.3 * words));
+}
+
 export class Toasts extends HudPart {
-  /** how long a toast is left alone before the next one may replace it (its own time if that's shorter) */
-  static readonly READ_SECS = 2.4;
   /** at most this many wait; past that the oldest is dropped */
   static readonly QUEUE_MAX = 4;
   private queue: { head: string; run: () => void; pickup?: string; n?: number }[] = [];
@@ -37,6 +44,8 @@ export class Toasts extends HudPart {
     // E19.4.2 / E22.10: the calm HUD drops number-heavy detail lines and the repeat count (numbers live in panels).
     html = calmToast(html);
     html = this.hud.words(html);
+    // long enough to read, whatever the caller asked for (and longer with the setting)
+    secs = Math.max(secs, readSecs(html)) * this.hud.messageScale;
     const head = html.split('<small>')[0].replace(/[×x]\d+|\d+/g, '#');
     for (const c of Array.from(box.children) as HTMLElement[]) {
       if (c.dataset.head !== head || c.style.opacity === '0') continue;
@@ -76,7 +85,8 @@ export class Toasts extends HudPart {
   }
 
   private show(box: HTMLElement, cls: string, inner: string, head: string, secs: number): HTMLElement {
-    this.readUntil = this.now() + Math.min(secs, Toasts.READ_SECS) * 1000;
+    // the next message waits until this one has had its whole time: nothing is replaced before it can be read
+    this.readUntil = this.now() + secs * 1000;
     while (box.children.length >= 1) box.firstElementChild!.remove();
     const el = document.createElement('div');
     el.dataset.head = head;
@@ -96,7 +106,8 @@ export class Toasts extends HudPart {
   }
 
   /** E22.5: a material picked up ("+3 Copper"); the same material again while it shows adds to it. */
-  pickup(name: string, n: number, secs = 2.6) {
+  pickup(name: string, n: number, secs = 3.5) {
+    secs *= this.hud.messageScale;
     const box = $(this.root, '#toasts');
     const cur = Array.from(box.children).find((c) => (c as HTMLElement).dataset.pickup === name && (c as HTMLElement).style.opacity !== '0') as HTMLElement | undefined;
     const total = (cur ? Number(cur.dataset.n ?? '0') : 0) + n;
