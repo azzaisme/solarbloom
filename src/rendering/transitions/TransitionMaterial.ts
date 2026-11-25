@@ -17,11 +17,12 @@ import * as pc from 'playcanvas';
  * transition starts or ends. Reduced motion keeps the timing but drops heave, tilt and overshoot. The Low tier
  * drops the procedural patterns (colour and mask fades only).
  *
- * Per-vertex data (three vec4 streams):
+ * Per-vertex data:
  *   trA = (t0, duration, mode, stagger)    mode 0 still · 1 grow · 2 heave (slab piece) · 3 surface · 4 root
  *   trB = deco: (inA, inB, outA, outB) progress windows · surface: (from colour packed, from pollution, to pollution, kind*8 + state)
  *   trC = deco: (anchor x, y, z, seed)                 · surface: (dir, feature, lushAt, lushUntil)
- *   Tree morph (mode 5) stores the starting vertex position in trB.xyz.
+ *   Tree morph (mode 5) stores the starting vertex position in trB.xyz. Leaves follow the branch motion while
+ *   their shape changes by trLeaf over their own opening window (trA.w to trB.w).
  * Surface kinds: 0 none · 1 soften · 2 moss · 3 restore · 4 bloom · 5 unblock. States: 0 concrete · 1 moss ·
  * 2 soil · 3 grass · 4 hard (water, clean paving: no cracks).
  */
@@ -29,11 +30,13 @@ import * as pc from 'playcanvas';
 export const SEM_A = pc.SEMANTIC_ATTR13;
 export const SEM_B = pc.SEMANTIC_ATTR14;
 export const SEM_C = pc.SEMANTIC_ATTR15;
+export const SEM_LEAF = pc.SEMANTIC_ATTR12;
 
 const DECL_VS = /* glsl */ `
 attribute vec4 vertex_trA;
 attribute vec4 vertex_trB;
 attribute vec4 vertex_trC;
+attribute vec3 vertex_trLeaf;
 varying vec4 vTrA;
 varying vec4 vTrB;
 varying vec4 vTrC;
@@ -61,7 +64,15 @@ vec3 trDisplace(vec3 posW) {
 	if (mode < 0.5 || (mode > 2.5 && mode < 3.5)) return posW;
 	vec3 anc = vertex_trC.xyz;
 	float p = clamp(trProgressAt(vertex_trA, anc), 0.0, 1.0);
-	if (mode > 4.5) return mix(vertex_trB.xyz, posW, smoothstep(0.0, 1.0, p));
+	if (mode > 4.5) {
+		float growth = smoothstep(0.0, 1.0, p);
+		vec3 moved = mix(vertex_trB.xyz, posW, growth);
+		if (vertex_trB.w > 0.0) {
+			float open = smoothstep(vertex_trA.w, vertex_trB.w, p);
+			moved += vertex_trLeaf * (open - growth) * uTrMotion;
+		}
+		return moved;
+	}
 	// stagger: pieces start one after another inside their window
 	float span = vertex_trB.y - vertex_trB.x;
 	float q = p - vertex_trA.w * span * 0.6;
@@ -375,6 +386,7 @@ export function transitionMaterial(): pc.StandardMaterial {
   m.setAttribute('vertex_trA', SEM_A);
   m.setAttribute('vertex_trB', SEM_B);
   m.setAttribute('vertex_trC', SEM_C);
+  m.setAttribute('vertex_trLeaf', SEM_LEAF);
   try {
     const chunks = m.getShaderChunks(pc.SHADERLANGUAGE_GLSL);
     chunks.set('litUserDeclarationVS', DECL_VS);

@@ -52,7 +52,11 @@ export interface TreeGeo {
   tris: number;
   /** Where late-growing ornaments sprout, ordered by their first vertex. */
   attachments?: readonly { first: number; at: V }[];
+  /** First vertex of each leaf card. Its first vertex is the leaf's attachment point. */
+  leafStarts?: Uint32Array;
 }
+
+export const LEAF_CARD_VERTICES = 8;
 
 type V = [number, number, number];
 const add = (a: V, b: V): V => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -108,7 +112,10 @@ class Buf {
   n = 0;
   top = 0;
   readonly attachments: { first: number; at: V }[] = [];
-  constructor(readonly age: TreeStage = 3) {}
+  readonly leafStarts?: number[];
+  constructor(readonly age: TreeStage = 3, tree = false) {
+    if (tree) this.leafStarts = [];
+  }
   v(p: V, n: V, c: C, flex: number) {
     this.pos.push(p[0], p[1], p[2], flex);
     this.nrm.push(n[0], n[1], n[2]);
@@ -128,6 +135,7 @@ class Buf {
       height: this.top,
       tris: this.idx.length / 3,
       attachments: this.attachments.length ? this.attachments : undefined,
+      leafStarts: this.leafStarts && new Uint32Array(this.leafStarts),
     };
   }
 }
@@ -509,6 +517,7 @@ function spray(B: Buf, R: () => number, at: Tip, n: number, reach: number, L: nu
     const offset = unfold * extension;
     const bud = offset === 1 ? p : add(root, mul(sub(p, at.p), offset));
     const leafSize = l * (B.age === 1 ? 1.5 : 1);
+    B.leafStarts?.push(B.n);
     card(B, bud, dir, upv, leafSize * unfold, leafSize * narrow * unfold * unfold, col, mix(col, cr.pal.light, 0.12), flex * 0.85, Math.min(1.2, flex + 0.15), 0.5, 0.14, soft);
   }
 }
@@ -593,7 +602,7 @@ const GLOW = hex(PALETTE.glow.honey);
  * Units are tiles: a full-grown tree is about 1.1–1.5 tiles tall and fits a tile's footprint.
  */
 export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: Lod = 1, form: Form = 'standard'): TreeGeo {
-  const B = new Buf(stage);
+  const B = new Buf(stage, true);
   // A tree keeps its trunk, branching pattern and leaf positions for its whole life.
   const R = rng((variant + 1) * 7919 + SPECIES.indexOf(sp) * 104729 + 3 * 13);
   const bark = BARK[sp];
