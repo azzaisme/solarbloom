@@ -2332,7 +2332,8 @@ export class Game {
       return false;
     }
     this.overlays.megaCharge = progress;
-    const count = Math.max(1, Math.ceil(progress * h.targets.length));
+    // Leave the entire footprint lit briefly before firing.
+    const count = Math.max(1, Math.ceil(Math.min(1, progress / 0.9) * h.targets.length));
     if (count !== h.shown) {
       h.shown = count;
       this.overlays.showRadius(h.targets.slice(0, count).map(({ tile }) => tile), 'mega');
