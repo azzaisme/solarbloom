@@ -239,7 +239,9 @@ export class Hud {
 
   private template() {
     return `
-      <div id="res" role="group" aria-label="Charge"></div>
+      <div id="res">
+        <div id="regionArrival" class="sg-card" role="status" aria-live="polite" hidden></div>
+      </div>
       ${ObjectiveCard.template()}
       ${BuildBar.template()}
       <div id="toasts" role="status" aria-live="polite"></div>
@@ -412,6 +414,12 @@ export class Hud {
       c.classList.remove('in', 'title-on');
       setTimeout(() => c.classList.remove('on'), 600);
     }
+  }
+
+  regionArrival(html: string | undefined) {
+    const el = $(this.root, '#regionArrival');
+    el.hidden = !html;
+    this.set('region-arrival', el, 'html', html ?? '');
   }
 
   /** A label pinned to a world point. Created on demand; `action` labels take clicks. */

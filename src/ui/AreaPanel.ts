@@ -2,7 +2,7 @@ import { TIERS } from '../data/salvage';
 import { PARK } from '../core/Areas';
 import { AREA_TYPES } from '../data/city';
 import { MACHINES } from '../data/machines';
-import { TUNING } from '../data/tuning';
+import { regionProgress, regionProgressHtml } from './RegionProgress';
 import type { Sim } from '../gameplay/Sim';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -36,17 +36,16 @@ export function areaPanelData(sim: Sim, id: string): AreaPanelData {
   const s = sim;
   const a = s.areas.info(id);
   const fog = s.areas.fog(id);
-  const c = s.areas.counts(id);
-  const need = id === PARK ? TUNING.park.restoredTiles : s.areas.need(id);
+  const progress = regionProgress(s, id);
   const machines: Record<string, number> = {};
   for (const m of s.state.machines) if (m.type !== 'core' && s.areas.areaOf(m) === id) machines[m.type] = (machines[m.type] ?? 0) + 1;
   return {
     id,
-    name: id === PARK ? 'The Park' : AREA_TYPES[a.type].name,
+    name: progress.name,
     type: a.type,
     fog,
-    restored: c.restored,
-    need,
+    restored: progress.restored,
+    need: progress.target,
     ready: id !== PARK && s.areas.ready(id),
     machines,
   };
@@ -65,7 +64,6 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
   const d = areaPanelData(sim, id);
   const fogName: Record<string, string> = { hidden: 'Hidden in fog', frontier: 'Thick fog', thinning: 'Thinning fog', cleared: 'Clear' };
   const title = (name: string) => `<span class="pn-badge">${def.icon}</span><span class="ap-name">${esc(name)}</span>`;
-  const pct = Math.min(100, Math.round((d.restored / Math.max(1, d.need)) * 100));
   const cleared = d.fog === 'cleared';
   const parkAwake = id === PARK && s.state.salvage.tier >= 1; // E21.6: the fountain wakes at tier 1
   let checklist: string;
@@ -103,8 +101,8 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<h4><span>${title(d.name)}</span><button data-close aria-label="Close">×</button></h4>` +
     `<p class="stat" data-area-panel="${esc(id)}">${esc(a.landmarkName)} · ${a.distance} block${a.distance === 1 ? '' : 's'} from the park${tag}</p>` +
     `<p class="blurb">${esc(AREA_SPECIALTY[a.type] ?? '')}</p>` +
-    `<p class="stat">🌫️ ${cleared || parkAwake ? 'Clear' : `${fogName[d.fog]} · ${pct}%`}</p>` +
-    (cleared || parkAwake ? '' : `<div class="bar"><i style="width:${pct}%"></i></div>`) +
+    `<p class="stat">🌫️ ${cleared || parkAwake ? 'Clear' : fogName[d.fog]}</p>` +
+    (d.fog === 'hidden' ? '' : regionProgressHtml(regionProgress(s, id))) +
     `<ul class="ap-steps">${checklist}</ul>` +
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
     oldCityShare(s, id) +
