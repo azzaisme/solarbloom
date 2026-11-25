@@ -5,6 +5,7 @@ import { mat, PALETTE } from './Materials';
 import { group, shape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 import { glowMaterial, glowTileMesh } from './TileFx';
+import { pavingOverlayLift } from './PavingSurface';
 import { Hologram, type HoloShape } from './Hologram';
 
 export type OverlayTone = 'hover' | 'ok' | 'bad' | 'info';
@@ -90,7 +91,13 @@ export class Overlays {
   showFrame(roofId: string, x: number, z: number, size: number, tone: OverlayTone) {
     this.layoutFrame(size);
     const p = this.footprintCenter(roofId, x, z, size);
-    this.frame.setPosition(p.x, p.y + 0.012, p.z);
+    let lift = 0;
+    for (let dx = 0; dx < size; dx++) {
+      for (let dz = 0; dz < size; dz++) {
+        lift = Math.max(lift, pavingOverlayLift(this.sim.grid, this.sim.grid.peek(roofId, x + dx, z + dz)));
+      }
+    }
+    this.frame.setPosition(p.x, p.y + lift + 0.024, p.z);
     if (this.frameTone !== tone) {
       this.frameTone = tone;
       this.frameMi.material = this.frameMats[tone];
@@ -139,7 +146,7 @@ export class Overlays {
         return;
       }
       const [x, y, z] = this.sim.grid.tileWorld(t);
-      e.setPosition(x, y + SLAB_TOP + 0.03, z);
+      e.setPosition(x, y + SLAB_TOP + pavingOverlayLift(this.sim.grid, t) + 0.028, z);
       if (retone || !e.enabled) this.radiusMis[i].material = m;
       e.enabled = true;
     });

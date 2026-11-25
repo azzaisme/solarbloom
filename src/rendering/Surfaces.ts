@@ -7,6 +7,7 @@
  * Everything is deterministic per tile (seeded by its position and variant), so a tile always renders the same
  * after a reload or rebuild. Density follows `ctx.dens` (quality tier × zoom band).
  */
+import { PARK_FENCE_INSET, parkFenceGap } from '../core/ParkFence';
 import type { TileData } from '../core/types';
 import type { BuildingPlot } from '../core/Generation';
 import type { TreeGeo, Lod } from './TreeGen';
@@ -702,12 +703,14 @@ export function areaEdges(c: DressCtx, t: TileData, top: number) {
     if (other === c.area || (c.area !== 'park' && (other === 'park' || other < c.area))) continue;
     const n = c.peek(nx, nz);
     const fr = EDGE_FRAME[`${dx},${dz}`];
-    const ox = t.x + fr.ox - dx * 0.06;
-    const oz = t.z + fr.oz - dz * 0.06;
+    const ox = t.x + fr.ox - dx * PARK_FENCE_INSET;
+    const oz = t.z + fr.oz - dz * PARK_FENCE_INSET;
     const h = hash01(t.x, t.z, 101 + dx * 3 + dz);
-    if (openEdge(t.feature) || openEdge(n?.feature) || (t.feature === 'paving' && n?.feature === 'paving' && !t.blocked)) {
+    const entrance = c.area === 'park' ? parkFenceGap(nx, nz) :
+      openEdge(t.feature) || openEdge(n?.feature) || (t.feature === 'paving' && n?.feature === 'paving' && !t.blocked);
+    if (entrance) {
       // an entrance: banner poles either side in restored areas
-      if (alive && h < 0.5) {
+      if (c.area !== 'park' && alive && h < 0.5) {
         const px = ox + fr.tx * 0.08, pz = oz + fr.tz * 0.08;
         // Look 3.19: the hand-built pole (its crossbar on +x, like the procedural one), with the swaying cloth hung
         // from the bar

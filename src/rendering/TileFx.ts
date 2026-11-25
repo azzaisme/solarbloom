@@ -4,6 +4,7 @@ import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { SLAB_TOP } from './SceneBuilder';
 import { NEON } from './Vfx';
+import { pavingOverlayLift } from './PavingSurface';
 import { PALETTE } from './Palette';
 
 interface Flash {
@@ -71,10 +72,10 @@ const glowMeshes = new WeakMap<pc.GraphicsDevice, Map<number | string, pc.Mesh>>
  * line set just inside the tile's edge, a soft halo either side of it and a faint inner fill. `size` is the
  * footprint in tiles; the line keeps the same width at every size. Shared and cached per device and size.
  */
-export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1): pc.Mesh {
+export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1, objective = false): pc.Mesh {
   let bySize = glowMeshes.get(device);
   if (!bySize) glowMeshes.set(device, (bySize = new Map()));
-  const key = width === 1 ? size : `${size}|${width}`;
+  const key = objective ? `objective|${size}|${width}` : width === 1 ? size : `${size}|${width}`;
   let mesh = bySize.get(key);
   if (mesh) return mesh;
   const h = size / 2;
@@ -96,6 +97,15 @@ export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1): pc
     const v = Math.round(b * 255);
     col.push(v, v, v, Math.round(a * 255));
   };
+  if (objective) {
+    // A dark warm keyline and an amber stroke stay legible on both pale brick and dark soil.
+    rings.splice(0, rings.length,
+      [[h - 0.035, 0.95, 0.06], [h - 0.058, 0.98, 0.06]],
+      [[h - 0.058, 1, 1], [h - 0.098, 1, 1]],
+      [[h - 0.098, 0.97, 0.06], [h - 0.12, 0.94, 0.06]],
+      [[h - 0.12, 0.28, 0.64], [h - 0.23, 0.06, 0.64]],
+    );
+  }
   for (const [[so, ao, bo], [si, ai, bi]] of rings) {
     const base = pos.length / 3;
     for (const [cx, cz] of corners) vert(so, cx, cz, ao, bo);
@@ -109,7 +119,7 @@ export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1): pc
     }
   }
   // Inner fill.
-  const inner = rings[2][1];
+  const inner = rings[rings.length - 1][1];
   const base = pos.length / 3;
   for (const [cx, cz] of corners) vert(inner[0], cx, cz, inner[1], inner[2]);
   idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
@@ -190,7 +200,7 @@ export class TileFx {
 
   private tilePos(t: TileData): pc.Vec3 {
     const [x, y, z] = this.sim.grid.tileWorld(t);
-    return new pc.Vec3(x, y + SLAB_TOP + 0.02, z);
+    return new pc.Vec3(x, y + SLAB_TOP + pavingOverlayLift(this.sim.grid, t) + 0.02, z);
   }
 
   /** Tiles currently "boosted" by a synergy: inside a pollinator zone, or next to a boosted solar panel. */
@@ -250,6 +260,35 @@ export class TileFx {
     f.max = this.reducedMotion ? Math.min(dur, 0.35) : dur;
     f.peak = Math.min(1, peak * 1.4); // outlines are mostly transparent, so they can run brighter than the old flat flash
     this.place(f, t, color, 0.005);
+  }
+
+  private objectiveFrames = new Map<string, pc.Entity>();
+  private objectiveMaterial?: pc.StandardMaterial;
+
+  /** Steady, separate from the transient pulse and chain effects pool. */
+  showObjectiveTiles(tiles: readonly TileData[]) {
+    const active = new Set(tiles.map(tile => tile.id));
+    for (const [id, frame] of this.objectiveFrames) {
+      if (active.has(id)) continue;
+      frame.destroy();
+      this.objectiveFrames.delete(id);
+    }
+    for (const tile of tiles) {
+      if (this.objectiveFrames.has(tile.id)) continue;
+      if (!this.objectiveMaterial) {
+        this.objectiveMaterial = glowMaterial(PALETTE.signal.objectiveTile, 1.25);
+        this.objectiveMaterial.update();
+      }
+      const frame = new pc.Entity('objective-tile');
+      frame.addComponent('render', {
+        meshInstances: [new pc.MeshInstance(glowTileMesh(this.device, 1, 1, true), this.objectiveMaterial)],
+        castShadows: false, receiveShadows: false,
+      });
+      const p = this.tilePos(tile);
+      frame.setPosition(p.x, p.y, p.z);
+      this.root.addChild(frame);
+      this.objectiveFrames.set(tile.id, frame);
+    }
   }
 
   /** Persistent gold outline on the tile that started a chain, until released. */

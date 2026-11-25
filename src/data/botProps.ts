@@ -136,3 +136,6 @@ export const PROPS: Record<PropId, PropDef> = {
     tip: [0, 0.07, 0.03],
   },
 };
+
+/** Standing visor height above Bloombot’s feet, in world units. */
+export const BLOOMBOT_EYE_HEIGHT = 0.66;

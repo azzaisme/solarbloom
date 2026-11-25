@@ -38,7 +38,11 @@ export function trailRoute(sim: Sim, walker: Walker, from: BotPose, goal: GoalSp
   // beside the goal counts as there: within `reach`, or further out when the goal is wide and solid (a landmark, a
   // hall), as far as its nearest open cell that bloombot can stand on
   const reach = Math.max(T.reach, besideGoal(sim, walker, from.roofId, goal) + 0.01);
-  const near = (x: number, z: number) => Math.hypot(x + 0.5 - goal.x, z + 0.5 - goal.z) <= reach;
+  const targets = goal.patchKeeperId ? [...sim.keepers.patchTiles(goal.patchKeeperId)].filter(tile => tile.ground !== 'restored') : undefined;
+  const area = goal.roofId === GROUND ? sim.areas.map.areaOfCell(goal.cell.x, goal.cell.z) : undefined;
+  const near = (x: number, z: number) => targets?.length
+    ? sim.areas.map.areaOfCell(x, z) === area && targets.some(tile => Math.abs(tile.x - x) + Math.abs(tile.z - z) <= 1)
+    : Math.hypot(x + 0.5 - goal.x, z + 0.5 - goal.z) <= reach;
   const r = walker.pathOrNearest(from.roofId, from.x, from.z, near, goal.cell, T.budget);
   const points = [start, ...r.path];
   if (r.reached) return { roofId: from.roofId, points, reached: true };
@@ -113,7 +117,7 @@ function gateWhy(sim: Sim, gate: GateDef): string {
  * walks rather than stepping cell to cell), then a dot every `spacing` cells. Each dot keeps how far along the way it
  * lies (`s`, cells). The first dot sits one gap out from bloombot, not under it.
  */
-export function trailDots(points: readonly TrailPoint[], spacing: number = WAYMARK.trail.spacing, max: number = WAYMARK.trail.max): (TrailPoint & { s: number })[] {
+export function trailDots(points: readonly TrailPoint[], spacing: number = WAYMARK.trail.spacing, max: number = WAYMARK.trail.max): (TrailPoint & { s: number; heading: number })[] {
   let pts = points.slice();
   for (let round = 0; round < 2 && pts.length > 2; round++) {
     const out: TrailPoint[] = [pts[0]];
@@ -126,7 +130,7 @@ export function trailDots(points: readonly TrailPoint[], spacing: number = WAYMA
     out.push(pts[pts.length - 1]);
     pts = out;
   }
-  const dots: (TrailPoint & { s: number })[] = [];
+  const dots: (TrailPoint & { s: number; heading: number })[] = [];
   let along = 0;
   let next = spacing;
   for (let i = 0; i < pts.length - 1 && dots.length < max; i++) {
@@ -135,7 +139,7 @@ export function trailDots(points: readonly TrailPoint[], spacing: number = WAYMA
     const len = Math.hypot(b.x - a.x, b.z - a.z);
     while (next <= along + len && dots.length < max) {
       const t = len > 0 ? (next - along) / len : 0;
-      dots.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, s: next });
+      dots.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, s: next, heading: Math.atan2(b.x - a.x, b.z - a.z) });
       next += spacing;
     }
     along += len;

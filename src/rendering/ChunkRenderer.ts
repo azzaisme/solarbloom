@@ -1,3 +1,4 @@
+import { RAISED_PAVING_LIFT, RESTORED_PATH_LIFT } from './PavingSurface';
 import * as pc from 'playcanvas';
 import { roadPlanFor, type RoadPiece, type RoadPlan } from '../core/RoadPlan';
 import { CHUNK } from '../core/Hash';
@@ -487,12 +488,12 @@ const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
  * one curve), segments per corner, how far the piece stands above the tile top (restored / not), and the width of
  * the white border along the curve.
  */
-const PATH_CURVE = { radius: 0.5, arc: 6, lift: 0.052, liftDead: 0.012, border: 0.07 };
+const PATH_CURVE = { radius: 0.5, arc: 6, lift: RESTORED_PATH_LIFT, liftDead: 0.012, border: 0.07 };
 /**
  * Dead paving stands a little above the earth beside it: how far its painted top is raised (a stone lip shows along
  * its edges and curves), and the soft contact shadow on the ground beside the lip (width in tiles, darkest tint).
  */
-const PAVING_RAISE = { lift: 0.03, shadow: 0.13, dark: 0.58 };
+const PAVING_RAISE = { lift: RAISED_PAVING_LIFT, shadow: 0.13, dark: 0.58 };
 /** City 16.6: the four sides of a road tile and their piece-mask bits (RoadPlan.pieceAt). */
 const ROAD_SIDES = [
   [1, 0, 1],
