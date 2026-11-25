@@ -47,6 +47,15 @@ describe('E22.3: glyphs', () => {
     expect([...sizes]).toEqual(['40,30']);
   });
 
+  it('draws Deck face buttons as round keycaps with keyboard ink', () => {
+    for (const [i, letter] of ['A', 'B', 'X', 'Y'].entries()) {
+      const glyph = padGlyph('deck', i);
+      expect(glyph).toMatch(/<circle[^>]*class="g-cap"\/>/);
+      expect(glyph).toMatch(new RegExp(`<text[^>]*class="g-ink"[^>]*>${letter}</text>`));
+      expect(label(glyph)).toBe(`${letter} button`);
+    }
+  });
+
   it('a rebound action shows its new input', () => {
     const b = new Bindings();
     b.setKey('interact', 'KeyF');

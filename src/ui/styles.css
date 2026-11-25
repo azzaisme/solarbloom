@@ -288,7 +288,6 @@ svg.glyph .g-pad-a { fill: var(--pad-a); stroke: var(--text-strong); stroke-widt
 svg.glyph .g-pad-b { fill: var(--pad-b); stroke: var(--text-strong); stroke-width: 1.4; }
 svg.glyph .g-pad-x { fill: var(--pad-x); stroke: var(--text-strong); stroke-width: 1.4; }
 svg.glyph .g-pad-y { fill: var(--pad-y); stroke: var(--text-strong); stroke-width: 1.4; }
-svg.glyph .g-deck { fill: var(--deck-btn); stroke: var(--text-strong); stroke-width: 1.4; }
 svg.glyph .g-ps-disc { fill: var(--deck-btn); stroke: var(--text-strong); stroke-width: 1.4; }
 svg.glyph .g-shape { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke: var(--text-strong); }
 svg.glyph.g-ps-cross .g-shape { stroke: var(--ps-cross); }
