@@ -157,6 +157,9 @@ try {
 
     // ── the loading screen covers everything until the first view is complete ──
     await page.waitForSelector('#loading:not(.gone):not([hidden])');
+    const frames = await page.locator('#loading .ld-frame img').evaluateAll((images) =>
+      images.map((image) => image.complete && image.naturalWidth > 0));
+    check(frames.length === 2 && frames.every(Boolean), T('Bloombot’s walk and turn frames are ready when the loading screen appears'));
     const seen = new Set();
     let shot = false;
     for (;;) {

@@ -1377,11 +1377,12 @@ export class Game {
   }
 
   /** "Quit to title" saves first (nothing in the menu loses progress), then goes to the title screen. */
-  quitToTitle() {
-    // E22.12: the loading screen covers the way out, as it covered the way in.
-    new Loading(!!this.settings.reducedMotion).show();
+  async quitToTitle() {
+    if (this.resetting) return;
     this.saveNow();
     this.resetting = true; // nothing writes after this save
+    // E22.12: the loading screen covers the way out, as it covered the way in.
+    await new Loading(!!this.settings.reducedMotion).show();
     setTimeout(() => (location.href = `${location.pathname}?title=1`), 60);
   }
 
