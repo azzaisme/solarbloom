@@ -4632,7 +4632,8 @@ export class Game {
       if ((machine.tier ?? 1) >= 3) return; // a superstructure's foundation: its own messages (super.stage)
       const first = s.state.machines.filter((m) => m.type === machine.type && !m.starter).length === 1;
       const msg: Partial<Record<MachineData['type'], string>> = {
-        solar: '☀️ Your Solar Panel is soaking up the sun and powering the machines joined to it.',
+        solar: '☀️ Put a Charger right beside this Solar Panel to give Bloombot a place to fill its Charge.',
+        charger: '🔌 In daylight, press {interact} beside your powered Charger to sit and refill Charge.',
         condenser: '💧 Your Water Condenser is running: it gathers water from the air all on its own.',
         pollinator: '🌸 Pollinator Garden planted. Turn the ground beside it green and watch the flowers spread.',
         droneHub: '🛸 Drone Hub built. A little drone flies out and helps turn the ground green nearby.',
