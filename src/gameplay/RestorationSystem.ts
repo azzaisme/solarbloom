@@ -12,6 +12,11 @@ export interface PulseCheck {
   reason?: string;
 }
 
+export interface MegaTarget {
+  tile: TileData;
+  depth: number;
+}
+
 export class RestorationSystem {
   constructor(private sim: Sim) {}
 
@@ -32,7 +37,7 @@ export class RestorationSystem {
     return true;
   }
 
-  checkPulse(t: TileData): PulseCheck {
+  checkPulse(t: TileData, mega = false): PulseCheck {
     // #606: a wait in words ("a second", "12 seconds"), not "12s"
     const seconds = (n: number) => (Math.max(1, Math.ceil(n)) === 1 ? 'a second' : `${Math.ceil(n)} seconds`);
     const roof = this.sim.grid.roof(t.roofId);
@@ -44,7 +49,7 @@ export class RestorationSystem {
     if (piece) return { ok: false, reason: piece.detail };
     if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent: nothing grows here' };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'An old flower engine: it wakes once the ground around it is green' };
-    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom && !this.sim.decay.thirsty(t)) return { ok: false, reason: 'Already in flower' };
+    if (!mega && t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom && !this.sim.decay.thirsty(t)) return { ok: false, reason: 'Already in flower' };
     // E23.2.1: out of charge, no pulse (bloombot walks on; eat, sit or find a charger)
     if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of Charge: press {eat} for a snack, or sit on a bench to rest' };
     if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through: ${seconds(t.growthRemainingSec)}` };
@@ -54,11 +59,25 @@ export class RestorationSystem {
     return { ok: true };
   }
 
-  /** Player Restoration Pulse. */
-  pulse(tileId: string): boolean {
+  private nextPlayerPulse = 0;
+
+  pulseReady(): boolean {
+    return this.sim.time >= this.nextPlayerPulse;
+  }
+
+  /** All live input shares a cooldown, across keys, mouse and controller. */
+  playerPulse(tileId: string, mega?: readonly MegaTarget[]): boolean {
+    if (!this.pulseReady()) return false;
+    this.nextPlayerPulse = this.sim.time + TUNING.mega.cooldown;
+    return this.pulse(tileId, mega);
+  }
+
+  /** Executes a pulse. A charged tap stays a normal pulse until an aimed Mega Pulse is requested. */
+  pulse(tileId: string, mega?: readonly MegaTarget[]): boolean {
     const t = this.sim.grid.byTileId(tileId);
     if (!t) return false;
-    const chk = this.checkPulse(t);
+    if (mega && (!this.megaReady() || !mega.some(({ tile }) => this.megaEligible(tile)))) return false;
+    const chk = this.checkPulse(t, !!mega);
     if (!chk.ok) {
       // Look 6.10: a tap on a tile mid-process knocks it along instead of failing: a Cultivator's tile (gameplay
       // time, limited), or one whose growth is still playing out (visual only).
@@ -71,7 +90,7 @@ export class RestorationSystem {
     // #607: the player's own pulses (drones and chains restore too: the guide asks whether the player has pulsed)
     this.sim.state.stats.pulses = (this.sim.state.stats.pulses ?? 0) + 1;
     this.sim.decay.tend(t);
-    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) {
+    if (!mega && t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) {
       this.sim.bus.emit('pulse.fired', { tileId, extra: [], overcharged: false });
       return true;
     }
@@ -80,7 +99,7 @@ export class RestorationSystem {
     const ripple = this.sim.pulseLoad.ripple(t);
     this.sim.buried.reveal(ripple.filter((g) => g.kind === 'buried')); // found: a mound marks each until it is dug up
     this.sim.bus.emit('pulse.ripple', { tileId, targets: ripple });
-    if (this.megaReady()) return this.releaseMega(t, load);
+    if (mega) return this.releaseMega(t, mega, load);
     this.chargeMega();
     if (t.ground === 'restored') {
       // a loaded pulse on living ground: it grows the load there, the chain it sets off carries the load, and a
@@ -223,6 +242,36 @@ export class RestorationSystem {
     return Math.min(M.maxTiles, M.baseTiles + M.tilesPerArea * (this.sim.areas?.clearedCount() ?? 0));
   }
 
+  private megaEligible(t: TileData): boolean {
+    return !t.occupantId && this.isEligible(t);
+  }
+
+  /** The reachable tiles in the forward fan, ordered outward from the aim point. */
+  megaTargets(origin: TileData, facing: number): MegaTarget[] {
+    const budget = this.megaBudget();
+    const reach = Math.ceil(Math.sqrt(budget) * 1.7);
+    const fx = Math.sin(facing), fz = Math.cos(facing);
+    const targets: MegaTarget[] = [];
+    const seen = new Set([origin.id]);
+    const queue = [{ tile: origin, depth: 0 }];
+    for (let i = 0; i < queue.length && targets.length < budget; i++) {
+      const { tile, depth } = queue[i];
+      if (this.megaEligible(tile)) targets.push({ tile, depth });
+      if (depth >= reach) continue;
+      for (const next of this.sim.grid.neighbors(tile)) {
+        if (seen.has(next.id)) continue;
+        seen.add(next.id);
+        const dx = next.x - origin.x, dz = next.z - origin.z;
+        const forward = dx * fx + dz * fz;
+        const side = Math.abs(dx * fz - dz * fx);
+        if (forward < -0.001 || side > 1.5 + 0.7 * forward) continue;
+        const green = next.ground === 'restored' && !next.blocked && !next.occupantId && next.feature !== 'water' && this.sim.areas.canTouch(next);
+        if (green || this.megaEligible(next)) queue.push({ tile: next, depth: depth + 1 });
+      }
+    }
+    return targets;
+  }
+
   /** The Mega Pulse is the city's tool: it starts charging once the fountain is awake. */
   private chargeMega() {
     const p = this.sim.state.progression;
@@ -233,14 +282,14 @@ export class RestorationSystem {
   }
 
   /** E23.2.2: a loaded Mega Pulse grows its load where it lands, and everything its wave restores grows it too. */
-  private releaseMega(t: TileData, load: PulseLoadDef = PULSE_LOAD.none): boolean {
+  private releaseMega(t: TileData, targets: readonly MegaTarget[], load: PulseLoadDef): boolean {
     this.sim.state.progression.megaCharge = 0;
     this.boostNeighbours(t);
     if (load.plant && t.ground === 'restored') {
       this.plant(t, load.plant);
       this.raiseBloom(t, load.bloom);
     }
-    const id = this.sim.chains.startMegaPulse(t, this.megaBudget());
+    const id = this.sim.chains.startMegaPulse(t, targets);
     if (load.plant && id >= 0) this.rememberChainPlant(id, load.plant);
     this.sim.bus.emit('pulse.fired', { tileId: t.id, extra: [], overcharged: true });
     return true;

@@ -8,8 +8,8 @@ import { glowMaterial, glowTileMesh } from './TileFx';
 import { pavingOverlayLift } from './PavingSurface';
 import { Hologram, type HoloShape } from './Hologram';
 
-export type OverlayTone = 'hover' | 'ok' | 'bad' | 'info';
-const TONE: Record<OverlayTone, string> = { hover: PALETTE.signal.hover, ok: PALETTE.signal.ok, bad: PALETTE.signal.bad, info: PALETTE.signal.info };
+export type OverlayTone = 'hover' | 'ok' | 'bad' | 'info' | 'mega';
+const TONE: Record<OverlayTone, string> = { hover: PALETTE.signal.hover, ok: PALETTE.signal.ok, bad: PALETTE.signal.bad, info: PALETTE.signal.info, mega: PALETTE.gold };
 const TONES = Object.keys(TONE) as OverlayTone[];
 
 /**
@@ -25,6 +25,7 @@ export class Overlays {
   private frameMats = {} as Record<OverlayTone, pc.StandardMaterial>;
   private radiusMats = {} as Record<OverlayTone, pc.StandardMaterial>;
   private radiusTone?: OverlayTone;
+  megaCharge = 0;
   private radiusMis: pc.MeshInstance[] = [];
   private ghost: pc.Entity;
   private ghostBox: pc.Entity;
@@ -65,8 +66,11 @@ export class Overlays {
     }
     this.gridLines.enabled = false;
     this.radiusRoot = group(root, 'radius');
+  }
+
+  private fillRadiusPool(count: number) {
     const tileMesh = glowTileMesh(this.device, 1);
-    for (let i = 0; i < 180; i++) { // Phase 4: room for the largest pulse footprint preview (161 tiles)
+    while (this.radius.length < count) {
       const e = group(this.radiusRoot, 'radiusTile');
       const mi = new pc.MeshInstance(tileMesh, this.radiusMats.info);
       e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false });
@@ -136,6 +140,7 @@ export class Overlays {
   }
 
   showRadius(tiles: TileData[], tone: OverlayTone = 'info') {
+    if (tiles.length > this.radius.length) this.fillRadiusPool(tiles.length);
     const m = this.radiusMats[tone];
     const retone = this.radiusTone !== tone;
     this.radiusTone = tone;
@@ -166,10 +171,10 @@ export class Overlays {
       m.opacity = 0.85 + 0.15 * Math.sin(this.time * 6);
       m.update();
     }
-    if (this.radiusTone && this.radius[0].enabled) {
+    if (this.radiusTone && this.radius[0]?.enabled) {
       // The preview tiles breathe softly together, a little out of step with the hover frame.
       const m = this.radiusMats[this.radiusTone];
-      m.opacity = 0.62 + 0.18 * Math.sin(this.time * 3.2);
+      m.opacity = this.radiusTone === 'mega' ? 0.4 + 0.6 * this.megaCharge : 0.62 + 0.18 * Math.sin(this.time * 3.2);
       m.update();
     }
   }

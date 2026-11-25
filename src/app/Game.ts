@@ -36,6 +36,7 @@ import { REST } from '../data/rest';
 import { Resting } from './Resting';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
+import type { MegaTarget } from '../gameplay/RestorationSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
 import { Sim } from '../gameplay/Sim';
 import { inSurge } from '../gameplay/PowerEnv';
@@ -658,6 +659,7 @@ export class Game {
       bot.onPad = (i) => {
         if (this.wheelPick(i)) return; // the load wheel is up: the d-pad picks a load
         const a = this.resolveButton(i);
+        if (a === 'pulse' && this.beginMegaHold(i)) return;
         if (a && a !== 'sprint') this.doAction(a);
       };
       // E22.4: the rebinding screen takes the next press; that press then does nothing else.
@@ -731,6 +733,9 @@ export class Game {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
+      press: (b) => this.resolveKey(`Mouse${b}`) === 'pulse' && this.beginMegaHold(`Mouse${b}`),
+      release: (b) => this.endMegaHold(`Mouse${b}`),
+      cancelPress: () => { if (typeof this.megaHold?.input === 'string' && this.megaHold.input.startsWith('Mouse')) this.clearMegaHold(); },
       pan: (dx, dy, x, y) => {
         this.lastPanAt = performance.now();
         this.camera.pan(dx, dy, x, y);
@@ -1494,8 +1499,14 @@ export class Game {
   }
 
   private wireKeys() {
-    window.addEventListener('keyup', (e) => this.heldKeys.delete(e.code));
-    window.addEventListener('blur', () => this.heldKeys.clear());
+    window.addEventListener('keyup', (e) => {
+      this.heldKeys.delete(e.code);
+      this.endMegaHold(e.code);
+    });
+    window.addEventListener('blur', () => {
+      this.heldKeys.clear();
+      this.clearMegaHold();
+    });
     window.addEventListener('keydown', (e) => {
       this.heldKeys.add(e.code);
       const field = (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') || e.target instanceof HTMLSelectElement;
@@ -1548,6 +1559,7 @@ export class Game {
         if (!a) return;
         if (a === 'backpack' || a === 'debug' || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
         if (e.repeat && a !== 'rotate' && a !== 'rotateBack') return;
+        if (a === 'pulse' && this.beginMegaHold(e.code)) return;
         this.doAction(a);
         return;
       }
@@ -2261,6 +2273,74 @@ export class Game {
     this.buildKey = '';
   }
 
+  private megaHold?: { input: string | number; tile: TileData; targets: MegaTarget[]; elapsed: number; shown: number };
+
+  private megaAim(): TileData | undefined {
+    if (!this.bot || this.building() || this.overviewOn || this.paused || this.panelOpen() || this.hud.modalOpen || this.cinematic || this.photo.active || this.resting?.active || this.bot.visuals.busy === 'assemble') return;
+    const tile = this.frontPick()?.tile;
+    if (tile && !tile.occupantId && this.sim.restoration.checkPulse(tile, true).ok) return tile;
+  }
+
+  private beginMegaHold(input: string | number): boolean {
+    if (this.megaHold) return true;
+    const rest = this.sim.restoration;
+    if (!rest.megaReady() || !rest.pulseReady()) return false;
+    const tile = this.megaAim();
+    if (!tile) return false;
+    const targets = rest.megaTargets(tile, this.bot!.pose.facing);
+    if (!targets.length) return false;
+    this.overlays.hideFrame();
+    this.overlays.hideRadius();
+    this.megaHold = { input, tile, targets, elapsed: 0, shown: -1 };
+    return true;
+  }
+
+  private clearMegaHold() {
+    if (!this.megaHold) return;
+    this.megaHold = undefined;
+    this.overlays.megaCharge = 0;
+    this.overlays.hideRadius();
+    this.botPreviewKey = '';
+  }
+
+  private endMegaHold(input: string | number) {
+    const h = this.megaHold;
+    if (!h || h.input !== input) return;
+    this.clearMegaHold();
+    if (this.megaAim()?.id === h.tile.id) this.botAct();
+  }
+
+  private updateMegaHold(): boolean {
+    const h = this.megaHold;
+    if (!h) return false;
+    if (this.megaAim()?.id !== h.tile.id || !this.sim.restoration.megaReady()) {
+      this.clearMegaHold();
+      return false;
+    }
+    if (typeof h.input === 'number') {
+      const button = h.input;
+      const pads = [...(navigator.getGamepads?.() ?? [])].filter((pad) => pad?.connected);
+      if (!pads.length) this.clearMegaHold();
+      else if (!pads.some((pad) => pad?.buttons[button]?.pressed)) this.endMegaHold(button);
+      if (!this.megaHold) return false;
+    }
+    h.elapsed += this.frameDt;
+    const progress = Math.min(1, h.elapsed / TUNING.mega.holdSeconds);
+    if (progress >= 1) {
+      this.clearMegaHold();
+      if (this.sim.restoration.playerPulse(h.tile.id, h.targets)) this.botAnim('pulse');
+      return false;
+    }
+    this.overlays.megaCharge = progress;
+    const count = Math.max(1, Math.ceil(progress * h.targets.length));
+    if (count !== h.shown) {
+      h.shown = count;
+      this.overlays.showRadius(h.targets.slice(0, count).map(({ tile }) => tile), 'mega');
+    }
+    this.hud.prompt.show({ glyph: this.glyph('pulse'), text: 'for Mega Pulse', hold: true, progress });
+    return true;
+  }
+
   /**
    * E22.2 (#339): Interact acts on the one target the prompt names (Interact.ts chooses it by the epic's priority,
    * nearest first). A refused action says why; a hold starts the ring instead (unless holds are single presses).
@@ -2541,6 +2621,7 @@ export class Game {
       else if (this.sim.decay.thirsty(t)) text = 'Tend thirsty plants';
       pulse = { glyph: this.glyph('pulse'), text };
     }
+    if (this.sim.restoration.megaReady() && this.megaAim()) pulse = { glyph: this.glyph('pulse'), text: pulse ? `${pulse.text} · Hold for Mega Pulse` : 'Hold for Mega Pulse' };
     if (!target) return pulse ? { glyph: pulse.glyph, text: pulse.text } : undefined;
     const hold = holdFor(target, this.settings.holdToAct !== false) || (target.ocHold && this.settings.holdToAct !== false ? target.ocHold : 0);
     const h = this.holding;
@@ -2798,10 +2879,12 @@ export class Game {
       this.hud.setKeyMap(this.glyphs.style, this.bindings);
     }
     if (this.cinematic || this.photo.active || this.panelOpen()) {
+      this.clearMegaHold();
       this.holding = undefined;
       this.hud.prompt.show(undefined);
       return;
     }
+    if (this.updateMegaHold()) return;
     // E22.2: one prompt, every frame (the hold ring fills smoothly); the target gets a soft outline.
     const target = this.interactTarget();
     this.updateHold(this.frameDt, target);
@@ -4061,7 +4144,7 @@ export class Game {
       this.hud.showFail(this.bot ? `A decoration stands here: ${this.hudKey('interact')} picks it up` : 'A decoration stands here', x, y);
       return 'none';
     }
-    const ok = this.sim.restoration.pulse(t.id);
+    const ok = this.sim.restoration.playerPulse(t.id);
     if (hover) this.onHover(x, y);
     return ok ? 'pulse' : 'none';
   }
@@ -4375,7 +4458,7 @@ export class Game {
       else if (source === 'drone') this.vfx.ring(p, PALETTE.leafFin, 0.8, 0.5);
     });
     b.on('mega.ready', () => {
-      this.hud.toast('💥 Your next pulse is a big one<small>Press {pulse} and a huge patch of ground around Bloombot bursts into flower.</small>', 'gold', 4);
+      this.hud.toast('💥 Mega Pulse is ready<small>Hold {pulse} to light up the ground ahead and bring it to life.</small>', 'gold', 4);
       this.hud.nudge('[data-tool="pulse"]', 4);
     });
     b.on('mega.released', ({ tileId }) => {
