@@ -57,6 +57,7 @@ import { FarmSystem } from './FarmSystem';
 import { CompostSystem } from './CompostSystem';
 import { FarmExtras } from './FarmExtras';
 import { Weather } from './Weather';
+import { DecaySystem } from './DecaySystem';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -68,6 +69,7 @@ export class Sim {
   readonly upgrades: UpgradeSystem;
   readonly production: ProductionSystem;
   readonly restoration: RestorationSystem;
+  readonly decay: DecaySystem;
   readonly chains: BloomChainSystem;
   readonly build: BuildSystem;
   readonly drones: DroneSystem;
@@ -224,6 +226,7 @@ export class Sim {
     this.production = new ProductionSystem(this);
     this.restoration = new RestorationSystem(this);
     this.water = new WaterSystem(this);
+    this.decay = new DecaySystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
     this.automation = new Automation(this); // E23.6.4: after the grid (the Assembler is a consumer)
@@ -346,6 +349,7 @@ export class Sim {
     this.compost.tick(dt);
     this.farmExtras.tick(dt);
     this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
+    this.decay.tick();
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();

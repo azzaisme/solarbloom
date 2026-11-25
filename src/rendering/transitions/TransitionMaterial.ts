@@ -21,6 +21,7 @@ import * as pc from 'playcanvas';
  *   trA = (t0, duration, mode, stagger)    mode 0 still · 1 grow · 2 heave (slab piece) · 3 surface · 4 root
  *   trB = deco: (inA, inB, outA, outB) progress windows · surface: (from colour packed, from pollution, to pollution, kind*8 + state)
  *   trC = deco: (anchor x, y, z, seed)                 · surface: (dir, feature, lushAt, lushUntil)
+ *   Tree morph (mode 5) stores the starting vertex position in trB.xyz.
  * Surface kinds: 0 none · 1 soften · 2 moss · 3 restore · 4 bloom · 5 unblock. States: 0 concrete · 1 moss ·
  * 2 soil · 3 grass · 4 hard (water, clean paving: no cracks).
  */
@@ -60,6 +61,7 @@ vec3 trDisplace(vec3 posW) {
 	if (mode < 0.5 || (mode > 2.5 && mode < 3.5)) return posW;
 	vec3 anc = vertex_trC.xyz;
 	float p = clamp(trProgressAt(vertex_trA, anc), 0.0, 1.0);
+	if (mode > 4.5) return mix(vertex_trB.xyz, posW, smoothstep(0.0, 1.0, p));
 	// stagger: pieces start one after another inside their window
 	float span = vertex_trB.y - vertex_trB.x;
 	float q = p - vertex_trA.w * span * 0.6;

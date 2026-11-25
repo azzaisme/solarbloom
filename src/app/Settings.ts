@@ -1,11 +1,11 @@
 import type { Settings } from '../ui/Hud';
 
-/** Where the player's settings live (apart from the game save: settings never touch the simulation). */
+/** Where the player's settings live, apart from the game save. */
 export const SETTINGS_KEY = 'solarbloom.settings';
 
 /** The settings a new player starts with. */
 export function defaultSettings(prefersReducedMotion = false): Settings {
-  return { sound: true, music: true, reducedMotion: prefersReducedMotion, hints: true, debug: false, lowVfx: false, lowFog: false, followChains: false };
+  return { sound: true, music: true, reducedMotion: prefersReducedMotion, hints: true, debug: false, lowVfx: false, lowFog: false, followChains: false, cozyMode: false };
 }
 
 /**

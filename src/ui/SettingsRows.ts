@@ -29,6 +29,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         { kind: 'check', key: 'hints', label: 'Tips on what to do next' },
         { kind: 'check', key: 'realClock', label: 'Follow my clock', hint: c.inGame ? 'The sky and the sun keep your local time; everything grows at the same pace' : 'New gardens offer to follow your local time first' },
         { kind: 'check', key: 'potter', label: 'Potter about', hint: 'Just wander: no tips or pointers, and the flowers spread more gently' },
+        { kind: 'check', key: 'cozyMode', label: 'Cozy Mode', hint: 'Restored plants stay alive even without watering or tending' },
         { kind: 'check', key: 'showNumbers', label: 'Show details', hint: 'Adds the figures to the energy and water gauges' },
         { kind: 'check', key: 'followChains', label: 'Camera follows the flowers when they spread far' },
         { kind: 'check', key: 'pauseOnBlur', label: 'Pause when the window is not in focus', defaultOn: true },

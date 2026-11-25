@@ -280,8 +280,10 @@ export const TUNING = {
   autosaveSeconds: 10,
 
   /** The starting park's Core (the fountain): replaces TUNING.core when the game starts in the city. */
-  /** Mega Pulse: manual taps charge it; the next tap after it is full releases a city-scale chain. */
+  /** Taps build a charge, then a held pulse releases it across the ground ahead. */
   mega: {
+    cooldown: 0.45,
+    holdSeconds: 1.6,
     charge: 40,
     baseTiles: 40,
     tilesPerArea: 3, // per cleared area…

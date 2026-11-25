@@ -25,8 +25,8 @@ import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
-import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } from './Foliage';
-import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
+import { FoliageBuilder, foliageBounds, foliageMaterial, updateWind } from './Foliage';
+import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type TreeStage, type Lod } from './TreeGen';
 import { treeSpot, treeStage, treeWorldOf } from './TreePlacement';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, beachDressing, buildingDressing, grassTufts, lawnFringe, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
@@ -44,7 +44,7 @@ import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
 import { clearWaterCovers, clearWaterDisturbers, setWaterCovers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
 import { clearWaterLife, lifeForTile, outletSpots, setWaterLife, type LifeSpot } from './WaterLife';
-import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
+import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer, type TreeBloom } from './transitions/TransitionRenderer';
 import { MOVE_TRIPS } from '../data/moveSpots';
 
 /** A land tile for `waterDistance`: its corner, its rounded corners, and whether it slopes into the water as a bank. */
@@ -826,7 +826,6 @@ export class ChunkRenderer {
   update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1) {
     this.time += dt;
     this.warmTrees();
-    this.tickGrowing(dt);
     // Phase 5 / Look 3.16: foliage, grass, flowers, vines and banners sway; still with reduced motion or `?still`
     updateWind(ChunkRenderer.still ? 0 : this.time, this.reducedMotion || ChunkRenderer.still ? 0 : 1);
     if (!this.reducedMotion && !ChunkRenderer.still) this.waterTime = this.time;
@@ -1690,6 +1689,7 @@ export class ChunkRenderer {
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
       model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
       bloom: (t) => s.water.bloomShown(t), // E23.4.4: the lawn's colour fades with low water too
+      wilting: (t) => s.decay.wilting(t),
       // P7-E28: planting zones, memoised for this build (a pure function of the cell, so a rebuild matches)
       landmark: s.areas.info(area).noLandmark ? undefined : s.areas.info(area).landmark,
       zone: (x, z) => {
@@ -1970,17 +1970,36 @@ export class ChunkRenderer {
     return { x0: t.x, z0: t.z, open, cut: this.landCuts(t) ?? [0, 0, 0, 0] };
   }
 
-  /** Adds the tile's tree at its stage, unless it's growing on its own right now. True if the tile has one. */
+  /** Draws one tree at the tile's stage, with a continuous morph during bloom. */
   private addTree(t: TileData, h: number, lod: 0 | 1): boolean {
     if ((t.feature ?? 'lawn') === 'water') return false;
     const spot = treeSpot(t, this.areaType, treeWorldOf(this.sim)); // P7-E29: from the generated world
     if (!spot) return false;
     const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: trees fade with low water
     if (!stage) return false;
-    if (this.growing.has(t.id)) return true;
+    const growth = this.treeBloom;
+    if (growth?.outgoing) return true;
     // Look 3.7: close-up trees at near zoom on High; the single-clump version at mid zoom and below
     const tl: Lod = lod === 1 && this.band >= 2 && this.detail === 'high' ? (this.band === 3 ? 3 : 2) : lod;
-    this.fb.add(treeGeo(spot.species, stage, spot.variant, tl, spot.form), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
+    const geometry = (age: TreeStage) => treeGeo(spot.species, age, spot.variant, tl, spot.form);
+    const x = t.x + 0.5;
+    const y = h + 0.08 + (spot.planter ? 0.16 : 0);
+    const z = t.z + 0.5;
+    const mesh = geometry(stage);
+    if (growth && !growth.reducedMotion) {
+      const tr = growth.transition;
+      // Low water can suppress some or all of the visible bloom stages.
+      const start = Math.min(stage, Math.max(1, (tr.from ?? t.bloom - 1) - (t.bloom - stage)));
+      if (start < stage) {
+        const from = Math.floor(start) as TreeStage;
+        const next = Math.ceil(start) as TreeStage;
+        growth.mesh.addGeo(mesh, x, y, z, spot.rot, spot.scale, {
+          from: geometry(from), next: geometry(next), ageMix: start - from, t0: tr.t0, duration: tr.d,
+        });
+        return true;
+      }
+    }
+    (growth?.staticFoliage ?? this.fb).add(mesh, x, y, z, spot.rot, spot.scale);
     return true;
   }
 
@@ -1993,56 +2012,6 @@ export class ChunkRenderer {
     if (!this.warm) return;
     const t0 = performance.now();
     while (performance.now() - t0 < 3) if (this.warm.next().done) return void (this.warm = undefined);
-  }
-
-  /** Trees growing to a new stage right now: a pooled entity bounces up while the chunk leaves the tree out. */
-  private growing = new Map<string, { e: pc.Entity; t: number; from: number; to: number; tile: TileData; dur: number; lift: number }>();
-  static readonly GROW_SECONDS = 0.9;
-  static readonly MAX_GROWING = 24;
-
-  /** A tile's bloom stage rose (or it was restored): grow its tree, if it has one. */
-  growTree(t: TileData, prevStage: number) {
-    if (this.transitions) return; // Look 6.12: trees grow in through the transition mesh
-    if (t.roofId !== GROUND || this.reducedMotion || this.growing.size >= ChunkRenderer.MAX_GROWING) return;
-    const view = this.views.get(chunkKey(GROUND, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
-    if (!view || view.far) return;
-    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.areaOf(t)!).type, treeWorldOf(this.sim));
-    const stage = treeStage(t, this.sim.water.bloomShown(t));
-    if (!spot || !stage || (t.feature ?? 'lawn') === 'water') return;
-    const old = this.growing.get(t.id);
-    old?.e.destroy();
-    const e = new pc.Entity(`grow-${t.id}`);
-    e.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, treeGeo(spot.species, stage, spot.variant, 1, spot.form)), foliageMaterial())], castShadows: true, receiveShadows: true });
-    const h = this.sim.grid.layer(GROUND)!.height;
-    e.setLocalPosition(t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5);
-    e.setLocalEulerAngles(0, (-spot.rot * 180) / Math.PI, 0);
-    this.root.addChild(e);
-    // Relative size of the previous stage, so a young tree swells into a full one rather than popping from zero.
-    const SIZE = [0, 0.32, 0.62, 1, 1.08];
-    const from = prevStage >= 1 ? SIZE[prevStage] / SIZE[stage] : 0.05;
-    // P7-E29.5 (#738): a specimen (a big lone tree) reaching Thriving or Radiant is a restoration moment: it swells
-    // in slower, overshoots further and stretches up before it settles
-    const special = spot.scale >= 2 && stage >= 3;
-    this.growing.set(t.id, { e, t: 0, from, to: spot.scale, tile: t, dur: special ? ChunkRenderer.GROW_SECONDS * 2.2 : ChunkRenderer.GROW_SECONDS, lift: special ? 0.16 : 0.06 });
-    e.setLocalScale(from * spot.scale, from * spot.scale, from * spot.scale);
-    view.dirty = true;
-  }
-
-  private tickGrowing(dt: number) {
-    for (const [id, g] of this.growing) {
-      g.t += dt;
-      const k = Math.min(1, g.t / g.dur);
-      // ease-out with a soft overshoot: the tree springs up and settles
-      const e = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
-      const sc = g.to * (g.from + (1 - g.from) * e);
-      g.e.setLocalScale(sc, sc * (1 + g.lift * Math.sin(k * Math.PI)), sc);
-      if (k >= 1) {
-        this.growing.delete(id);
-        this.markTile(g.tile); // the chunk takes the tree back…
-        const ge = g.e;
-        setTimeout(() => ge.destroy(), 120); // …and the stand-in goes once that rebuild has had a frame to land
-      }
-    }
   }
 
   /** Dev/perf readout: foliage triangles in loaded chunks. */
@@ -2340,6 +2309,8 @@ export class ChunkRenderer {
     return n.ground === 'restored' || this.livePond(n) ? ALIVE.water : n.ground === 'polluted' ? PALETTE.aqua.bed : PALETTE.ground.wetSoil;
   }
 
+  private treeBloom?: TreeBloom;
+
   private readonly host: ChunkHost = (() => {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -2358,6 +2329,9 @@ export class ChunkRenderer {
         self.level = level;
         fn();
         self.level = old;
+      },
+      set treeBloom(growth: TreeBloom | undefined) {
+        self.treeBloom = growth;
       },
       get slabCap() {
         return self.slabCap;
@@ -3657,6 +3631,7 @@ export class ChunkRenderer {
     void r;
     const stage = Math.max(1, Math.min(4, this.sim.water.bloomShown(t) || 1)); // E23.4.4: fades by low water
     const grass = grassTone(stage, t.x, t.z);
+    const planted = !!t.plant && !this.sim.decay.wilting(t);
     const c = this.ctx;
     if (f === 'paving') {
       // Look 3.2: clean stone slabs, moss and tiny flowers in the gaps; a street tree stands in a stone planter.
@@ -3687,7 +3662,7 @@ export class ChunkRenderer {
       this.slab(b, PALETTE.beachSand[((t.variant % 3) + 3) % 3], [x, h, z], [1, 0.16, 1]);
       turfTop(c, t, top);
       beachDressing(c, t, x, z, top);
-      if (t.plant) this.plantExtras(t, x, z, top); // what the player's pulse grew still shows
+      if (planted) this.plantExtras(t, x, z, top);
       return;
     } else {
       this.slab(b, grass, [x, h, z], [1, 0.16, 1]);
@@ -3708,9 +3683,9 @@ export class ChunkRenderer {
     // P7-E28 (#714): natural ground is planted by its zone (lawn, meadow, bed, shore, woodland floor, path border,
     // clearing), in layers that fill in with the bloom stage, instead of the same drifts on every tile
     const zone = zoneOf(c, t.x, t.z);
-    if (t.plant) this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
+    if (planted) this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
     const tree = this.addTree(t, h, 1);
-    zonedPlanting(c, t, stage, x, z, top, zone, tree || !!t.plant);
+    zonedPlanting(c, t, stage, x, z, top, zone, tree || planted);
     if (stage <= 2 && !tree && (zone === 'open_lawn' || zone === 'landmark_clearance') && dhash(t.x, t.z, 67) < 0.07) {
       // the odd pebble in young lawns (seeded), so open lawn doesn't repeat exactly
       b.add('sphere', PALETTE.stone.pebble, this.at(x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6, 0.08), [0.16, 0.08, 0.13]);

@@ -114,6 +114,7 @@ const lawn = {
   sunlit: '#78a962',
   shadow: '#2f6027',
   dryTip: '#b7c25c',
+  wilted: ['#91905a', '#a39a60', '#aba269'],
   /**
    * Grass by bloom stage: index 1 Restored … 4 Radiant. Each stage keeps its own brightness so stages read apart:
    * young grass is light and yellow-green, Blooming mid, Thriving deep, Radiant warm and golden.

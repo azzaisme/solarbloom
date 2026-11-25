@@ -221,8 +221,9 @@ export class CultivatorSystem {
     m.cult!.done++;
     // E23.6.3: the water it tilled with is the job's, drawn by its dock as it set out (DroneFuel.take): nothing more
     if (this.level(m, 'cultSeed') && t.bloom < C().seedBloom) {
+      const before = t.bloom;
       t.bloom = C().seedBloom;
-      this.sim.transitions.bloom(t, t.bloom, true);
+      this.sim.transitions.bloom(t, t.bloom, true, before);
       this.sim.grid.touch(t);
       this.sim.bus.emit('tile.transition', { tile: t });
     }

@@ -178,6 +178,23 @@ describe('P7-E29 pacing: the simulation counts tree tiles (songbirds, species, b
 });
 
 describe('P7-E29 tree variation (the original leafy trees, varied)', () => {
+  it('keeps branch and leaf vertex correspondence through every growth stage', () => {
+    for (const [form, species] of [['standard', 'oak'], ['standard', 'willow'], ...Object.entries(FORM_SPECIES)] as [Form, 'oak' | 'willow' | 'birch' | 'cherry'][]) {
+      for (const lod of [0, 1, 2] as const) {
+        const ages = ([1, 2, 3, 4] as const).map((stage) => treeGeo(species, stage, 1, lod, form));
+        for (let i = 1; i < ages.length; i++) {
+          const younger = ages[i - 1];
+          const older = ages[i];
+          expect(older.height).toBeGreaterThan(younger.height);
+          expect(older.idx.subarray(0, younger.idx.length)).toEqual(younger.idx);
+          if (older.pos.length > younger.pos.length) {
+            expect(older.attachments?.some(({ first }) => first === younger.pos.length / 4)).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
   it('variants differ in proportions and greens; sizes come in classes', () => {
     const dims = Array.from({ length: TREE_VARIANTS }, (_, v) => {
       const f = foliageShape(treeGeo('oak', 3, v, 1).pos, 4);

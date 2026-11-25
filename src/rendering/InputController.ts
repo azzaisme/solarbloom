@@ -2,6 +2,10 @@ export interface InputHandlers {
   hover(x: number, y: number): void;
   leave(): void;
   click(x: number, y: number, button: number): void;
+  /** A world gesture that needs both ends of a mouse press. True consumes the normal click. */
+  press?(button: number): boolean;
+  release?(button: number): void;
+  cancelPress?(): void;
   /** a drag moved by dx, dy; the pointer (or pinch centre) is now at x, y */
   pan(dx: number, dy: number, x: number, y: number): void;
   /** zoom by a factor toward a screen point (the wheel cursor or pinch centre) */
@@ -39,6 +43,7 @@ export class InputController {
   /** spread and time when the current pinch began */
   private pinchStart?: { d: number; at: number };
   private suppressClick = false;
+  private claimedMouse = new Set<number>();
   static DRAG_PX = 7;
 
   constructor(
@@ -55,12 +60,15 @@ export class InputController {
     el.addEventListener('wheel', this.wheel, { passive: false });
     // Captured, a mouse button acts the moment it goes down (every button, also pressed together with another).
     el.addEventListener('mousedown', (e) => {
-      if (this.locked && e.button !== this.holdButton) this.h.click(this.el.clientWidth / 2, this.el.clientHeight / 2, e.button);
+      if (!this.locked || e.button === this.holdButton) return;
+      if (this.h.press?.(e.button)) this.claimedMouse.add(e.button);
+      else this.h.click(this.el.clientWidth / 2, this.el.clientHeight / 2, e.button);
     });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     // Hold to look: letting go of the held button frees the mouse (mouseup reaches the locked canvas, and the window
     // in case the lock was already lost)
     const release = (e: MouseEvent) => {
+      if (this.claimedMouse.delete(e.button)) this.h.release?.(e.button);
       if (this.holdButton === undefined || e.button !== this.holdButton) return;
       this.holdButton = undefined;
       if (this.locked) document.exitPointerLock?.();
@@ -69,11 +77,13 @@ export class InputController {
     window.addEventListener('mouseup', release);
     // the lock was lost some other way (Esc, the window lost focus): the hold is over
     document.addEventListener('pointerlockchange', () => {
+      if (!this.locked && this.claimedMouse.size) this.cancelClaim();
       if (!this.locked && this.holdButton !== undefined) {
         this.holdButton = undefined;
         this.h.holdLookEnd?.();
       }
     });
+    window.addEventListener('blur', this.cancelClaim);
   }
 
   private local(e: PointerEvent | WheelEvent) {
@@ -100,6 +110,10 @@ export class InputController {
     }
     if (e.pointerType === 'mouse' && this.h.capture?.(e.button)) {
       this.swallowUp = true;
+      return;
+    }
+    if (e.pointerType === 'mouse' && this.h.press?.(e.button)) {
+      this.claimedMouse.add(e.button);
       return;
     }
     const p = this.local(e);
@@ -190,11 +204,17 @@ export class InputController {
   };
 
   private cancel = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && this.claimedMouse.size) this.cancelClaim();
     this.pointers.delete(e.pointerId);
     if (!this.pointers.size) {
       this.dragging = false;
       this.suppressClick = false;
     }
+  };
+
+  private cancelClaim = () => {
+    this.claimedMouse.clear();
+    this.h.cancelPress?.();
   };
 
   private wheel = (e: WheelEvent) => {
