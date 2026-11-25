@@ -70,6 +70,7 @@ import { CropVisuals } from '../rendering/CropVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
 import { ShaderWarmup } from '../rendering/ShaderWarmup';
 import { areaPanelHtml } from '../ui/AreaPanel';
+import { regionProgress, regionProgressHtml } from '../ui/RegionProgress';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
 import { InputController } from '../rendering/InputController';
@@ -5189,6 +5190,33 @@ export class Game {
     this.focusArea(list[this.attentionIndex++ % list.length]);
   }
 
+  private arrivingRegion?: string;
+  private arrivalTime = 0;
+
+  /** Briefly show ground restoration progress when Bloombot enters a different region. */
+  private updateRegionArrival(dt: number) {
+    const pose = this.bot?.pose;
+    if (!pose || pose.roofId !== GROUND || !this.city || this.cinematic || this.overviewOn) {
+      this.hud.regionArrival(undefined);
+      this.arrivalTime = 0;
+      return;
+    }
+
+    const id = this.sim.areas.map.areaOfCell(Math.floor(pose.x), Math.floor(pose.z));
+    if (id !== this.arrivingRegion) {
+      this.arrivingRegion = id;
+      const open = this.sim.areas.fog(id) !== 'hidden' && !this.sim.areas.info(id).noLandmark;
+      this.arrivalTime = open ? 3.8 : 0;
+    }
+    this.arrivalTime = Math.max(0, this.arrivalTime - dt);
+    if (this.arrivalTime === 0) {
+      this.hud.regionArrival(undefined);
+      return;
+    }
+    const progress = regionProgress(this.sim, id);
+    this.hud.regionArrival(`<strong>${esc(progress.name)}</strong>${regionProgressHtml(progress)}`);
+  }
+
   /** Labels over revealed city areas: a ready landmark always; names and progress when zoomed out. */
   private updateAreaLabels() {
     const s = this.sim;
@@ -5210,22 +5238,21 @@ export class Game {
       for (const id of s.areas.revealed()) {
         const a = s.areas.info(id);
         if (a.noLandmark) continue; // E21: Old City backstreets carry no label
-        const fog = s.areas.fog(id);
+        if (s.areas.fog(id) === 'hidden') continue;
         const ready = id !== PARK && s.areas.ready(id);
         if (!ready && !zoomedOut) continue;
         // Look 4.6: never behind the camera or past the haze; sized by distance close up.
         const sp = this.camera.onScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1), 50);
         if (!sp) continue;
         // E21: an Old City region is labelled with its own name
-        const def = a.region ? { ...AREA_TYPES[a.type], name: s.gates.regionById(a.region)!.name } : AREA_TYPES[a.type];
+        const def = AREA_TYPES[a.type];
+        const progress = regionProgress(s, id);
         const key = `areaLabel-${id}`;
         live.add(key);
         const lm = s.areas.landmark(id);
-        let html: string;
         const icons = `${chaining.has(id) ? ' 🔗' : ''}${catAreas.has(id) ? ' 🐱' : ''}`;
-        if (ready && lm) html = `✨ ${esc(a.landmarkName)}<button data-wake="${lm.id}">Wake it</button>`;
-        else if (fog === 'cleared') html = `<span data-area="${id}">${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}${icons}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small></span>`;
-        else html = `<span data-area="${id}">${def.icon} ${esc(def.name)}${icons}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small></span>`;
+        const title = `<span data-area="${esc(id)}">${def.icon} ${esc(progress.name)}${icons}${regionProgressHtml(progress)}</span>`;
+        const html = ready && lm ? `${title}<button data-wake="${esc(lm.id)}">Wake it</button>` : title;
         // Zoomed out, every label is a button to its area's panel.
         this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut, zoomedOut ? 1 : sp.scale);
       }
@@ -5622,6 +5649,7 @@ export class Game {
       }
     }
     this.updateAreaLabels();
+    this.updateRegionArrival(wdt);
     this.updateBoostRings(dt);
 
     if (!paused) this.saveTimer += dt; // E22.11: a pause writes nothing (savedAt doesn't move)
