@@ -53,7 +53,7 @@ export function fromTile(t: TileData, tr: TileTransition): TileData | undefined 
       return { ...t, ground: p > 0 ? 'polluted' : 'prepared', pollution: p, bloom: 0, tr: undefined, lushUntil: undefined };
     }
     case 'bloom':
-      return { ...t, bloom: Math.max(1, tr.from ?? t.bloom - 1), tr: undefined };
+      return { ...t, bloom: Math.max(1, Math.floor(tr.from ?? t.bloom - 1)), tr: undefined };
     case 'unblock':
       return { ...t, blocked: true, unblocked: undefined, tr: undefined };
   }

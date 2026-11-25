@@ -26,6 +26,14 @@ export interface GeoSink {
   grey: number;
 }
 
+export interface TreeBloom {
+  transition: TileTransition;
+  mesh: TrMeshBuilder;
+  staticFoliage: GeoSink;
+  reducedMotion: boolean;
+  outgoing?: boolean;
+}
+
 /**
  * The few hooks the chunk renderer gives the framework (Look 6.12 keeps its footprint in ChunkRenderer small).
  * `tile`/`far` draw a tile (or a "from" copy of it) into a sink; slabs go through `slabCap` when it's set.
@@ -34,6 +42,7 @@ export interface ChunkHost {
   tile(sink: Sink, t: TileData, h: number): void;
   far(sink: Sink, t: TileData, h: number): void;
   setFoliage(f: GeoSink | undefined): void;
+  treeBloom?: TreeBloom;
   /** draws with the chunk's prop level overridden (area-clear waves) */
   withLevel(level: number, fn: () => void): void;
   /** Look 3.8 (#135): draws one tile's area-edge dressing (rail, ivy, banners, clutter) into `sink` */
@@ -279,6 +288,8 @@ export class TransitionRenderer {
     tb.grey = B.b.grey;
     const kind = tr?.k;
     const decoLive = live && detailed && kind !== 'soften';
+    const treeBloom = live && tr?.k === 'bloom' ? { transition: tr, mesh: tb, staticFoliage: B.fb, reducedMotion: this.reducedMotion } : undefined;
+    host.treeBloom = treeBloom;
     let end = 0;
     const gAdapter: GeoSink = { add: (g, x, y, z, r, s) => tb.addGeo(g, x, y, z, r, s), grey: tb.grey };
     if (waking) {
@@ -305,6 +316,7 @@ export class TransitionRenderer {
     }
     const to = rec;
     rec = undefined;
+    if (treeBloom) host.treeBloom = { ...treeBloom, outgoing: true };
     let fromHex = to?.hex;
     if (live && tr) {
       const ft = fromTile(t, tr);
@@ -324,6 +336,7 @@ export class TransitionRenderer {
       end = Math.max(end, this.endOf(tr));
     }
     host.slabCap = undefined;
+    host.treeBloom = undefined;
     host.setFoliage(B.fb);
     if (!to) return end;
     // The living surface.

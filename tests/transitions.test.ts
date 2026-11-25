@@ -12,6 +12,19 @@ const saver = new SaveService(undefined);
 const T = TUNING.transitions;
 
 describe('Look 6.2: tile transitions in the sim (#171)', () => {
+  it('keeps the tree at its current age when a second nurture starts', () => {
+    const sim = makeSim(1);
+    const t = ground(sim, PAD, 4, 4, 'restored');
+    t.bloom = 1;
+    sim.restoration.grow(t, undefined, 'player', true);
+    const step = t.tr!;
+    expect(step.from).toBe(1);
+    sim.state.time = step.t0 + step.d / 2;
+    sim.restoration.grow(t, undefined, 'player', true);
+    expect(t.bloom).toBe(3);
+    expect(t.tr?.from).toBe(1.5);
+  });
+
   it('a pulse plays the restore sequence for longer than the sim takes to restore (visual catch-up)', () => {
     const sim = makeSim(1);
     rich(sim);
@@ -65,7 +78,8 @@ describe('Look 6.2: tile transitions in the sim (#171)', () => {
     sim.advance(1);
     sim.restoration.pulse(t.id);
     expect(t.bloom).toBe(3);
-    expect(t.tr).toMatchObject({ k: 'bloom', from: 1 });
+    expect(t.tr).toMatchObject({ k: 'bloom' });
+    expect(t.tr!.from).toBeCloseTo(1 + 7 / 27, 2);
     sim.advance(T.bloom[3] + 1.5);
     sim.restoration.grow(t); // automatic
     expect(t.tr!.d).toBeCloseTo(T.bloom[4] * T.autoMult, 5);

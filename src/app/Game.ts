@@ -1025,10 +1025,11 @@ export class Game {
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
+      const motionChanged = this.transitions.reducedMotion !== rm;
       this.transitions.reducedMotion = rm;
       if (this.tillers) this.tillers.reducedMotion = rm;
       const tier = (this as { gfxTier?: 'low' | 'medium' | 'high' }).gfxTier ?? (s.lowVfx ? 'low' : 'high');
-      if (this.transitions.tier !== tier) {
+      if (this.transitions.tier !== tier || motionChanged) {
         this.transitions.tier = tier;
         this.chunks?.markAll();
       }
@@ -4307,9 +4308,6 @@ export class Game {
     for (const ev of ['keeper.step', 'keeper.gift', 'keeper.friend'] as const) b.on(ev, () => this.waymark.done(['keeper']));
     b.on('tile.restored', ({ tile }) => this.waymark.done(['park', 'spot'], tile));
     b.on('machine.built', ({ machine }) => this.waymark.done(['machine', 'spot'], machine));
-    // Phase 5: trees grow into their next stage with a bounce (restored → sapling, then with each bloom stage).
-    b.on('tile.restored', ({ tile }) => this.chunks.growTree(tile, 0));
-    b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
     b.on('machine.built', ({ machine }) => {
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
     });

@@ -251,9 +251,10 @@ export class RestorationSystem {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
     this.sim.decay.tend(t);
     this.chainPlantOn(t, chainId);
+    const before = t.bloom;
     // one bloom level, or straight to what its plant grows at (a grove: full bloom)
     t.bloom = Math.min(TUNING.restore.maxBloom, Math.max(t.bloom + 1, this.plantDef(t).bloom));
-    this.sim.transitions.bloom(t, t.bloom, starter === 'auto' || quiet);
+    this.sim.transitions.bloom(t, t.bloom, starter === 'auto' || quiet, before);
     this.sim.grid.touch(t);
     this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom, auto: starter === 'auto' });
     if (quiet) return;
@@ -268,8 +269,9 @@ export class RestorationSystem {
   private raiseBloom(t: TileData, to: number) {
     const b = Math.min(TUNING.restore.maxBloom, to);
     if (t.ground !== 'restored' || t.bloom >= b) return;
+    const before = t.bloom;
     t.bloom = b;
-    this.sim.transitions.bloom(t, t.bloom, false);
+    this.sim.transitions.bloom(t, t.bloom, false, before);
     this.sim.grid.touch(t);
   }
 

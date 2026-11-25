@@ -69,6 +69,13 @@ class Grow<T extends Float32Array | Uint8Array | Uint32Array> {
   view(): T {
     return this.a.subarray(0, this.n) as T;
   }
+
+  push4(x: number, y: number, z: number, w: number) {
+    this.a[this.n++] = x;
+    this.a[this.n++] = y;
+    this.a[this.n++] = z;
+    this.a[this.n++] = w;
+  }
 }
 
 /**
@@ -99,6 +106,15 @@ export interface SurfaceData {
   feature: number;
   lushAt: number;
   lushUntil: number;
+}
+
+/** The two cached poses around a tree's current age and the fraction between them. */
+export interface TreeMorph {
+  from: TreeGeo;
+  next: TreeGeo;
+  ageMix: number;
+  t0: number;
+  duration: number;
 }
 
 const hash2 = (x: number, z: number) => {
@@ -204,7 +220,7 @@ export class TrMeshBuilder {
   }
 
   /** Cached tree/shrub geometry (as the foliage builder stamps it), growing from its base. */
-  addGeo(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number) {
+  addGeo(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number, morph?: TreeMorph) {
     const nv = g.pos.length / 4;
     this.reserve(nv, g.idx.length);
     const base = this.pos.n / 3;
@@ -213,6 +229,9 @@ export class TrMeshBuilder {
     let o = this.pos.n, c = this.col.n;
     const seed = hash2(x, z);
     const grey = this.grey;
+    const attachments = g.attachments ?? [];
+    let attachment = 0;
+    let pivot = [0, 0, 0];
     for (let i = 0; i < nv; i++, o += 3, c += 4) {
       const px = g.pos[i * 4], py = g.pos[i * 4 + 1], pz = g.pos[i * 4 + 2];
       P[o] = x + (px * cs - pz * sn) * scale;
@@ -230,7 +249,20 @@ export class TrMeshBuilder {
         b += (l * 0.95 - b) * grey;
       }
       C[c] = r; C[c + 1] = gg; C[c + 2] = b; C[c + 3] = 255;
-      this.stream(x, y, z, seed);
+      if (morph) {
+        if (attachments[attachment]?.first === i) pivot = attachments[attachment++].at;
+        const [ax, ay, az] = pivot;
+        const j = i * 4;
+        const a = morph.from.pos, b = morph.next.pos, k = morph.ageMix;
+        const sx = (a[j] ?? ax) * (1 - k) + (b[j] ?? ax) * k;
+        const sy = (a[j + 1] ?? ay) * (1 - k) + (b[j + 1] ?? ay) * k;
+        const sz = (a[j + 2] ?? az) * (1 - k) + (b[j + 2] ?? az) * k;
+        this.a.push4(morph.t0, morph.duration, 5, 0);
+        this.b.push4(x + (sx * cs - sz * sn) * scale, y + sy * scale, z + (sx * sn + sz * cs) * scale, 0);
+        this.c.push4(x, y, z, 0);
+      } else {
+        this.stream(x, y, z, seed);
+      }
     }
     this.pos.n = o;
     this.nrm.n = o;
