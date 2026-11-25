@@ -4704,7 +4704,7 @@ export class Game {
       this.drones.wake(droneId);
       this.sfx.at(p, (q) => q.powerUp());
       this.tweens.add(0.01, () => {}, { delay: 0.45, done: () => this.sfx.at(p, (q) => q.drone('restorer')) });
-      this.hud.toast('🛸 The old drone wakes up!<small>It tends the ground around its lamp, turning it green bit by bit, and keeps Bloombot company.</small>', 'gold', 5);
+      this.hud.toast('🛸 The old drone wakes up!<small>You have a little buddy! It follows Bloombot and helps turn nearby ground green in the park.</small>', 'gold', 5);
       this.save();
     });
     b.on('drone.jobStarted', ({ droneId }) => {

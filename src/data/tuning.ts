@@ -174,7 +174,10 @@ export const TUNING = {
      * Upgrades don't affect it.
      */
     // E23.7.1: helper timers in game time (3.5 game minutes = 7 s of play; 0.4 = 0.8 s)
-    old: { enabled: true, radius: 6, cycleSeconds: gameMinutes(3.5), flySpeed: 1.5, workSeconds: gameMinutes(0.4) },
+    old: {
+      enabled: true, radius: 6, cycleSeconds: gameMinutes(3.5), flySpeed: 1.5, workSeconds: gameMinutes(0.4),
+      followSpeed: 5.8, workNearBot: 4, catchupDistance: 12,
+    },
     /**
      * E18: drone roles. Every number is a starting guess from the design (the E18 epic, section 4), to tune
      * against the bots in docs/E18_AUDIT.md.
