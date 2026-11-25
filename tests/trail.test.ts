@@ -300,7 +300,9 @@ describe('falling route leaves and raised paving', () => {
     const samples = [0, 0.25, 0.5, 0.75, 1].map(t => leafFlight(t, 0.43, 0.66, { yaw: -2.1, pitch: 0.5, roll: 0.3 }));
     for (let i = 1; i < samples.length; i++) expect(samples[i].height).toBeLessThan(samples[i - 1].height);
     expect(samples[1].roll).not.toBe(samples[2].roll);
-    expect(Object.values(samples.at(-1)!).every(value => value === 0)).toBe(true);
+    const { yaw, ...settled } = samples.at(-1)!;
+    expect(yaw).toBe(-2.1);
+    expect(Object.values(settled).every(value => value === 0)).toBe(true);
   });
 
   it('starts at the light with an independent initial direction for each leaf', () => {
@@ -311,6 +313,7 @@ describe('falling route leaves and raised paving', () => {
       const start = leafFlight(0, 1.3, 0.66, launch);
       expect(start).toMatchObject(launch);
       expect(start.height).toBe(0.66);
+      expect(leafFlight(1, 1.3, 0.66, launch).yaw).toBe(launch.yaw);
       expect(Math.abs(start.sideways) + Math.abs(start.along)).toBe(0);
     }
   });

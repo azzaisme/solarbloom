@@ -39,7 +39,7 @@ function rgb(hex: string) {
 /** One depth-tested mesh for the light ribbon, moving beads and little star-shaped glints. */
 export class TrailLight {
   private root: pc.Entity;
-  private material = glowMaterial(PALETTE.pure.white, 1.85);
+  private material = glowMaterial(PALETTE.pure.white, 1.55);
   private mesh?: pc.Mesh;
   private points: readonly LightPoint[] = [];
   private positions = new Float32Array(0);

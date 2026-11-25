@@ -59,7 +59,7 @@ export function randomLeafLaunch(random = Math.random): LeafLaunch {
   };
 }
 
-/** World-space drift from the landing point. Offset and flutter ease into the same pose as the settled leaf. */
+/** World-space drift from the landing point. The flutter settles around each leaf’s own heading. */
 export function leafFlight(progress: number, phase: number, height: number, launch: LeafLaunch) {
   const t = clamp01(progress);
   const envelope = 1 - smooth(t);
@@ -70,7 +70,7 @@ export function leafFlight(progress: number, phase: number, height: number, laun
     height: height * Math.pow(1 - t, 1.18),
     sideways: 0.48 * sway * flutter,
     along: 0.25 * turn * flutter,
-    yaw: launch.yaw * envelope + 0.48 * turn * flutter,
+    yaw: launch.yaw + 0.48 * turn * flutter,
     pitch: launch.pitch * envelope + 0.69 * turn * flutter,
     roll: launch.roll * envelope + 1.24 * sway * flutter,
   };

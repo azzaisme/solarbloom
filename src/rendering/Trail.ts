@@ -174,7 +174,7 @@ export class Trail {
     const distance = camera ? Math.hypot(x - camera.x, y - camera.y, z - camera.z) : 0;
     const scale = size * (0.83 + 0.17 * Math.cos(phase + 0.6)) *
       Math.min(T.farScale, Math.max(1, 1 + (distance - T.nearDistance) * T.growth));
-    this.placeLeaf(index, x, y, z, heading + flight.yaw, flight.pitch, flight.roll, scale, alpha);
+    this.placeLeaf(index, x, y, z, flight.yaw, flight.pitch, flight.roll, scale, alpha);
   }
 
   private placeLeaf(index: number, x: number, y: number, z: number, yaw: number, pitch: number, roll: number, scale: number, alpha: number) {

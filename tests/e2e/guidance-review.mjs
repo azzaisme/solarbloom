@@ -66,15 +66,15 @@ try {
   console.log('Fountain exit staged');
   assert.equal(await page.evaluate(() => window.solarbloom.hud.objective.showWhere()), true);
   await page.waitForFunction(() => window.solarbloom.trail.showing);
-  if (!before) await page.evaluate(() => {
+  if (!before) await page.evaluate(age => {
     const { trail } = window.solarbloom;
     const update = trail.update.bind(trail);
     trail.update = (_, ...args) => {
       trail.reducedMotion = false;
-      trail.age = 1.85;
+      trail.age = age;
       update(0, ...args);
     };
-  });
+  }, Number(process.env.ART_TRAIL_AGE ?? 1.85));
   if (!before) {
     const guide = await page.evaluate(() => {
       const { trail } = window.solarbloom;

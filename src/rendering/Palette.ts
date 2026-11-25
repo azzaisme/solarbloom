@@ -504,10 +504,10 @@ const signal = {
   /** Compass leaves and the restoration target stroke. */
   trailLeaves: ['#ffb035', '#ffc95d', '#f4aa3d', '#ffdd87'],
   trailVein: '#ffea9c',
-  trailHeart: '#fff6cf',
-  trailThread: '#ffce76',
-  trailAura: '#9ce6ca',
-  trailSpark: '#b6ffdf',
+  trailHeart: '#ffdb79',
+  trailThread: '#ffb52e',
+  trailAura: '#e99418',
+  trailSpark: '#ffe49a',
   objectiveTile: '#ffc04e',
   /** E19: the build hologram bloombot projects */
   holo: '#a6ff86',

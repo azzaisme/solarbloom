@@ -9,9 +9,11 @@ In both captures, the Old Market gate is open and Bloombot has Tally’s restora
 
 The [motion preview](drifting-leaves.gif) uses the game’s trail renderer on a small test path. The previous pass is available for comparison in the [flat trail](after-fountain-exit.png) and [faint tile outlines](after-market-tiles.png) captures.
 
-The eye-level light pass adds a ribbon and soft star glints. Leaves form along the ribbon with independent random starting angles and drift down to the same walkable route.
+The eye-level guide is a golden ribbon with an amber glow and gold star glints. Each leaf forms at a random angle, flutters down, and keeps its own heading when it lands.
 
-- [Eye-level light in the game](eye-level-fountain-exit.png)
+- [Gold ribbon and scattered leaves in the game](gold-ribbon-fountain-exit.png)
+- [Gold ribbon and scattered leaves in motion](gold-ribbon-leaves.gif)
+- [Previous eye-level light](eye-level-fountain-exit.png)
 - [Animated ribbon and leaves in the test scene](eye-level-light.gif) · [still frame](eye-level-light-preview.png)
 - [Previously, leaves drifted from above the route](drifting-fountain-exit.png)
 
