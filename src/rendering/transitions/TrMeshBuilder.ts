@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import { lowGeometry, type VPrim } from '../Shapes';
-import type { TreeGeo } from '../TreeGen';
-import { SEM_A, SEM_B, SEM_C } from './TransitionMaterial';
+import { LEAF_CARD_VERTICES, type TreeGeo, type TreeStage } from '../TreeGen';
+import { SEM_A, SEM_B, SEM_C, SEM_LEAF } from './TransitionMaterial';
 
 interface Template {
   pos: Float32Array;
@@ -110,7 +110,8 @@ export interface SurfaceData {
 
 /** The two cached poses around a tree's current age and the fraction between them. */
 export interface TreeMorph {
-  from: TreeGeo;
+  from?: TreeGeo;
+  stage: TreeStage;
   next: TreeGeo;
   ageMix: number;
   t0: number;
@@ -134,6 +135,7 @@ export class TrMeshBuilder {
   private a = new Grow(new Float32Array(1 << 12));
   private b = new Grow(new Float32Array(1 << 12));
   private c = new Grow(new Float32Array(1 << 12));
+  private foliage?: Grow<Float32Array>;
   private idx = new Grow(new Uint32Array(1 << 12));
   /** 0 = full colour … 1 = grey (fog), as in the chunk builder */
   grey = 0;
@@ -163,6 +165,10 @@ export class TrMeshBuilder {
     this.a.reserve(nv * 4);
     this.b.reserve(nv * 4);
     this.c.reserve(nv * 4);
+    if (this.foliage) {
+      this.foliage.n = this.col.n;
+      this.foliage.reserve(nv * 4);
+    }
     this.idx.reserve(ni);
   }
 
@@ -222,7 +228,10 @@ export class TrMeshBuilder {
   /** Cached tree/shrub geometry (as the foliage builder stamps it), growing from its base. */
   addGeo(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number, morph?: TreeMorph) {
     const nv = g.pos.length / 4;
+    const leaves = morph ? g.leafStarts : undefined;
+    const foliage = this.foliage ??= new Grow(new Float32Array(1 << 12));
     this.reserve(nv, g.idx.length);
+    const W = foliage.a;
     const base = this.pos.n / 3;
     const cs = Math.cos(rotY), sn = Math.sin(rotY);
     const P = this.pos.a, N = this.nrm.a, C = this.col.a;
@@ -232,6 +241,12 @@ export class TrMeshBuilder {
     const attachments = g.attachments ?? [];
     let attachment = 0;
     let pivot = [0, 0, 0];
+    let leaf = 0;
+    let leafStart = -LEAF_CARD_VERTICES;
+    let opensAt = 0, openBy = 0, leafMix = 0;
+    const ageMix = morph?.ageMix ?? 0;
+    // The saved fractional age is eased. Recover progress to seed a leaf already opening when a pulse interrupts it.
+    const interrupted = ageMix > 0 ? 0.5 - Math.sin(Math.asin(1 - 2 * ageMix) / 3) : 0;
     for (let i = 0; i < nv; i++, o += 3, c += 4) {
       const px = g.pos[i * 4], py = g.pos[i * 4 + 1], pz = g.pos[i * 4 + 2];
       P[o] = x + (px * cs - pz * sn) * scale;
@@ -249,17 +264,45 @@ export class TrMeshBuilder {
         b += (l * 0.95 - b) * grey;
       }
       C[c] = r; C[c + 1] = gg; C[c + 2] = b; C[c + 3] = 255;
+      const flex = g.pos[i * 4 + 3];
+      W[c + 3] = flex >= 2 ? flex - 2 : flex;
       if (morph) {
         if (attachments[attachment]?.first === i) pivot = attachments[attachment++].at;
         const [ax, ay, az] = pivot;
         const j = i * 4;
-        const a = morph.from.pos, b = morph.next.pos, k = morph.ageMix;
-        const sx = (a[j] ?? ax) * (1 - k) + (b[j] ?? ax) * k;
-        const sy = (a[j + 1] ?? ay) * (1 - k) + (b[j + 1] ?? ay) * k;
-        const sz = (a[j + 2] ?? az) * (1 - k) + (b[j + 2] ?? az) * k;
-        this.a.push4(morph.t0, morph.duration, 5, 0);
-        this.b.push4(x + (sx * cs - sz * sn) * scale, y + sy * scale, z + (sx * sn + sz * cs) * scale, 0);
-        this.c.push4(x, y, z, 0);
+        const a = morph.from?.pos, b = morph.next.pos, k = morph.ageMix;
+        let sx = (a?.[j] ?? ax) * (1 - k) + (b[j] ?? ax) * k;
+        let sy = (a?.[j + 1] ?? ay) * (1 - k) + (b[j + 1] ?? ay) * k;
+        let sz = (a?.[j + 2] ?? az) * (1 - k) + (b[j + 2] ?? az) * k;
+        if (i === leaves?.[leaf]) {
+          leafStart = i;
+          leaf++;
+          const variation = hash2(x + i * 0.0137, z + i * 0.0279);
+          opensAt = 0.15 + 0.48 * variation;
+          openBy = 0.55 + 0.44 * variation;
+          const q = Math.max(0, Math.min(1, (interrupted - opensAt) / (openBy - opensAt)));
+          leafMix = q * q * (3 - 2 * q);
+        }
+        const isLeaf = i < leafStart + LEAF_CARD_VERTICES;
+        if (isLeaf) {
+          const root = leafStart * 4;
+          const fromX = (a?.[j] ?? 0) - (a?.[root] ?? 0), nextX = b[j] - b[root];
+          const fromY = (a?.[j + 1] ?? 0) - (a?.[root + 1] ?? 0), nextY = b[j + 1] - b[root + 1];
+          const fromZ = (a?.[j + 2] ?? 0) - (a?.[root + 2] ?? 0), nextZ = b[j + 2] - b[root + 2];
+          sx += (nextX - fromX) * (leafMix - k);
+          sy += (nextY - fromY) * (leafMix - k);
+          sz += (nextZ - fromZ) * (leafMix - k);
+          // Delay the blade relative to its own attachment. The root moves with the branch at the normal rate.
+          const dx = px - g.pos[root] - (fromX * (1 - leafMix) + nextX * leafMix);
+          const dy = py - g.pos[root + 1] - (fromY * (1 - leafMix) + nextY * leafMix);
+          const dz = pz - g.pos[root + 2] - (fromZ * (1 - leafMix) + nextZ * leafMix);
+          W[c] = (dx * cs - dz * sn) * scale;
+          W[c + 1] = dy * scale;
+          W[c + 2] = (dx * sn + dz * cs) * scale;
+        }
+        this.a.push4(morph.t0, morph.duration, 5, isLeaf ? opensAt : 0);
+        this.b.push4(x + (sx * cs - sz * sn) * scale, y + sy * scale, z + (sx * sn + sz * cs) * scale, isLeaf ? openBy : 0);
+        this.c.push4(x, y, z, morph.stage);
       } else {
         this.stream(x, y, z, seed);
       }
@@ -283,6 +326,7 @@ export class TrMeshBuilder {
     m.setVertexStream(SEM_A, this.a.view(), 4);
     m.setVertexStream(SEM_B, this.b.view(), 4);
     m.setVertexStream(SEM_C, this.c.view(), 4);
+    m.setVertexStream(SEM_LEAF, this.foliage?.a.subarray(0, this.col.n) ?? new Float32Array(this.col.n), 4);
     m.setIndices(this.idx.view());
     m.update(pc.PRIMITIVE_TRIANGLES);
     // Pieces lift a little above their rest pose (heave, overshoot): pad the bounds so they never cull early.

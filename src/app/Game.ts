@@ -12,6 +12,7 @@ import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { AudioDebugHUD } from '../audio/AudioDebugHUD';
 import { sampleArea, surfaceOf, type TileSound } from '../audio/AudioMath';
 import { treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
+import { treeGeo } from '../rendering/TreeGen';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -3194,6 +3195,45 @@ export class Game {
     () => performance.now(),
   );
 
+  private nextFallingLeaf = 0;
+
+  private updateFallingLeaves(dt: number, wind: number, view: { x0: number; x1: number; z0: number; z1: number }) {
+    if (!dt || this.vfx.reducedMotion || ChunkRenderer.still || this.camera.zoom < 0.7) return;
+    this.nextFallingLeaf -= dt;
+    if (this.nextFallingLeaf > 0) return;
+    this.nextFallingLeaf = (1.4 + Math.random() * 1.5) / (1 + 1.8 * wind) / this.vfx.density;
+    const world = treeWorldOf(this.sim);
+    const focus = this.camera.target;
+    for (let attempt = 0; attempt < 16; attempt++) {
+      const x = Math.floor(focus.x + (Math.random() - 0.5) * 12);
+      const z = Math.floor(focus.z + (Math.random() - 0.5) * 12);
+      if (x + 0.5 < view.x0 || x + 0.5 > view.x1 || z + 0.5 < view.z0 || z + 0.5 > view.z1) continue;
+      const tile = this.sim.grid.peek(GROUND, x, z);
+      if (!tile || tile.blocked || tile.feature === 'water' || this.sunkAt(x, z)) continue;
+      const stage = treeStage(tile, this.sim.water.bloomShown(tile));
+      if (!stage || stage < 2 || this.transitions.fadeWindow(tile)) continue;
+      const area = this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z));
+      const spot = treeSpot(tile, area.type, world);
+      if (!spot) continue;
+      const tree = treeGeo(spot.species, stage, spot.variant, 1, spot.form);
+      const leaves = tree.leafStarts;
+      if (!leaves?.length) continue;
+      const root = leaves[Math.floor(Math.random() * leaves.length)] * 4;
+      const tip = root + 8;
+      if (Math.hypot(tree.pos[tip] - tree.pos[root], tree.pos[tip + 1] - tree.pos[root + 1], tree.pos[tip + 2] - tree.pos[root + 2]) < 0.02) continue;
+      const c = Math.cos(spot.rot), s = Math.sin(spot.rot);
+      const px = x + 0.5, pz = z + 0.5;
+      const ground = this.groundY(px, pz);
+      this.vfx.fallingLeaf(
+        px + (tree.pos[root] * c - tree.pos[root + 2] * s) * spot.scale,
+        ground + (spot.planter ? 0.16 : 0) + tree.pos[root + 1] * spot.scale,
+        pz + (tree.pos[root] * s + tree.pos[root + 2] * c) * spot.scale,
+        ground, [tree.col[root], tree.col[root + 1], tree.col[root + 2]],
+      );
+      break;
+    }
+  }
+
   /**
    * E23.12.3 (#530): could the player spot this cat by eye? Enough of it is drawn in front of everything else
    * (core/CatSight): anything the player can't see through hides it, at its real shape and height, and a cat a few
@@ -5381,7 +5421,8 @@ export class Game {
     const rect = view;
     if (rect) this.grid.stream(rect);
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
-    if (rect) this.chunks.update(wdt, rect, this.camera.target, this.camera.zoom); // streams while paused; the wind and growth wait
+    const wind = this.weatherVisuals.wind;
+    if (rect) this.chunks.update(wdt, rect, this.camera.target, this.camera.zoom, wind); // streams while paused; the wind and growth wait
     detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
@@ -5475,7 +5516,8 @@ export class Game {
     // #613: resting at home charges bloombot: show it, so the player knows to stand still
     if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
     if (!this.cinematic) this.checkCozyUnlocks();
-    this.vfx.update(wdt);
+    if (rect) this.updateFallingLeaves(wdt, wind, rect);
+    this.vfx.update(wdt, wind);
     // E24 (#609): the old gold arrow is retired; the waymark (a soft light on the goal spot) took its place
     this.overlays.update(dt, camP);
     this.waterLevels.update();
