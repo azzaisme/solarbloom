@@ -28,7 +28,7 @@ import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageBounds, foliageMaterial, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type TreeStage, type Lod } from './TreeGen';
 import { treeSpot, treeStage, treeWorldOf } from './TreePlacement';
-import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
+import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, reedGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, beachDressing, buildingDressing, grassTufts, lawnFringe, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
 import { zoneAt, type PlantingZone } from './PlantingZones';
 import { MODELS, ModelBatch } from './Models';
@@ -690,7 +690,7 @@ export class ChunkRenderer {
   /** Look 3.17: current zoom band (1 mid, 2 near) */
   private band = 1;
   /** Look 3.16: freeze the wind (deterministic screenshots: `?still`) */
-  static still = typeof location !== 'undefined' && /[?&]still/.test(location.search);
+  static still = typeof location !== 'undefined' && /[?&]still\b/.test(location.search);
 
   constructor(
     private sim: Sim,
@@ -823,11 +823,11 @@ export class ChunkRenderer {
   /** Called when the park's stage rises (Game shows a line and a sparkle). */
   onParkStage?: (stage: number, prev: number) => void;
 
-  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1) {
+  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1, wind = 0) {
     this.time += dt;
     this.warmTrees();
     // Phase 5 / Look 3.16: foliage, grass, flowers, vines and banners sway; still with reduced motion or `?still`
-    updateWind(ChunkRenderer.still ? 0 : this.time, this.reducedMotion || ChunkRenderer.still ? 0 : 1);
+    updateWind(ChunkRenderer.still ? 0 : this.time, this.reducedMotion || ChunkRenderer.still ? 0 : 0.65 + 1.2 * wind);
     if (!this.reducedMotion && !ChunkRenderer.still) this.waterTime = this.time;
     const ps = this.sim.grid.isPlayable(GROUND) ? this.sim.progression.parkStage() : 0;
     if (ps !== this.parkStage) {
@@ -1761,7 +1761,7 @@ export class ChunkRenderer {
       // E28.W02: natural ground slopes down into the water, its waterline wandering, dressed with stones and plants
       this.shore(b, fb, t, th, !!v.far);
       if (!v.far && this.isWater(t)) {
-        this.poolBanks(b, t, th, gtex);
+        this.poolBanks(b, fb, t, th, gtex);
         // a dead pond's bed: dried, cracked silt painted across the whole pond (no tile grid)
         if (this.siltBed(t)) {
           const k = Math.round(255 * (1 - 0.3 * b.grey));
@@ -1989,12 +1989,13 @@ export class ChunkRenderer {
     if (growth && !growth.reducedMotion) {
       const tr = growth.transition;
       // Low water can suppress some or all of the visible bloom stages.
-      const start = Math.min(stage, Math.max(1, (tr.from ?? t.bloom - 1) - (t.bloom - stage)));
+      const start = tr.k === 'restore' ? (stage === 1 ? 0 : stage)
+        : Math.min(stage, Math.max(1, (tr.from ?? t.bloom - 1) - (t.bloom - stage)));
       if (start < stage) {
-        const from = Math.floor(start) as TreeStage;
-        const next = Math.ceil(start) as TreeStage;
+        const from = Math.floor(start) as TreeStage | 0;
+        const next = Math.max(1, Math.ceil(start)) as TreeStage;
         growth.mesh.addGeo(mesh, x, y, z, spot.rot, spot.scale, {
-          from: geometry(from), next: geometry(next), ageMix: start - from, t0: tr.t0, duration: tr.d,
+          stage, from: from ? geometry(from) : undefined, next: geometry(next), ageMix: start - from, t0: tr.t0, duration: tr.d,
         });
         return true;
       }
@@ -3454,7 +3455,7 @@ export class ChunkRenderer {
    * bank of that material in each outer corner, wider where the pool carries on behind the tile, with the odd rock
    * or clump of reeds on it.
    */
-  private poolBanks(b: MeshBuilder, t: TileData, h: number, gtex?: GroundTexGeo[]) {
+  private poolBanks(b: MeshBuilder, fb: FoliageBuilder, t: TileData, h: number, gtex?: GroundTexGeo[]) {
     const g = this.sim.grid;
     const x = t.x + 0.5;
     const z = t.z + 0.5;
@@ -3495,14 +3496,9 @@ export class ChunkRenderer {
         b.add('sphere', PALETTE.stone.pebble, [px, top + 0.04, pz], [0.2, 0.14, 0.17]);
         b.add('sphere', PALETTE.stone.grey, [px + sx * 0.12, top + 0.03, pz - sz * 0.1], [0.13, 0.1, 0.12]);
         if (alive) b.add('sphere', PALETTE.leaf.light, [px, top + 0.09, pz], [0.14, 0.05, 0.12]);
-      } else if (alive && k < 0.9)
-        for (let j = 0; j < 3; j++) {
-          const ht = 0.22 + 0.1 * j;
-          const rx = px + (j - 1) * 0.06;
-          const rz = pz + (j === 1 ? 0.05 : -0.03);
-          b.add('cone', [PALETTE.leaf.dark, PALETTE.leaf.mid, PALETTE.leaf.deep][j], [rx, top + ht / 2, rz], [0.05, ht, 0.05]);
-          if (j === 2 && t.bloom >= 2) b.add('capsule', PALETTE.wood.bark, [rx, top + ht, rz], [0.045, 0.05, 0.045]); // a bulrush
-        }
+      } else if (alive && k < 0.9) {
+        fb.add(reedGeo(t.variant + i, t.bloom >= 2 ? 1 : 0), px, top, pz, k * 6.28, 1);
+      }
     }
     // straight banks, stopping where a rounded corner takes over
     for (const [dx, dz] of EDGE_DIRS) {
@@ -3520,14 +3516,9 @@ export class ChunkRenderer {
         this.rocks.push({ x: ex0, z: ez0, r: 0.12 });
         b.add('sphere', PALETTE.stone.warm, [ex0 + (dz ? 0.16 : 0), surf + 0.03, ez0 + (dx ? 0.16 : 0)], [0.14, 0.12, 0.13]);
         if (this.poolAlive(t)) b.add('sphere', PALETTE.leaf.light, [ex0, surf + 0.14, ez0], [0.15, 0.04, 0.12]);
-      } else if (k < 0.5 && this.poolAlive(t))
-        for (let j = 0; j < 4; j++) {
-          const ht = 0.26 + 0.07 * j;
-          const rx = ex0 + (dz ? (j - 1.5) * 0.07 : (j % 2) * 0.05);
-          const rz = ez0 + (dx ? (j - 1.5) * 0.07 : (j % 2) * 0.05);
-          b.add('cone', [PALETTE.leaf.dark, PALETTE.leaf.mid, PALETTE.leaf.deep, PALETTE.leaf.stalk][j], [rx, surf + ht / 2, rz], [0.045, ht, 0.045]);
-          if (j === 3) b.add('capsule', PALETTE.wood.bark, [rx, surf + ht, rz], [0.04, 0.05, 0.04]);
-        }
+      } else if (k < 0.5 && this.poolAlive(t)) {
+        fb.add(reedGeo(t.variant + dx + dz, 1), ex0, surf, ez0, k * 6.28, 1.2);
+      }
       b.grey = this.greyOf(n);
       const hex = this.topColour(n);
       // (and short of the land's own corner where that is rounded off into the water)

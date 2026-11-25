@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { lowGeometry, type VPrim } from '../Shapes';
-import { LEAF_CARD_VERTICES, type TreeGeo } from '../TreeGen';
+import { LEAF_CARD_VERTICES, type TreeGeo, type TreeStage } from '../TreeGen';
 import { SEM_A, SEM_B, SEM_C, SEM_LEAF } from './TransitionMaterial';
 
 interface Template {
@@ -110,7 +110,8 @@ export interface SurfaceData {
 
 /** The two cached poses around a tree's current age and the fraction between them. */
 export interface TreeMorph {
-  from: TreeGeo;
+  from?: TreeGeo;
+  stage: TreeStage;
   next: TreeGeo;
   ageMix: number;
   t0: number;
@@ -134,7 +135,7 @@ export class TrMeshBuilder {
   private a = new Grow(new Float32Array(1 << 12));
   private b = new Grow(new Float32Array(1 << 12));
   private c = new Grow(new Float32Array(1 << 12));
-  private leafOffsets?: Grow<Float32Array>;
+  private foliage?: Grow<Float32Array>;
   private idx = new Grow(new Uint32Array(1 << 12));
   /** 0 = full colour … 1 = grey (fog), as in the chunk builder */
   grey = 0;
@@ -164,9 +165,9 @@ export class TrMeshBuilder {
     this.a.reserve(nv * 4);
     this.b.reserve(nv * 4);
     this.c.reserve(nv * 4);
-    if (this.leafOffsets) {
-      this.leafOffsets.n = this.pos.n;
-      this.leafOffsets.reserve(nv * 3);
+    if (this.foliage) {
+      this.foliage.n = this.col.n;
+      this.foliage.reserve(nv * 4);
     }
     this.idx.reserve(ni);
   }
@@ -228,8 +229,9 @@ export class TrMeshBuilder {
   addGeo(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number, morph?: TreeMorph) {
     const nv = g.pos.length / 4;
     const leaves = morph ? g.leafStarts : undefined;
-    if (leaves?.length) this.leafOffsets ??= new Grow(new Float32Array(1 << 12));
+    const foliage = this.foliage ??= new Grow(new Float32Array(1 << 12));
     this.reserve(nv, g.idx.length);
+    const W = foliage.a;
     const base = this.pos.n / 3;
     const cs = Math.cos(rotY), sn = Math.sin(rotY);
     const P = this.pos.a, N = this.nrm.a, C = this.col.a;
@@ -262,14 +264,16 @@ export class TrMeshBuilder {
         b += (l * 0.95 - b) * grey;
       }
       C[c] = r; C[c + 1] = gg; C[c + 2] = b; C[c + 3] = 255;
+      const flex = g.pos[i * 4 + 3];
+      W[c + 3] = flex >= 2 ? flex - 2 : flex;
       if (morph) {
         if (attachments[attachment]?.first === i) pivot = attachments[attachment++].at;
         const [ax, ay, az] = pivot;
         const j = i * 4;
-        const a = morph.from.pos, b = morph.next.pos, k = morph.ageMix;
-        let sx = (a[j] ?? ax) * (1 - k) + (b[j] ?? ax) * k;
-        let sy = (a[j + 1] ?? ay) * (1 - k) + (b[j + 1] ?? ay) * k;
-        let sz = (a[j + 2] ?? az) * (1 - k) + (b[j + 2] ?? az) * k;
+        const a = morph.from?.pos, b = morph.next.pos, k = morph.ageMix;
+        let sx = (a?.[j] ?? ax) * (1 - k) + (b[j] ?? ax) * k;
+        let sy = (a?.[j + 1] ?? ay) * (1 - k) + (b[j + 1] ?? ay) * k;
+        let sz = (a?.[j + 2] ?? az) * (1 - k) + (b[j + 2] ?? az) * k;
         if (i === leaves?.[leaf]) {
           leafStart = i;
           leaf++;
@@ -280,11 +284,11 @@ export class TrMeshBuilder {
           leafMix = q * q * (3 - 2 * q);
         }
         const isLeaf = i < leafStart + LEAF_CARD_VERTICES;
-        if (isLeaf && this.leafOffsets) {
+        if (isLeaf) {
           const root = leafStart * 4;
-          const fromX = a[j] - a[root], nextX = b[j] - b[root];
-          const fromY = a[j + 1] - a[root + 1], nextY = b[j + 1] - b[root + 1];
-          const fromZ = a[j + 2] - a[root + 2], nextZ = b[j + 2] - b[root + 2];
+          const fromX = (a?.[j] ?? 0) - (a?.[root] ?? 0), nextX = b[j] - b[root];
+          const fromY = (a?.[j + 1] ?? 0) - (a?.[root + 1] ?? 0), nextY = b[j + 1] - b[root + 1];
+          const fromZ = (a?.[j + 2] ?? 0) - (a?.[root + 2] ?? 0), nextZ = b[j + 2] - b[root + 2];
           sx += (nextX - fromX) * (leafMix - k);
           sy += (nextY - fromY) * (leafMix - k);
           sz += (nextZ - fromZ) * (leafMix - k);
@@ -292,14 +296,13 @@ export class TrMeshBuilder {
           const dx = px - g.pos[root] - (fromX * (1 - leafMix) + nextX * leafMix);
           const dy = py - g.pos[root + 1] - (fromY * (1 - leafMix) + nextY * leafMix);
           const dz = pz - g.pos[root + 2] - (fromZ * (1 - leafMix) + nextZ * leafMix);
-          const offset = this.leafOffsets.a;
-          offset[o] = (dx * cs - dz * sn) * scale;
-          offset[o + 1] = dy * scale;
-          offset[o + 2] = (dx * sn + dz * cs) * scale;
+          W[c] = (dx * cs - dz * sn) * scale;
+          W[c + 1] = dy * scale;
+          W[c + 2] = (dx * sn + dz * cs) * scale;
         }
         this.a.push4(morph.t0, morph.duration, 5, isLeaf ? opensAt : 0);
         this.b.push4(x + (sx * cs - sz * sn) * scale, y + sy * scale, z + (sx * sn + sz * cs) * scale, isLeaf ? openBy : 0);
-        this.c.push4(x, y, z, 0);
+        this.c.push4(x, y, z, morph.stage);
       } else {
         this.stream(x, y, z, seed);
       }
@@ -323,7 +326,7 @@ export class TrMeshBuilder {
     m.setVertexStream(SEM_A, this.a.view(), 4);
     m.setVertexStream(SEM_B, this.b.view(), 4);
     m.setVertexStream(SEM_C, this.c.view(), 4);
-    m.setVertexStream(SEM_LEAF, this.leafOffsets?.a.subarray(0, this.pos.n) ?? new Float32Array(this.pos.n), 3);
+    m.setVertexStream(SEM_LEAF, this.foliage?.a.subarray(0, this.col.n) ?? new Float32Array(this.col.n), 4);
     m.setIndices(this.idx.view());
     m.update(pc.PRIMITIVE_TRIANGLES);
     // Pieces lift a little above their rest pose (heave, overshoot): pad the bounds so they never cull early.

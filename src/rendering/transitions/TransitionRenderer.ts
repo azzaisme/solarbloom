@@ -288,7 +288,10 @@ export class TransitionRenderer {
     tb.grey = B.b.grey;
     const kind = tr?.k;
     const decoLive = live && detailed && kind !== 'soften';
-    const treeBloom = live && tr?.k === 'bloom' ? { transition: tr, mesh: tb, staticFoliage: B.fb, reducedMotion: this.reducedMotion } : undefined;
+    const treeTransition = live && tr?.k === 'restore'
+      ? { ...tr, t0: tr.t0 + tr.d * this.durScale * WINDOWS.restore.in[0], d: tr.d * (1 - WINDOWS.restore.in[0]) }
+      : live && tr?.k === 'bloom' ? tr : undefined;
+    const treeBloom = treeTransition ? { transition: treeTransition, mesh: tb, staticFoliage: B.fb, reducedMotion: this.reducedMotion } : undefined;
     host.treeBloom = treeBloom;
     let end = 0;
     const gAdapter: GeoSink = { add: (g, x, y, z, r, s) => tb.addGeo(g, x, y, z, r, s), grey: tb.grey };
