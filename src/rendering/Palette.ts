@@ -509,7 +509,6 @@ const signal = {
   trailThread: '#ffb52e',
   trailAura: '#e99418',
   trailSpark: '#ffe49a',
-  objectiveTile: '#ffc04e',
   /** E19: the build hologram bloombot projects */
   holo: '#a6ff86',
   /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
@@ -535,6 +534,14 @@ const signal = {
      */
     machineHolo: '#0088ff',
   },
+};
+
+const tileMarker = {
+  hover: { line: '#ffe2b4', tip: '#fff4dd', shadow: '#493129' },
+  selected: { line: '#63f5da', tip: '#d5fff3', shadow: '#184f50' },
+  valid: { line: '#98e74e', tip: '#e1ff9c', shadow: '#37531c' },
+  invalid: { line: '#d9532e', tip: '#ff9658', shadow: '#733423' },
+  objective: { line: '#ffbd43', tip: '#ffefa9', shadow: '#77401d' },
 };
 
 /** Scene lights (Look 1 owns lighting; on its branch these move to src/data/look.ts). */
@@ -616,7 +623,7 @@ const cozy = {
   waterShallow: '#7fd0f0',
 };
 
-const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, light, surfaces, pure };
+const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, tileMarker, light, surfaces, pure };
 
 export const PALETTE = {
   ...families,

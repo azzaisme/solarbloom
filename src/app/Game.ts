@@ -1025,7 +1025,7 @@ export class Game {
     if (this.chunks) this.chunks.reducedMotion = rm;
     // E28.W04: the water's drifting flecks go with the air's motes (reduced motion stills the rest: it stops waterTime)
     if (this.waterLife) this.waterLife.particles = !s.lowVfx && this.gfxTier !== 'low';
-    if (this.overlays) this.overlays.holo.reducedMotion = rm;
+    if (this.overlays) this.overlays.reducedMotion = this.overlays.holo.reducedMotion = rm;
     if (this.lightVisuals) this.lightVisuals.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
@@ -2903,7 +2903,8 @@ export class Game {
       this.overlays.hideGhost();
       this.overlays.hideRadius();
       const fr = target.frame ?? (target.at && { roofId: target.at.roofId, x: target.at.x, z: target.at.z, size: 1 });
-      if (fr && target.kind !== 'cat') this.overlays.showFrame(fr.roofId, fr.x, fr.z, fr.size, 'info');
+      const tone = target.refused ? 'bad' : target.verb === 'Plant in' ? 'restore' : 'info';
+      if (fr && target.kind !== 'cat') this.overlays.showFrame(fr.roofId, fr.x, fr.z, fr.size, tone);
       else this.overlays.hideFrame();
       this.hud.hideTip();
       return;
@@ -3518,11 +3519,11 @@ export class Game {
     const chk = this.sim.restoration.checkPulse(t);
     const needsCare = this.sim.decay.thirsty(t);
     const maxed = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom && !needsCare;
-    this.overlays.showFrame(t.roofId, t.x, t.z, 1, chk.ok ? 'ok' : maxed || t.ground === 'growing' ? 'hover' : 'bad');
+    this.overlays.showFrame(t.roofId, t.x, t.z, 1, chk.ok ? 'restore' : maxed || t.ground === 'growing' ? 'hover' : 'bad');
     let action = '';
     // Phase 4 E03.1: preview exactly which tiles this pulse will restore.
     const fp = chk.ok && t.ground !== 'restored' ? this.sim.restoration.footprint(t) : [];
-    if (fp.length) this.overlays.showRadius([t, ...fp.map((f) => f.tile)], 'ok');
+    if (fp.length) this.overlays.showRadius(fp.map((f) => f.tile), 'ok');
     else if (!this.selected) this.overlays.hideRadius();
     if (this.sim.salvage.describe(t)) action = '';
     else if (chk.ok) action = `<span class="ok">${needsCare ? 'Press {pulse} to tend it' : t.ground === 'restored' ? 'Press {pulse} to help it flower' : 'Press {pulse} to bring it back to life'}</span>`;
@@ -5476,7 +5477,7 @@ export class Game {
     if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(wdt);
     // E24 (#609): the old gold arrow is retired; the waymark (a soft light on the goal spot) took its place
-    this.overlays.update(dt);
+    this.overlays.update(dt, camP);
     this.waterLevels.update();
     this.pipes.update(dt);
     this.waterOverlay.visible = this.waterView && this.building();
@@ -5513,7 +5514,7 @@ export class Game {
       this.waymark.update(dt, this.goal, shown && !canSeePatch, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
       this.tileFx.showObjectiveTiles(canSeePatch && patchId
         ? [...this.sim.keepers.patchTiles(patchId)].filter(tile => tile.ground !== 'restored')
-        : []);
+        : [], (tile) => this.overlays.framesTile(tile), camP);
       this.trail.reducedMotion = !!this.settings.reducedMotion;
       this.trail.update(dt, !this.cinematic && !this.photo.active && !this.building(), this.bot.pose, 1 - this.dayNight.light, this.camera.entity.getPosition());
       const [cx, cy, cz] = this.bot.world();

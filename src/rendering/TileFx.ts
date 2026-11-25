@@ -6,6 +6,7 @@ import { SLAB_TOP } from './SceneBuilder';
 import { NEON } from './Vfx';
 import { pavingOverlayLift } from './PavingSurface';
 import { PALETTE } from './Palette';
+import { faceTileMarker, markerShimmerMesh, tileMarkerMesh, type MarkerView } from './TileMarker';
 
 interface Flash {
   e: pc.Entity;
@@ -72,10 +73,10 @@ const glowMeshes = new WeakMap<pc.GraphicsDevice, Map<number | string, pc.Mesh>>
  * line set just inside the tile's edge, a soft halo either side of it and a faint inner fill. `size` is the
  * footprint in tiles; the line keeps the same width at every size. Shared and cached per device and size.
  */
-export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1, objective = false): pc.Mesh {
+export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1): pc.Mesh {
   let bySize = glowMeshes.get(device);
   if (!bySize) glowMeshes.set(device, (bySize = new Map()));
-  const key = objective ? `objective|${size}|${width}` : width === 1 ? size : `${size}|${width}`;
+  const key = width === 1 ? size : `${size}|${width}`;
   let mesh = bySize.get(key);
   if (mesh) return mesh;
   const h = size / 2;
@@ -97,15 +98,6 @@ export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1, obj
     const v = Math.round(b * 255);
     col.push(v, v, v, Math.round(a * 255));
   };
-  if (objective) {
-    // A dark warm keyline and an amber stroke stay legible on both pale brick and dark soil.
-    rings.splice(0, rings.length,
-      [[h - 0.035, 0.95, 0.06], [h - 0.058, 0.98, 0.06]],
-      [[h - 0.058, 1, 1], [h - 0.098, 1, 1]],
-      [[h - 0.098, 0.97, 0.06], [h - 0.12, 0.94, 0.06]],
-      [[h - 0.12, 0.28, 0.64], [h - 0.23, 0.06, 0.64]],
-    );
-  }
   for (const [[so, ao, bo], [si, ai, bi]] of rings) {
     const base = pos.length / 3;
     for (const [cx, cz] of corners) vert(so, cx, cz, ao, bo);
@@ -264,9 +256,10 @@ export class TileFx {
 
   private objectiveFrames = new Map<string, pc.Entity>();
   private objectiveMaterial?: pc.StandardMaterial;
+  private objectiveShimmer?: pc.StandardMaterial;
 
   /** Steady, separate from the transient pulse and chain effects pool. */
-  showObjectiveTiles(tiles: readonly TileData[]) {
+  showObjectiveTiles(tiles: readonly TileData[], focused?: (tile: TileData) => boolean, view?: MarkerView) {
     const active = new Set(tiles.map(tile => tile.id));
     for (const [id, frame] of this.objectiveFrames) {
       if (active.has(id)) continue;
@@ -274,20 +267,34 @@ export class TileFx {
       this.objectiveFrames.delete(id);
     }
     for (const tile of tiles) {
-      if (this.objectiveFrames.has(tile.id)) continue;
-      if (!this.objectiveMaterial) {
-        this.objectiveMaterial = glowMaterial(PALETTE.signal.objectiveTile, 1.25);
-        this.objectiveMaterial.update();
+      let frame = this.objectiveFrames.get(tile.id);
+      if (!frame) {
+        this.objectiveMaterial ??= glowMaterial(PALETTE.pure.white, 1.25);
+        this.objectiveShimmer ??= glowMaterial(PALETTE.pure.white, 1.35);
+        frame = new pc.Entity('objective-tile');
+        frame.addComponent('render', {
+          meshInstances: [new pc.MeshInstance(tileMarkerMesh(this.device, 'objective'), this.objectiveMaterial)],
+          castShadows: false, receiveShadows: false,
+        });
+        const shimmer = new pc.Entity('objective-shimmer');
+        shimmer.addComponent('render', {
+          meshInstances: [new pc.MeshInstance(markerShimmerMesh(this.device, 'objective'), this.objectiveShimmer)],
+          castShadows: false, receiveShadows: false,
+        });
+        frame.addChild(shimmer);
+        this.root.addChild(frame);
+        this.objectiveFrames.set(tile.id, frame);
       }
-      const frame = new pc.Entity('objective-tile');
-      frame.addComponent('render', {
-        meshInstances: [new pc.MeshInstance(glowTileMesh(this.device, 1, 1, true), this.objectiveMaterial)],
-        castShadows: false, receiveShadows: false,
-      });
-      const p = this.tilePos(tile);
-      frame.setPosition(p.x, p.y, p.z);
-      this.root.addChild(frame);
-      this.objectiveFrames.set(tile.id, frame);
+      frame.setPosition(this.tilePos(tile));
+      frame.enabled = !focused?.(tile);
+      if (view && frame.enabled) faceTileMarker(frame, view);
+      const shimmer = frame.children[0];
+      shimmer.enabled = !this.reducedMotion;
+      if (shimmer.enabled) shimmer.setLocalPosition(0, 0.035 + 0.032 * Math.sin(this.time * 1.8 + tile.variant), 0);
+    }
+    if (this.objectiveShimmer && tiles.length) {
+      this.objectiveShimmer.opacity = 0.72 + 0.2 * Math.sin(this.time * 2.1);
+      this.objectiveShimmer.update();
     }
   }
 
