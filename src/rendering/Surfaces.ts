@@ -7,6 +7,7 @@
  * Everything is deterministic per tile (seeded by its position and variant), so a tile always renders the same
  * after a reload or rebuild. Density follows `ctx.dens` (quality tier × zoom band).
  */
+import { PARK_FENCE_INSET, parkFenceGap } from '../core/ParkFence';
 import type { TileData } from '../core/types';
 import type { BuildingPlot } from '../core/Generation';
 import type { TreeGeo, Lod } from './TreeGen';
@@ -51,6 +52,7 @@ export interface DressCtx {
   model?(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy?: number, sz?: number): boolean;
   /** E23.4.4: the bloom stage a tile shows (its own, less any fade from low water nearby). Defaults to `t.bloom`. */
   bloom?(t: TileData): number;
+  wilting?(t: TileData): boolean;
   /**
    * #687: where a scattered piece of footprint radius `r` meant for (x, z) goes so it stays on the drawn ground of
    * the tile being dressed (moved in from water and drops, never removed). Foliage added through `fb` while a tile
@@ -128,7 +130,10 @@ export const STAGE_GRASS: string[][] = PALETTE.stageGrass;
 /** One of a palette list by a (possibly negative) variant: lists differ in length now that Look 2 owns them. */
 const pick = (a: string[], v: number) => a[((v % a.length) + a.length) % a.length];
 const isTurf = (t: TileData | undefined) => !!t && t.ground === 'restored' && !t.blocked && (t.feature ?? 'lawn') !== 'paving' && (t.feature ?? 'lawn') !== 'water' && (t.feature ?? 'lawn') !== 'road';
-const turfColour = (t: TileData, bloom = t.bloom) => lin(pick(STAGE_GRASS[Math.max(1, Math.min(4, bloom || 1))], t.variant));
+const turfColour = (c: DressCtx, t: TileData) => {
+  const stage = Math.max(1, Math.min(4, (c.bloom?.(t) ?? t.bloom) || 1));
+  return lin(pick(c.wilting?.(t) ? PALETTE.lawn.wilted : STAGE_GRASS[stage], t.variant));
+};
 
 /**
  * A restored lawn's top: one quad whose corner colours average the turf of the (up to) four tiles meeting there,
@@ -174,13 +179,13 @@ function turfCorners(c: DressCtx, t: TileData): number[] {
         ns++;
         continue;
       }
-      const k = turfColour(n2, c.bloom?.(n2));
+      const k = turfColour(c, n2);
       r += k[0];
       g += k[1];
       b += k[2];
       n++;
     }
-    const k = n ? [r / n, g / n, b / n] : ns ? [0, 0, 0] : turfColour(t, c.bloom?.(t));
+    const k = n ? [r / n, g / n, b / n] : ns ? [0, 0, 0] : turfColour(c, t);
     // a soft mottling across the lawn, a few tiles wide
     // Phase 6: with no blades shading it, the bare turf is a touch deeper, and the light / dark patches are stronger
     // so a big lawn reads as soft sunlit and shaded areas rather than one flat green
@@ -702,12 +707,14 @@ export function areaEdges(c: DressCtx, t: TileData, top: number) {
     if (other === c.area || (c.area !== 'park' && (other === 'park' || other < c.area))) continue;
     const n = c.peek(nx, nz);
     const fr = EDGE_FRAME[`${dx},${dz}`];
-    const ox = t.x + fr.ox - dx * 0.06;
-    const oz = t.z + fr.oz - dz * 0.06;
+    const ox = t.x + fr.ox - dx * PARK_FENCE_INSET;
+    const oz = t.z + fr.oz - dz * PARK_FENCE_INSET;
     const h = hash01(t.x, t.z, 101 + dx * 3 + dz);
-    if (openEdge(t.feature) || openEdge(n?.feature) || (t.feature === 'paving' && n?.feature === 'paving' && !t.blocked)) {
+    const entrance = c.area === 'park' ? parkFenceGap(nx, nz) :
+      openEdge(t.feature) || openEdge(n?.feature) || (t.feature === 'paving' && n?.feature === 'paving' && !t.blocked);
+    if (entrance) {
       // an entrance: banner poles either side in restored areas
-      if (alive && h < 0.5) {
+      if (c.area !== 'park' && alive && h < 0.5) {
         const px = ox + fr.tx * 0.08, pz = oz + fr.tz * 0.08;
         // Look 3.19: the hand-built pole (its crossbar on +x, like the procedural one), with the swaying cloth hung
         // from the bar

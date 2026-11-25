@@ -12,6 +12,7 @@ import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { AudioDebugHUD } from '../audio/AudioDebugHUD';
 import { sampleArea, surfaceOf, type TileSound } from '../audio/AudioMath';
 import { treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
+import { treeGeo } from '../rendering/TreeGen';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -36,6 +37,7 @@ import { REST } from '../data/rest';
 import { Resting } from './Resting';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
+import type { MegaTarget } from '../gameplay/RestorationSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
 import { Sim } from '../gameplay/Sim';
 import { inSurge } from '../gameplay/PowerEnv';
@@ -68,6 +70,7 @@ import { CropVisuals } from '../rendering/CropVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
 import { ShaderWarmup } from '../rendering/ShaderWarmup';
 import { areaPanelHtml } from '../ui/AreaPanel';
+import { regionProgress, regionProgressHtml } from '../ui/RegionProgress';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
 import { InputController } from '../rendering/InputController';
@@ -658,6 +661,7 @@ export class Game {
       bot.onPad = (i) => {
         if (this.wheelPick(i)) return; // the load wheel is up: the d-pad picks a load
         const a = this.resolveButton(i);
+        if (a === 'pulse' && this.beginMegaHold(i)) return;
         if (a && a !== 'sprint') this.doAction(a);
       };
       // E22.4: the rebinding screen takes the next press; that press then does nothing else.
@@ -731,6 +735,9 @@ export class Game {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
+      press: (b) => this.resolveKey(`Mouse${b}`) === 'pulse' && this.beginMegaHold(`Mouse${b}`),
+      release: (b) => this.endMegaHold(`Mouse${b}`),
+      cancelPress: () => { if (typeof this.megaHold?.input === 'string' && this.megaHold.input.startsWith('Mouse')) this.clearMegaHold(); },
       pan: (dx, dy, x, y) => {
         this.lastPanAt = performance.now();
         this.camera.pan(dx, dy, x, y);
@@ -984,6 +991,7 @@ export class Game {
 
   private applySettings() {
     const s = this.settings;
+    this.sim.decay.setCozyMode(s.cozyMode === true);
     this.applyVolumes();
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
@@ -1019,15 +1027,16 @@ export class Game {
     if (this.chunks) this.chunks.reducedMotion = rm;
     // E28.W04: the water's drifting flecks go with the air's motes (reduced motion stills the rest: it stops waterTime)
     if (this.waterLife) this.waterLife.particles = !s.lowVfx && this.gfxTier !== 'low';
-    if (this.overlays) this.overlays.holo.reducedMotion = rm;
+    if (this.overlays) this.overlays.reducedMotion = this.overlays.holo.reducedMotion = rm;
     if (this.lightVisuals) this.lightVisuals.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
+      const motionChanged = this.transitions.reducedMotion !== rm;
       this.transitions.reducedMotion = rm;
       if (this.tillers) this.tillers.reducedMotion = rm;
       const tier = (this as { gfxTier?: 'low' | 'medium' | 'high' }).gfxTier ?? (s.lowVfx ? 'low' : 'high');
-      if (this.transitions.tier !== tier) {
+      if (this.transitions.tier !== tier || motionChanged) {
         this.transitions.tier = tier;
         this.chunks?.markAll();
       }
@@ -1492,8 +1501,14 @@ export class Game {
   }
 
   private wireKeys() {
-    window.addEventListener('keyup', (e) => this.heldKeys.delete(e.code));
-    window.addEventListener('blur', () => this.heldKeys.clear());
+    window.addEventListener('keyup', (e) => {
+      this.heldKeys.delete(e.code);
+      this.endMegaHold(e.code);
+    });
+    window.addEventListener('blur', () => {
+      this.heldKeys.clear();
+      this.clearMegaHold();
+    });
     window.addEventListener('keydown', (e) => {
       this.heldKeys.add(e.code);
       const field = (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') || e.target instanceof HTMLSelectElement;
@@ -1546,6 +1561,7 @@ export class Game {
         if (!a) return;
         if (a === 'backpack' || a === 'debug' || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
         if (e.repeat && a !== 'rotate' && a !== 'rotateBack') return;
+        if (a === 'pulse' && this.beginMegaHold(e.code)) return;
         this.doAction(a);
         return;
       }
@@ -1709,7 +1725,7 @@ export class Game {
   }
 
   /**
-   * #605 (E24): Show me where. A trail of glowing dots runs along the ground from bloombot to the current goal spot
+   * #605 (E24): Show me where. Gold leaves drift down along the route from bloombot to the current goal spot
    * (ui/GoalSpot.ts) by a way bloombot can walk (#632), to where the waymark's light stands on it (#609; for a while
    * it shows even at the potter-about pace, which otherwise keeps the world unmarked). The camera stays with
    * bloombot. When nothing walkable gets there yet, the trail goes as close as it can and a note says why. False
@@ -2259,6 +2275,75 @@ export class Game {
     this.buildKey = '';
   }
 
+  private megaHold?: { input: string | number; tile: TileData; targets: MegaTarget[]; elapsed: number; shown: number };
+
+  private megaAim(): TileData | undefined {
+    if (!this.bot || this.building() || this.overviewOn || this.paused || this.panelOpen() || this.hud.modalOpen || this.cinematic || this.photo.active || this.resting?.active || this.bot.visuals.busy === 'assemble') return;
+    const tile = this.frontPick()?.tile;
+    if (tile && !tile.occupantId && this.sim.restoration.checkPulse(tile, true).ok) return tile;
+  }
+
+  private beginMegaHold(input: string | number): boolean {
+    if (this.megaHold) return true;
+    const rest = this.sim.restoration;
+    if (!rest.megaReady() || !rest.pulseReady()) return false;
+    const tile = this.megaAim();
+    if (!tile) return false;
+    const targets = rest.megaTargets(tile, this.bot!.pose.facing);
+    if (!targets.length) return false;
+    this.overlays.hideFrame();
+    this.overlays.hideRadius();
+    this.megaHold = { input, tile, targets, elapsed: 0, shown: -1 };
+    return true;
+  }
+
+  private clearMegaHold() {
+    if (!this.megaHold) return;
+    this.megaHold = undefined;
+    this.overlays.megaCharge = 0;
+    this.overlays.hideRadius();
+    this.botPreviewKey = '';
+  }
+
+  private endMegaHold(input: string | number) {
+    const h = this.megaHold;
+    if (!h || h.input !== input) return;
+    this.clearMegaHold();
+    if (this.megaAim()?.id === h.tile.id) this.botAct();
+  }
+
+  private updateMegaHold(): boolean {
+    const h = this.megaHold;
+    if (!h) return false;
+    if (this.megaAim()?.id !== h.tile.id || !this.sim.restoration.megaReady()) {
+      this.clearMegaHold();
+      return false;
+    }
+    if (typeof h.input === 'number') {
+      const button = h.input;
+      const pads = [...(navigator.getGamepads?.() ?? [])].filter((pad) => pad?.connected);
+      if (!pads.length) this.clearMegaHold();
+      else if (!pads.some((pad) => pad?.buttons[button]?.pressed)) this.endMegaHold(button);
+      if (!this.megaHold) return false;
+    }
+    h.elapsed += this.frameDt;
+    const progress = Math.min(1, h.elapsed / TUNING.mega.holdSeconds);
+    if (progress >= 1) {
+      this.clearMegaHold();
+      if (this.sim.restoration.playerPulse(h.tile.id, h.targets)) this.botAnim('pulse');
+      return false;
+    }
+    this.overlays.megaCharge = progress;
+    // Leave the entire footprint lit briefly before firing.
+    const count = Math.max(1, Math.ceil(Math.min(1, progress / 0.9) * h.targets.length));
+    if (count !== h.shown) {
+      h.shown = count;
+      this.overlays.showRadius(h.targets.slice(0, count).map(({ tile }) => tile), 'mega');
+    }
+    this.hud.prompt.show({ glyph: this.glyph('pulse'), text: 'for Mega Pulse', hold: true, progress });
+    return true;
+  }
+
   /**
    * E22.2 (#339): Interact acts on the one target the prompt names (Interact.ts chooses it by the epic's priority,
    * nearest first). A refused action says why; a hold starts the ring instead (unless holds are single presses).
@@ -2532,7 +2617,14 @@ export class Game {
     const f = b.front();
     const t = this.sim.grid.get(b.pose.roofId, f.x, f.z);
     const chk = t && !t.occupantId ? this.sim.restoration.checkPulse(t) : undefined;
-    const pulse = chk?.ok ? { glyph: this.glyph('pulse'), text: t!.ground === 'restored' ? 'Nurture' : 'Pulse' } : undefined;
+    let pulse: { glyph: string; text: string } | undefined;
+    if (t && chk?.ok) {
+      let text = t.ground === 'restored' ? 'Nurture' : 'Pulse';
+      if (this.sim.decay.wilting(t)) text = 'Tend wilting plants';
+      else if (this.sim.decay.thirsty(t)) text = 'Tend thirsty plants';
+      pulse = { glyph: this.glyph('pulse'), text };
+    }
+    if (this.sim.restoration.megaReady() && this.megaAim()) pulse = { glyph: this.glyph('pulse'), text: pulse ? `${pulse.text} · Hold for Mega Pulse` : 'Hold for Mega Pulse' };
     if (!target) return pulse ? { glyph: pulse.glyph, text: pulse.text } : undefined;
     const hold = holdFor(target, this.settings.holdToAct !== false) || (target.ocHold && this.settings.holdToAct !== false ? target.ocHold : 0);
     const h = this.holding;
@@ -2790,10 +2882,12 @@ export class Game {
       this.hud.setKeyMap(this.glyphs.style, this.bindings);
     }
     if (this.cinematic || this.photo.active || this.panelOpen()) {
+      this.clearMegaHold();
       this.holding = undefined;
       this.hud.prompt.show(undefined);
       return;
     }
+    if (this.updateMegaHold()) return;
     // E22.2: one prompt, every frame (the hold ring fills smoothly); the target gets a soft outline.
     const target = this.interactTarget();
     this.updateHold(this.frameDt, target);
@@ -2811,7 +2905,8 @@ export class Game {
       this.overlays.hideGhost();
       this.overlays.hideRadius();
       const fr = target.frame ?? (target.at && { roofId: target.at.roofId, x: target.at.x, z: target.at.z, size: 1 });
-      if (fr && target.kind !== 'cat') this.overlays.showFrame(fr.roofId, fr.x, fr.z, fr.size, 'info');
+      const tone = target.refused ? 'bad' : target.verb === 'Plant in' ? 'restore' : 'info';
+      if (fr && target.kind !== 'cat') this.overlays.showFrame(fr.roofId, fr.x, fr.z, fr.size, tone);
       else this.overlays.hideFrame();
       this.hud.hideTip();
       return;
@@ -3100,6 +3195,45 @@ export class Game {
     (id) => this.sightKey(id),
     () => performance.now(),
   );
+
+  private nextFallingLeaf = 0;
+
+  private updateFallingLeaves(dt: number, wind: number, view: { x0: number; x1: number; z0: number; z1: number }) {
+    if (!dt || this.vfx.reducedMotion || ChunkRenderer.still || this.camera.zoom < 0.7) return;
+    this.nextFallingLeaf -= dt;
+    if (this.nextFallingLeaf > 0) return;
+    this.nextFallingLeaf = (1.4 + Math.random() * 1.5) / (1 + 1.8 * wind) / this.vfx.density;
+    const world = treeWorldOf(this.sim);
+    const focus = this.camera.target;
+    for (let attempt = 0; attempt < 16; attempt++) {
+      const x = Math.floor(focus.x + (Math.random() - 0.5) * 12);
+      const z = Math.floor(focus.z + (Math.random() - 0.5) * 12);
+      if (x + 0.5 < view.x0 || x + 0.5 > view.x1 || z + 0.5 < view.z0 || z + 0.5 > view.z1) continue;
+      const tile = this.sim.grid.peek(GROUND, x, z);
+      if (!tile || tile.blocked || tile.feature === 'water' || this.sunkAt(x, z)) continue;
+      const stage = treeStage(tile, this.sim.water.bloomShown(tile));
+      if (!stage || stage < 2 || this.transitions.fadeWindow(tile)) continue;
+      const area = this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z));
+      const spot = treeSpot(tile, area.type, world);
+      if (!spot) continue;
+      const tree = treeGeo(spot.species, stage, spot.variant, 1, spot.form);
+      const leaves = tree.leafStarts;
+      if (!leaves?.length) continue;
+      const root = leaves[Math.floor(Math.random() * leaves.length)] * 4;
+      const tip = root + 8;
+      if (Math.hypot(tree.pos[tip] - tree.pos[root], tree.pos[tip + 1] - tree.pos[root + 1], tree.pos[tip + 2] - tree.pos[root + 2]) < 0.02) continue;
+      const c = Math.cos(spot.rot), s = Math.sin(spot.rot);
+      const px = x + 0.5, pz = z + 0.5;
+      const ground = this.groundY(px, pz);
+      this.vfx.fallingLeaf(
+        px + (tree.pos[root] * c - tree.pos[root + 2] * s) * spot.scale,
+        ground + (spot.planter ? 0.16 : 0) + tree.pos[root + 1] * spot.scale,
+        pz + (tree.pos[root] * s + tree.pos[root + 2] * c) * spot.scale,
+        ground, [tree.col[root], tree.col[root + 1], tree.col[root + 2]],
+      );
+      break;
+    }
+  }
 
   /**
    * E23.12.3 (#530): could the player spot this cat by eye? Enough of it is drawn in front of everything else
@@ -3424,15 +3558,16 @@ export class Game {
       return;
     }
     const chk = this.sim.restoration.checkPulse(t);
-    const maxed = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom;
-    this.overlays.showFrame(t.roofId, t.x, t.z, 1, chk.ok ? 'ok' : maxed || t.ground === 'growing' ? 'hover' : 'bad');
+    const needsCare = this.sim.decay.thirsty(t);
+    const maxed = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom && !needsCare;
+    this.overlays.showFrame(t.roofId, t.x, t.z, 1, chk.ok ? 'restore' : maxed || t.ground === 'growing' ? 'hover' : 'bad');
     let action = '';
     // Phase 4 E03.1: preview exactly which tiles this pulse will restore.
     const fp = chk.ok && t.ground !== 'restored' ? this.sim.restoration.footprint(t) : [];
-    if (fp.length) this.overlays.showRadius([t, ...fp.map((f) => f.tile)], 'ok');
+    if (fp.length) this.overlays.showRadius(fp.map((f) => f.tile), 'ok');
     else if (!this.selected) this.overlays.hideRadius();
     if (this.sim.salvage.describe(t)) action = '';
-    else if (chk.ok) action = `<span class="ok">${t.ground === 'restored' ? 'Press {pulse} to help it flower' : 'Press {pulse} to bring it back to life'}</span>`;
+    else if (chk.ok) action = `<span class="ok">${needsCare ? 'Press {pulse} to tend it' : t.ground === 'restored' ? 'Press {pulse} to help it flower' : 'Press {pulse} to bring it back to life'}</span>`;
     else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}${this.plotLine(t.roofId, t)}`);
   }
@@ -3957,6 +4092,8 @@ export class Game {
       case 'growing':
         return `${this.stageName(t) ?? 'Roots are breaking through'}${t.growthRemainingSec > 5 ? '' : ': nearly there'}`;
       case 'restored':
+        if (this.sim.decay.wilting(t)) return 'Wilting. Press {pulse} to save it or bring water nearby.';
+        if (this.sim.decay.thirsty(t)) return 'Thirsty. Press {pulse} to tend it or bring water nearby.';
         return t.bloom >= TUNING.restore.fullBloom ? 'In flower.' : 'Alive again. Press {pulse} once more to help it flower.';
     }
   }
@@ -4050,7 +4187,7 @@ export class Game {
       this.hud.showFail(this.bot ? `A decoration stands here: ${this.hudKey('interact')} picks it up` : 'A decoration stands here', x, y);
       return 'none';
     }
-    const ok = this.sim.restoration.pulse(t.id);
+    const ok = this.sim.restoration.playerPulse(t.id);
     if (hover) this.onHover(x, y);
     return ok ? 'pulse' : 'none';
   }
@@ -4286,7 +4423,8 @@ export class Game {
   private wireEvents() {
     const b = this.bus;
     const s = this.sim;
-    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.decayChanged', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    b.on('tile.decayChanged', ({ tile }) => this.grid.refresh(tile, false));
     // the waymark's Bloom Pulse: the game's own deeds finish the goal it stands on (never just the goal moving on)
     // a pile stays the goal until it is dug out: only its last dig blooms
     b.on('pile.salvaged', ({ x, z, left }) => left === 0 && this.waymark.done(['pile'], { x, z }));
@@ -4296,9 +4434,6 @@ export class Game {
     for (const ev of ['keeper.step', 'keeper.gift', 'keeper.friend'] as const) b.on(ev, () => this.waymark.done(['keeper']));
     b.on('tile.restored', ({ tile }) => this.waymark.done(['park', 'spot'], tile));
     b.on('machine.built', ({ machine }) => this.waymark.done(['machine', 'spot'], machine));
-    // Phase 5: trees grow into their next stage with a bounce (restored → sapling, then with each bloom stage).
-    b.on('tile.restored', ({ tile }) => this.chunks.growTree(tile, 0));
-    b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
     b.on('machine.built', ({ machine }) => {
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
     });
@@ -4366,7 +4501,7 @@ export class Game {
       else if (source === 'drone') this.vfx.ring(p, PALETTE.leafFin, 0.8, 0.5);
     });
     b.on('mega.ready', () => {
-      this.hud.toast('💥 Your next pulse is a big one<small>Press {pulse} and a huge patch of ground around Bloombot bursts into flower.</small>', 'gold', 4);
+      this.hud.toast('💥 Mega Pulse is ready<small>Hold {pulse} to light up the ground ahead and bring it to life.</small>', 'gold', 4);
       this.hud.nudge('[data-tool="pulse"]', 4);
     });
     b.on('mega.released', ({ tileId }) => {
@@ -5055,6 +5190,33 @@ export class Game {
     this.focusArea(list[this.attentionIndex++ % list.length]);
   }
 
+  private arrivingRegion?: string;
+  private arrivalTime = 0;
+
+  /** Briefly show ground restoration progress when Bloombot enters a different region. */
+  private updateRegionArrival(dt: number) {
+    const pose = this.bot?.pose;
+    if (!pose || pose.roofId !== GROUND || !this.city || this.cinematic || this.overviewOn) {
+      this.hud.regionArrival(undefined);
+      this.arrivalTime = 0;
+      return;
+    }
+
+    const id = this.sim.areas.map.areaOfCell(Math.floor(pose.x), Math.floor(pose.z));
+    if (id !== this.arrivingRegion) {
+      this.arrivingRegion = id;
+      const open = this.sim.areas.fog(id) !== 'hidden' && !this.sim.areas.info(id).noLandmark;
+      this.arrivalTime = open ? 3.8 : 0;
+    }
+    this.arrivalTime = Math.max(0, this.arrivalTime - dt);
+    if (this.arrivalTime === 0) {
+      this.hud.regionArrival(undefined);
+      return;
+    }
+    const progress = regionProgress(this.sim, id);
+    this.hud.regionArrival(`<strong>${esc(progress.name)}</strong>${regionProgressHtml(progress)}`);
+  }
+
   /** Labels over revealed city areas: a ready landmark always; names and progress when zoomed out. */
   private updateAreaLabels() {
     const s = this.sim;
@@ -5076,22 +5238,21 @@ export class Game {
       for (const id of s.areas.revealed()) {
         const a = s.areas.info(id);
         if (a.noLandmark) continue; // E21: Old City backstreets carry no label
-        const fog = s.areas.fog(id);
+        if (s.areas.fog(id) === 'hidden') continue;
         const ready = id !== PARK && s.areas.ready(id);
         if (!ready && !zoomedOut) continue;
         // Look 4.6: never behind the camera or past the haze; sized by distance close up.
         const sp = this.camera.onScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1), 50);
         if (!sp) continue;
         // E21: an Old City region is labelled with its own name
-        const def = a.region ? { ...AREA_TYPES[a.type], name: s.gates.regionById(a.region)!.name } : AREA_TYPES[a.type];
+        const def = AREA_TYPES[a.type];
+        const progress = regionProgress(s, id);
         const key = `areaLabel-${id}`;
         live.add(key);
         const lm = s.areas.landmark(id);
-        let html: string;
         const icons = `${chaining.has(id) ? ' 🔗' : ''}${catAreas.has(id) ? ' 🐱' : ''}`;
-        if (ready && lm) html = `✨ ${esc(a.landmarkName)}<button data-wake="${lm.id}">Wake it</button>`;
-        else if (fog === 'cleared') html = `<span data-area="${id}">${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}${icons}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small></span>`;
-        else html = `<span data-area="${id}">${def.icon} ${esc(def.name)}${icons}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small></span>`;
+        const title = `<span data-area="${esc(id)}">${def.icon} ${esc(progress.name)}${icons}${regionProgressHtml(progress)}</span>`;
+        const html = ready && lm ? `${title}<button data-wake="${esc(lm.id)}">Wake it</button>` : title;
         // Zoomed out, every label is a button to its area's panel.
         this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut, zoomedOut ? 1 : sp.scale);
       }
@@ -5287,7 +5448,8 @@ export class Game {
     const rect = view;
     if (rect) this.grid.stream(rect);
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
-    if (rect) this.chunks.update(wdt, rect, this.camera.target, this.camera.zoom); // streams while paused; the wind and growth wait
+    const wind = this.weatherVisuals.wind;
+    if (rect) this.chunks.update(wdt, rect, this.camera.target, this.camera.zoom, wind); // streams while paused; the wind and growth wait
     detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
@@ -5381,9 +5543,10 @@ export class Game {
     // #613: resting at home charges bloombot: show it, so the player knows to stand still
     if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
     if (!this.cinematic) this.checkCozyUnlocks();
-    this.vfx.update(wdt);
+    if (rect) this.updateFallingLeaves(wdt, wind, rect);
+    this.vfx.update(wdt, wind);
     // E24 (#609): the old gold arrow is retired; the waymark (a soft light on the goal spot) took its place
-    this.overlays.update(dt);
+    this.overlays.update(dt, camP);
     this.waterLevels.update();
     this.pipes.update(dt);
     this.waterOverlay.visible = this.waterView && this.building();
@@ -5412,7 +5575,15 @@ export class Game {
       this.waymark.held = this.cinematic;
       const marked = this.wayMarked();
       const shown = !this.cinematic && !this.photo.active && !this.building() && (!this.settings.potter || marked);
-      this.waymark.update(dt, this.goal, shown, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
+      const patchId = this.goal?.patchKeeperId;
+      const canSeePatch = patchId && this.goal && this.bot.pose.roofId === GROUND
+        && this.sim.keepers.step(patchId) === 'request2'
+        && Math.hypot(this.goal.x - this.bot.pose.x, this.goal.z - this.bot.pose.z) < 9
+        && !this.cinematic && !this.photo.active && !this.building();
+      this.waymark.update(dt, this.goal, shown && !canSeePatch, this.bot.pose, this.camera.entity.getPosition(), 1 - this.dayNight.light);
+      this.tileFx.showObjectiveTiles(canSeePatch && patchId
+        ? [...this.sim.keepers.patchTiles(patchId)].filter(tile => tile.ground !== 'restored')
+        : [], (tile) => this.overlays.framesTile(tile), camP);
       this.trail.reducedMotion = !!this.settings.reducedMotion;
       this.trail.update(dt, !this.cinematic && !this.photo.active && !this.building(), this.bot.pose, 1 - this.dayNight.light, this.camera.entity.getPosition());
       const [cx, cy, cz] = this.bot.world();
@@ -5478,6 +5649,7 @@ export class Game {
       }
     }
     this.updateAreaLabels();
+    this.updateRegionArrival(wdt);
     this.updateBoostRings(dt);
 
     if (!paused) this.saveTimer += dt; // E22.11: a pause writes nothing (savedAt doesn't move)

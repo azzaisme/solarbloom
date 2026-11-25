@@ -115,6 +115,7 @@ export interface GameEvents {
   'landmark.woken': { region: string };
   'tile.restoring': { tile: TileData; source: RestoreSource };
   'tile.restored': { tile: TileData; source: RestoreSource; chainId: number };
+  'tile.decayChanged': { tile: TileData };
   'tile.prepared': { tile: TileData };
   'tile.softened': { tile: TileData };
   'tile.nurtured': { tile: TileData; level: number; auto?: boolean };

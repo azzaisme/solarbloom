@@ -218,6 +218,24 @@ describe('#609 / #613: one goal spot for Show me where, the arrow, the beam and 
     expect(goalSpot(sim)).toMatchObject({ kind: 'keeper', name: k.name });
   });
 
+  it('points Tally’s restoration request at the market square and counts its unfinished tiles', () => {
+    const sim = new Sim(createInitialState(7));
+    sim.state.salvage!.tier = 1;
+    sim.gates.open('g-oldMarket', true);
+    sim.state.salvage!.keepers.tally = { step: 'request2' };
+    const objective = objectiveSentence(sim);
+    const goal = goalSpot(sim, objective);
+    const patch = sim.keepers.region('tally').patch;
+    expect(goal).toMatchObject({ kind: 'spot', name: patch.name, patchKeeperId: 'tally' });
+    expect(goal!.cell.x).toBeGreaterThanOrEqual(patch.x);
+    expect(goal!.cell.z).toBeGreaterThanOrEqual(patch.z);
+    const tile = [...sim.keepers.patchTiles('tally')].find(tile => tile.ground !== 'restored')!;
+    const { restored, total } = sim.keepers.patch('tally');
+    expect(objective.next).toContain(`${total - restored} tiles left`);
+    sim.restoration.complete(tile, 'pulse');
+    expect(objectiveSentence(sim).next).toContain(`${total - restored - 1} tiles left`);
+  });
+
   it('the park part points at the park, and handing in points at the fountain', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.delivered = { scrap: 20, seeds: 6 };

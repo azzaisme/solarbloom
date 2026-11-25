@@ -288,7 +288,9 @@ export class BloomChainSystem {
     const near = s.grid.tilesNear(m, TUNING.condenser.radius);
     const dry = near.filter((t) => t.ground === 'prepared' && s.restoration.isEligible(t, false));
     const growable = extra > 0 ? near.filter((t) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom) : [];
-    if (!dry.length && !growable.length) return false;
+    let tended = false;
+    for (const t of near) if (s.decay.irrigate(t)) tended = true;
+    if (!dry.length && !growable.length) return tended;
     const origin = dry[0] ?? growable[0];
     const run = this.newRun(origin);
     run.visited.delete(origin.id);
@@ -386,18 +388,14 @@ export class BloomChainSystem {
     return true;
   }
 
-  /**
-   * Mega Pulse (the player's charged tap): a city-scale chain seeded from the chosen tile. It restores the tile
-   * if it can, then spreads outward through everything eligible, up to its budget.
-   */
-  startMegaPulse(origin: TileData, budget: number): number {
-    const s = this.sim;
-    const run = this.newRun(origin, 'mega', budget, 'player');
-    if (s.restoration.isEligible(origin)) {
-      run.visited.delete(origin.id); // the origin itself is the first restoration
-      this.enqueue(run, { type: 'RESTORE', source: origin.id, target: origin.id, cause: 'mega', depth: 0 }, 0);
-    } else this.spreadMega(run, origin, 0);
-    s.bus.emit('mega.released', { tileId: origin.id, budget });
+  /** The held Mega Pulse fires along the same wave drawn by its preview. */
+  startMegaPulse(origin: TileData, targets: readonly { tile: TileData; depth: number }[]): number {
+    const run = this.newRun(origin, 'normal', Infinity, 'player');
+    for (const { tile, depth } of targets) {
+      run.visited.add(tile.id);
+      this.enqueue(run, { type: 'RESTORE', source: origin.id, target: tile.id, cause: 'mega', depth }, depth * TUNING.chain.stepDelay);
+    }
+    this.sim.bus.emit('mega.released', { tileId: origin.id, budget: targets.length });
     return run.id;
   }
 
@@ -599,7 +597,7 @@ export class BloomChainSystem {
     switch (ev.type) {
       case 'RESTORE': {
         const t = s.grid.byTileId(ev.target);
-        if (!t || !s.restoration.isEligible(t, true)) return;
+        if (!t || (ev.cause === 'mega' && t.occupantId) || !s.restoration.isEligible(t, true)) return;
         run.roofs.add(t.roofId);
         const ar = s.areas.areaOf(t);
         if (ar) run.areas.add(ar);

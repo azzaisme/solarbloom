@@ -1,3 +1,4 @@
+import { BLOOMBOT_EYE_HEIGHT } from '../data/botProps';
 import { applyTurnLook, stepPhase, turnLook, type TurnLook } from './BotTurn';
 import { MOVES, TURN_LOOK } from '../data/botMotion';
 import { BotMoves, type MoveIn } from './BotMoves';
@@ -40,7 +41,7 @@ const HANGING = /^(Left|Right)(Leg|Foot|ToeBase|Toe_End)/;
 const WALK_STRIDE = 0.455;
 const BLEND = 0.18;
 /** The visor's middle, from the feet (front is +z), in world units. */
-const EYE = new pc.Vec3(0, 0.66, 0.2);
+const EYE = new pc.Vec3(0, BLOOMBOT_EYE_HEIGHT, 0.2);
 /** Where the echo palms are while pulsing (model space, before SCALE): chest height, pushed forward. */
 const PALM = new pc.Vec3(0.06, 0.46, 0.34);
 

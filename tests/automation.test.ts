@@ -484,6 +484,7 @@ describe('E23.6.4: building from supply crates', () => {
 
   it('end to end: couriers and an Assembler keep a build site supplied, and it builds with nothing carried', () => {
     const sim = park();
+    sim.decay.setCozyMode(true); // keep the test site green while the delivery routes run
     const sv = sim.state.salvage!;
     carryByHand(sim);
     sv.pack = {};

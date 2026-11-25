@@ -32,7 +32,7 @@ const QUICK = [
   // E23.9: the story
   'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally', 'keepers-crops',
   // E23.4: the water network
-  'water-levels', 'shoreline', 'fullscreen', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'water-surface', 'water-seams', 'water-disturbance', 'water-life',
+  'water-levels', 'shoreline', 'fullscreen', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'water-surface', 'water-seams', 'water-disturbance', 'water-life', 'decay',
   'pipe-visuals', 'pipe-visuals-west',
   // E23.5: the farm
   'farm-items', 'farm-planters', 'farm-compost', 'farm-extras',
@@ -74,7 +74,7 @@ const QUICK = [
   'planting-zones',
   // P7-E29 (#715): tree placement by zone, and the tree shapes' budgets and silhouettes
   'tree-placement',
-  'p7-terrain',
+  'p7-terrain', 'tile-markers',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

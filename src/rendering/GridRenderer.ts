@@ -252,12 +252,12 @@ export class GridRenderer {
     for (const v of this.views.values()) if (v.tile.roofId === roofId) this.refresh(v.tile, false);
   }
 
-  private keyOf(t: TileData) {
+  private keyOf(t: TileData, bloom: number, wilting: boolean) {
     const occ = t.occupantId ? 'o' : '';
     const band = t.ground === 'polluted' ? (t.pollution > 80 ? 2 : t.pollution > 40 ? 1 : 0) : 0;
     const st = this.stageOf(t);
     const clean = t.ground === 'polluted' ? Math.min(2, Math.floor(st / 2) + (st >= 1 ? 1 : 0)) : 0;
-    return `${t.ground}|${t.bloom}|${occ}|${band}|${clean}`;
+    return `${t.ground}|${bloom}|${occ}|${band}|${clean}|${wilting}`;
   }
 
   /** Slab footprint: lawns join up seamlessly; concrete and soil keep visible paver gaps. */
@@ -269,7 +269,9 @@ export class GridRenderer {
   refresh(t: TileData, animate: boolean) {
     const v = this.views.get(t.id);
     if (!v) return;
-    const key = this.keyOf(t);
+    const wilting = this.sim.decay.wilting(t);
+    const bloom = wilting ? 1 : t.bloom;
+    const key = this.keyOf(t, bloom, wilting);
     if (key === v.key) return;
     const prevGround = v.key.split('|')[0];
     const prevBloom = Number(v.key.split('|')[1] ?? 0);
@@ -349,7 +351,8 @@ export class GridRenderer {
         break;
       }
       case 'restored': {
-        setVColor(v.slab, 'box', grassTone(Math.max(1, t.bloom || 1), t.x, t.z));
+        const turf = PALETTE.lawn.wilted;
+        setVColor(v.slab, 'box', wilting ? turf[t.variant % turf.length] : grassTone(Math.max(1, bloom), t.x, t.z));
         if (t.occupantId) break;
         if (!keepOld) {
           const tufts = 8 + (t.variant % 3);
@@ -360,7 +363,7 @@ export class GridRenderer {
           if (t.variant % 4 === 0) add(shape(deco, 'sphere', PALETTE.lawn.clover, { pos: [r.range(-0.3, 0.3), 0.02, r.range(-0.3, 0.3)], scale: [0.2, 0.05, 0.2] }));
         }
         const fr = new VRng(t.variant * 31 + 5);
-        if (t.bloom >= 2 && (!keepOld || prevBloom < 2)) {
+        if (bloom >= 2 && (!keepOld || prevBloom < 2)) {
           const n = 3 + (t.variant % 3);
           for (let i = 0; i < n; i++) {
             const h = fr.range(0.14, 0.28);
@@ -387,7 +390,7 @@ export class GridRenderer {
             v.sway.push(f);
           }
         }
-        if (t.bloom >= 3 && (!keepOld || prevBloom < 3)) {
+        if (bloom >= 3 && (!keepOld || prevBloom < 3)) {
           const kind = t.variant % 5;
           const p: [number, number, number] = [fr.range(-0.15, 0.15), 0, fr.range(-0.15, 0.15)];
           const g = add(group(deco, 'big', p));
@@ -425,7 +428,7 @@ export class GridRenderer {
           }
           v.sway.push(g);
         }
-        if (t.bloom >= 4 && (!keepOld || prevBloom < 4)) {
+        if (bloom >= 4 && (!keepOld || prevBloom < 4)) {
           // Phase 4 E05: Radiant: luminous golden flowers and a soft glow disk.
           const g = add(group(deco, 'radiant', [0, 0, 0]));
           shape(g, 'cylinder', PALETTE.flowers.radiantDisc, { pos: [0, 0.005, 0], scale: [0.86, 0.01, 0.86] });

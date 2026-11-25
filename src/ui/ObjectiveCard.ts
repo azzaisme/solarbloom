@@ -37,6 +37,7 @@ export interface Objective {
   where?: SuggestionAction;
   /** #605 / #609: what it points at ("the fountain", "Tally"): ui/GoalSpot.ts turns where + place into the goal spot */
   place?: Place;
+  patchKeeperId?: string;
 }
 
 export interface ObjectivePart {
@@ -137,14 +138,25 @@ export function firstRubble(sim: Sim): RegionDef | undefined {
  * request (E21.8, with its patch's count while it is restored by hand), then the advisor's step towards the fountain.
  * The farm's hint only ever comes last (never above the fountain's own step).
  */
-function nextStep(sim: Sim, advice: Suggestion | undefined): Pick<Objective, 'next' | 'topic' | 'where' | 'place' | 'count'> {
+function nextStep(sim: Sim, advice: Suggestion | undefined): Pick<Objective, 'next' | 'topic' | 'where' | 'place' | 'count' | 'patchKeeperId'> {
   if (advice && URGENT.has(advice.topic)) return { next: advice.text, topic: advice.topic, where: advice.action, place: advice.place };
   const pinned = pinnedKeeper(sim); // E22.6: the request the player pinned, else the first open one
   if (pinned) {
     const step = sim.keepers.step(pinned.id);
-    const p = step === 'request2' ? sim.keepers.patch(pinned.id) : undefined;
+    if (step === 'request2') {
+      const { restored, total } = sim.keepers.patch(pinned.id);
+      const patch = sim.keepers.region(pinned.id).patch;
+      const left = total - restored;
+      return {
+        next: `Restore ${patch.name.toLowerCase()} · ${left} ${left === 1 ? 'tile' : 'tiles'} left`,
+        topic: 'keeper',
+        where: { kind: 'focus', x: patch.x + Math.floor(patch.w / 2), z: patch.z + Math.floor(patch.d / 2) },
+        place: { kind: 'spot', name: patch.name },
+        patchKeeperId: pinned.id,
+      };
+    }
     const k = sim.keepers.def(pinned.id);
-    return { next: p ? `${pinned.text} (${WORDS.objective.count(Math.min(p.restored, p.total), p.total)})` : pinned.text, topic: 'keeper', where: { kind: 'focus', x: k.x, z: k.z }, place: { kind: 'keeper', name: k.name } };
+    return { next: pinned.text, topic: 'keeper', where: { kind: 'focus', x: k.x, z: k.z }, place: { kind: 'keeper', name: k.name } };
   }
   const step = sim.advisor.fountainStep() ?? advice;
   return step ? { next: step.text, topic: step.topic, where: step.action, place: step.place } : {};

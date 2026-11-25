@@ -204,7 +204,8 @@ describe('E23.2.2.2: what grows from each load', () => {
       const seen = watch(sim);
       sim.inventory.add('seeds', 3);
       sim.pulseLoad.choose('seeds');
-      expect(sim.restoration.pulse(t.id)).toBe(true);
+      const targets = [0, Math.PI / 2, Math.PI, -Math.PI / 2].map(facing => sim.restoration.megaTargets(t, facing)).sort((a, b) => b.length - a.length)[0];
+      expect(sim.restoration.playerPulse(t.id, targets)).toBe(true);
       expect(sim.restoration.megaReady()).toBe(false); // released
       sim.advance(20);
       const wave = seen.restored.filter((e) => e.source === 'mega');

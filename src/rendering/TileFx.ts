@@ -4,7 +4,9 @@ import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { SLAB_TOP } from './SceneBuilder';
 import { NEON } from './Vfx';
+import { pavingOverlayLift } from './PavingSurface';
 import { PALETTE } from './Palette';
+import { faceTileMarker, markerShimmerMesh, tileMarkerMesh, type MarkerView } from './TileMarker';
 
 interface Flash {
   e: pc.Entity;
@@ -109,7 +111,7 @@ export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1): pc
     }
   }
   // Inner fill.
-  const inner = rings[2][1];
+  const inner = rings[rings.length - 1][1];
   const base = pos.length / 3;
   for (const [cx, cz] of corners) vert(inner[0], cx, cz, inner[1], inner[2]);
   idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
@@ -190,7 +192,7 @@ export class TileFx {
 
   private tilePos(t: TileData): pc.Vec3 {
     const [x, y, z] = this.sim.grid.tileWorld(t);
-    return new pc.Vec3(x, y + SLAB_TOP + 0.02, z);
+    return new pc.Vec3(x, y + SLAB_TOP + pavingOverlayLift(this.sim.grid, t) + 0.02, z);
   }
 
   /** Tiles currently "boosted" by a synergy: inside a pollinator zone, or next to a boosted solar panel. */
@@ -250,6 +252,50 @@ export class TileFx {
     f.max = this.reducedMotion ? Math.min(dur, 0.35) : dur;
     f.peak = Math.min(1, peak * 1.4); // outlines are mostly transparent, so they can run brighter than the old flat flash
     this.place(f, t, color, 0.005);
+  }
+
+  private objectiveFrames = new Map<string, pc.Entity>();
+  private objectiveMaterial?: pc.StandardMaterial;
+  private objectiveShimmer?: pc.StandardMaterial;
+
+  /** Steady, separate from the transient pulse and chain effects pool. */
+  showObjectiveTiles(tiles: readonly TileData[], focused?: (tile: TileData) => boolean, view?: MarkerView) {
+    const active = new Set(tiles.map(tile => tile.id));
+    for (const [id, frame] of this.objectiveFrames) {
+      if (active.has(id)) continue;
+      frame.destroy();
+      this.objectiveFrames.delete(id);
+    }
+    for (const tile of tiles) {
+      let frame = this.objectiveFrames.get(tile.id);
+      if (!frame) {
+        this.objectiveMaterial ??= glowMaterial(PALETTE.pure.white, 1.25);
+        this.objectiveShimmer ??= glowMaterial(PALETTE.pure.white, 1.35);
+        frame = new pc.Entity('objective-tile');
+        frame.addComponent('render', {
+          meshInstances: [new pc.MeshInstance(tileMarkerMesh(this.device, 'objective'), this.objectiveMaterial)],
+          castShadows: false, receiveShadows: false,
+        });
+        const shimmer = new pc.Entity('objective-shimmer');
+        shimmer.addComponent('render', {
+          meshInstances: [new pc.MeshInstance(markerShimmerMesh(this.device, 'objective'), this.objectiveShimmer)],
+          castShadows: false, receiveShadows: false,
+        });
+        frame.addChild(shimmer);
+        this.root.addChild(frame);
+        this.objectiveFrames.set(tile.id, frame);
+      }
+      frame.setPosition(this.tilePos(tile));
+      frame.enabled = !focused?.(tile);
+      if (view && frame.enabled) faceTileMarker(frame, view);
+      const shimmer = frame.children[0];
+      shimmer.enabled = !this.reducedMotion;
+      if (shimmer.enabled) shimmer.setLocalPosition(0, 0.035 + 0.032 * Math.sin(this.time * 1.8 + tile.variant), 0);
+    }
+    if (this.objectiveShimmer && tiles.length) {
+      this.objectiveShimmer.opacity = 0.72 + 0.2 * Math.sin(this.time * 2.1);
+      this.objectiveShimmer.update();
+    }
   }
 
   /** Persistent gold outline on the tile that started a chain, until released. */

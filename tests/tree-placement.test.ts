@@ -178,6 +178,45 @@ describe('P7-E29 pacing: the simulation counts tree tiles (songbirds, species, b
 });
 
 describe('P7-E29 tree variation (the original leafy trees, varied)', () => {
+  it('opens additional branches and leaf geometry as the same tree matures', () => {
+    for (const [form, species] of [['standard', 'oak'], ['standard', 'pine'], ['standard', 'willow'], ...Object.entries(FORM_SPECIES)] as [Form, 'oak' | 'pine' | 'willow' | 'birch' | 'cherry'][]) {
+      for (const lod of [0, 1] as const) {
+        const [sapling, young, grown] = ([1, 2, 3] as const).map((age) => treeGeo(species, age, 1, lod, form));
+        const visible = (tree: typeof grown) => {
+          let count = 0;
+          // Compare the shared branch and leaf geometry, excluding collars and fruit added to the mature tree.
+          for (let i = 0; i < young.idx.length; i += 3) {
+            const a = tree.idx[i] * 4, b = tree.idx[i + 1] * 4, c = tree.idx[i + 2] * 4;
+            const p = tree.pos;
+            const x = p[b] - p[a], y = p[b + 1] - p[a + 1], z = p[b + 2] - p[a + 2];
+            const u = p[c] - p[a], v = p[c + 1] - p[a + 1], w = p[c + 2] - p[a + 2];
+            if (Math.hypot(y * w - z * v, z * u - x * w, x * v - y * u) > 1e-8) count++;
+          }
+          return count;
+        };
+        expect(visible(sapling), `${species} ${form} lod ${lod}`).toBeLessThan(visible(young));
+        expect(visible(young), `${species} ${form} lod ${lod}`).toBeLessThan(visible(grown));
+      }
+    }
+  });
+
+  it('keeps branch and leaf vertex correspondence through every growth stage', () => {
+    for (const [form, species] of [['standard', 'oak'], ['standard', 'willow'], ...Object.entries(FORM_SPECIES)] as [Form, 'oak' | 'willow' | 'birch' | 'cherry'][]) {
+      for (const lod of [0, 1, 2] as const) {
+        const ages = ([1, 2, 3, 4] as const).map((stage) => treeGeo(species, stage, 1, lod, form));
+        for (let i = 1; i < ages.length; i++) {
+          const younger = ages[i - 1];
+          const older = ages[i];
+          expect(older.height).toBeGreaterThan(younger.height);
+          expect(older.idx.subarray(0, younger.idx.length)).toEqual(younger.idx);
+          if (older.pos.length > younger.pos.length) {
+            expect(older.attachments?.some(({ first }) => first === younger.pos.length / 4)).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
   it('variants differ in proportions and greens; sizes come in classes', () => {
     const dims = Array.from({ length: TREE_VARIANTS }, (_, v) => {
       const f = foliageShape(treeGeo('oak', 3, v, 1).pos, 4);

@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
 import { color, PALETTE, uniqueMat } from './Materials';
 import { shape } from './Shapes';
+import { WIND_X, WIND_Z } from './Wind';
 
 interface Particle {
   x: number;
@@ -26,6 +27,7 @@ interface Particle {
   float: boolean;
   /** Look 3.14: flickers in size (sparkles). */
   twinkle: boolean;
+  leaf: boolean;
 }
 
 /** Bloombot's travelling palm ring (palmWave). */
@@ -107,7 +109,7 @@ export class Vfx {
     for (let i = 0; i < MAX_PARTICLES; i++)
       this.particles.push({
         x: 0, y: 0, z: 0, rot: 0, color: colors[i % colors.length], base: colors[i % colors.length], vx: 0, vy: 0, vz: 0,
-        life: 0, max: 1, size: 0.05, spin: 0, gravity: 4, active: false, glow: BASE_GLOW, float: false, twinkle: false,
+        life: 0, max: 1, size: 0.05, spin: 0, gravity: 4, active: false, glow: BASE_GLOW, float: false, twinkle: false, leaf: false,
       });
     const n = MAX_PARTICLES * 6;
     this.pPos = new Float32Array(n * 3);
@@ -359,6 +361,25 @@ export class Vfx {
     p.glow = BASE_GLOW;
     p.float = false;
     p.twinkle = false;
+    p.leaf = false;
+  }
+
+  /** A real canopy leaf, reusing the pooled particle mesh. */
+  fallingLeaf(x: number, y: number, z: number, ground: number, rgb: [number, number, number]) {
+    if (this.reducedMotion) return;
+    const p = this.free();
+    if (!p) return;
+    this.spawn(p, x, y, z);
+    p.leaf = p.float = true;
+    p.vx = 0;
+    p.vy = -0.18;
+    p.vz = 0;
+    p.gravity = 0.2;
+    p.max = Math.min(2.4 + Math.random() * 1.3, (y - ground) / 0.30);
+    p.size = 0.065 + Math.random() * 0.035;
+    p.spin = (Math.random() < 0.5 ? -1 : 1) * (65 + Math.random() * 85);
+    p.color = rgb;
+    p.glow = 0;
   }
 
   /**
@@ -450,7 +471,7 @@ export class Vfx {
   }
 
   /** Simulates all particles and rewrites the one shared mesh. */
-  private updateParticles(dt: number) {
+  private updateParticles(dt: number, wind: number) {
     let any = false;
     const P = this.pPos;
     const N = this.pNrm;
@@ -460,7 +481,7 @@ export class Vfx {
       let s = 0;
       if (p.active) {
         p.life += dt;
-        if (p.life >= p.max) p.active = false;
+        if (p.life >= p.max || (p.leaf && this.reducedMotion)) p.active = false;
         else {
           any = true;
           p.vy -= p.gravity * dt;
@@ -477,6 +498,11 @@ export class Vfx {
           p.x += p.vx * dt;
           p.y += p.vy * dt;
           p.z += p.vz * dt;
+          if (p.leaf) {
+            const glide = (0.16 + wind * 0.50) * (0.85 + 0.15 * Math.sin(p.life * 3 + i)) * dt;
+            p.x += WIND_X * glide;
+            p.z += WIND_Z * glide;
+          }
           p.rot += (p.spin * Math.PI * dt) / 180;
           const k = 1 - p.life / p.max;
           s = p.size * Math.min(1, k * 3) * 0.6;
@@ -486,18 +512,25 @@ export class Vfx {
       const c = Math.cos(p.rot);
       const sn = Math.sin(p.rot);
       const ga = Math.round(p.glow * 255);
+      const tilt = p.leaf ? p.life * 3.5 + i : 0;
+      const tiltCos = p.leaf ? Math.cos(tilt) : 1, tiltSin = p.leaf ? Math.sin(tilt) : 0;
       for (let v = 0; v < 6; v++) {
         const [ox, oy, oz] = OCT[v];
         // spin around Y, flatten a little so they read as leaves/petals
-        const rx = ox * c - oz * sn;
-        const rz = ox * sn + oz * c;
+        const x = p.leaf ? ox * 1.45 : ox;
+        const y = oy * (p.leaf ? 0.14 : 0.5);
+        const z = p.leaf ? oz * 0.63 : oz;
+        const rolled = z * tiltCos + y * tiltSin;
+        const rx = x * c - rolled * sn;
+        const rz = x * sn + rolled * c;
         const j = (base + v) * 3;
         P[j] = p.x + rx * s;
-        P[j + 1] = p.y + oy * s * 0.5;
+        P[j + 1] = p.y + (y * tiltCos - z * tiltSin) * s;
         P[j + 2] = p.z + rz * s;
-        N[j] = rx;
-        N[j + 1] = oy;
-        N[j + 2] = rz;
+        const normalZ = oz * tiltCos + oy * tiltSin;
+        N[j] = ox * c - normalZ * sn;
+        N[j + 1] = oy * tiltCos - oz * tiltSin;
+        N[j + 2] = ox * sn + normalZ * c;
         const q = (base + v) * 4;
         C[q] = p.color[0];
         C[q + 1] = p.color[1];
@@ -514,8 +547,8 @@ export class Vfx {
     this.anyActive = any;
   }
 
-  update(dt: number) {
-    this.updateParticles(dt);
+  update(dt: number, wind = 0) {
+    this.updateParticles(dt, wind);
     for (const r of this.palms) {
       if (!r.active) continue;
       if (r.delay > 0) {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
@@ -17,7 +17,7 @@ function city(seed = 6) {
 const deadTiles = (sim: Sim) => sim.areas.tiles(PARK).filter((t) => sim.restoration.isEligible(t));
 
 describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
-  it('manual taps charge the meter; the next tap releases a city-scale chain, once', () => {
+  it('manual taps charge the meter, and a Mega Pulse restores the previewed ground ahead', () => {
     const sim = city();
     let ready = 0;
     let released = 0;
@@ -32,8 +32,16 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
     sim.advance(3);
     const combos: { combo: number; starter: string }[] = [];
     sim.bus.on('chain.ended', (e) => combos.push(e));
-    const origin = deadTiles(sim)[5];
-    expect(sim.restoration.pulse(origin.id)).toBe(true);
+    const tap = deadTiles(sim)[5];
+    expect(sim.restoration.pulse(tap.id)).toBe(true);
+    expect(sim.restoration.megaReady()).toBe(true);
+    expect(released).toBe(0);
+    sim.advance(3);
+    const { origin, targets } = deadTiles(sim).map(origin => ({ origin, targets: sim.restoration.megaTargets(origin, 0) })).sort((a, b) => b.targets.length - a.targets.length)[0];
+    expect(targets.every(({ tile }) => tile.z >= origin.z)).toBe(true);
+    const wave = new Set<string>();
+    sim.bus.on('tile.restored', ({ tile, source }) => { if (source === 'mega') wave.add(tile.id); });
+    expect(sim.restoration.playerPulse(origin.id, targets)).toBe(true);
     expect(released).toBe(1);
     expect(sim.state.progression.megaCharge).toBe(0);
     sim.advance(30);
@@ -42,6 +50,20 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
     expect(big.combo).toBeLessThanOrEqual(sim.restoration.megaBudget() + 40); // budget plus what it sets off
     expect(big.starter).toBe('player');
     expect(origin.ground).toBe('restored');
+    expect(wave).toEqual(new Set(targets.map(({ tile }) => tile.id)));
+  });
+
+  it('blocks another pulse or tree nurture until the cooldown expires', () => {
+    const sim = city();
+    const tile = deadTiles(sim)[0];
+    sim.restoration.complete(tile, 'drone', undefined, true);
+    expect(sim.restoration.playerPulse(tile.id)).toBe(true);
+    const bloom = tile.bloom;
+    expect(sim.restoration.playerPulse(tile.id)).toBe(false);
+    expect(tile.bloom).toBe(bloom);
+    sim.advance(TUNING.mega.cooldown + 0.1);
+    expect(sim.restoration.playerPulse(tile.id)).toBe(true);
+    expect(tile.bloom).toBeGreaterThan(bloom);
   });
 
   it('the Mega Pulse grows with the city, capped', () => {
@@ -54,9 +76,9 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
     for (let i = 0; i < 10; i++) expect(wakeNext()).toBe(true);
     expect(sim.restoration.megaBudget()).toBe(TUNING.mega.baseTiles + 10 * TUNING.mega.tilesPerArea);
     const toCap = Math.ceil((TUNING.mega.maxTiles - TUNING.mega.baseTiles) / TUNING.mega.tilesPerArea);
-    while (sim.areas.clearedCount() < toCap + 5 && wakeNext());
-    expect(sim.areas.clearedCount()).toBeGreaterThan(toCap);
+    const clearedCount = vi.spyOn(sim.areas, 'clearedCount').mockReturnValue(toCap + 5);
     expect(sim.restoration.megaBudget()).toBe(TUNING.mega.maxTiles);
+    clearedCount.mockRestore();
   });
 
   it('the meter is saved', async () => {

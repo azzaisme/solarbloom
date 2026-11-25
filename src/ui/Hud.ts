@@ -101,6 +101,8 @@ export interface Settings {
   showNumbers?: boolean;
   /** E19.4.3 (#262): the potter-about pace: no objective nudges or advisor tips, softer chains. Presentation only. */
   potter?: boolean;
+  /** Protects restored ground from dying when left dry. */
+  cozyMode?: boolean;
   /** E23.7.1.2: "follow my clock" for the game in play (kept in its save; the menu shows it here) */
   realClock?: boolean;
   /** E21.22: the camera: how fast it turns (percent), inverted axes, no drift back behind bloombot, no vistas */
@@ -237,7 +239,9 @@ export class Hud {
 
   private template() {
     return `
-      <div id="res" role="group" aria-label="Charge"></div>
+      <div id="res">
+        <div id="regionArrival" class="sg-card" role="status" aria-live="polite" hidden></div>
+      </div>
       ${ObjectiveCard.template()}
       ${BuildBar.template()}
       <div id="toasts" role="status" aria-live="polite"></div>
@@ -410,6 +414,12 @@ export class Hud {
       c.classList.remove('in', 'title-on');
       setTimeout(() => c.classList.remove('on'), 600);
     }
+  }
+
+  regionArrival(html: string | undefined) {
+    const el = $(this.root, '#regionArrival');
+    el.hidden = !html;
+    this.set('region-arrival', el, 'html', html ?? '');
   }
 
   /** A label pinned to a world point. Created on demand; `action` labels take clicks. */

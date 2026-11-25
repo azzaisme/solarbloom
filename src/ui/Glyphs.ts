@@ -80,12 +80,6 @@ const FACE = {
     { name: 'Square', cls: 'g-ps-square' },
     { name: 'Triangle', cls: 'g-ps-triangle' },
   ],
-  deck: [
-    { name: 'A', cls: 'g-deck' },
-    { name: 'B', cls: 'g-deck' },
-    { name: 'X', cls: 'g-deck' },
-    { name: 'Y', cls: 'g-deck' },
-  ],
 } as const;
 
 /** The names a style gives each standard button, for labels and the small hotbar badges. */
@@ -96,6 +90,10 @@ export const PAD_NAMES: Record<PadStyle, readonly string[]> = {
 };
 
 function faceGlyph(style: PadStyle, i: 0 | 1 | 2 | 3): string {
+  if (style === 'deck') {
+    const name = PAD_NAMES.deck[i];
+    return svg(`${name} button`, `<circle cx="20" cy="15" r="13" class="g-cap"/>${text(name)}`);
+  }
   const f = FACE[style][i];
   const disc = `<circle cx="20" cy="15" r="13" class="${f.cls}"/>`;
   if (style !== 'ps') return svg(`${f.name} button`, disc + text(f.name, 'g-face-ink', 20));

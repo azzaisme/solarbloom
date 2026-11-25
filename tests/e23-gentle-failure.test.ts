@@ -7,7 +7,7 @@ import { bindOrFail, CHARGE, DAY, forceStorm, GAME_DAY, GentleWatch, homeScene, 
 
 /**
  * E23.10.1 (#405): the gentle-failure suite, on seeds 7 and 21. Epic #354 rule 2: a shortage is a puzzle, never a
- * loss. Each check names the system it covers. It skips only while that system is absent from the sim; once the
+ * loss in Cozy Mode. Each check names the system it covers. It skips only while that system is absent from the sim; once the
  * system is there the check binds to its real API, and FAILS (never passes) if it can't (tests/e23-gentle.ts).
  * Every drain must really turn something off before "nothing lost" counts. The checks that need no E23 system
  * (ground never goes back, builds stay, determinism) run from day one and guard everything the other sub-epics add.
@@ -17,6 +17,12 @@ const SEEDS = [7, 21];
 const probeSim = new Sim(createInitialState(7));
 const has = (name: string) => PROBES.find((p) => p.name === name)!.present(probeSim);
 const hasWeather = weatherPresent(probeSim);
+
+function cozyHome(seed: number): Sim {
+  const sim = homeScene(seed);
+  sim.decay.setCozyMode(true);
+  return sim;
+}
 
 describe('E23.10.1: the gentle-failure proof', () => {
   it('the watch itself: the home scene has ground in every state and machines, and a break is caught', () => {
@@ -41,8 +47,8 @@ describe('E23.10.1: the gentle-failure proof', () => {
 
   for (const seed of SEEDS) {
     describe(`seed ${seed}`, () => {
-      it('a quiet game day: nothing goes back to dead ground, nothing restored fades, nothing built is lost', () => {
-        const sim = homeScene(seed);
+      it('a quiet game day in Cozy Mode leaves plants and builds intact', () => {
+        const sim = cozyHome(seed);
         const w = new GentleWatch(sim);
         w.run(GAME_DAY);
         expect(w.violations).toEqual([]);
@@ -50,7 +56,7 @@ describe('E23.10.1: the gentle-failure proof', () => {
 
       for (const p of PROBES)
         it.skipIf(!has(p.name))(`${p.name} runs out: it really goes dark, nothing is lost, and it all comes back`, () => {
-          const sim = homeScene(seed);
+          const sim = cozyHome(seed);
           const b = bindOrFail(p, sim);
           const w = new GentleWatch(sim);
           w.run(30);
@@ -66,7 +72,7 @@ describe('E23.10.1: the gentle-failure proof', () => {
         });
 
       it.skipIf(!PROBES.some((p) => has(p.name)))('everything runs out at once through a whole game day', () => {
-        const sim = homeScene(seed);
+        const sim = cozyHome(seed);
         const live = PROBES.filter((p) => p.present(sim)).map((p) => bindOrFail(p, sim));
         const w = new GentleWatch(sim);
         w.run(30);
