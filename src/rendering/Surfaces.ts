@@ -52,6 +52,7 @@ export interface DressCtx {
   model?(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy?: number, sz?: number): boolean;
   /** E23.4.4: the bloom stage a tile shows (its own, less any fade from low water nearby). Defaults to `t.bloom`. */
   bloom?(t: TileData): number;
+  wilting?(t: TileData): boolean;
   /**
    * #687: where a scattered piece of footprint radius `r` meant for (x, z) goes so it stays on the drawn ground of
    * the tile being dressed (moved in from water and drops, never removed). Foliage added through `fb` while a tile
@@ -129,7 +130,11 @@ export const STAGE_GRASS: string[][] = PALETTE.stageGrass;
 /** One of a palette list by a (possibly negative) variant: lists differ in length now that Look 2 owns them. */
 const pick = (a: string[], v: number) => a[((v % a.length) + a.length) % a.length];
 const isTurf = (t: TileData | undefined) => !!t && t.ground === 'restored' && !t.blocked && (t.feature ?? 'lawn') !== 'paving' && (t.feature ?? 'lawn') !== 'water' && (t.feature ?? 'lawn') !== 'road';
-const turfColour = (t: TileData, bloom = t.bloom) => lin(pick(STAGE_GRASS[Math.max(1, Math.min(4, bloom || 1))], t.variant));
+const WILTED_GRASS = ['#91905a', '#a39a60', '#aba269'];
+const turfColour = (c: DressCtx, t: TileData) => {
+  const stage = Math.max(1, Math.min(4, (c.bloom?.(t) ?? t.bloom) || 1));
+  return lin(pick(c.wilting?.(t) ? WILTED_GRASS : STAGE_GRASS[stage], t.variant));
+};
 
 /**
  * A restored lawn's top: one quad whose corner colours average the turf of the (up to) four tiles meeting there,
@@ -175,13 +180,13 @@ function turfCorners(c: DressCtx, t: TileData): number[] {
         ns++;
         continue;
       }
-      const k = turfColour(n2, c.bloom?.(n2));
+      const k = turfColour(c, n2);
       r += k[0];
       g += k[1];
       b += k[2];
       n++;
     }
-    const k = n ? [r / n, g / n, b / n] : ns ? [0, 0, 0] : turfColour(t, c.bloom?.(t));
+    const k = n ? [r / n, g / n, b / n] : ns ? [0, 0, 0] : turfColour(c, t);
     // a soft mottling across the lawn, a few tiles wide
     // Phase 6: with no blades shading it, the bare turf is a touch deeper, and the light / dark patches are stronger
     // so a big lawn reads as soft sunlit and shaded areas rather than one flat green

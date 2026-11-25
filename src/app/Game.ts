@@ -984,6 +984,7 @@ export class Game {
 
   private applySettings() {
     const s = this.settings;
+    this.sim.decay.setCozyMode(s.cozyMode === true);
     this.applyVolumes();
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
@@ -2532,7 +2533,13 @@ export class Game {
     const f = b.front();
     const t = this.sim.grid.get(b.pose.roofId, f.x, f.z);
     const chk = t && !t.occupantId ? this.sim.restoration.checkPulse(t) : undefined;
-    const pulse = chk?.ok ? { glyph: this.glyph('pulse'), text: t!.ground === 'restored' ? 'Nurture' : 'Pulse' } : undefined;
+    let pulse: { glyph: string; text: string } | undefined;
+    if (t && chk?.ok) {
+      let text = t.ground === 'restored' ? 'Nurture' : 'Pulse';
+      if (this.sim.decay.wilting(t)) text = 'Tend wilting plants';
+      else if (this.sim.decay.thirsty(t)) text = 'Tend thirsty plants';
+      pulse = { glyph: this.glyph('pulse'), text };
+    }
     if (!target) return pulse ? { glyph: pulse.glyph, text: pulse.text } : undefined;
     const hold = holdFor(target, this.settings.holdToAct !== false) || (target.ocHold && this.settings.holdToAct !== false ? target.ocHold : 0);
     const h = this.holding;
@@ -3424,7 +3431,8 @@ export class Game {
       return;
     }
     const chk = this.sim.restoration.checkPulse(t);
-    const maxed = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom;
+    const needsCare = this.sim.decay.thirsty(t);
+    const maxed = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom && !needsCare;
     this.overlays.showFrame(t.roofId, t.x, t.z, 1, chk.ok ? 'ok' : maxed || t.ground === 'growing' ? 'hover' : 'bad');
     let action = '';
     // Phase 4 E03.1: preview exactly which tiles this pulse will restore.
@@ -3432,7 +3440,7 @@ export class Game {
     if (fp.length) this.overlays.showRadius([t, ...fp.map((f) => f.tile)], 'ok');
     else if (!this.selected) this.overlays.hideRadius();
     if (this.sim.salvage.describe(t)) action = '';
-    else if (chk.ok) action = `<span class="ok">${t.ground === 'restored' ? 'Press {pulse} to help it flower' : 'Press {pulse} to bring it back to life'}</span>`;
+    else if (chk.ok) action = `<span class="ok">${needsCare ? 'Press {pulse} to tend it' : t.ground === 'restored' ? 'Press {pulse} to help it flower' : 'Press {pulse} to bring it back to life'}</span>`;
     else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}${this.plotLine(t.roofId, t)}`);
   }
@@ -3957,6 +3965,8 @@ export class Game {
       case 'growing':
         return `${this.stageName(t) ?? 'Roots are breaking through'}${t.growthRemainingSec > 5 ? '' : ': nearly there'}`;
       case 'restored':
+        if (this.sim.decay.wilting(t)) return 'Wilting. Press {pulse} to save it or bring water nearby.';
+        if (this.sim.decay.thirsty(t)) return 'Thirsty. Press {pulse} to tend it or bring water nearby.';
         return t.bloom >= TUNING.restore.fullBloom ? 'In flower.' : 'Alive again. Press {pulse} once more to help it flower.';
     }
   }
@@ -4286,7 +4296,7 @@ export class Game {
   private wireEvents() {
     const b = this.bus;
     const s = this.sim;
-    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.decayChanged', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
     // the waymark's Bloom Pulse: the game's own deeds finish the goal it stands on (never just the goal moving on)
     // a pile stays the goal until it is dug out: only its last dig blooms
     b.on('pile.salvaged', ({ x, z, left }) => left === 0 && this.waymark.done(['pile'], { x, z }));

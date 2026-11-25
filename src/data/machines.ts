@@ -35,7 +35,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '💧',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Its little meter fills, then it waters the dry ground beside it into flower, and the flowers spread from there.',
+    blurb: 'Its little meter fills, then it waters nearby plants and brings dry, mossy ground into flower.',
     hotkey: '4',
   },
   pollinator: {

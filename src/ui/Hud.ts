@@ -101,6 +101,8 @@ export interface Settings {
   showNumbers?: boolean;
   /** E19.4.3 (#262): the potter-about pace: no objective nudges or advisor tips, softer chains. Presentation only. */
   potter?: boolean;
+  /** Protects restored ground from dying when left dry. */
+  cozyMode?: boolean;
   /** E23.7.1.2: "follow my clock" for the game in play (kept in its save; the menu shows it here) */
   realClock?: boolean;
   /** E21.22: the camera: how fast it turns (percent), inverted axes, no drift back behind bloombot, no vistas */

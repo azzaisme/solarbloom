@@ -288,7 +288,9 @@ export class BloomChainSystem {
     const near = s.grid.tilesNear(m, TUNING.condenser.radius);
     const dry = near.filter((t) => t.ground === 'prepared' && s.restoration.isEligible(t, false));
     const growable = extra > 0 ? near.filter((t) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom) : [];
-    if (!dry.length && !growable.length) return false;
+    let tended = false;
+    for (const t of near) if (s.decay.irrigate(t)) tended = true;
+    if (!dry.length && !growable.length) return tended;
     const origin = dry[0] ?? growable[0];
     const run = this.newRun(origin);
     run.visited.delete(origin.id);

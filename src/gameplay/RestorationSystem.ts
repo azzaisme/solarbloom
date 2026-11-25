@@ -44,7 +44,7 @@ export class RestorationSystem {
     if (piece) return { ok: false, reason: piece.detail };
     if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent: nothing grows here' };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'An old flower engine: it wakes once the ground around it is green' };
-    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in flower' };
+    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom && !this.sim.decay.thirsty(t)) return { ok: false, reason: 'Already in flower' };
     // E23.2.1: out of charge, no pulse (bloombot walks on; eat, sit or find a charger)
     if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of Charge: press {eat} for a snack, or sit on a bench to rest' };
     if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through: ${seconds(t.growthRemainingSec)}` };
@@ -70,6 +70,11 @@ export class RestorationSystem {
     this.sim.charge.use('pulse');
     // #607: the player's own pulses (drones and chains restore too: the guide asks whether the player has pulsed)
     this.sim.state.stats.pulses = (this.sim.state.stats.pulses ?? 0) + 1;
+    this.sim.decay.tend(t);
+    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) {
+      this.sim.bus.emit('pulse.fired', { tileId, extra: [], overcharged: false });
+      return true;
+    }
     // E23.2.2: the pulse uses one unit of its load (or fires empty) and sends out its reveal ripple
     const load = this.sim.pulseLoad.take();
     const ripple = this.sim.pulseLoad.ripple(t);
@@ -244,6 +249,7 @@ export class RestorationSystem {
   /** `quiet`: grows the tile but sets off no chain. */
   grow(t: TileData, chainId?: number, starter: 'player' | 'auto' = 'auto', quiet = false) {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
+    this.sim.decay.tend(t);
     this.chainPlantOn(t, chainId);
     // one bloom level, or straight to what its plant grows at (a grove: full bloom)
     t.bloom = Math.min(TUNING.restore.maxBloom, Math.max(t.bloom + 1, this.plantDef(t).bloom));

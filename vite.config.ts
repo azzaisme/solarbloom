@@ -32,7 +32,7 @@ const QUICK = [
   // E23.9: the story
   'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally', 'keepers-crops',
   // E23.4: the water network
-  'water-levels', 'shoreline', 'fullscreen', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'water-surface', 'water-seams', 'water-disturbance', 'water-life',
+  'water-levels', 'shoreline', 'fullscreen', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'water-surface', 'water-seams', 'water-disturbance', 'water-life', 'decay',
   'pipe-visuals', 'pipe-visuals-west',
   // E23.5: the farm
   'farm-items', 'farm-planters', 'farm-compost', 'farm-extras',

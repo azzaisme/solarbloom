@@ -1690,6 +1690,7 @@ export class ChunkRenderer {
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
       model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
       bloom: (t) => s.water.bloomShown(t), // E23.4.4: the lawn's colour fades with low water too
+      wilting: (t) => s.decay.wilting(t),
       // P7-E28: planting zones, memoised for this build (a pure function of the cell, so a rebuild matches)
       landmark: s.areas.info(area).noLandmark ? undefined : s.areas.info(area).landmark,
       zone: (x, z) => {
@@ -3657,6 +3658,7 @@ export class ChunkRenderer {
     void r;
     const stage = Math.max(1, Math.min(4, this.sim.water.bloomShown(t) || 1)); // E23.4.4: fades by low water
     const grass = grassTone(stage, t.x, t.z);
+    const planted = !!t.plant && !this.sim.decay.wilting(t);
     const c = this.ctx;
     if (f === 'paving') {
       // Look 3.2: clean stone slabs, moss and tiny flowers in the gaps; a street tree stands in a stone planter.
@@ -3687,7 +3689,7 @@ export class ChunkRenderer {
       this.slab(b, PALETTE.beachSand[((t.variant % 3) + 3) % 3], [x, h, z], [1, 0.16, 1]);
       turfTop(c, t, top);
       beachDressing(c, t, x, z, top);
-      if (t.plant) this.plantExtras(t, x, z, top); // what the player's pulse grew still shows
+      if (planted) this.plantExtras(t, x, z, top);
       return;
     } else {
       this.slab(b, grass, [x, h, z], [1, 0.16, 1]);
@@ -3708,9 +3710,9 @@ export class ChunkRenderer {
     // P7-E28 (#714): natural ground is planted by its zone (lawn, meadow, bed, shore, woodland floor, path border,
     // clearing), in layers that fill in with the bloom stage, instead of the same drifts on every tile
     const zone = zoneOf(c, t.x, t.z);
-    if (t.plant) this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
+    if (planted) this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
     const tree = this.addTree(t, h, 1);
-    zonedPlanting(c, t, stage, x, z, top, zone, tree || !!t.plant);
+    zonedPlanting(c, t, stage, x, z, top, zone, tree || planted);
     if (stage <= 2 && !tree && (zone === 'open_lawn' || zone === 'landmark_clearance') && dhash(t.x, t.z, 67) < 0.07) {
       // the odd pebble in young lawns (seeded), so open lawn doesn't repeat exactly
       b.add('sphere', PALETTE.stone.pebble, this.at(x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6, 0.08), [0.16, 0.08, 0.13]);
