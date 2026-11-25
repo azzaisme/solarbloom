@@ -261,6 +261,7 @@ function branchPoint(p: V, branch?: BranchPose): V {
 // Rows are fork depths. The final entry repeats for later branches at each depth.
 const SAPLING_BRANCHES = [[0.66, 0.66, 0], [0.56, 0], [0.4, 0]];
 const YOUNG_BRANCHES = [[0.95, 0.95, 0.7], [0.83, 0.83, 0.46], [0.48, 0]];
+const TRUNK_RADIUS_SCALE = 0.86;
 
 /** Deeper forks and later side branches wait for their parent to grow. */
 function branchPose(age: TreeStage, root: V, depth: number, order: number, parent?: BranchPose): BranchPose | undefined {
@@ -509,8 +510,10 @@ function spray(B: Buf, R: () => number, at: Tip, n: number, reach: number, L: nu
     // the card needs an "up" that isn't along the leaf
     const upv: V = Math.abs(dot(dir, soft)) > 0.92 ? norm(add(soft, [0.3, 0.2, -0.3])) : soft;
     const order = at.order ?? i / n;
-    const lastBud = B.age === 1 ? 0.33 : 0.8;
-    const birth = B.age < 3 ? clamp((lastBud - order) * 5, 0, 1) : 1;
+    // Keep unopened cards collapsed at the twig so each cohort can grow into the canopy in place.
+    const birth = B.age === 1 ? clamp((0.16 - order) * 10, 0, 1)
+      : B.age === 2 ? clamp((0.37 - order) * 6, 0, 1)
+      : 1;
     const extension = at.branch?.extension ?? 1;
     const unfold = extension > 0 ? birth : 0;
     const root = branchPoint(at.p, at.branch);
@@ -625,7 +628,7 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
   // machine side: brass irrigation collar with a little cyan status light (grown trees only)
   if (stage >= 3 && lod > 0) {
     B.attachments.push({ first: B.n, at: [0, 0, 0] });
-    const tr = (sp === 'birch' ? 0.055 : 0.075) * S;
+    const tr = (sp === 'birch' ? 0.055 : 0.075) * S * TRUNK_RADIUS_SCALE;
     collar(B, 0.0, tr * 0.9, tr * 1.9, 0.045, BRASS);
     puff(B, { c: [tr * 1.9, 0.035, 0], r: [0.014, 0.014, 0.014], base: CYAN, light: CYAN, dark: scaleC(CYAN, 0.8), flex: 0, seed: 1, detail: 0, lump: 0 });
   }
@@ -677,7 +680,7 @@ function trunk(B: Buf, R: () => number, H: number, rad: number, bark: C, barkDar
   for (let i = 0; i <= segs; i++) {
     const k = i / segs;
     tp.push([lean[0] * k * H + Math.sin(k * 3 + R()) * 0.012, k * H, lean[2] * k * H]);
-    tr.push(rad * (1 - 0.4 * k) * (1 + 0.95 * Math.exp(-k * 7))); // sturdy, with a root flare
+    tr.push(rad * TRUNK_RADIUS_SCALE * (1 - 0.4 * k) * (1 + 0.8 * Math.exp(-k * 7))); // root flare
     let c = mix(barkDark, bark, clamp(k * 1.6, 0, 1));
     if (birch && i > 0 && i < segs && R() < 0.5) c = hex(PALETTE.birchEye);
     tc.push(c);
@@ -698,7 +701,7 @@ function farTree(B: Buf, sp: Species, R: () => number, S: number, pal: Palette, 
     willow: [0.5, 0.5, 0.36],
   };
   const [th, cr, ch] = shape[sp];
-  tube(B, [[0, 0, 0], [0, th * S + ch * S * 0.5, 0]], [0.07 * S, 0.04 * S], 4, [scaleC(bark, 0.75), bark], [0, 0.1], false);
+  tube(B, [[0, 0, 0], [0, th * S + ch * S * 0.5, 0]], [0.07 * S * TRUNK_RADIUS_SCALE, 0.04 * S * TRUNK_RADIUS_SCALE], 4, [scaleC(bark, 0.75), bark], [0, 0.1], false);
   const heart: V = [0, th * S + ch * S * 0.8, 0];
   const crown: Crown = { heart, r: cr * S, pal };
   const n = 44;
@@ -714,7 +717,7 @@ function farTree(B: Buf, sp: Species, R: () => number, S: number, pal: Palette, 
 /** P7-E29: the far tree of a form: a trunk (leaning by `lean`), and a few dozen big leaves over its crown. */
 function farForm(B: Buf, R: () => number, S: number, pal: Palette, bark: C, th: number, cr: number, ch: number, lean = 0, narrow = 0.7) {
   const top: V = [lean * th * S, th * S + ch * S * 0.5, 0];
-  tube(B, [[0, 0, 0], top], [0.07 * S, 0.04 * S], 4, [scaleC(bark, 0.75), bark], [0, 0.1], false);
+  tube(B, [[0, 0, 0], top], [0.07 * S * TRUNK_RADIUS_SCALE, 0.04 * S * TRUNK_RADIUS_SCALE], 4, [scaleC(bark, 0.75), bark], [0, 0.1], false);
   const heart: V = [lean * th * S * 1.2, th * S + ch * S * 0.8, 0];
   const crown: Crown = { heart, r: cr * S, pal };
   for (let i = 0; i < 44; i++) {
@@ -776,7 +779,7 @@ function formTree(B: Buf, form: Exclude<Form, 'standard'> | Form, R: () => numbe
     const a0 = R() * Math.PI * 2;
     for (let i = 0; i < stems; i++) {
       const a = a0 + (i / stems) * Math.PI * 2;
-      limb(B, R, [Math.cos(a) * 0.02 * S, 0, Math.sin(a) * 0.02 * S], norm([Math.cos(a) * 0.4, 1, Math.sin(a) * 0.4]), 0.46 * S, 0.05 * S, 0, 1, 0.08, o, tips, i);
+      limb(B, R, [Math.cos(a) * 0.02 * S, 0, Math.sin(a) * 0.02 * S], norm([Math.cos(a) * 0.4, 1, Math.sin(a) * 0.4]), 0.46 * S, 0.05 * S * TRUNK_RADIUS_SCALE, 0, 1, 0.08, o, tips, i);
     }
     for (const t of tips) spray(B, R, t, Math.round(n * 1.2), 0.2 * S, 0.11 * S * k, crown, 0.7, 0.62, 0.2);
     if (stage >= 3) {
@@ -810,7 +813,7 @@ function formTree(B: Buf, form: Exclude<Form, 'standard'> | Form, R: () => numbe
     }
     const rad = (0.075 - 0.015 * i) * S;
     const stem = branchPose(B.age, pts[0], 0, i);
-    tube(B, pts, pts.map((_, j) => rad * (1 - 0.45 * (j / 4)) * (j === 0 ? 1.5 : 1)), 6, pts.map((_, j) => mix(barkDark, bark, j / 4)), pts.map((_, j) => (j / 4) * 0.12), false, stem);
+    tube(B, pts, pts.map((_, j) => rad * TRUNK_RADIUS_SCALE * (1 - 0.45 * (j / 4)) * (j === 0 ? 1.5 : 1)), 6, pts.map((_, j) => mix(barkDark, bark, j / 4)), pts.map((_, j) => (j / 4) * 0.12), false, stem);
     const top = pts[4];
     for (let a = 0; a < 2; a++) {
       const ang = (R() - 0.5) * 2.2 + (a ? 0.4 : -0.4);
@@ -867,7 +870,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
 function pine(B: Buf, R: () => number, S: number, pal: Palette, bark: C, _det: number, _big: number, lod: Lod = 1) {
   const H = 1.35 * S;
   const trunkR = 0.06 * S;
-  tube(B, [[0, 0, 0], [0, H * 0.5, 0], [0, H * 0.97, 0]], [trunkR * 1.3, trunkR * 0.8, trunkR * 0.2], 6, [scaleC(bark, 0.75), bark, bark], [0, 0.15, 0.4], false);
+  tube(B, [[0, 0, 0], [0, H * 0.5, 0], [0, H * 0.97, 0]], [1.3, 0.8, 0.2].map((taper) => trunkR * TRUNK_RADIUS_SCALE * taper), 6, [scaleC(bark, 0.75), bark, bark], [0, 0.15, 0.4], false);
   const crown: Crown = { heart: [0, H * 0.55, 0], r: 0.6 * S, pal };
   const [n, k] = LEAVES[lod];
   const whorls = 5;

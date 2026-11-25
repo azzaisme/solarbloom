@@ -1,8 +1,31 @@
 import { expect, it } from 'vitest';
-import { treeGeo } from '../src/rendering/TreeGen';
+import { FORM_SPECIES, treeGeo, type Form, type Species, type TreeGeo } from '../src/rendering/TreeGen';
 import { SEM_A, SEM_B, SEM_LEAF } from '../src/rendering/transitions/TransitionMaterial';
 import { TrMeshBuilder } from '../src/rendering/transitions/TrMeshBuilder';
 import { headlessApp } from './helpers';
+
+it('starts with a few open leaves and reserves most blades for later growth', () => {
+  const trees: [Form, Species][] = [
+    ['standard', 'oak'], ['standard', 'pine'], ['standard', 'willow'],
+    ...Object.entries(FORM_SPECIES) as [Form, Species][],
+  ];
+  const visible = ({ pos, leafStarts }: TreeGeo) =>
+    leafStarts!.reduce((count, start) => {
+      const root = start * 4;
+      const tip = root + 8;
+      return count + Number(Math.hypot(pos[tip] - pos[root], pos[tip + 1] - pos[root + 1], pos[tip + 2] - pos[root + 2]) > 1e-5);
+    }, 0);
+  for (const [form, species] of trees) {
+    for (const lod of [0, 1, 2] as const) {
+      const [sapling, young, grown] = ([1, 2, 3] as const).map((stage) => visible(treeGeo(species, stage, 1, lod, form)));
+      const label = `${form} ${species} LOD ${lod}`;
+      expect(sapling, label).toBeGreaterThan(0);
+      expect(sapling, label).toBeLessThan(grown * 0.2);
+      expect(young, label).toBeGreaterThan(sapling);
+      expect(young, label).toBeLessThan(grown * 0.6);
+    }
+  }
+});
 
 it('staggers leaf blades while their attachment points follow the branch', () => {
   const { device, destroy } = headlessApp();

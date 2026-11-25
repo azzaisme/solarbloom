@@ -274,8 +274,8 @@ export class TrMeshBuilder {
           leafStart = i;
           leaf++;
           const variation = hash2(x + i * 0.0137, z + i * 0.0279);
-          opensAt = 0.15 + 0.28 * variation;
-          openBy = 0.77 + 0.22 * variation;
+          opensAt = 0.15 + 0.48 * variation;
+          openBy = 0.55 + 0.44 * variation;
           const q = Math.max(0, Math.min(1, (interrupted - opensAt) / (openBy - opensAt)));
           leafMix = q * q * (3 - 2 * q);
         }
