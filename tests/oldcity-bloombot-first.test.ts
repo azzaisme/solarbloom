@@ -79,9 +79,12 @@ describe('E21.9: bloombot first', () => {
     }
     expect(sim.state.areas.mastRow.byBot).toBeGreaterThanOrEqual(target);
     expect(sim.areas.helpersMayWork('mastRow')).toBe(true);
-    const mid = mastRestored(sim);
+    let helped = 0;
+    sim.bus.on('tile.restored', ({ tile, source }) => {
+      if (source === 'drone' && sim.areas.areaOf(tile) === 'mastRow') helped++;
+    });
     sim.advance(60);
-    expect(mastRestored(sim)).toBeGreaterThan(mid);
+    expect(helped).toBeGreaterThan(0);
     expect(n).toBeGreaterThan(0);
     // drone work never counts as bloombot's
     const byBot = sim.state.areas.mastRow.byBot;
