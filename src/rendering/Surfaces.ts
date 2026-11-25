@@ -130,10 +130,9 @@ export const STAGE_GRASS: string[][] = PALETTE.stageGrass;
 /** One of a palette list by a (possibly negative) variant: lists differ in length now that Look 2 owns them. */
 const pick = (a: string[], v: number) => a[((v % a.length) + a.length) % a.length];
 const isTurf = (t: TileData | undefined) => !!t && t.ground === 'restored' && !t.blocked && (t.feature ?? 'lawn') !== 'paving' && (t.feature ?? 'lawn') !== 'water' && (t.feature ?? 'lawn') !== 'road';
-const WILTED_GRASS = ['#91905a', '#a39a60', '#aba269'];
 const turfColour = (c: DressCtx, t: TileData) => {
   const stage = Math.max(1, Math.min(4, (c.bloom?.(t) ?? t.bloom) || 1));
-  return lin(pick(c.wilting?.(t) ? WILTED_GRASS : STAGE_GRASS[stage], t.variant));
+  return lin(pick(c.wilting?.(t) ? PALETTE.lawn.wilted : STAGE_GRASS[stage], t.variant));
 };
 
 /**

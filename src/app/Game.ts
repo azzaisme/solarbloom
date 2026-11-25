@@ -4297,6 +4297,7 @@ export class Game {
     const b = this.bus;
     const s = this.sim;
     for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.decayChanged', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    b.on('tile.decayChanged', ({ tile }) => this.grid.refresh(tile, false));
     // the waymark's Bloom Pulse: the game's own deeds finish the goal it stands on (never just the goal moving on)
     // a pile stays the goal until it is dug out: only its last dig blooms
     b.on('pile.salvaged', ({ x, z, left }) => left === 0 && this.waymark.done(['pile'], { x, z }));
