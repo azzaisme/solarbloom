@@ -2554,6 +2554,12 @@ export class Game {
     if (page) out.push({ kind: 'cache', id: `page:${page}`, verb: 'Read', name: s.journal.found(page) ? 'the page again' : 'the page', distance: fd, at: front, run });
     const sp = setPieceAt(f.x, f.z);
     if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
+    // #787: a region's works: while dark, the prompt says what's wrong and what to build where; running, what it does now
+    if (sp?.kind === 'works' && s.areas.fog(sp.works.region) !== 'hidden') {
+      const w = sp.works;
+      const why = s.works.problem(w.region);
+      out.push({ kind: 'gate', id: `works:${w.region}`, verb: 'Look at', name: w.name, distance: fd, at: front, refused: why, run: () => this.hud.toast(`${w.running}<small>${w.then}</small>`, '', 4) });
+    }
     const gate = s.gates.gateAt(f.x, f.z);
     if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? s.upgrades.pryHold : undefined, refused: s.gates.problem(gate), run });
     // E25 (#626): a sealed vault (Pry II), a stash, and the trips the level II moves take (over the sea, up a wall)
@@ -4797,6 +4803,23 @@ export class Game {
       if (!r || r.gate.opensRegion === false || this.settings.noVistas || this.settings.reducedMotion) return;
       if (!s.salvage.see(`vista:${region}`)) return;
       setTimeout(() => this.vista(r.landmark.x + 1, r.landmark.z + 1, 2, () => {}), 300);
+    });
+    // #787: a region's works start running: the piece lights up (its tile redraws), a ring and a burst of sparks in the
+    // works' own colour, its sound and a chime, and a toast saying what it means for the landmark
+    b.on('works.running', ({ region, x, z }) => {
+      const w = s.works.def(region);
+      const t = s.grid.get(GROUND, x, z);
+      if (!w || !t) return;
+      this.chunks.markTile(t); // redraw it running: lamp lit, water in, gears bright
+      const [wx, wy, wz] = s.grid.tileWorld(t);
+      const at = new pc.Vec3(wx, wy + 0.6, wz);
+      const hex = w.kind === 'power' ? PALETTE.works.lampOn : w.kind === 'water' ? PALETTE.works.waterHi : PALETTE.works.brass;
+      this.vfx.ring(new pc.Vec3(wx, wy + 0.1, wz), hex, 1.8, 0.8);
+      this.vfx.burst(at, 18, { up: 2.6, size: 0.06, life: 1.4, hex, glow: 1 });
+      this.vfx.sparkles(at, 12, this.vfx.reducedMotion);
+      this.sfx.at(at, (q) => (w.kind === 'power' ? q.powerUp() : w.kind === 'water' ? q.areaOpen() : q.drone('restorer')));
+      this.sfx.fanfare();
+      this.hud.toast(`${w.running}<small>${w.then}</small>`, 'gold', 6);
     });
     // E23.9.2: a Keeper finished tending a tile: a little burst of green where it worked
     b.on('keeper.tended', ({ x, z }) => {

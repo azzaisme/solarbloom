@@ -2,6 +2,7 @@ import type { Action } from '../app/Bindings';
 import type { MaterialId } from '../core/types';
 import { PARK } from '../core/Areas';
 import { REGIONS } from '../data/oldcity';
+import { WORKS } from '../data/works';
 import { MATERIALS } from '../data/salvage';
 import type { Sim } from '../gameplay/Sim';
 
@@ -13,7 +14,7 @@ import type { Sim } from '../gameplay/Sim';
  * Each idea has `comes` (it has come up: now is the moment to say it) and `known` (the player has done it, so it
  * never needs saying). Ideas come in the order a new game meets them; one is shown at a time.
  */
-export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'build' | 'pry' | 'keepers';
+export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'build' | 'pry' | 'keepers' | 'works';
 
 /** What the key function gives for an action on the mouse's left button: the line names "the left mouse button" instead. */
 export const CLICK = 'Click';
@@ -118,7 +119,17 @@ export const IDEAS: readonly Idea[] = [
     comes: pried,
     known: keeperAwake,
   },
+  {
+    // #787: the first time a region's landmark waits on its works (its Keeper is awake there): building is needed now
+    id: 'works',
+    text: (k) => `Some landmarks need building first. Press ${k('interact')} beside the dark machine or dry channel near one to see what it needs.`,
+    // (after the fountain's first step, so the opening minutes stay about the park)
+    comes: (sim) => (sv(sim)?.tier ?? 0) >= 1 && WORKS.some((w) => !sim.works.running(w.region) && sim.areas.fog(w.region) !== 'hidden' && (sv(sim)?.keepers[regionKeeper(w.region)]?.step ?? 'asleep') !== 'asleep'),
+    known: (sim) => (sv(sim)?.works?.length ?? 0) > 0,
+  },
 ];
+
+const regionKeeper = (region: string) => REGIONS.find((r) => r.id === region)?.keeper ?? '';
 
 /**
  * Starts the list for a game. A new game starts empty. A save from before E24 has no list: everything that has

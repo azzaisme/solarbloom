@@ -436,6 +436,8 @@ export interface SalvageState {
   items?: string[];
   /** E21.9: lasting region rewards in effect (data/oldcity RewardId), in the order they were won */
   rewards?: string[];
+  /** #787: regions whose works run (power, water or drones reached them), by region id in map order; for good */
+  works?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
   /** #783: where the workbench stands, beside the house (set on a new game, or on the first load of an older save) */

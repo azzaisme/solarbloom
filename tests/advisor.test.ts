@@ -53,6 +53,7 @@ describe('objective advisor (City 14.1)', () => {
     restoreArea(sim, id);
     // E21.9: a region's landmark wakes once half of it is restored and its Keeper has asked for it
     sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
+    sim.works.start(id); // #787: and its works run, if it has any
     expect(sim.areas.ready(id)).toBe(true);
     const g = check(sim, 'ready');
     expect(g.action).toEqual({ kind: 'wake', machineId: sim.areas.landmark(id)!.id });

@@ -250,6 +250,9 @@ body.paused #hud .sg-card { backdrop-filter: none; -webkit-backdrop-filter: none
 #hud .region-progress { display: block; margin-top: 4px; }
 #hud .region-count { display: block; margin-bottom: 5px; color: var(--ink-2); font: 700 13px/1.25 var(--font-ui); }
 #hud .region-progress .sg-bar { height: 6px; }
+/* #787: what a gated region's landmark still waits on (power, water or drones), and once it runs */
+#hud .region-works { display: inline-block; margin-bottom: 5px; padding: 1px 8px; border-radius: 999px; background: var(--clay-soft); color: var(--clay-ink); font: 700 12px/1.4 var(--font-ui); }
+#hud .region-works.on { background: var(--leaf-soft); color: var(--leaf-ink); }
 #hud .region-check { margin-left: 3px; color: var(--leaf-ink); }
 #regionArrival { width: 100%; padding: 10px 14px 12px; text-align: left; }
 #regionArrival strong { font: 900 16px/1.25 var(--font-ui); }
