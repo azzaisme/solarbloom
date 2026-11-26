@@ -127,13 +127,13 @@ try {
     const core = g.sim.state.machines.find((m) => m.type === 'core' && g.sim.areas.areaOf(m) === 'park');
     g.sim.state.charge.value = 20;
     g.bot.teleport('g', core.x + core.size + 1, core.z + 1);
-    return g.sim.charge.atHome();
+    return { at: g.sim.charge.atHome(), t: g.sim.state.time };
   });
-  check(home, 'Bloombot stands beside the fountain');
-  check(await until(() => window.solarbloom.sim.charge.chargingFrom === 'home'), 'standing still a moment, the fountain charges it');
-  // the teleport settles for a moment (a nudge restarts the stand-still wait): measure once it has stood a while
-  await until(() => window.solarbloom.sim.charge.still > 3);
-  await wait(300);
+  check(home.at, 'Bloombot stands beside the fountain');
+  // standing up from the bench is already within the fountain's reach, so it may be charging from home before the
+  // teleport is seen: wait for the game's clock to pass the move (which restarts the stand-still wait) first
+  check(await until((t) => window.solarbloom.sim.state.time > t + 2 && window.solarbloom.sim.charge.chargingFrom === 'home', home.t), 'standing still a moment, the fountain charges it');
+  await until((t) => window.solarbloom.sim.state.time > t + 3.5 && window.solarbloom.sim.charge.still > 1.5, home.t);
   s = await look();
   check(s.meter && s.glow, 'the meter glows by the fountain');
   check(/Charging up/.test(s.chip), `the chip reads "${s.chip}"`);
