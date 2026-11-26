@@ -370,6 +370,8 @@ export interface LinkState {
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
 export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser' | 'honey'
+  // #785: picked from fruit trees
+  | 'fruit'
   // E23.8.3.2: from the mainland's industrial ruins only
   | 'steel';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */

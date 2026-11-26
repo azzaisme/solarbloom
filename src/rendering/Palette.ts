@@ -863,6 +863,8 @@ export const PALETTE = {
   orchard: {
     unripe: '#8fc24e',
     unripeDark: '#5f8f34',
+    /** half way: the green warms to a golden blush before the ripe colour comes in (never a muddy brown) */
+    turning: '#e6c443',
     ripe: ['#e2433a', '#f28a2b', '#d23c66'] as string[],
     ripeLight: '#ffd0a8',
     blossom: ['#fdf1f4', '#f9cddb', '#e7a9bf'] as string[],

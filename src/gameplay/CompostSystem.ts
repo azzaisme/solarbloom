@@ -52,11 +52,11 @@ export class CompostSystem {
   }
 
   /** Puts biomass or food from the backpack into a bin, as much as fits (food counts richer). Returns items put in. */
-  fill(m: MachineData, item: 'biomass' | 'food'): number {
-    const worth = item === 'food' ? COMPOST.foodWorth : 1;
+  fill(m: MachineData, item: 'biomass' | 'food' | 'fruit'): number {
+    const worth = item === 'biomass' ? 1 : COMPOST.foodWorth; // #785: fruit rots down as richly as food
     const n = Math.min(this.sim.inventory.count(item), Math.floor(this.room(m) / worth + 1e-9));
     if (n <= 0) {
-      this.sim.bus.emit('action.failed', { reason: this.room(m) < worth ? 'The bin is full' : `No ${item === 'food' ? 'Food' : 'Greens'} to put in` });
+      this.sim.bus.emit('action.failed', { reason: this.room(m) < worth ? 'The bin is full' : `No ${item === 'food' ? 'Food' : item === 'fruit' ? 'Fruit' : 'Greens'} to put in` });
       return 0;
     }
     this.sim.inventory.take(item, n);

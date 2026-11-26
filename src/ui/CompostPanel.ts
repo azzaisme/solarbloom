@@ -34,6 +34,7 @@ export function compostHtml(sim: Sim, m: MachineData): string {
     `<h3 class="pn-label">Put in</h3><div class="oc-row oc-col">` +
     btn('fill', 'biomass', 'biomass', 'All my Greens', !!inv.count('biomass') && room >= 1) +
     btn('fill', 'food', 'food', 'All my Food', !!inv.count('food') && room >= COMPOST.foodWorth) +
+    (inv.count('fruit') ? btn('fill', 'fruit', 'fruit', 'All my Fruit', room >= COMPOST.foodWorth) : '') +
     btn('return', '', 'compost', 'My Compost, to turn into Fertiliser', !!inv.count('compost') && !full) +
     `</div><h3 class="pn-label">Take</h3><div class="oc-row">` +
     btn('take', 'fertiliser', 'fertiliser', 'Fertiliser', fert > 0) +

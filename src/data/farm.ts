@@ -9,7 +9,7 @@ import type { MaterialId } from '../core/types';
 // Where each farm machine unlocks lives with its recipe on the crafting table (data/crafting MACHINE_RECIPES).
 
 /** The four farm items, in backpack order. */
-export const FARM_ITEMS = ['biomass', 'food', 'compost', 'fertiliser', 'honey'] as const satisfies readonly MaterialId[];
+export const FARM_ITEMS = ['biomass', 'food', 'fruit', 'compost', 'fertiliser', 'honey'] as const satisfies readonly MaterialId[];
 export type FarmItem = (typeof FARM_ITEMS)[number];
 
 export function isFarmItem(m: string): m is FarmItem {
@@ -26,6 +26,8 @@ export const FARM_USES: Record<FarmItem, { charge: number; load: boolean; blurb:
   compost: { charge: 0, load: false, blurb: 'From the compost bin. Given time it turns into fertiliser.' },
   fertiliser: { charge: 0, load: true, blurb: 'Pulse it into the ground for flowers, big trees and rare blooms.' },
   // E23.5.4.1: a strong snack
+  // #785: picked from fruit trees, a sweet snack between Food and Honey
+  fruit: { charge: 0.16, load: false, blurb: 'Picked ripe from fruit trees. A sweet snack: more charge than Food, and Keepers love it as a gift.' },
   honey: { charge: 0.25, load: false, blurb: 'From beehives. A strong snack: much more charge than food.' },
 };
 

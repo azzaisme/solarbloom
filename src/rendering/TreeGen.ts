@@ -1075,7 +1075,10 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
     const order = tips.map((t, i) => ({ t, i, w: RF() })).sort((a, b) => a.w - b.w);
     const flowering = look.fruit < look.blossomUntil;
     const set = (look.fruit - look.blossomUntil) / (1 - look.blossomUntil);
-    for (let j = 0; j < Math.min(ORCHARD_FRUIT.count, order.length); j++) {
+    const turning = hex(PALETTE.orchard.turning);
+    // a tree in flower is covered in it (every twig end); fruit sets on fewer of them
+    const many = flowering ? order.length : Math.min(ORCHARD_FRUIT.count, order.length);
+    for (let j = 0; j < many; j++) {
       const t = order[j].t;
       const out = norm(sub(t.p, crown.heart));
       const jit: V = [(RF() - 0.5) * 0.08 * S, -0.03 * S - RF() * 0.04 * S, (RF() - 0.5) * 0.08 * S];
@@ -1086,14 +1089,15 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
         const open = 0.55 + 0.45 * smooth(look.bareUntil, (look.bareUntil + look.blossomUntil) / 2, look.fruit);
         const c = add(add(t.p, mul(out, 0.05 * S)), [jit[0], 0.01, jit[2]]);
         const col = blossom[j % blossom.length];
-        puff(B, { c, r: [0.042 * open, 0.03 * open, 0.042 * open], base: col, light: hex(PALETTE.orchard.blossom[0]), dark: blossom[2], flex: 0.85, seed, detail: 1, lump: 0 });
-        puff(B, { c: add(c, [0, 0.02 * open, 0]), r: [0.012 * open, 0.008 * open, 0.012 * open], base: hex(PALETTE.orchard.blossomHeart), light: hex(PALETTE.orchard.blossomHeart), dark: hex(PALETTE.orchard.blossomHeart), flex: 0.85, seed, detail: 0, lump: 0 });
+        puff(B, { c, r: [0.068 * open, 0.05 * open, 0.068 * open], base: col, light: hex(PALETTE.orchard.blossom[0]), dark: blossom[2], flex: 0.85, seed, detail: 1, lump: 0.25, leafy: false });
+        puff(B, { c: add(c, [0, 0.035 * open, 0]), r: [0.016 * open, 0.01 * open, 0.016 * open], base: hex(PALETTE.orchard.blossomHeart), light: hex(PALETTE.orchard.blossomHeart), dark: hex(PALETTE.orchard.blossomHeart), flex: 0.85, seed, detail: 0, lump: 0 });
         continue;
       }
       // the fruit: it swells from set to ripe, and its colour comes in over the second half
       const r = lerp(ORCHARD_FRUIT.setR, ORCHARD_FRUIT.ripeR, smooth(0, 1, set) * 0.85 + set * 0.15) * S;
       const colour = smooth(0.45, 1, set);
-      const base = mix(green, ripeCol, colour);
+      // green, warming to a golden blush, then the ripe colour
+      const base = colour < 0.5 ? mix(green, turning, colour * 2) : mix(turning, ripeCol, colour * 2 - 1);
       const c = add(add(t.p, mul(out, 0.04 * S + r * 0.6)), jit);
       // a short stalk up to the twig, then the fruit hanging from it
       const hang = add(c, [0, r * 0.9, 0]);

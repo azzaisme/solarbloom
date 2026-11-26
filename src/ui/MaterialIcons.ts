@@ -43,6 +43,8 @@ const BODY: Record<ItemId | 'biomass' | 'unknown', string> = {
   sunCell: `<rect x="3" y="9" width="26" height="18" rx="2"/><path d="M12 9 V27 M20 9 V27 M3 18 H29" class="mi-line"/><circle cx="25" cy="7" r="4" class="mi-hi"/>`,
   // E23.5.1 Food: a carrot with its leaves
   food: `<path d="M9 27 C7 25 9 20 13 15 L19 9 L23 13 L17 19 C12 23 11 29 9 27 Z"/><path d="M20 8 C19 4 21 2 23 2 M22 10 C25 8 28 9 30 11 M21 9 C24 5 27 5 28 6" class="mi-line"/><path d="M12 20 L15 21 M15 16 L17 18" class="mi-line"/>`,
+  // #785 Fruit: an apple with its stalk and a leaf
+  fruit: `<path d="M16 11 C11 7 4 9 4 17 C4 24 9 29 13 29 C14.5 29 15 28 16 28 C17 28 17.5 29 19 29 C23 29 28 24 28 17 C28 9 21 7 16 11 Z"/><path d="M16 11 C16 8 17 5 19 3" class="mi-line"/><path d="M18 7 C20 3 25 3 26 5 C24 8 20 8 18 7 Z" class="mi-hi"/><circle cx="10" cy="16" r="2" class="mi-hi"/>`,
   // Compost: a heap with crumbs
   compost: `<path d="M3 26 C5 16 11 10 16 10 C21 10 27 16 29 26 Z"/><circle cx="12" cy="19" r="1.6" class="mi-hi"/><circle cx="19" cy="16" r="1.4" class="mi-hi"/><circle cx="21" cy="22" r="1.6" class="mi-hi"/><path d="M16 10 C16 7 18 5 21 5" class="mi-line"/>`,
   // Fertiliser: a tied sack with a drop on it

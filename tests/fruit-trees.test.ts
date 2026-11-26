@@ -17,6 +17,10 @@ import { buildOrchardTree, ORCHARD_FRUIT, type OrchardLook } from '../src/render
 import { PALETTE } from '../src/rendering/Palette';
 import { orchardScale } from '../src/rendering/CropVisuals';
 import { MACHINES } from '../src/data/machines';
+import { MATERIALS } from '../src/data/salvage';
+import { CHARGE } from '../src/data/charge';
+import { FARM_USES, isFarmItem } from '../src/data/farm';
+import { COMPOST } from '../src/data/compost';
 
 SaveService.clock = () => 0;
 
@@ -178,6 +182,43 @@ describe('#785 fruit trees: picking', () => {
     expect(sim.farmExtras.overgrown(tree)).toBe(true);
     expect(sim.farmExtras.prune(tree)).toBe(ORCHARD.timber);
     expect(sim.farmExtras.overgrown(tree)).toBe(false);
+  });
+});
+
+describe('#785 fruit trees: Fruit, a real item', () => {
+  it('picking gives Fruit, a backpack item with its own name, icon and words', () => {
+    expect(ORCHARD_ITEM).toBe('fruit');
+    expect(MATERIALS.fruit).toMatchObject({ id: 'fruit', name: 'Fruit', icon: '🍎' });
+    expect(isFarmItem('fruit')).toBe(true);
+    expect(bannedIn(FARM_USES.fruit.blurb)).toEqual([]);
+  });
+
+  it('Bloombot eats it for charge: a sweet snack, more than Food, less than Honey', () => {
+    const sim = farm();
+    expect(FARM_USES.fruit.charge).toBeGreaterThan(FARM_USES.food.charge);
+    expect(FARM_USES.fruit.charge).toBeLessThan(FARM_USES.honey.charge);
+    sim.state.charge = { value: 10 };
+    sim.bot = { roofId: GROUND, x: 30.5, z: 30.5 }; // away from home (no resting trickle)
+    const pack = sim.state.salvage!.pack as Record<string, number>;
+    for (const k of Object.keys(pack)) delete pack[k];
+    pack.fruit = 2;
+    expect(sim.charge.eat()).toMatchObject({ id: 'fruit' });
+    sim.advance(4);
+    expect(sim.charge.value()).toBeCloseTo(10 + FARM_USES.fruit.charge * CHARGE.max, 1);
+    expect(pack.fruit).toBe(1);
+  });
+
+  it('it rots down in a compost bin as richly as Food, and Moss (who hands over fruit trees) loves it as a gift', () => {
+    const sim = farm();
+    for (const [k, v] of Object.entries(sim.build.recipe('compostBin')!)) sim.inventory.add(k as 'scrap', v!);
+    const t = sim.grid.get(GROUND, 14, 16)!;
+    Object.assign(t, { blocked: false, feature: undefined, ground: 'restored', pollution: 0, bloom: 1 });
+    const bin = sim.build.place('compostBin', GROUND, 14, 16);
+    expect(bin).toBeDefined();
+    sim.inventory.add('fruit', 2);
+    expect(sim.compost.fill(bin!, 'fruit')).toBe(2);
+    expect(sim.compost.bin(bin!).feed).toBe(2 * COMPOST.foodWorth);
+    expect(sim.keepers.likes('moss')).toContain('fruit');
   });
 });
 

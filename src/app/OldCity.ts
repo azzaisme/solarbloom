@@ -416,7 +416,7 @@ export class OldCityController {
     this.panel.open(
       () => compostHtml(this.sim, m),
       (act, arg) => {
-        const n = act === 'fill' ? c.fill(m, arg as 'biomass' | 'food') : act === 'take' ? c.take(m, arg as 'compost' | 'fertiliser') : act === 'return' ? c.returnCompost(m) : 0;
+        const n = act === 'fill' ? c.fill(m, arg as 'biomass' | 'food' | 'fruit') : act === 'take' ? c.take(m, arg as 'compost' | 'fertiliser') : act === 'return' ? c.returnCompost(m) : 0;
         if (n > 0) this.host.sound(act === 'take' ? 'salvage' : 'deliver', act === 'take' ? 'seeds' : undefined);
       },
     );

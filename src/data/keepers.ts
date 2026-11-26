@@ -118,7 +118,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
       tender: ['I will not cut anything any more. I will water, and talk to the tree, and wait.'],
       friend: ['You are like the tree. Patient. Come and sit in the shade whenever you like.', 'Take this lamp. It is shaped like an acorn. Mm.'],
     },
-    likes: ['potato', 'seeds'],
+    likes: ['potato', 'seeds', 'fruit'], // #785: the fruit trees Moss hands over
     thanks: 'Mm. For me? Thank you, little one.',
     giftBack: { timber: 5 },
     chatter: ['A hedgehog sleeps under the roots. Shh.', 'The tree said good morning. In its way.', 'Mm. Mushrooms after the rain.'],

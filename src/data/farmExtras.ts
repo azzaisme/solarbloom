@@ -58,7 +58,7 @@ export const ORCHARD = {
 };
 
 /** What picking a tree gives. */
-export const ORCHARD_ITEM: MaterialId = 'food';
+export const ORCHARD_ITEM: MaterialId = 'fruit';
 
 /** What a fruit tree shows: still growing up, bare (just picked), in flower, green fruit, nearly ripe, or ripe. */
 export type FruitPhase = 'young' | 'bare' | 'blossom' | 'green' | 'nearly' | 'ripe';

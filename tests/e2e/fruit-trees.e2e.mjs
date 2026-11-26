@@ -28,6 +28,8 @@ const check = (ok, what) => {
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const DAY = 2880;
+/** Clean shots: no toasts, and not the seed wheel's one-time introduction (it shows when Seeds first reach the backpack). */
+const CLEAN = `${QUIET_CSS} #loadWheel { display: none !important; }`;
 
 try {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })).newPage();
@@ -60,17 +62,17 @@ try {
       }
     }, n);
   /** Stands Bloombot just south of a tree, facing it, the camera behind and close in. */
-  const face = (m, zoom = 1.6) =>
+  const face = (m, zoom = 0) =>
     game((g, s, { m, zoom }) => {
       g.bot.teleport('g', m.x + 0.5, m.z + 1.5);
       Object.assign(g.bot.pose, { roofId: 'g', x: m.x + 0.5, z: m.z + 1.5, facing: Math.PI });
       g.bot.walk = undefined;
       g.camera.turnTo(25, true);
-      g.camera.zoomTo?.(zoom);
+      g.zoomStep = zoom; // the bot camera's zoom step (0: the close view)
     }, { m, zoom });
 
   await startGame(page, `http://localhost:${PORT}`, { settings: { hints: false } });
-  await page.addStyleTag({ content: QUIET_CSS });
+  await page.addStyleTag({ content: CLEAN });
   await wait(3000);
 
   // A row of eight free squares of ground near Bloombot, with free ground south of them to stand on: green it, and
@@ -94,7 +96,10 @@ try {
               const t = s.grid.get('g', x0 + i, z);
               if (t && free(t.x, t.z)) s.restoration.complete(t, 'pulse');
             }
-          return { x0, z0 };
+          // the game itself must agree a tree can stand on every square (props like vents don't block a walk)
+          let fits = true;
+          for (let i = 0; i < 8 && fits; i++) { const c = s.build.check('orchard', 'g', x0 + i, z0); fits = !!(c.ok || c.spotOk); }
+          if (fits) return { x0, z0 };
         }
     return null;
   });
@@ -161,12 +166,12 @@ try {
     g.bot.teleport('g', x, z);
     Object.assign(g.bot.pose, { roofId: 'g', x, z, facing: Math.PI });
     g.camera.turnTo(20, true);
-    g.camera.zoomTo?.(3.2);
+    g.zoomStep = 1;
   }, { x: row.x0 + 3.5, z: row.z0 + 2.5 });
   await wait(4000);
   await snap('03-a-day-of-fruit-row');
   for (const t of trees) {
-    await face(t, 1.35);
+    await face(t, 0);
     await wait(2500);
     await snap(`04-tree-${t.name.replace(/ /g, '-')}`);
   }
@@ -175,26 +180,28 @@ try {
   const ripe = trees.find((t) => t.name === 'ripe');
   await face(ripe);
   p = await promptFor(/Pick the ripe fruit/);
-  check(/Pick the ripe fruit/.test(p) && !/\{/.test(p), `at a ripe tree the prompt reads "${p}"`);
-  const hold = await page.evaluate(() => !!document.querySelector('#prompt .hold, #prompt [class*=hold], #prompt svg'));
-  // the hover tip: the pointer over the tree
-  const at = await game((g, s, m) => g.botTileScreen(s.grid.get('g', m.x, m.z)), ripe);
+  check(/Hold Pick the ripe fruit/.test(p) && !/\{/.test(p), `at a ripe tree the prompt asks for a hold: "${p}"`);
+  // the hover tip: in Bloombot's play the pointer has a tip over the world in the map's overview (M), so open it
+  // and rest the pointer on the tree
+  await game((g) => g.toggleOverview());
+  await wait(3000);
   let tip = '';
-  if (at) {
-    await page.mouse.move(at.x, at.y);
-    for (let k = 0; k < 20 && !/Fruit Tree/.test(tip); k++) {
-      await wait(400);
-      tip = await page.evaluate(() => (getComputedStyle(document.getElementById('tip')).display !== 'none' ? document.getElementById('tip').innerText.replace(/\s+/g, ' ').trim() : ''));
-    }
+  for (let k = 0; k < 25 && !/Fruit Tree/.test(tip); k++) {
+    const at = await game((g, s, m) => g.botTileScreen(s.grid.get('g', m.x, m.z)), ripe);
+    await page.mouse.move(at.x + (k % 3) - 1, at.y + 1 + (k % 2));
+    await wait(500);
+    tip = await page.evaluate(() => (getComputedStyle(document.getElementById('tip')).display !== 'none' ? document.getElementById('tip').innerText.replace(/\s+/g, ' ').trim() : ''));
   }
   check(/Ripe fruit/.test(tip) && /Hold .+ to pick it/.test(tip) && !/\{/.test(tip), `the hover tip says it's ripe and to hold the key: "${tip}"`);
   await snap('05-ripe-hover-tip');
   await page.mouse.move(5, 5);
+  await game((g) => g.toggleOverview());
+  await wait(1500);
   await face(ripe);
   await promptFor(/Pick the ripe fruit/);
   await snap('06-ripe-prompt');
   const key = (await page.evaluate(() => window.solarbloom.bindings.keys.interact[0])).replace(/^Key/, '');
-  const before = await game((g, s) => s.inventory.count('food') + s.inventory.stored('food'));
+  const before = await game((g, s) => s.inventory.count('fruit') + s.inventory.stored('fruit'));
   await page.keyboard.down(key);
   await wait(450);
   const acting = await game((g) => g.bot.visuals.acting ?? '');
@@ -202,12 +209,11 @@ try {
   let after = before;
   for (let k = 0; k < 30 && after === before; k++) {
     await wait(300);
-    after = await game((g, s) => s.inventory.count('food') + s.inventory.stored('food'));
+    after = await game((g, s) => s.inventory.count('fruit') + s.inventory.stored('fruit'));
   }
   await page.keyboard.up(key);
-  check(after - before === 4, `holding Interact picks the fruit into the backpack (+${after - before} Food)`);
+  check(after - before === 4, `holding Interact picks the fruit into the backpack (+${after - before} Fruit)`);
   check(/harvest/.test(acting), `Bloombot acts out the picking while it lasts (${acting})`);
-  check(hold || true, 'the prompt shows a hold ring');
   await wait(600);
   await snap('08-picked-fly-up');
   const bare = await game((g, s, id) => ({ phase: s.farmExtras.fruitPhase(s.machine(id)), shown: s.farmExtras.fruitShown(s.machine(id)) }), ripe.id);
@@ -224,7 +230,7 @@ try {
   await wait(500);
   await page.goto(`http://localhost:${PORT}/?slot=1`);
   await waitForGame(page);
-  await page.addStyleTag({ content: QUIET_CSS });
+  await page.addStyleTag({ content: CLEAN });
   await wait(2500);
   const loaded = await game((g, s, id) => ({ st: s.farmExtras.st(id), phase: s.farmExtras.fruitPhase(s.machine(id)) }), ripe.id);
   check(Math.abs((loaded.st.growing ?? 0) - (saved.st.growing ?? 0)) < 0.01 && loaded.phase === saved.phase, `after a reload the fruit is where it was (${saved.phase}, ${(saved.st.growing ?? 0).toFixed(2)} → ${loaded.phase}, ${(loaded.st.growing ?? 0).toFixed(2)})`);
