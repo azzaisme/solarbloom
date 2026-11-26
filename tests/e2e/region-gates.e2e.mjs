@@ -57,6 +57,27 @@ try {
     }, { x, z, zoom, yaw });
     await wait(ms);
   };
+  /** Waits (up to a while: the software-rendered page is slow) until an element's text matches, then returns it. */
+  const until = async (sel, re, ms = 120_000) => {
+    await page.waitForFunction(([sel, src]) => new RegExp(src).test(document.querySelector(sel)?.innerText.replace(/\s+/g, ' ') ?? ''), [sel, re.source], { timeout: ms, polling: 250 }).catch(() => {});
+    return text(sel);
+  };
+  /** Waits until a toast with this text is up (one shows at a time, so it may wait its turn). */
+  const toastWith = (s, ms = 180_000) =>
+    page
+      .waitForFunction((s) => [...document.querySelectorAll('.toast')].some((t) => t.innerText.replace(/\s+/g, ' ').includes(s)), s, { timeout: ms, polling: 200 })
+      .then(() => true)
+      .catch(() => false);
+  /** Walks out of the region to the park, then back beside the piece: the region's card shows on arriving. */
+  const arrive = async ({ x, z }) => {
+    await run(() => window.solarbloom.bot.teleport('g', 8.5, 8.5));
+    await wait(2500);
+    await run(({ x, z }) => {
+      const g = window.solarbloom;
+      g.bot.teleport('g', x + 1.5, z + 0.5);
+      g.bot.faceToward(x + 0.5, z + 0.5);
+    }, { x, z });
+  };
   const text = (sel) => run((sel) => document.querySelector(sel)?.innerText.replace(/\s+/g, ' ').trim() ?? '', sel);
 
   // ── Mast Row: open past its rubble, its Keeper asking for the landmark, the sun at noon ──
@@ -73,28 +94,25 @@ try {
     const noon = { ...s.power.sky(), sun: 1, solar: 1 };
     s.power.skyOverride = () => noon;
     const def = s.works.def('mastRow');
-    // green ground round the box, to build on
-    for (let dz = -2; dz <= 2; dz++)
-      for (let dx = -2; dx <= 2; dx++) {
-        const t = s.grid.get('g', def.x + dx, def.z + dz);
-        if (t && !t.blocked && t.feature !== 'water') Object.assign(t, { ground: 'restored', pollution: 0, bloom: Math.max(1, t.bloom) }), s.grid.touch(t);
-      }
+    // the region turned green (so only the works stand in the landmark's way), the ground round the box to build on
+    for (const t of s.areas.tiles('mastRow'))
+      if (!t.blocked && !t.occupantId && t.feature !== 'water') Object.assign(t, { ground: 'restored', pollution: 0, bloom: Math.max(1, t.bloom) }), s.grid.touch(t);
     g.chunks.markAll();
     // stand beside it (east), facing it
     g.bot.teleport('g', def.x + 1.5, def.z + 0.5);
     g.bot.faceToward(def.x + 0.5, def.z + 0.5);
     return { x: def.x, z: def.z, how: def.how, goal: def.goal, running: def.running, name: def.name };
   });
-  await wait(4000);
+  await arrive(w);
+  const arrival = await until('#regionArrival', /Needs power/);
+  check(/Mast Row/.test(arrival) && /Needs power/.test(arrival), `the region's progress bar on arriving: "${arrival}"`);
   let st = await run(() => ({ running: window.solarbloom.sim.works.running('mastRow'), ready: window.solarbloom.sim.areas.ready('mastRow'), problem: window.solarbloom.sim.landmarks.problem('mastRow') }));
   check(!st.running && !st.ready, `Mast Row's works are dark and its landmark is not ready (${JSON.stringify(st)})`);
   check(/junction box is dark/.test(st.problem ?? ''), `the Signal Mast refuses to wake, saying why: "${st.problem}"`);
-  let prompt = await text('#prompt');
+  let prompt = await until('#prompt', /Solar Panel/);
   check(prompt.includes(`Look at ${w.name}`) && prompt.includes('Solar Panel') && !/\{/.test(prompt), `the prompt at the box: "${prompt}"`);
   const next = await text('#objNext');
   check(next.includes(w.goal), `the objective card's next step: "${next}"`);
-  const arrival = await text('#regionArrival');
-  check(/Mast Row/.test(arrival) && /Needs power/.test(arrival), `the region's progress bar on arriving: "${arrival}"`);
   await shot('1-mastrow-dark-prompt');
   await frame(w.x + 0.5, w.z + 0.5, 1.6, 30);
   await shot('2-junction-dark');
@@ -109,14 +127,14 @@ try {
   }, w);
   check(!!built, `a Solar Panel built beside the box (${built})`);
   await page.waitForFunction(() => window.solarbloom.sim.works.running('mastRow'), null, { timeout: TIMEOUT, polling: 500 });
-  await wait(700);
-  const toast = await run(() => [...document.querySelectorAll('.toast')].map((t) => t.innerText.replace(/\s+/g, ' ')).join(' | '));
-  check(toast.includes(w.running) && !/\{/.test(toast), `the toast: "${toast.slice(0, 160)}"`);
+  await wait(500);
   await shot('3-junction-running');
-  await wait(3000);
-  await shot('4-junction-running-settled');
-  st = await run(() => ({ running: window.solarbloom.sim.works.running('mastRow'), ready: window.solarbloom.sim.areas.ready('mastRow') || window.solarbloom.sim.areas.counts('mastRow').restored < window.solarbloom.sim.areas.need('mastRow'), problem: window.solarbloom.sim.landmarks.problem('mastRow') ?? '', saved: window.solarbloom.sim.state.salvage.works }));
-  check(st.running && !/junction box/.test(st.problem) && JSON.stringify(st.saved) === '["mastRow"]', `running for good, saved, and the landmark no longer waits on it (${JSON.stringify(st)})`);
+  const toasted = await toastWith(w.running);
+  const toast = await run(() => [...document.querySelectorAll('.toast')].map((t) => t.innerText.replace(/\s+/g, ' ')).join(' | '));
+  check(toasted && !/\{/.test(toast), `the toast: "${toast.slice(0, 160)}"`);
+  await shot('4-junction-running-toast');
+  st = await run(() => ({ running: window.solarbloom.sim.works.running('mastRow'), ready: window.solarbloom.sim.areas.ready('mastRow'), problem: window.solarbloom.sim.landmarks.problem('mastRow') ?? '', saved: window.solarbloom.sim.state.salvage.works }));
+  check(st.running && st.ready && !st.problem && JSON.stringify(st.saved) === '["mastRow"]', `running for good, saved, and the landmark no longer waits on it (${JSON.stringify(st)})`);
   // back beside it: the prompt no longer refuses
   await run(({ x, z }) => {
     const g = window.solarbloom;
@@ -124,20 +142,13 @@ try {
     g.bot.teleport('g', x + 1.5, z + 0.5);
     g.bot.faceToward(x + 0.5, z + 0.5);
   }, w);
-  await wait(3000);
+  prompt = await until('#prompt', /Look at/);
+  await wait(1500);
   prompt = await text('#prompt');
   check(prompt.includes(`Look at ${w.name}`) && !/Solar Panel right beside/.test(prompt), `the prompt now: "${prompt}"`);
-  const arrival2 = await run(() => {
-    const g = window.solarbloom;
-    // walk out of the region and back in: the arrival card shows the bar again
-    g.bot.teleport('g', 8.5, 8.5);
-    return true;
-  });
-  await wait(2500);
-  await run(({ x, z }) => window.solarbloom.bot.teleport('g', x + 1.5, z + 0.5), w);
-  await wait(1500);
-  const arrivalNow = await text('#regionArrival');
-  check(arrival2 && /Powered/.test(arrivalNow), `the region's progress bar now: "${arrivalNow}"`);
+  await arrive(w);
+  const arrivalNow = await until('#regionArrival', /Powered/);
+  check(/Powered/.test(arrivalNow), `the region's progress bar now: "${arrivalNow}"`);
   await shot('5-mastrow-powered-bar');
 
   // ── saved running: a reload keeps it running ──

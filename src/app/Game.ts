@@ -4811,6 +4811,7 @@ export class Game {
       const w = s.works.def(region);
       const t = s.grid.get(GROUND, x, z);
       if (!w || !t) return;
+      this.chunks.markTile(t); // redraw it running: lamp lit, water in, gears bright
       const [wx, wy, wz] = s.grid.tileWorld(t);
       const at = new pc.Vec3(wx, wy + 0.6, wz);
       const hex = w.kind === 'power' ? PALETTE.works.lampOn : w.kind === 'water' ? PALETTE.works.waterHi : PALETTE.works.brass;
