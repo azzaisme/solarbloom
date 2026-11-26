@@ -4283,6 +4283,7 @@ export class Game {
 
   private droneLabel(role: DroneRole, status: DroneStatus, short?: string, lit = false): string {
     if (status === 'asleep') return `fast asleep on the old lamp: press ${this.hudKey('interact')} at the lamp to wake it`;
+    if (status === 'following') return 'flying along beside Bloombot, helping with the ground nearby';
     const work: Record<DroneRole, string> = {
       restorer: 'turning grey ground green',
       gardener: 'watering the ground',
@@ -4656,7 +4657,8 @@ export class Game {
       if ((machine.tier ?? 1) >= 3) return; // a superstructure's foundation: its own messages (super.stage)
       const first = s.state.machines.filter((m) => m.type === machine.type && !m.starter).length === 1;
       const msg: Partial<Record<MachineData['type'], string>> = {
-        solar: '☀️ Your Solar Panel is soaking up the sun and powering the machines joined to it.',
+        solar: '☀️ Put a Charger right beside this Solar Panel to give Bloombot a place to fill its Charge.',
+        charger: '🔌 In daylight, press {interact} beside your powered Charger to sit and refill Charge.',
         condenser: '💧 Your Water Condenser is running: it gathers water from the air all on its own.',
         pollinator: '🌸 Pollinator Garden planted. Turn the ground beside it green and watch the flowers spread.',
         droneHub: '🛸 Drone Hub built. A little drone flies out and helps turn the ground green nearby.',
@@ -4728,7 +4730,7 @@ export class Game {
       this.drones.wake(droneId);
       this.sfx.at(p, (q) => q.powerUp());
       this.tweens.add(0.01, () => {}, { delay: 0.45, done: () => this.sfx.at(p, (q) => q.drone('restorer')) });
-      this.hud.toast('🛸 The old drone wakes up!<small>It tends the ground around its lamp, turning it green bit by bit, and keeps Bloombot company.</small>', 'gold', 5);
+      this.hud.toast('🛸 The old drone wakes up!<small>You have a little buddy! It follows Bloombot and helps turn nearby ground green in the park.</small>', 'gold', 5);
       this.save();
     });
     b.on('drone.jobStarted', ({ droneId }) => {

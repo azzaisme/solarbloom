@@ -14,16 +14,17 @@ describe('E21.12: the walking bot\'s first fifteen minutes', () => {
     it(`seed ${seed}: reaches tier 1 (time reported), every hint in order`, { timeout: 600_000 }, () => {
       const r = runOldCityBot(seed, 25);
       console.log(
-        `\nE21.12 walking bot, seed ${seed}: first salvage ${mmss(r.firsts.salvage)} · first pulse ${mmss(r.firsts.pulse)} · Seeds ${mmss(r.firsts.seeds)} · tier 1 ${mmss(r.firsts.tier1)} · barricade ${mmss(r.firsts.gate)} · Keeper ${mmss(r.firsts.keeper)} · Solar Panel ${mmss(r.firsts.solar)} · walking ${mmss(r.walked)} · longest idle ${r.longestIdle} s\n  steps ${r.steps.join(' → ')}\n  ${r.hints.map((h, i) => `${r.steps[i]}: ${h}`).join('\n  ')}\n`,
+        `\nE21.12 walking bot, seed ${seed}: first salvage ${mmss(r.firsts.salvage)} · first pulse ${mmss(r.firsts.pulse)} · Seeds ${mmss(r.firsts.seeds)} · tier 1 ${mmss(r.firsts.tier1)} · barricade ${mmss(r.firsts.gate)} · Keeper ${mmss(r.firsts.keeper)} · Solar Panel ${mmss(r.firsts.solar)} · Charger ${mmss(r.firsts.charger)} · walking ${mmss(r.walked)} · longest idle ${r.longestIdle} s\n  steps ${r.steps.join(' → ')}\n  ${r.hints.map((h, i) => `${r.steps[i]}: ${h}`).join('\n  ')}\n`,
       );
       // E21.12's 8–12 minute target for tier 1 is superseded by E23 (#354, A living world), which reworks pulses,
       // charge and salvage: the bot reports the time (above) and only checks that tier 1 is reached.
       expect(r.firsts.tier1).toBeDefined();
       expect(r.longestIdle).toBeLessThanOrEqual(180);
-      // every step, in order, none skipped: a barricade, a Keeper, then (E23.1.4) the first Solar Panel, Tally's craft
+      // The first powered machines are optional and the main guide still plays in order.
       expect(r.steps).toEqual(Array.from({ length: FIRST_STEPS }, (_, i) => i));
       expect(r.firsts.keeper).toBeDefined();
-      expect(r.firsts.solar).toBeGreaterThan(r.firsts.keeper);
+      expect(r.firsts.solar).toBeLessThan(r.firsts.charger);
+      expect(r.firsts.charger).toBeLessThan(r.firsts.tier1);
       // E23.3 (#480): the Solar Panel bloombot built joins the grid and supplies power
       if (r.grid) {
         console.log(`  grid: solar panel on a network ${r.grid.onNetwork}, supply ${r.grid.supply.toFixed(1)} W`);

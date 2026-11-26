@@ -855,6 +855,8 @@ export const PALETTE = {
   lilyPad: leaf.mid,
   bloomPale: '#fff6c2',
   mist: '#d8f4ff',
+  /** Tide sketches: the pencil's graphite */
+  sketchPencil: '#352f29',
 };
 
 // ───── colour helpers (pure) ─────

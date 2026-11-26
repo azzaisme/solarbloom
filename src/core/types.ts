@@ -155,6 +155,8 @@ export interface MachineData {
   z: number;
   size: number;
   starter?: boolean;
+  /** Resources paid for a machine whose recipe changed, used when it is dismantled. */
+  buildCost?: Partial<Record<ItemId, number>>;
   boostUntil: number; // solar bloom boost
   /** A planted giant tree: when it was planted (game seconds); it grows from a young tree over game days. */
   plantedAt?: number;

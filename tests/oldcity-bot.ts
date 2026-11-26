@@ -6,24 +6,22 @@ import { CHARGE as CHARGE_DATA } from '../src/data/charge';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
-import { MATERIALS, SALVAGE } from '../src/data/salvage';
-import { COMPONENT_RECIPES } from '../src/data/crafting';
-import { oldCityHint, panelNeeds } from '../src/ui/OldCityGuide';
+import { SALVAGE } from '../src/data/salvage';
+import { oldCityHint } from '../src/ui/OldCityGuide';
 import { canWalk, CHARGE, handle } from './e23-gentle';
 
 /**
  * E21.12 / E21.23: the Old City's walking bot. It plays a new old-city game the way a player would, on foot:
  * walks (real paths, sprinting on long ones) to the nearest pile and salvages it, pulses dead park ground, brings
  * Scrap and Seeds to the fountain, eats or rests when charge runs low, pries a barricade and wakes the Keeper
- * behind it, then (E23.1.4, #536) makes the first Solar Panel the way the guide says: Tally's craft, so it opens
- * the Old Market and wakes Tally, salvages its glass and Mast Row's copper, makes panes and wire at the table in
- * the shed and builds the panel. Time passes for walking, for each action and for waiting; the report
+ * behind it. In the full opening run it builds a Solar Panel and Charger from park Scrap before the fountain wakes.
+ * Time passes for walking, for each action and for waiting; the report
  * gives the sim time of each milestone, the tutorial hints in the order they showed, and the longest stretch
  * with nothing reachable to do.
  */
 export interface OldCityBotReport {
   seed: number;
-  /** sim seconds of each first: salvage, pulse, seeds, tier1, gate, keeper, solar */
+  /** sim seconds of each first: salvage, pulse, seeds, tier1, gate, keeper, solar, charger */
   firsts: Record<string, number>;
   hints: string[];
   steps: number[];
@@ -57,10 +55,9 @@ export interface OldCityBotOptions {
 const ACT = { salvage: SALVAGE.holdSeconds + 0.5, pulse: 0.7, interact: 0.6, build: 1.2, pry: SALVAGE.pryHoldSeconds + 0.4, think: 0.4 };
 
 /**
- * `until`: stop at fountain tier 1, at the first Keeper awake, or (the default) at the first Solar Panel, the last of
- * the first fifteen minutes' steps.
+ * `until`: stop at fountain tier 1, at the first Keeper awake, or (the default) run the opening with early power.
  */
-export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'keeper' | 'panel' = 'panel', opts: OldCityBotOptions = {}): OldCityBotReport {
+export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'keeper' | 'intro' = 'intro', opts: OldCityBotOptions = {}): OldCityBotReport {
   const sim = new Sim(createInitialState(seed));
   opts.setup?.(sim);
   const w = new Walker(sim);
@@ -143,7 +140,7 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   while (sim.time < end) {
     if (until === 'tier1' && firsts.tier1 !== undefined) break;
     if (until === 'keeper' && firsts.keeper !== undefined) break;
-    if (firsts.solar !== undefined) break;
+    if (until === 'intro' && firsts.keeper !== undefined) break;
     let did = false;
     const tier = sim.fountain.tier;
     // 0. E23.2.1: running low: eat something carried; out of charge with nothing to eat: walk home and rest there
@@ -161,6 +158,12 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
         continue;
       }
     }
+    if (until === 'intro' && tier === 0 && firsts.charger === undefined && sim.state.stats.tilesRestored >= 4) {
+      if (buildEarlyPower()) {
+        pass(ACT.think);
+        continue;
+      }
+    }
     // 1. Hand in what the fountain wants (once carrying enough to be worth the trip)
     const wantScrap = sim.fountain.remaining('scrap');
     const wantSeeds = sim.fountain.remaining('seeds');
@@ -172,14 +175,14 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
         did = true;
       }
     }
-    // 2. After tier 1: the nearest barricade, then its Keeper, then (E23.1.4) the first Solar Panel, as the guide asks
+    // 2. After tier 1: the nearest barricade, then its Keeper
     if (!did && tier >= 1) {
       if (firsts.gate === undefined) {
         const gates = REGIONS.filter((r) => r.ring === 1 && r.gate.kind === 'barricade' && r.gate.opensRegion !== false).sort((a, b) => dist(a.gate.cells[0][0], a.gate.cells[0][1]) - dist(b.gate.cells[0][0], b.gate.cells[0][1]));
         for (const r of gates) if ((did = pry(r))) break;
       } else if (firsts.keeper === undefined) {
         did = wake(REGIONS.find((q) => sim.gates.isOpen(q.gate.id) && q.gate.opensRegion !== false)!);
-      } else did = panel();
+      }
     }
     // 3. Salvage the nearest pile that still has something and fits in the pack
     if (!did) {
@@ -243,50 +246,18 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     sim.keepers.interact(k.id);
     return true;
   }
-  /** Salvages the nearest pile of one material that has something left (false: none right now, they refill). */
-  function salvageOf(m: string): boolean {
-    const pile = allPiles.filter((p) => p.material === m && sim.salvage.left(p.id) > 0 && !sim.salvage.problem(p.id)).sort((a, b) => dist(a.x, a.z) - dist(b.x, b.z))[0];
-    if (!pile || !walkTo(pile.x, pile.z)) return false;
-    while (sim.salvage.left(pile.id) > 0 && !sim.salvage.problem(pile.id)) {
-      pass(ACT.salvage);
-      sim.salvage.salvage(pile.id);
-    }
-    return true;
-  }
-  /**
-   * E23.1.4 (#536): the first Solar Panel, step by step as the guide's hint says: its Keeper's barricade and the
-   * Keeper (the recipe), each missing material where it's found (its barricade first), the components at the table
-   * in the shed, then the panel beside home.
-   */
-  function panel(): boolean {
-    const u = sim.crafting.machineRecipe('solar')!.unlock;
-    if (!sim.crafting.unlocked(u)) {
-      const r = REGIONS.find((q) => 'keeper' in u && q.id === u.keeper)!;
-      return sim.gates.isOpen(r.gate.id) ? wake(r) : pry(r);
-    }
-    const need = panelNeeds(sim);
-    const m = need.salvage[0];
-    if (m) {
-      const home = MATERIALS[m].home.includes('park') ? undefined : REGIONS.find((q) => MATERIALS[m].home.includes(q.id));
-      if (home && !sim.gates.isOpen(home.gate.id)) return pry(home);
-      return salvageOf(m);
-    }
-    if (need.craft.length) {
-      const sh = PARK_SET.shed;
-      if (!walkTo(sh.x, sh.z, sh.size)) return false;
-      for (const c of need.craft) {
-        const r = COMPONENT_RECIPES.find((q) => q.id === c)!;
-        const n = sim.crafting.machineRecipe('solar')!.cost[c]! - sim.inventory.count(c) - sim.inventory.stored(c);
-        sim.crafting.craft(c, Math.ceil(n / r.makes));
-      }
-      while (sim.crafting.queued() > 0) pass(1); // at the table while it works
-      return true;
-    }
-    const spot = sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && !t.occupantId && !t.blocked && sim.build.check('solar', GROUND, t.x, t.z).ok).sort((a, b) => dist(a.x, a.z) - dist(b.x, b.z))[0];
+  function buildEarlyPower(): boolean {
+    const solar = sim.machinesOfType('solar').find((m) => !m.starter);
+    const type = solar ? 'charger' : 'solar';
+    const neighbors = (x: number, z: number) => [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]];
+    const spots = solar ? neighbors(solar.x, solar.z).map(([x, z]) => sim.grid.get(GROUND, x, z))
+      : sim.areas.tiles(PARK).filter(({ x, z }) => neighbors(x, z).some(([nx, nz]) => sim.build.check('charger', GROUND, nx, nz).ok));
+    const spot = spots.filter((t): t is TileData => !!t && sim.build.check(type, GROUND, t.x, t.z).ok)
+      .sort((a, b) => dist(a.x, a.z) - dist(b.x, b.z))[0];
     if (!spot || !walkTo(spot.x, spot.z)) return false;
     pass(ACT.build);
-    if (!sim.build.place('solar', GROUND, spot.x, spot.z)) return false;
-    first('solar');
+    if (!sim.build.place(type, GROUND, spot.x, spot.z)) return false;
+    first(type);
     return true;
   }
   function affordableNear(): boolean {

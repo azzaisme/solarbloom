@@ -90,13 +90,13 @@ export interface MachineRecipe {
 
 /** §machines, in the order they are unlocked. */
 export const MACHINE_RECIPES: MachineRecipe[] = [
+  { id: 'solar', name: 'Solar panel', cost: { scrap: 3 }, unlock: { home: true }, builds: 'solar' },
+  { id: 'charger', name: 'Charger', cost: { scrap: 3 }, unlock: { home: true }, builds: 'charger' },
   // the owner's call: planter boxes open when Timber does (Tide, Saltwind Beach); until then the farm is gathering
   { id: 'planterBox', name: 'Planter box', cost: { planks: 3 }, unlock: { keeper: 'saltwind' }, builds: 'planter' },
   { id: 'compostBin', name: 'Compost bin', cost: { planks: 4, scrap: 2 }, unlock: { home: true }, builds: 'compostBin' },
   // E23.3 (#422): Bloom Relays are the grid's poles, so the power pole builds one
   { id: 'powerPole', name: 'Power pole', cost: { planks: 1, wire: 1 }, unlock: { keeper: 'mastRow' }, builds: 'relay' },
-  { id: 'charger', name: 'Charger', cost: { scrap: 4, wire: 2 }, unlock: { keeper: 'mastRow' }, builds: 'charger' },
-  { id: 'solar', name: 'Solar panel', cost: { scrap: 4, glassPane: 2, wire: 1 }, unlock: { keeper: 'oldMarket' }, builds: 'solar' },
   { id: 'windTurbine', name: 'Wind turbine', cost: { planks: 6, scrap: 4, wire: 2 }, unlock: { keeper: 'saltwind' }, builds: 'windTurbine' },
   { id: 'chest', name: 'Storage chest', cost: { planks: 4, scrap: 2 }, unlock: { keeper: 'saltwind' }, builds: 'chest' },
   { id: 'beehive', name: 'Beehive', cost: { planks: 4, seeds: 2 }, unlock: { keeper: 'elderGrove' }, builds: 'beehive' },

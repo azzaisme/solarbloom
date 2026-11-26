@@ -69,12 +69,12 @@ export const BUILD_TAB: Record<BuildableType | 'pipe', BuildTabId> = {
 
 /** One plain line about each piece (the menu's detail pane): what it does for you, no numbers. */
 const LINES: Record<BuildableType | 'pipe', string> = {
-  solar: 'Soaks up the sun and powers the machines joined to it. Build a Battery close by to keep the lights on after dark.',
+  solar: 'Makes power in daylight. Place a Charger beside it to keep Bloombot going while out in the park.',
   battery: 'Saves the power your panels have spare and gives it back after dark.',
   gridBattery: 'Saves lots of spare power, enough to keep every light on through a long night.',
   relay: 'Carries power along: build a row of them to reach a machine far from your panels.',
   windTurbine: 'Turns on windy days and in storms, and catches more wind up high.',
-  charger: 'A pad that runs on power from your panels. Stand Bloombot on it and its Charge fills up fast.',
+  charger: 'Place it beside a Solar Panel. Sit at the Charger in daylight to fill Bloombot’s Charge.',
   bioDigester: 'Feed it Greens and it powers the machines joined to it, day or night, until it runs empty.',
   condenser: 'Pulls water from the air, then waters the dry soil beside it into bloom.',
   reservoir: 'Holds water. Rain fills it, and so does a pond on its bank or a pipe from a pump.',

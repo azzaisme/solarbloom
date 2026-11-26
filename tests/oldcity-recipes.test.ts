@@ -67,8 +67,8 @@ describe('E21.3: recipes', () => {
     expect(sim.build.isUnlocked('compostBin')).toBe(true);
     for (const t of BUILDABLE) if (!home(t)) expect(sim.build.isUnlocked(t), t).toBe(false);
     sim.state.salvage!.tier = 1;
-    // E23.6.1: the Solar panel and the Storage chest come from Keepers now (crafting-table recipes)
-    expect(sim.build.isUnlocked('solar')).toBe(false);
+    expect(sim.build.isUnlocked('solar')).toBe(true);
+    expect(sim.build.isUnlocked('charger')).toBe(true);
     expect(sim.build.isUnlocked('condenser')).toBe(true);
     expect(sim.build.isUnlocked('chest')).toBe(false);
     expect(sim.build.isUnlocked('droneHub')).toBe(false);
