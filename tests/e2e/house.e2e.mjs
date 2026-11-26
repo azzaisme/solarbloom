@@ -50,19 +50,23 @@ const stand = (page, roofId, x, z, facing, ms = 2500) =>
     )
     .then(() => wait(ms));
 
-/** A view of the house from the park, south-east of it, looking back at its door. */
-const houseShot = async (page, file) => {
-  await page.evaluate(() => {
+/** A view of the house from the park, just south of its door, looking down at its front and roof. */
+const view = async (page, file, v) => {
+  await page.evaluate((v) => {
     const g = window.solarbloom;
-    // south-west of it, past the pergola's end: the door, its front and the garden's side in view
-    g.bot.teleport('g', 1.5, 8.5);
-    g.bot.faceToward(3.5, 3.5);
+    g.bot.teleport('g', v.x, v.z);
+    g.bot.faceToward(v.fx, v.fz);
     g.camera.recentre?.();
-    g.camera.zoomTo(0.8);
-  });
-  await wait(4000);
+    g.camera.zoomTo(v.zoom);
+    g.camera.pitchBy(v.pitch);
+  }, v);
+  await wait(5000);
   await page.screenshot({ path: `${dir}/${file}` });
+  await page.evaluate((p) => window.solarbloom.camera.pitchBy(-p), v.pitch);
 };
+const houseShot = (page, file) => view(page, file, { x: 4.5, z: 7.5, fx: 1, fz: 3, zoom: 0.7, pitch: 35 });
+/** The House's fenced garden, west of it: Bloombot stands in it. */
+const gardenShot = (page, file) => view(page, file, { x: 1, z: 7, fx: 1, fz: 2, zoom: 0.9, pitch: 30 });
 
 try {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
@@ -171,6 +175,7 @@ try {
     await page.evaluate(() => window.solarbloom.sim.house.giveAll());
     await page.waitForFunction((l) => window.solarbloom.sim.house.level === l, level, { timeout: 60_000 });
     await houseShot(page, `house-${level}-${names[level]}.png`);
+    if (level === 3) await gardenShot(page, 'house-3-garden.png');
     await stand(page, 'g', 4.5, 6.5, Math.PI, 1500);
     await press(page, interact);
     await wait(4000);
