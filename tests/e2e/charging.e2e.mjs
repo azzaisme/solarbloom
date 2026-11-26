@@ -149,13 +149,15 @@ try {
   // ── a snack: Food gives +25 ──
   await page.evaluate(() => {
     const g = window.solarbloom;
-    g.bot.teleport('g', 30.5, 30.5); // away from home
+    g.bot.teleport('g', 3, 8); // open park ground by the west bench, out of the fountain's reach
     g.sim.state.charge.value = 20;
     const pack = g.sim.state.salvage.pack;
     for (const k of Object.keys(pack)) delete pack[k];
     pack.food = 2;
   });
-  await wait(600);
+  check(!(await page.evaluate(() => window.solarbloom.sim.charge.atHome())), 'Bloombot stands away from the fountain to eat');
+  await page.evaluate(() => (window.solarbloom.zoomStep = 0));
+  await wait(1500);
   const before0 = (await look()).v;
   await key('KeyF');
   check(await until(() => window.solarbloom.sim.charge.eating?.id === 'food', undefined, 30_000), 'the Eat key eats some Food');
