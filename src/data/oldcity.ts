@@ -1131,8 +1131,75 @@ export interface HouseLevel {
   gives: string[];
 }
 
+/**
+ * #782: the house grows one level at a time, each a delivery handed in at its door (a bit at a time; part deliveries
+ * are saved), from the fountain's first step on (the step that gives "the house plot"). Before that it is the ruined
+ * shed, with no inside. `room` is the inside's size and `decor` how many decorations it holds.
+ */
+export const HOUSE_GROWTH = {
+  /** the fountain step from which the house can be mended */
+  opensAtStep: 1,
+  /** the level that lets Bloombot go home from anywhere (the Home's "Travel home from anywhere", in the menu) */
+  goHomeLevel: 4,
+};
+
+/** #782: a piece of furniture inside the house (cells from the room's north-west corner; `w` × `d` cells). */
+export interface HouseFurniture {
+  id: 'bed' | 'chest' | 'radio' | 'shelf' | 'desk';
+  name: string;
+  /** what {interact} does at it, as the prompt says it ("Sleep", "Open") */
+  verb: string;
+  /** the level it arrives at */
+  level: number;
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+}
+
+/**
+ * #782: the inside of the house: a room of `room` × `room` floorboards (HOUSE), drawn far above the park and shown
+ * only while Bloombot is in it. The door is in the middle of the south wall; furniture stands along the north wall
+ * and the side walls, placed from the room's size so each level's bigger room keeps the same shape.
+ */
+export const HOUSE_INSIDE = {
+  layer: 'house',
+  /** world position of the room's north-west cell: high over the park, above where birds and clouds go, out of sight */
+  origin: [0, 400, 0] as [number, number, number],
+  /** the floor's thickness under the cells (the slab tops sit at origin + height + SLAB_TOP) */
+  height: 0,
+  /** the walls' height (metres): Bloombot is 0.85 m */
+  wall: 2.2,
+};
+
+/**
+ * #782: the House's fenced garden (level 3 on): the strip of lawn west of the house, open on its east side to the
+ * path by the door (clear of the crafting bench by the door, #783). Decorations go in it like anywhere green.
+ */
+export const HOUSE_GARDEN = { x: 0, z: 2, w: 2, d: 4, gate: 'e' as const, level: 3 };
+
+/** #782: the room's furniture at a level (each piece from the level it arrives at). */
+export function houseFurniture(level: number): HouseFurniture[] {
+  const room = HOUSE[level - 1]?.room ?? 0;
+  if (!room) return [];
+  const all: HouseFurniture[] = [
+    { id: 'bed', name: 'the bed', verb: 'Sleep', level: 1, x: 0, z: 0, w: 1, d: 2 },
+    { id: 'radio', name: 'the radio', verb: 'Listen to', level: 1, x: Math.floor(room / 2) - 1, z: 0, w: 1, d: 1 },
+    { id: 'chest', name: 'the chest', verb: 'Open', level: 1, x: room - 1, z: 0, w: 1, d: 1 },
+    { id: 'shelf', name: 'the keepsake shelf', verb: 'Look at', level: 2, x: room - 1, z: 2, w: 1, d: 2 },
+    { id: 'desk', name: 'the journal desk', verb: 'Read', level: 2, x: 0, z: 3, w: 1, d: 1 },
+  ];
+  return all.filter((f) => f.level <= level);
+}
+
+/** #782: the room's door cell (inside, in the middle of the south wall) at a level. */
+export function houseDoorInside(level: number): [number, number] {
+  const room = HOUSE[level - 1]?.room ?? 6;
+  return [Math.floor(room / 2), room - 1];
+}
+
 export const HOUSE: HouseLevel[] = [
-  { level: 1, name: 'Shed', delivery: { scrap: 15, timber: 10 }, room: 6, decor: 12, gives: ['A bed', 'A storage chest', 'The Workbench moves in'] },
+  { level: 1, name: 'Shed', delivery: { scrap: 15, timber: 10 }, room: 6, decor: 12, gives: ['A bed', 'A storage chest', 'A radio by the window'] },
   { level: 2, name: 'Cottage', delivery: { timber: 30, glass: 20, clay: 20 }, room: 8, decor: 40, gives: ['Keepsake shelf', 'Journal desk'] },
   { level: 3, name: 'House', delivery: { gears: 40, copper: 40, glass: 30 }, room: 10, decor: 80, gives: ['A fenced garden outside'] },
   { level: 4, name: 'Home', delivery: { sunstone: 40, timber: 60, clay: 40 }, room: 12, decor: 140, gives: ['Travel home from anywhere'] },

@@ -20,7 +20,8 @@ import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
 import { fitOnGround, geoRadius, type GroundFit } from './GroundFit';
 import { LOOK } from '../data/look';
-import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
+import { GATE_MODELS, HOUSE_GARDEN, LANDING, PARK_SET } from '../data/oldcity';
+import { drawGardenFence, drawHouse, type HouseSink } from './HouseArt';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
@@ -1360,6 +1361,12 @@ export class ChunkRenderer {
       const cx = sh.x + sh.size / 2;
       const cz = sh.z + sh.size / 2;
       const house = this.sim.state.salvage?.house ?? 0;
+      if (house >= 1) {
+        // #782: the house mended, level by level (HouseArt)
+        drawHouse(b as HouseSink, house, sh, y);
+        if (house >= HOUSE_GARDEN.level) drawGardenFence(b as HouseSink, HOUSE_GARDEN, y); // the garden is on the house's own terrace
+        return true;
+      }
       const W = sh.size - 0.3;
       const wall = house >= 1 ? PALETTE.wood.mid : PALETTE.wood.deep;
       // four walls (the front one broken until the shed is patched), a sagging roof

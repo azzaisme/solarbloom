@@ -193,6 +193,24 @@ export const WORDS = {
     tooFar: 'Too far: walk closer',
     needs: (what: string) => `Needs ${what}`,
   },
+  /** #782: decorating, from the fountain's first step */
+  decor: {
+    /** the first decoration, a gift: what it is, then how to put it down (the key named) */
+    gift: (icon: string, name: string) =>
+      `${icon} A gift for the house: ${name}<small>Press {buildMenu} and find it under Decorations, then set it down on green ground by the house. Put down as many as you like: they’re free.</small>`,
+  },
+  /** #782: the house grows */
+  house: {
+    /** the fountain's first step: the house can be mended now */
+    canMend: '🏡 The old shed can be mended now<small>Walk up to its front wall, beside the door, and press {interact} to see what it needs.</small>',
+    /** Go home (the Home's gift): Bloombot is on its doorstep */
+    home: '🏡 Home again<small>Bloombot is on its own doorstep.</small>',
+    /** a level reached: its name, what it brings, and that there is an inside to go into */
+    grew: (name: string, gives: string, decor: number, first = false, goHome = false) =>
+      `🏡 Bloombot’s house is a ${String(name).toLowerCase()} now<small>${first ? 'Walk up to the door and press {interact} to go inside. ' : ''}${gives}, and room inside for ${decor} decorations.${goHome ? ' Press {menu} and choose Go home.' : ''}</small>`,
+    /** what a level brings, as one line ("A bed, a storage chest, a radio by the window") */
+    gives: (gives: readonly string[] | string) => [gives].flat().map((g, i) => (i ? g[0].toLowerCase() + g.slice(1) : g)).join(', '),
+  },
   toasts: {
     controlsReset: 'The controls changed in this update, so your own keys are back to the defaults.',
     saved: 'Saved',

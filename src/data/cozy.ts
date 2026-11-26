@@ -126,6 +126,18 @@ export const CAT_DECOR: readonly string[] = DECOR_OPTIONS.filter((o) => 'cat' in
 /** A rarer cat leaves its own piece first, while bloombot doesn't have it (an ordinary cat leaves it last). */
 export const CAT_DECOR_OF_VARIANT: Readonly<Record<string, string>> = { golden: 'goldlantern', rainbow: 'rainbowbunting' };
 
+/**
+ * #782: the first decoration, a gift the moment the fountain reaches its first step (and, once, for a save already
+ * past it), so decorating round the house starts in the first session. It comes made: free to place, as often as
+ * you like. The first one here bloombot hasn't made yet is the gift; the rest are only there for a save that made
+ * the first already.
+ */
+export const FIRST_DECOR = {
+  /** the fountain step that gives it */
+  step: 1,
+  gifts: ['pot', 'flowerbed', 'bench', 'stones', 'trough', 'bunting', 'barrel', 'cratestack', 'rug', 'birdbath', 'topiary'] as readonly string[],
+};
+
 export const DECOR_GEN = {
   /** how far from bloombot (tiles, centre to centre) a build may be aimed: Satisfactory-style reach */
   reach: 3.6,

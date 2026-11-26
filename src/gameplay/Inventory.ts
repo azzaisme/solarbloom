@@ -149,6 +149,9 @@ export class Inventory {
     if (this.sv.house >= 1) {
       const sh = PARK_SET.shed;
       out.push({ roofId: GROUND, x: sh.x, z: sh.z, size: sh.size });
+      // #782: the chest inside the house (the whole room is within reach of it)
+      const l = this.sim.house?.layer();
+      if (l) out.push({ roofId: l.id, x: 0, z: 0, size: l.width });
     }
     return out;
   }

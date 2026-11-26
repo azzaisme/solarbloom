@@ -99,6 +99,9 @@ export interface GameEvents {
   /** E21.6: something was handed in at the fountain; the fountain reached a tier. */
   'fountain.delivered': { material: import('../core/types').MaterialId; n: number };
   'fountain.tier': { tier: number };
+  /** #782: something was handed in at the house; the house grew a level (1 Shed … 4 Home). */
+  'house.delivered': { material: import('../core/types').MaterialId; n: number };
+  'house.level': { level: number };
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
   /** `then`: a second bubble once the first has been read (#625: a Keeper's knack and first request, after it wakes) */
   'keeper.said': { keeperId: string; lines: string[]; then?: string[] };
