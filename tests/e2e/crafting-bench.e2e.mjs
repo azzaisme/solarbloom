@@ -105,22 +105,63 @@ try {
   check(wall !== 'craft:table' && wall !== 'craft:bench', `the house's wall doesn't open crafting (${wall})`);
 
   // ── the map view: pointing at it says what it is ──
-  const tip = await page.evaluate(async () => {
+  await page.evaluate(() => {
+    const g = window.solarbloom;
+    g.bot.teleport('g', 10.5, 12.5);
+    g.bot.pose.facing = 0;
+  });
+  await wait(1000);
+  await page.evaluate(() => {
     const g = window.solarbloom;
     const b = g.sim.bench.at;
     g.toggleOverview();
-    g.camera.glide(b.x + 0.5, 0, b.z + 0.5, g.camera.minZoom);
-    for (let i = 0; i < 300; i++) g.camera.update(0.05);
-    await new Promise((r) => setTimeout(r, 800));
-    const p = g.botTileScreen(g.sim.grid.get('g', b.x, b.z));
+    g.camera.glide(b.x + 0.5, 0, b.z + 0.5, 1.5); // the map view, brought in close over the house
+  });
+  await wait(6000); // the camera glides there over real frames
+  // where the bench's square is on screen once the camera has settled: the point the game's own pointer pick reads as
+  // that square (the same pick the hover uses)
+  const tip = await page.evaluate(async () => {
+    const g = window.solarbloom;
+    const b = g.sim.bench.at;
+    const at = () => {
+      const v = g.camera.toScreen(g.tileVec(g.sim.grid.get('g', b.x, b.z)));
+      return { x: v.x, y: v.y };
+    };
+    let p = at();
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const q = at();
+      const still = Math.hypot(q.x - p.x, q.y - p.y) < 1;
+      p = q;
+      if (still) break;
+    }
+    for (let r = 0; r <= 24; r += 2)
+      for (let a = 0; a < (r ? 12 : 1); a++) {
+        const x = p.x + Math.cos(a * Math.PI / 6) * r;
+        const y = p.y + Math.sin(a * Math.PI / 6) * r;
+        const hit = g.pick(x, y)?.tile;
+        if (hit && hit.x === b.x && hit.z === b.z) return { x, y };
+      }
     return p;
   });
-  await page.mouse.move(tip.x, tip.y - 6);
-  await wait(400);
-  await page.mouse.move(tip.x, tip.y - 4);
-  await page.waitForFunction(() => /Workbench/.test(document.getElementById('tip')?.innerText ?? ''), null, { timeout: 30_000, polling: 250 }).catch(() => {});
+  // hover there (each pointer move is a fresh hover), until the tip shows
+  for (let i = 0; i < 12; i++) {
+    await page.mouse.move(tip.x + (i % 2 ? 0.5 : 0), tip.y);
+    await wait(300);
+    const shown = await page.evaluate(() => {
+      const t = document.getElementById('tip');
+      return !!t && getComputedStyle(t).display !== 'none' && /Workbench/.test(t.innerText);
+    });
+    if (shown) break;
+  }
   const tipText = await page.evaluate(() => document.getElementById('tip')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
   check(/Workbench/.test(tipText) && /press/i.test(tipText) && !/\{/.test(tipText), `pointing at it in the map view: "${tipText}"`);
+  // the tip shows while the pointer is fresh (a second and a half); this browser is slow to take a picture, so keep the
+  // pointer counted as fresh for the picture
+  await page.evaluate(() => (window.solarbloom.pointerAt = performance.now() + 60_000));
+  await page.mouse.move(tip.x, tip.y + 0.5);
+  await page.evaluate(() => (window.solarbloom.pointerAt = performance.now() + 60_000));
+  await page.waitForFunction(() => getComputedStyle(document.getElementById('tip')).display !== 'none', null, { timeout: 10_000, polling: 100 }).catch(() => {});
   await page.screenshot({ path: `${dir}/map-tip.png` });
   await page.evaluate(() => window.solarbloom.toggleOverview());
   await page.mouse.move(5, 5);
@@ -160,6 +201,19 @@ try {
   await wait(2500);
   await page.screenshot({ path: `${dir}/older-save-bench.png` });
   await useBench(page, 'an older save', 'older-save');
+  // ── without the model files (models=classic), the same table and tools drawn by hand ──
+  await page.goto(`http://localhost:${PORT}/?slot=2&gfx=low&models=classic`, { timeout: TIMEOUT, waitUntil: 'domcontentloaded' });
+  await waitForGame(page);
+  await wait(3000);
+  await page.evaluate(() => {
+    const g = window.solarbloom;
+    const b = g.sim.bench.at;
+    const f = g.sim.bench.front();
+    g.bot.teleport('g', f.x + 0.5 + (f.x - b.x) * 1.5, f.z + 0.5 + (f.z - b.z) * 1.5);
+    g.bot.faceToward(b.x + 0.5, b.z + 0.5);
+  });
+  await wait(2500);
+  await page.screenshot({ path: `${dir}/drawn-by-hand.png` });
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 } catch (e) {
   console.error(e);
