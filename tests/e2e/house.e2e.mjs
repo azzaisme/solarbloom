@@ -54,10 +54,11 @@ const stand = (page, roofId, x, z, facing, ms = 2500) =>
 const houseShot = async (page, file) => {
   await page.evaluate(() => {
     const g = window.solarbloom;
-    g.bot.teleport('g', 6.5, 8.5);
+    // south-west of it, past the pergola's end: the door, its front and the garden's side in view
+    g.bot.teleport('g', 1.5, 8.5);
     g.bot.faceToward(3.5, 3.5);
     g.camera.recentre?.();
-    g.camera.zoomTo(0.95);
+    g.camera.zoomTo(0.8);
   });
   await wait(4000);
   await page.screenshot({ path: `${dir}/${file}` });

@@ -239,7 +239,7 @@ export function houseHtml(sim: Sim): string {
   const n = h.next();
   if (!n)
     return (
-      cardHead({ icon: icon('home', 'l'), title, mood: 'Bloombot’s house is a home now, with room for all it loves.', tone: 'leaf', badge: 'sky' }) +
+      cardHead({ icon: '🏡', title, mood: 'Bloombot’s house is a home now, with room for all it loves.', tone: 'leaf', badge: 'sky' }) +
       `<div class="oc-content"><div class="oc-row"><button class="pn-btn" data-act="storage">${icon('pack', 's')}Storage</button></div></div>`
     );
   const mood = !h.open() ? 'It can be mended once the fountain flows again.' : now ? `Grow it into a ${n.name.toLowerCase()}` : 'Mend it into a little shed of your own';
@@ -254,7 +254,7 @@ export function houseHtml(sim: Sim): string {
   const gives = [...n.gives, `Room inside for ${n.decor} decorations`];
   const canGive = h.open() && h.wants().some((w) => w.given < w.need && sim.inventory.available(w.id) > 0);
   return (
-    cardHead({ icon: icon('home', 'l'), title, mood, badge: 'sky', choose: 'Give' }) +
+    cardHead({ icon: '🏡', title, mood, badge: 'sky', choose: 'Give' }) +
     `<div class="oc-content"><h3 class="pn-label">Bring</h3><ul class="oc-needs">${rows}</ul>` +
     `<h3 class="pn-label">The ${escHtml(n.name.toLowerCase())} brings</h3><ul class="oc-gives">${gives.map((g) => `<li>${icon('spark', 's')}${escHtml(g)}</li>`).join('')}</ul>` +
     `<div class="oc-row"><button class="pn-btn primary" data-act="giveAll" ${canGive ? '' : 'disabled'}>Give all I have</button><button class="pn-btn" data-act="storage">${icon('pack', 's')}Storage</button></div></div>`
