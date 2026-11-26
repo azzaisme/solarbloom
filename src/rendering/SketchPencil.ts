@@ -1,4 +1,5 @@
 import { Rng } from '../core/Rng';
+import { PALETTE } from './Palette';
 import { SKETCH_HEIGHT as H, SKETCH_WIDTH as W, type SketchCapture } from './SketchCapture';
 
 const clamp = (x: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
@@ -147,7 +148,7 @@ export function drawPencil({ geometry, colour }: SketchCapture, seed: number): s
   }
 
   ctx.putImageData(paper, 0, 0);
-  ctx.strokeStyle = '#352f29';
+  ctx.strokeStyle = PALETTE.sketchPencil;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (const cross of [false, true]) {

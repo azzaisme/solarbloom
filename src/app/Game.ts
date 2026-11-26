@@ -4278,6 +4278,7 @@ export class Game {
 
   private droneLabel(role: DroneRole, status: DroneStatus, short?: string, lit = false): string {
     if (status === 'asleep') return `fast asleep on the old lamp: press ${this.hudKey('interact')} at the lamp to wake it`;
+    if (status === 'following') return 'flying along beside Bloombot, helping with the ground nearby';
     const work: Record<DroneRole, string> = {
       restorer: 'turning grey ground green',
       gardener: 'watering the ground',
