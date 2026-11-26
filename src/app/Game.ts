@@ -4,6 +4,7 @@ import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { WORDS } from '../ui/words';
 import { BLOOMBOT_PAGE, CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
+import { CHARGE } from '../data/charge';
 import { RESEARCH, RESEARCH_UPGRADES } from '../data/research';
 import { PARK_GROWTH } from '../data/bloombot';
 import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
@@ -12,7 +13,7 @@ import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { AudioDebugHUD } from '../audio/AudioDebugHUD';
 import { sampleArea, surfaceOf, type TileSound } from '../audio/AudioMath';
 import { treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
-import { orchardGeo, treeGeo } from '../rendering/TreeGen';
+import { DECIDUOUS, orchardGeo, treeGeo } from '../rendering/TreeGen';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -149,6 +150,8 @@ import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
 import { WEATHER, WEATHER_WORDS } from '../data/weather';
+import { SEASON_WORDS } from '../data/seasons';
+import { fallingLeafColour, seasonLookAt, seasonShading, type SeasonLookNow } from '../rendering/SeasonLook';
 import { WeatherVisuals, type WeatherLook } from '../rendering/WeatherVisuals';
 import { buildRadio } from '../rendering/HouseRadio';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
@@ -704,6 +707,11 @@ export class Game {
         const d = VISITORS.find((v) => v.id === e.id);
         if (d) this.hud.toast(`${d.icon} ${d.name} came to sit with you<small>New in your visitor log</small>`, '', 3);
       });
+      // #830: a warm toast when a new season arrives
+      this.sim.bus.on('season.changed', (e) => {
+        const w = SEASON_WORDS[e.season];
+        this.hud.toast(`${w.icon} ${w.arrive}<small>${w.detail}</small>`, 'gold', 6);
+      });
       this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
       // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
       this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
@@ -1018,6 +1026,7 @@ export class Game {
   private applySettings() {
     const s = this.settings;
     this.sim.decay.setCozyMode(s.cozyMode === true);
+    this.sim.seasons.setCozyMode(s.cozyMode === true); // #830: winter's grey days don't slow the panels
     this.applyVolumes();
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
@@ -1074,6 +1083,7 @@ export class Game {
     // Look 3: surface detail, the leaf pattern and foliage density follow Look 1's graphics tier.
     detailTextures.setTier(this.gfxTier);
     setLeafTier(this.gfxTier);
+    seasonShading.setTier(this.gfxTier); // #830: Low's frost is cheaper
     if (this.chunks) this.chunks.setDetail(this.deck ? DECK.detail : this.gfxTier);
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
@@ -1138,6 +1148,36 @@ export class Game {
     this.leafTimer = window.setTimeout(() => leaf.classList.remove('on'), 1000);
   }
   private leafTimer = 0;
+  /** #784: seconds until the next charging sparkle on Bloombot */
+  private chargeSparkleIn = 0;
+
+  /**
+   * #784: the player must see Bloombot charging, whatever it charges from. Sparkles rise from Bloombot (calm ones
+   * with reduced motion), the meter glows (ChargeMeter reads `chargingFrom` too), and the chip low on screen reads
+   * "Charging up" with how full it is. Meditating at a Charger with no power says what it is waiting for (sunshine, or a Solar Panel to build).
+   */
+  private showCharging(dt: number) {
+    const c = this.sim.charge;
+    const from = c.chargingFrom;
+    const sat = this.sim.rest.sitting;
+    if (!from) {
+      this.chargeSparkleIn = 0;
+      const pad = sat?.kind === 'charger' ? this.sim.machine(sat.machineId) : undefined;
+      const waits = pad && this.sim.chargers.waitingFor(pad);
+      if (waits && c.share < 1) this.hud.guide.charging(WORDS.objective.chargerWaits[waits], c.share);
+      return;
+    }
+    if (c.share < 1) this.hud.guide.charging(WORDS.objective.charging, c.share);
+    this.chargeSparkleIn -= dt;
+    if (this.chargeSparkleIn > 0 || !this.bot) return;
+    const f = CHARGE.feedback;
+    this.chargeSparkleIn = f.sparkleEvery;
+    const [x, y, z] = this.bot.world();
+    // seated, the bot sits on the seat (or the pad) above its feet
+    const seat = this.bot.seat;
+    const at = seat ? new pc.Vec3(seat.x, seat.y + f.lift, seat.z) : new pc.Vec3(x, y + f.lift, z);
+    this.vfx.chargeSparkle(at, f.sparkles);
+  }
   private models?: ModelLibrary;
   /** the device the title screen was driven with (it picks the first glyph set) */
   private startDevice: 'keys' | 'pad' = 'keys';
@@ -2549,12 +2589,11 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
-    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start. Facing the shed's walls
-    // uses the table (listed first, so it wins the tie); the door in front of it is for the radio and the bed.
-    const sh = PARK_SET.shed;
-    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+    // #783: the workbench stands outside beside the house from the start: walk up to it and Interact opens crafting.
+    // The house is a home only (its radio by day, its bed from dusk).
+    if (s.bench.isAt(GROUND, f.x, f.z))
       out.push({
-        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        kind: 'machine', id: 'craft:bench', verb: 'Use', name: 'the workbench', distance: fd, at: front, frame: { roofId: GROUND, x: f.x, z: f.z, size: 1 },
         run: () => {
           this.oc?.panel.close();
           this.hud.craft.open();
@@ -3247,12 +3286,25 @@ export class Game {
   );
 
   private nextFallingLeaf = 0;
+  /** #830: the season shading every season material reads (the e2e and perf checks read and set it) */
+  readonly seasonShading = seasonShading;
+  /** #830: the season's look on screen now (SeasonLook), worked out once a frame */
+  private seasonNow: SeasonLookNow = seasonLookAt('spring', 0);
+
+  /** #830: the season's look: every material that shows it (tint, blossom, autumn, bare trees, frost). */
+  private updateSeasonLook() {
+    const n = this.sim.seasons.now();
+    const sc = sceneNow(this.sim, this.photo);
+    this.seasonNow = seasonLookAt(n.season, n.progress, sc.f, sc.weather === 'snow', this.sim.seasons.snowCover());
+    seasonShading.set(this.seasonNow);
+  }
 
   private updateFallingLeaves(dt: number, wind: number, view: { x0: number; x1: number; z0: number; z1: number }) {
     if (!dt || this.vfx.reducedMotion || ChunkRenderer.still || this.camera.zoom < 0.7) return;
     this.nextFallingLeaf -= dt;
     if (this.nextFallingLeaf > 0) return;
-    this.nextFallingLeaf = (1.4 + Math.random() * 1.5) / (1 + 1.8 * wind) / this.vfx.density;
+    // #830: autumn sends many more leaves down, spring a few petals, winter's bare trees hardly any
+    this.nextFallingLeaf = (1.4 + Math.random() * 1.5) / (1 + 1.8 * wind) / this.vfx.density / Math.max(0.05, this.seasonNow.leafFall);
     const world = treeWorldOf(this.sim);
     const focus = this.camera.target;
     for (let attempt = 0; attempt < 16; attempt++) {
@@ -3279,7 +3331,7 @@ export class Game {
         px + (tree.pos[root] * c - tree.pos[root + 2] * s) * spot.scale,
         ground + (spot.planter ? 0.16 : 0) + tree.pos[root + 1] * spot.scale,
         pz + (tree.pos[root] * s + tree.pos[root + 2] * c) * spot.scale,
-        ground, [tree.col[root], tree.col[root + 1], tree.col[root + 2]],
+        ground, fallingLeafColour(this.seasonNow, [tree.col[root], tree.col[root + 1], tree.col[root + 2]], DECIDUOUS[spot.species], Math.random(), Math.random()),
       );
       break;
     }
@@ -3747,7 +3799,7 @@ export class Game {
     const why = pipes.layProblem(p.roofId, t.x, t.z) ?? (this.inReach(p.roofId, t.x, t.z, 1) ? undefined : TOO_FAR);
     this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.12);
     const have = this.sim.inventory.available('pipe');
-    const left = `${have} Pipe${have === 1 ? '' : 's'} at hand (the crafting table makes them)`;
+    const left = `${have} Pipe${have === 1 ? '' : 's'} at hand (the workbench makes them)`;
     this.hud.showTip(x, y, `<b>Pipe</b>Carries water from a pump or a reservoir to whatever stands beside it.<br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to lay · ${left}</span>`}`);
   }
 
@@ -5615,8 +5667,8 @@ export class Game {
     this.turntable?.update();
     // #624 Lantern: Bloombot's own light at night, from its research level (none before it)
     if (this.bot) this.bot.visuals.setLantern(this.sim.upgrades.lanternReach, 1 - this.dayNight.light, this.dayNight.lightShare, RESEARCH.lanternIntensity);
-    // #613: resting at home charges bloombot: show it, so the player knows to stand still
-    if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
+    // #613 / #784: charging from anything (the fountain, a bench, a Charger, a snack, the sun): show it
+    if (this.bot && !this.cinematic) this.showCharging(wdt);
     if (!this.cinematic) this.checkCozyUnlocks();
     if (rect) this.updateFallingLeaves(wdt, wind, rect);
     this.vfx.update(wdt, wind);
@@ -5671,7 +5723,9 @@ export class Game {
       const wv = this.weatherVisuals;
       wv.reducedMotion = this.settings.reducedMotion;
       wv.lowVfx = !!this.settings.lowVfx;
+      wv.lowTier = this.gfxTier === 'low'; // #830: fewer snowflakes on Low
       wv.update(wdt, this.weatherLook(), this.camera.target);
+      this.updateSeasonLook();
       this.sky.wind = wv.wind;
       this.clouds.gust = wv.wind;
     }

@@ -486,6 +486,9 @@ const signal = {
   /** the Bloom Pulse's ring racing out over the ground, and its sparks */
   bloomPulse: '#ffe27a',
   bloomPulseGreen: '#8dffb4',
+  /** #784: Bloombot charging (a bench, the fountain, a Charger, a snack): warm gold motes and mint ones rising off it */
+  chargeSpark: '#ffd968',
+  chargeSparkMint: '#9dffc8',
   /** the Solarbloom lotus (Emblem.ts), drawn in outline. In the world: its light (the halo, the glow along its lines
    * and the bright thread in them, leaves greener), its painted line under the light by day (gold, the leaves green),
    * and the goal's symbol in the centre petal, painted and glowing (rest in blue and cyan, so low charge stands apart).
@@ -632,6 +635,20 @@ export const PALETTE = {
   ...families,
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
   /**
+   * #830: the seasons (rendering/SeasonLook). `grass`: the colour green grass, lawns, shrubs and leaves drift toward in
+   * each season (summer is the world's own green). `autumn`: deciduous leaves turning gold, orange and russet. `blossom`:
+   * spring's soft pink and white blossom. `frost`: winter's frost and light snow; `snow`: falling snowflakes.
+   */
+  season: {
+    grass: { spring: '#9ccf5a', summer: '#6fa84a', autumn: '#b5a24c', winter: '#9fae96' },
+    autumn: ['#e0a93a', '#d9772e', '#b8452c'],
+    /** the last brown leaves hanging on in winter */
+    withered: '#8c6a45',
+    blossom: ['#f6b9cf', '#fbeef2'],
+    frost: '#e9f1f6',
+    snow: '#f4f8fb',
+  },
+  /**
    * #787: a region's works (ChunkRenderer `works`): a cabinet, winch, power feed or dome motor (power), a drinking
    * fountain, inlet or watering channel (water), clockwork or a lift's winding gear (drones). Dark: dull metal, an
    * unlit lamp, a dry bed, rust and dust. Running: a warm lamp, clear water, bright brass, a mint status light.
@@ -639,6 +656,8 @@ export const PALETTE = {
   works: { cabinet: '#5d6770', cabinetLit: '#6f8a8f', door: '#4c545b', lampOff: '#4a4640', lampOn: '#ffd56a', statusOff: '#7a3f36', statusOn: '#7cf7c8', cable: '#3f4246', rust: '#8a5a40', dust: '#a89f92', brass: '#c9a14a', steelClean: '#9aa4ad', bedDry: '#9a8a70', crack: '#6b5d4c', water: '#4cc3ea', waterHi: '#9fe3f5', moss: '#7fb35a', crystalOff: '#6e7a80', crystalOn: '#7cf7c8' },
   /** E23.7.2.2: the house's radio (the forecast) */
   radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
+  /** #783: the workbench beside the house, drawn by hand when its model isn't loaded (as the model: a warm top, cream legs) */
+  workbench: { top: '#b4703f', edge: '#8e5530', leg: '#e2d6bc', foot: '#6b4a2c', rack: '#9a6238', iron: '#4b4741', handle: '#c9a14a' },
   /** #628: the little tools and things Bloombot holds while it works (BotProps) */
   botProps: { metal: '#8d949b', metalDark: '#5d646b', wood: '#9a6b3f', cloth: '#b89c72', basket: '#c99a55', can: '#5fa8a0', brass: '#c9a14a', paper: '#f3ead2', stem: '#5c9a4c', petal: '#f39ab4', core: '#ffd25a', shell: '#f2c6b0', fruit: '#e0573f', glow: '#94ff6e' },
   /** #627: Sun soak's solar panel on Bloombot's pack: dark blue glass */

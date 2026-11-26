@@ -45,7 +45,7 @@ describe('E23.7.3: photo mode sets the time and the weather', () => {
     expect(photo.hour).toBeUndefined();
   });
 
-  it('the weather picker has sun, golden hour, cloud, rain, wind, storm and fog; golden hour sets the evening', () => {
+  it('the weather picker has sun, golden hour, cloud, rain, wind, storm, fog and snow (#830); golden hour sets the evening', () => {
     const { photo } = setup();
     photo.enter();
     expect(photo.weatherOverride()).toBeUndefined();
@@ -58,7 +58,7 @@ describe('E23.7.3: photo mode sets the time and the weather', () => {
         expect(photo.hour).toBe(GOLDEN_HOUR);
       }
     }
-    expect(seen).toEqual(['sunny', 'golden', 'cloudy', 'rain', 'wind', 'storm', 'fog', 'now']);
+    expect(seen).toEqual(['sunny', 'golden', 'cloudy', 'rain', 'wind', 'storm', 'fog', 'snow', 'now']);
   });
 
   it('filters go over the view and the picture', () => {

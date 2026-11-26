@@ -442,7 +442,9 @@ export interface SalvageState {
   works?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
-  /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
+  /** #783: where the workbench stands, beside the house (set on a new game, or on the first load of an older save) */
+  bench?: { x: number; z: number };
+  /** E23.6.1: the workbench's queue (recipe id, crafts left, seconds left on the one in hand) */
   craft?: { id: string; n: number; left: number }[];
   /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
   decorMade?: string[];
@@ -612,6 +614,13 @@ export interface GameState {
   charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
+  /** #830: the seasons (optional: a save from before them starts a fresh spring on the day it first loads) */
+  seasons?: SeasonsState;
+}
+
+/** #830: the year began on this game day (spring's first day); the season is worked out from the game clock. */
+export interface SeasonsState {
+  startDay: number;
 }
 
 /**

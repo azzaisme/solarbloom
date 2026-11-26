@@ -22,14 +22,14 @@ export function isFarmItem(m: string): m is FarmItem {
  * eating one (share of a full battery, 0–1); `load`: it can ride a loaded pulse (E23.2.2).
  */
 export const FARM_USES: Record<FarmItem, { charge: number; load: boolean; blurb: string }> = {
-  biomass: { charge: 0.04, load: false, blurb: 'Clippings, leaves and spent crops. Bloombot can eat it, compost it or feed it to a Bio Digester.' },
-  food: { charge: 0.12, load: false, blurb: 'Grown in planters. More charge than Greens, and Keepers love a gift of it.' },
+  biomass: { charge: 0.08, load: false, blurb: 'Clippings, leaves and spent crops. Bloombot can eat it, compost it or feed it to a Bio Digester.' },
+  food: { charge: 0.25, load: false, blurb: 'Grown in planters. More charge than Greens, and Keepers love a gift of it.' },
   compost: { charge: 0, load: false, blurb: 'From the compost bin. Given time it turns into fertiliser.' },
   fertiliser: { charge: 0, load: true, blurb: 'Pulse it into the ground for flowers, big trees and rare blooms.' },
   // E23.5.4.1: a strong snack
   // #785: each fruit's entry is filled in just below, between Food's and Honey's charge
   ...({} as Record<(typeof FRUIT_IDS)[number], { charge: number; load: boolean; blurb: string }>),
-  honey: { charge: 0.25, load: false, blurb: 'From beehives. A strong snack: much more charge than food.' },
+  honey: { charge: 0.4, load: false, blurb: 'From beehives. A strong snack: much more charge than food.' },
 };
 
 // #785: a fruit's charge sits its share of the way from Food's to Honey's (so it stays between them when they're tuned)

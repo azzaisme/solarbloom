@@ -203,6 +203,32 @@ interface PuffOpts {
  */
 export const LEAF_FLAG = 2;
 
+/**
+ * #830: added to a vertex's flex (on top of LEAF_FLAG, if any) to mark a leaf that follows the seasons: a deciduous
+ * tree's leaf cards and leafy clumps. The foliage shader turns these gold and red in autumn, blossoms them in spring
+ * and lets them fall in winter (rendering/SeasonLook). Evergreens (the Spire Pine), shrubs, grass and bark never
+ * carry it. `plainFlex` takes both flags off.
+ */
+export const SEASON_FLAG = 4;
+/** A vertex's own flex, without LEAF_FLAG or SEASON_FLAG (flex itself is always below 2). */
+export const plainFlex = (w: number) => w % LEAF_FLAG;
+/** #830: species that lose their leaves in winter (everything but the Spire Pine). */
+export const DECIDUOUS: Record<Species, boolean> = { oak: true, cherry: true, birch: true, pine: false, willow: true };
+
+/** #830: marks a deciduous tree's leaves (cards and leafy clumps) with SEASON_FLAG. */
+function seasonal(g: TreeGeo, sp: Species): TreeGeo {
+  return DECIDUOUS[sp] ? markSeasonLeaves(g) : g;
+}
+
+/** #830: marks every leaf card and leafy clump of a geometry with SEASON_FLAG (giant trees use it too). */
+export function markSeasonLeaves<T extends TreeGeo>(g: T): T {
+  const n = g.pos.length / 4;
+  const mark = new Uint8Array(n);
+  for (const s of g.leafStarts ?? []) for (let j = 0; j < LEAF_CARD_VERTICES && s + j < n; j++) mark[s + j] = 1;
+  for (let i = 0; i < n; i++) if (mark[i] || g.pos[i * 4 + 3] >= LEAF_FLAG) g.pos[i * 4 + 3] += SEASON_FLAG;
+  return g;
+}
+
 /** A soft, lumpy foliage clump: an ellipsoid with low-frequency bumps and baked sun / sky / ambient shading. */
 function puff(B: Buf, o: PuffOpts) {
   const ico = icosphere(o.detail);
@@ -617,9 +643,9 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
   const pal = leafPalette(sp, R, sh);
   if (form !== 'standard') {
     formTree(B, form, R, S, form === 'fruit' ? leafPalette('oak', R, sh) : pal, bark, barkDark, stage, lod);
-    return proportion(B, sh, variant, stage).done();
+    return seasonal(proportion(B, sh, variant, stage).done(), sp);
   }
-  if (lod === 0) return proportion(farTree(B, sp, R, S, pal, bark), sh, variant, stage).done();
+  if (lod === 0) return seasonal(proportion(farTree(B, sp, R, S, pal, bark), sh, variant, stage).done(), sp);
 
   if (sp === 'pine') pine(B, R, S, pal, bark, det, big, lod);
   else if (sp === 'willow') willow(B, R, S, pal, bark, barkDark, det, big, lod);
@@ -634,7 +660,7 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
   }
   // Radiant: moss-jar lanterns and golden sun-berries
   if (stage === 4 && lod > 0) radiant(B, R, sp, S);
-  return proportion(B, sh, variant, stage).done();
+  return seasonal(proportion(B, sh, variant, stage).done(), sp);
 }
 
 /**

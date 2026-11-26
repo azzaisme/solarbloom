@@ -13,7 +13,7 @@ export type ItemCost = Partial<Record<ItemId, number>>;
 
 /**
  * Where a recipe is unlocked:
- * - `home`: known from the start (the table is in the house from the first day)
+ * - `home`: known from the start (#783: the workbench stands beside the house from the first day)
  * - `keeper`: handed over when that region's Keeper wakes (one region at a time)
  * - `research`: a finished research project (E23.6.2), by project id
  * - `find`: a cache opened, by cache id (data/oldcity caches)

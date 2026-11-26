@@ -329,7 +329,7 @@ Make things at the crafting table, unlock more at the research station, and auto
 ### 6.1 The crafting table and recipes (#390)
 Raw materials become components; components become machines and decorations. Replaces E21.3's direct recipes.
 
-**6.1.1 The crafting table (#435).** In the house from the start, with Craft and Upgrade tabs (E22 panel rules, full controller support). Crafting takes a few seconds and pays from the backpack, then the store. Works on pad and keyboard.
+**6.1.1 The crafting table (#435).** (#783: now the workbench, its own wooden table with tools outside beside the house from the start; walk up to it and press Interact. Older saves get it on a free square beside the house.) Originally in the house from the start, with Craft and Upgrade tabs (E22 panel rules, full controller support). Crafting takes a few seconds and pays from the backpack, then the store. Works on pad and keyboard.
 
 **6.1.2 Components (#436).** Recipes in data; a data test checks each.
 

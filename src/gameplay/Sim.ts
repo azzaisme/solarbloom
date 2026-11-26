@@ -52,6 +52,7 @@ import { BuriedSystem } from './Buried';
 import { DroneFuel } from './DroneFuel';
 import { Clock } from './Clock';
 import { TreeGrowth, stampGiants } from './TreeGrowth';
+import { CraftBench, stampBench } from './CraftBench';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
 import { PlotWork } from './PlotWork';
@@ -59,6 +60,7 @@ import { FarmSystem } from './FarmSystem';
 import { CompostSystem } from './CompostSystem';
 import { FarmExtras } from './FarmExtras';
 import { Weather } from './Weather';
+import { Seasons } from './Seasons';
 import { DecaySystem } from './DecaySystem';
 
 /**
@@ -148,10 +150,14 @@ export class Sim {
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
+  /** #830: the seasons (spring, summer, autumn, winter) on the game clock. See gameplay/Seasons. */
+  readonly seasons: Seasons;
   /** E23.5.1: gathering biomass from restored ground. */
   readonly gather: GatherSystem;
   /** E27.2 (#680): gathering from and pruning the plant plots */
   readonly plotWork: PlotWork;
+  /** #783: the workbench beside the house, where Bloombot crafts. */
+  readonly bench: CraftBench;
   /** E23.5.2: planters and crops. */
   readonly farm: FarmSystem;
   /** E23.5.3: compost bins and Bio Digesters (old-city rules). */
@@ -189,7 +195,8 @@ export class Sim {
         const t = this.grid.peek(at.roofId, at.x, at.z);
         if (t && !t.occupantId) t.occupantId = decorOccupant(k);
       }
-      // world giants: their trunk cells are solid, as a decoration's tile
+      // #783: the workbench's square, then world giants: their trunk cells are solid, as a decoration's tile
+      if (c.layer === GROUND) stampBench(this.state, c.tiles);
       if (c.layer === GROUND) stampGiants(this, c.tiles);
     };
     // The world travels with the state (for saving) but is never part of its JSON.
@@ -212,6 +219,7 @@ export class Sim {
     this.clock = new Clock(this);
     this.trees = new TreeGrowth(this);
     this.nightFinds = new NightFinds(this);
+    this.seasons = new Seasons(this);
     this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
@@ -257,6 +265,10 @@ export class Sim {
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
     this.mainland.wire(); // E23.8.3.2: after every system (the grid and water network) is built
+    // #783: the workbench beside the house (a new game, or an older save's first load), once machines, decorations
+    // and pipes are all in place so it only takes a free square
+    this.bench = new CraftBench(this);
+    this.bench.ensure();
   }
 
   get time() {
@@ -354,6 +366,7 @@ export class Sim {
     this.parkGrowth.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
+    this.seasons.tick();
     this.weather.tick();
     this.farm.tick(dt);
     this.compost.tick(dt);
