@@ -142,6 +142,11 @@ export interface LayerData {
   template?: string;
   /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */
   cluster?: string;
+  /**
+   * #782: the inside of Bloombot's house: a room of floorboards, not a rooftop (nothing grows, no machines, no fog;
+   * drawn by rendering/HouseInterior and shown only while Bloombot is inside).
+   */
+  interior?: boolean;
 }
 
 /** Kept as an alias while the rooftop-era code is ported (City 12 removes it). */
@@ -430,6 +435,8 @@ export interface SalvageState {
   blueprints: string[];
   /** E21.11: the house's level (0 = the ruined shed) */
   house: number;
+  /** #782: what has been handed in toward the house's next level (part deliveries; cleared when it grows) */
+  houseDelivered?: Partial<Record<MaterialId, number>>;
   /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
   /** E23.7.4: when each pile that isn't full last gained a unit (sim time), by pile id: it refills from there */
@@ -448,6 +455,8 @@ export interface SalvageState {
   craft?: { id: string; n: number; left: number }[];
   /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
   decorMade?: string[];
+  /** #782: the decoration given when the fountain reached its first step (set once; absent before then) */
+  decorGift?: string;
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
   /** E23.6.4: what each supply crate holds, by machine id */

@@ -229,6 +229,9 @@ export const VERB_ACTS: Record<string, ActId | undefined> = {
   Feed: 'tend',
   Repair: 'repair',
   Mend: 'repair',
+  Grow: 'repair', // #782: the house's next level
+  'Go inside': 'reach', // #782: the house's door, opened
+  'Go outside': 'reach',
   Wake: 'wake',
   'Say hello': 'greet',
   'Talk to': 'greet',

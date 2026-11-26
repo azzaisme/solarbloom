@@ -92,7 +92,7 @@ export class Grid {
 
   /** Bounded (raised) layers of the rooftop campaign (generated city rooftops are separate: `clusterRoofs`). */
   get rooftops(): LayerData[] {
-    return this.allLayers.filter((l) => l.kind === 'raised' && !l.cluster);
+    return this.allLayers.filter((l) => l.kind === 'raised' && !l.cluster && !l.interior);
   }
 
   /** City 12.1: generated rooftops standing in city areas. */
@@ -106,6 +106,11 @@ export class Grid {
     if (had) return had;
     this.layers.set(l.id, l);
     return l;
+  }
+
+  /** #782: a bounded layer changed size (the house's room grew): its cached tile list is rebuilt on next use. */
+  resized(id: string) {
+    this.boundedTiles.delete(id);
   }
 
   /** Revealed and reachable: tiles can be restored and built on. */

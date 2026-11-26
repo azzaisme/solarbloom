@@ -33,7 +33,13 @@ import { ORCHARD } from '../data/farmExtras';
 import { FRUITS, isFruit } from '../data/fruit';
 import { fruitShort, fruitTip } from '../ui/FruitWords';
 import { EXPLORE } from '../rendering/CameraController';
-import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
+import { HOUSE, HOUSE_GROWTH, KEEPSAKES, OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
+import { HouseInterior } from '../rendering/HouseInterior';
+
+/** #782: saved once the player has been told the house can be mended (presentation: `salvage.seen`). */
+const HOUSE_HINT = 'house:canMend';
+/** #782: seconds the house's hint waits after the gift's toast, so the two never crowd the toast queue together */
+const HOUSE_HINT_WAIT = 20;
 import { allPiles, seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
@@ -133,7 +139,7 @@ import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
 import { Cozy } from '../gameplay/Cozy';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS, PLOT_WORK_TUNING } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS, PLOT_WORK_TUNING, type DecorOption } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
 import type { Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
@@ -529,7 +535,9 @@ export class Game {
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
     this.nightFindVisuals = new NightFindVisuals(this.sim, this.scene.world, (x, z) => this.groundY(x, z));
     this.weatherVisuals = new WeatherVisuals(this.app, this.scene.world);
-    buildRadio(this.scene.world, (x, z) => this.groundY(x, z));
+    this.outsideRadio = buildRadio(this.scene.world, (x, z) => this.groundY(x, z));
+    // #782: the house's inside (drawn high over the park, shown while Bloombot is in it)
+    this.houseInside = new HouseInterior(this.sim, this.scene.world, this.app.graphicsDevice, () => this.cozy.decorations().filter((d) => this.sim.house.isInside(d.roofId)), () => this.keepsakesFound().length);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onWisp = (_m, at) => this.vfx.burst(at, 1, { up: 0.5, speed: 0.12, size: 0.035, life: 1.3, gravity: 0 }); // Phase 5 E16: running machines only
     this.machines.onActivated = (_m, at) => {
@@ -1193,11 +1201,14 @@ export class Game {
    * world (done once this exists), the chunks round bloombot built with those models, and a few frames drawn
    * with everything in place (shaders compiled).
    */
+  /** #782: the loading screen has faded (`shown`): gifts and hints wait for it, so none plays behind it unseen */
+  private onScreen = false;
   /** Notes for the player that wait until the loading screen has faded (`shown`), so none expires unseen. */
   private openingNotes: (() => void)[] = [];
 
   /** E23.1.1: the loading screen has faded and the world is on screen: show the waiting notes. */
   shown() {
+    this.onScreen = true;
     const notes = this.openingNotes.splice(0);
     notes.forEach((n, i) => setTimeout(n, 400 + i * 600));
   }
@@ -1253,6 +1264,7 @@ export class Game {
       desktop: !!desktopApi()?.quit,
       header: () => this.menuHeader(),
       choose: (i) => this.menuChoose(i),
+      canGoHome: () => this.canGoHome(),
       // E23.11: Quit to title saves first; it asks only when that save can't be written (storage full or off)
       unsaved: () => {
         if (this.resetting) return false;
@@ -1342,6 +1354,115 @@ export class Game {
     return (f.x >= h.x && f.x < h.x + h.size && f.z >= h.z && f.z < h.z + h.size) || (f.x === h.door[0] && f.z === h.door[1]);
   }
 
+  /**
+   * #782: what Bloombot can do inside the house: the furniture in front of it (the bed from dusk, the radio, the
+   * chest, the keepsake shelf, the journal desk) and the door (going out).
+   */
+  private houseInsideCandidates(f: { x: number; z: number }, fd: number): InteractTarget[] {
+    const s = this.sim;
+    const h = s.house;
+    const [dx, dz] = h.doorInside();
+    const front = s.grid.get(h.layerId, f.x, f.z);
+    const out: InteractTarget[] = [];
+    if (f.x === dx && (f.z === dz || f.z === dz + 1)) out.push({ kind: 'door', id: 'house:exit', verb: 'Go outside', name: '', distance: fd, at: front, run: () => this.exitHouse() });
+    const piece = h.furnitureAt(f.x, f.z);
+    if (!piece) return out;
+    const frame = { roofId: h.layerId, x: piece.x, z: piece.z, size: Math.max(piece.w, piece.d) };
+    const add = (t: Omit<InteractTarget, 'distance' | 'at' | 'frame'>) => out.push({ ...t, distance: fd, at: front, frame });
+    if (piece.id === 'bed')
+      add({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', refused: s.clock.canSleep() ? undefined : 'The bed is for the night: come back at dusk', run: () => this.sleep() });
+    else if (piece.id === 'radio') add({ kind: 'door', id: 'house:radio', verb: piece.verb, name: piece.name, run: () => this.listenToRadio() });
+    else if (piece.id === 'chest') add({ kind: 'storage', id: 'house:chest', verb: piece.verb, name: piece.name, run: () => this.oc?.openStorage('The chest in the house') });
+    else if (piece.id === 'shelf') add({ kind: 'door', id: 'house:shelf', verb: piece.verb, name: piece.name, run: () => this.lookAtShelf() });
+    else add({ kind: 'door', id: 'house:desk', verb: piece.verb, name: 'your journal', run: () => this.readAtDesk() });
+    return out;
+  }
+
+  /** #782: the keepsakes standing on the shelf (the ones the Keepers have given). */
+  private keepsakesFound(): string[] {
+    const st = this.sim.state;
+    const have = new Set([...(st.cozy?.decorUnlocked ?? []), ...(st.salvage?.items ?? []), ...(st.salvage?.caches ?? [])]);
+    return KEEPSAKES.filter((k) => have.has(k.id)).map((k) => k.name);
+  }
+
+  private lookAtShelf() {
+    const ks = this.keepsakesFound();
+    this.hud.toast(ks.length ? `🏺 The keepsake shelf<small>${ks.join(', ')}. Each one from a friend.</small>` : '🏺 The keepsake shelf<small>Empty for now. When a Keeper gives you a keepsake, it will stand here.</small>', '', 5);
+  }
+
+  private readAtDesk() {
+    this.hud.backpack.open('journal');
+    this.syncPanelPause();
+  }
+
+  /** #782: the radio by the ruined shed's door (it moves inside once the house is mended) */
+  private outsideRadio?: pc.Entity;
+  /** #782: the inside of the house */
+  private houseInside!: HouseInterior;
+
+  /** #782: per frame: the room shows while Bloombot is in it; the camera stays indoors there; the old radio goes in. */
+  private updateHouse() {
+    const inside = !!this.bot && this.sim.house.isInside(this.bot.pose.roofId);
+    if (inside && !this.camera.isIndoors) this.camera.indoors(true); // a game saved inside comes back inside
+    this.houseInside.update(inside);
+    if (this.outsideRadio) this.outsideRadio.enabled = !this.sim.house.hasInside();
+  }
+
+  /** #782: the camera's look before Bloombot went inside (put back when it comes out). */
+  private outsideView?: ReturnType<CameraController['snapshot']>;
+
+  /** #782: in through the door: Bloombot stands just inside it, and the view comes in close over the room. */
+  enterHouse() {
+    const b = this.bot;
+    const h = this.sim.house;
+    if (!b || !h.hasInside() || this.cinematic) return;
+    this.cozy.clearCells(h.sync());
+    const [dx, dz] = h.doorInside();
+    this.outsideView = this.camera.snapshot();
+    b.teleport(h.layerId, dx + 0.5, dz - 0.5);
+    b.turnTo(Math.PI); // turning to face into the room (north)
+    this.camera.indoors(true);
+    this.houseInside.update(true);
+    this.sfx.click?.();
+    this.save();
+  }
+
+  /** #782: the Home (level 4) lets Bloombot go home from anywhere: not while it is home already, or in a cinematic. */
+  private canGoHome(): boolean {
+    const b = this.bot;
+    return !!b && this.sim.house.level >= HOUSE_GROWTH.goHomeLevel && !this.cinematic && !this.sim.house.isInside(b.pose.roofId) && !this.resting?.active;
+  }
+
+  /** #782: Go home: the screen fades, and Bloombot is on its doorstep, facing the park. */
+  goHome() {
+    const b = this.bot;
+    if (!b || !this.canGoHome()) return;
+    const [x, z] = PARK_SET.shed.door;
+    this.overlays.hideGhost();
+    if (this.building()) this.selectTool('inspect');
+    b.teleport(GROUND, x + 0.5, z + 0.6);
+    b.turnTo(0); // turning to face the park
+    this.camera.recentre();
+    this.hud.toast(WORDS.house.home, '', 3.5);
+    this.save();
+  }
+
+  /** #782: out through the door, onto the step in front of the house, facing the park. */
+  exitHouse() {
+    const b = this.bot;
+    if (!b || !this.sim.house.isInside(b.pose.roofId)) return;
+    const [x, z] = PARK_SET.shed.door;
+    b.teleport(GROUND, x + 0.5, z + 0.6);
+    b.turnTo(0); // turning to face the park
+    this.camera.indoors(false);
+    if (this.outsideView) this.camera.restore(this.outsideView);
+    this.outsideView = undefined;
+    this.camera.recentre();
+    this.houseInside.update(false);
+    this.sfx.click?.();
+    this.save();
+  }
+
   /** E23.7.1.3: sleep in the house until morning: the screen dims, the clock skips the night, charge is full. */
   private sleeping = false;
   private sleep() {
@@ -1376,7 +1497,7 @@ export class Game {
 
   /** E23.7.2: the weather the screen shows (photo mode may pick its own, E23.7.3). */
   private weatherLook(): WeatherLook {
-    return { kind: sceneNow(this.sim, this.photo).weather };
+    return { kind: sceneNow(this.sim, this.photo).weather, indoors: !!this.bot && this.sim.house.isInside(this.bot.pose.roofId) };
   }
 
   /**
@@ -1405,6 +1526,7 @@ export class Game {
   private regionName(): string {
     const b = this.bot;
     const at = b ? b.world() : [this.camera.target.x, 0, this.camera.target.z];
+    if (b && this.sim.house.isInside(b.pose.roofId)) return `Home: the ${this.sim.house.current()?.name.toLowerCase() ?? 'house'}`; // #782
     if (b && b.pose.roofId !== GROUND) return 'On a rooftop';
     const id = this.sim.areas.areaOf({ roofId: GROUND, x: Math.floor(at[0]), z: Math.floor(at[2]) });
     if (!id) return 'The city';
@@ -1425,6 +1547,9 @@ export class Game {
         this.closeMenu();
         if (!this.overviewOn) this.toggleOverview();
         return;
+      case 'home':
+        this.closeMenu();
+        return this.goHome();
       case 'photo':
         this.closeMenu();
         return this.photo.enter();
@@ -2579,6 +2704,7 @@ export class Game {
     const s = this.sim;
     const oc = this.oc!;
     const b = this.bot!;
+    if (s.house.isInside(b.pose.roofId)) return this.houseInsideCandidates(f, fd); // #782
     if (b.pose.roofId !== GROUND) return [];
     const occ = front ? s.occupant(front) : undefined;
     const run = () => void oc.interact(f, occ);
@@ -2589,6 +2715,16 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
+    // #782: the house. Its door (the cell before it, or the wall behind it): go inside, once it has been mended. Its
+    // walls: see and bring what its next level needs (before it is mended, the door does that too).
+    const sh = PARK_SET.shed;
+    const hs = s.house;
+    const atDoor = (f.x === sh.door[0] && f.z === sh.door[1]) || (f.x === sh.door[0] && f.z === sh.door[1] - 1);
+    const wall = f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size;
+    const houseName = hs.current() ? `the ${hs.current()!.name.toLowerCase()}` : 'the house';
+    if (hs.hasInside() && atDoor) out.push({ kind: 'door', id: 'house:enter', verb: 'Go inside', name: houseName, distance: fd, at: front, run: () => this.enterHouse() });
+    else if (hs.next() && (wall || (atDoor && !hs.hasInside() && f.z !== sh.door[1])))
+      out.push({ kind: 'door', id: 'house:grow', verb: hs.hasInside() ? 'Grow' : 'Mend', name: houseName, distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size }, run: () => oc.openHouse() });
     // #783: the workbench stands outside beside the house from the start: walk up to it and Interact opens crafting.
     // The house is a home only (its radio by day, its bed from dusk).
     if (s.bench.isAt(GROUND, f.x, f.z))
@@ -2601,8 +2737,9 @@ export class Game {
         },
       });
     // the house: its radio's forecast by day, its bed from dusk
-    if (this.atHouse(f) && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
-    if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
+    // (#782: once the house is mended they are inside it: its bed and its radio)
+    if (!hs.hasInside() && this.atHouse(f) && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
+    if (!hs.hasInside() && this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
     const pile = s.salvage.pileAt(f.x, f.z);
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: s.upgrades.salvageHold, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
@@ -3016,7 +3153,9 @@ export class Game {
   pick(x: number, y: number): Pick | undefined {
     const { o, d } = this.camera.ray(x, y);
     // The endless ground only once it's playable (the rooftop campaign shows it as scenery).
-    const layers = this.sim.grid.allLayers.filter((l) => l.kind === 'raised' || l.unlocked);
+    // #782: inside the house only its floor; outside never the house's inside (it hangs high over the park)
+    const inside = this.sim.house.isInside(this.bot?.pose.roofId);
+    const layers = this.sim.grid.allLayers.filter((l) => (inside ? !!l.interior : !l.interior && (l.kind === 'raised' || l.unlocked)));
     const hit = pickLayers(layers, o, d);
     if (!hit) return undefined;
     // E21.24: the Old City's terraces: the first ground the ray meets as drawn (terraces, slopes, sunk fog)
@@ -3430,7 +3569,7 @@ export class Game {
   solidAt(x: number, y: number, z: number): boolean {
     if (y < this.groundY(x, z)) return true;
     for (const l of this.sim.grid.allLayers) {
-      if (l.kind !== 'raised' || !l.unlocked) continue;
+      if (l.kind !== 'raised' || !l.unlocked || l.interior) continue; // #782: the house's inside stands apart
       const lx = x - l.origin[0];
       const lz = z - l.origin[2];
       if (lx >= 0 && lz >= 0 && lx < l.width && lz < l.depth && y < l.origin[1] + l.height + SLAB_TOP) return true;
@@ -3732,9 +3871,16 @@ export class Game {
       dz = Math.cos(b.pose.facing);
       d = 1;
     }
-    const want = Math.min(reach, Math.max(1, d));
+    let want = Math.min(reach, Math.max(1, d));
     fx = b.pose.x + (dx / d) * want;
     fz = b.pose.z + (dz / d) * want;
+    // #782: the aim is measured to a point, reach to the square's middle: step back until that square is in reach,
+    // so a hologram at the edge of reach never lands on a square that then says "Too far"
+    while (want > 1 && !this.inReach(b.pose.roofId, Math.floor(fx), Math.floor(fz), 1)) {
+      want = Math.max(1, want - 0.25);
+      fx = b.pose.x + (dx / d) * want;
+      fz = b.pose.z + (dz / d) * want;
+    }
     const tile = this.sim.grid.get(b.pose.roofId, Math.floor(fx), Math.floor(fz));
     return tile ? { roofId: b.pose.roofId, fx, fz, tile } : undefined;
   }
@@ -4151,6 +4297,18 @@ export class Game {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Grow it in an empty plot on green ground.</small>`, 'gold', 4.5);
+    // #782: the fountain's first step gives the first decoration (a save already past it, once)
+    const gift = this.onScreen ? this.cozy.giveFirstDecor() : undefined;
+    if (gift) {
+      this.decorGift(gift);
+      this.houseHintAfter = this.clock + HOUSE_HINT_WAIT; // the gift's toast first, the house's after it
+    }
+    // #782: once, when the house can first be mended: where to go and what to press
+    const hs = this.sim.house;
+    if (this.onScreen && this.clock >= this.houseHintAfter && hs.open() && hs.level === 0 && !this.sim.state.salvage?.seen?.includes(HOUSE_HINT)) {
+      this.sim.salvage.see(HOUSE_HINT);
+      this.hud.toast(WORDS.house.canMend, 'gold', 7);
+    }
     for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
@@ -4158,6 +4316,27 @@ export class Game {
       const [bx, , bz] = this.bot.world();
       if (Math.hypot(bx - (pp.x + pp.size / 2), bz - (pp.z + pp.size / 2)) > 4.5 || this.bot.pose.roofId !== GROUND) this.hud.closePlotPicker();
     }
+  }
+
+  /** #782: the house's hint waits until this clock time (the gift's toast has its moment first) */
+  private houseHintAfter = 0;
+
+  /**
+   * #782: the first decoration arrived. One toast says what it is and how to put it down; the build menu opens on it
+   * next time; and it goes on a free button of the build bar (when one is free and it isn't there already).
+   */
+  private decorGift(o: DecorOption) {
+    const tool: Tool = `decor:${o.id}`;
+    this.hud.toast(WORDS.decor.gift(o.icon, o.name), 'gold', 8);
+    this.hud.buildMenu.showNext(tool);
+    const slots = this.hud.buildBar.slots();
+    const free = slots.indexOf('');
+    if (!slots.includes(tool) && free >= 0) {
+      slots[free] = tool;
+      this.setSetting('hotbar', slots);
+      this.hud.buildBar.render(this.hud.currentTool);
+    }
+    this.save();
   }
 
   /** Look 6.10: the name of the stage a tile's transition is in (inspect panel). */
@@ -4930,6 +5109,22 @@ export class Game {
       const u = RESEARCH_UPGRADES.find((x) => x.id === id);
       if (u?.branch === 'bloombot') this.grown.push(WORDS.bloombot.upgraded(u.name, level, u.levels.length));
     });
+    // #782: the house grew: it is drawn anew, its room's furniture moves any decoration out of its way, and a toast says so
+    b.on('house.level', ({ level }) => {
+      this.cozy.clearCells(s.house.sync());
+      const sh = PARK_SET.shed;
+      for (let z = sh.z - 2; z <= sh.z + sh.size + 2; z++) for (let x = sh.x - 2; x <= sh.x + sh.size + 2; x++) {
+        const t = s.grid.get(GROUND, x, z);
+        if (t) this.chunks.markTile(t);
+      }
+      const lv = HOUSE[level - 1];
+      if (lv) this.hud.toast(WORDS.house.grew(lv.name, WORDS.house.gives(lv.gives), lv.decor, level === 1, level === HOUSE_GROWTH.goHomeLevel), 'gold', 7);
+      const [wx, wy, wz] = s.grid.tileWorld(s.grid.get(GROUND, sh.x + 1, sh.z + 1)!);
+      this.vfx.ring(new pc.Vec3(wx, wy + 0.1, wz), PALETTE.gold, 3, 0.9);
+      this.vfx.burst(new pc.Vec3(wx, wy + 1.4, wz), 20, { up: 3, speed: 1.6, size: 0.07, life: 1.3 });
+      this.sfx.fanfare();
+      this.save();
+    });
     b.on('fountain.tier', ({ tier }) => {
       this.applyFountainLook(false);
       this.celebrateTier(tier);
@@ -5670,6 +5865,7 @@ export class Game {
     // #613 / #784: charging from anything (the fountain, a bench, a Charger, a snack, the sun): show it
     if (this.bot && !this.cinematic) this.showCharging(wdt);
     if (!this.cinematic) this.checkCozyUnlocks();
+    this.updateHouse();
     if (rect) this.updateFallingLeaves(wdt, wind, rect);
     this.vfx.update(wdt, wind);
     // E24 (#609): the old gold arrow is retired; the waymark (a soft light on the goal spot) took its place

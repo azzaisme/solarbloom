@@ -6,6 +6,8 @@ import { color, PALETTE } from './Materials';
 /** What the weather looks like at a moment (from the sim, or photo mode's own pick). */
 export interface WeatherLook {
   kind: WeatherKind;
+  /** #782: the view is inside the house: no rain or snow falls there (the sky outside keeps its mood) */
+  indoors?: boolean;
 }
 
 const DROPS = 1400;
@@ -145,10 +147,12 @@ export class WeatherVisuals {
     this.overcastNow += (e.overcast - this.overcastNow) * ease;
     this.viewNow += (e.view - this.viewNow) * ease;
     this.windNow += (e.wind - this.windNow) * ease;
-    const snowing = look.kind === 'snow';
-    const rainTarget = snowing ? 0 : Math.min(1, e.rain);
-    this.rainA += (rainTarget - this.rainA) * ease;
-    this.snowA += ((snowing ? 1 : 0) - this.snowA) * ease;
+    const snowing = look.kind === 'snow' && !look.indoors;
+    const rainTarget = snowing || look.indoors ? 0 : Math.min(1, e.rain);
+    // indoors the rain and snow stop at once (no fade: there is a roof)
+    const k = look.indoors ? 1 : ease;
+    this.rainA += (rainTarget - this.rainA) * k;
+    this.snowA += ((snowing ? 1 : 0) - this.snowA) * k;
     this.updateSnow(dt, around);
     // lightning: a storm flashes now and then (never with reduced motion: no strobing)
     this.flash = Math.max(0, this.flash - dt * 3.5);

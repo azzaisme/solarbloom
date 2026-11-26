@@ -153,6 +153,7 @@ export class ChargeSystem {
 
   /** Is bloombot standing at home (by the park's fountain or the house) right now? */
   atHome(at = this.sim.bot): boolean {
+    if (at && this.sim.house?.isInside(at.roofId)) return true; // #782: inside the house is home too
     if (!at || at.roofId !== GROUND) return false;
     const R = CHARGE.home.radius;
     const x = Math.floor(at.x);
