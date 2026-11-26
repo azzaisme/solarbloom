@@ -112,6 +112,12 @@ body.photo #tally { display: none; }
 #chargeRow.empty .pct { color: var(--ink-2); }
 #chargeRow.eating .sg-bar > i { background: var(--leaf-bar); }
 #chargeRow.calm { opacity: .35; }
+/* #784: charging from anything: a green glow round the card, the badge breathing and a soft shine along the bar */
+#chargeRow.charging { box-shadow: var(--glow-green), var(--card-lift); }
+#chargeRow.charging .sg-badge { animation: charge-up 1.2s ease-in-out infinite; }
+#chargeRow.charging:not(.eating) .sg-bar > i { background: var(--leaf-bar); }
+@keyframes charge-up { 50% { transform: scale(1.12); } }
+body.reduced #chargeRow.charging .sg-badge { animation: none; }
 @keyframes charge-low { 50% { opacity: .5; } }
 /* the pulse load chip under the charge ("Seeds loaded"), unless the load is nothing */
 #loadChip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px 0 8px; border-radius: 999px; background: var(--paper-a); box-shadow: var(--shadow-sm); font: 800 16px var(--font-ui); color: var(--ink); white-space: nowrap; }

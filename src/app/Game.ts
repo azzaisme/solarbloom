@@ -4,6 +4,7 @@ import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { WORDS } from '../ui/words';
 import { BLOOMBOT_PAGE, CLICK, dueIdea, markShown, startIdeas, type Idea } from '../ui/GuideLines';
+import { CHARGE } from '../data/charge';
 import { RESEARCH, RESEARCH_UPGRADES } from '../data/research';
 import { PARK_GROWTH } from '../data/bloombot';
 import { goalSpot, type GoalSpot } from '../ui/GoalSpot';
@@ -1121,6 +1122,34 @@ export class Game {
     this.leafTimer = window.setTimeout(() => leaf.classList.remove('on'), 1000);
   }
   private leafTimer = 0;
+  /** #784: seconds until the next charging sparkle on Bloombot */
+  private chargeSparkleIn = 0;
+
+  /**
+   * #784: the player must see Bloombot charging, whatever it charges from. Sparkles rise from Bloombot (calm ones
+   * with reduced motion), the meter glows (ChargeMeter reads `chargingFrom` too), and the chip low on screen reads
+   * "Charging up" with how full it is. Meditating at a Charger with no power says what it is waiting for.
+   */
+  private showCharging(dt: number) {
+    const c = this.sim.charge;
+    const from = c.chargingFrom;
+    const sat = this.sim.rest.sitting;
+    if (!from) {
+      this.chargeSparkleIn = 0;
+      if (sat?.kind === 'charger' && c.share < 1) this.hud.guide.charging(WORDS.objective.chargerNeedsSun, c.share);
+      return;
+    }
+    if (c.share < 1) this.hud.guide.charging(WORDS.objective.charging, c.share);
+    this.chargeSparkleIn -= dt;
+    if (this.chargeSparkleIn > 0 || !this.bot) return;
+    const f = CHARGE.feedback;
+    this.chargeSparkleIn = f.sparkleEvery;
+    const [x, y, z] = this.bot.world();
+    // seated, the bot sits on the seat (or the pad) above its feet
+    const seat = this.bot.seat;
+    const at = seat ? new pc.Vec3(seat.x, seat.y + f.lift, seat.z) : new pc.Vec3(x, y + f.lift, z);
+    this.vfx.sparkles(at, f.sparkles, true);
+  }
   private models?: ModelLibrary;
   /** the device the title screen was driven with (it picks the first glyph set) */
   private startDevice: 'keys' | 'pad' = 'keys';
@@ -5567,8 +5596,8 @@ export class Game {
     this.turntable?.update();
     // #624 Lantern: Bloombot's own light at night, from its research level (none before it)
     if (this.bot) this.bot.visuals.setLantern(this.sim.upgrades.lanternReach, 1 - this.dayNight.light, this.dayNight.lightShare, RESEARCH.lanternIntensity);
-    // #613: resting at home charges bloombot: show it, so the player knows to stand still
-    if (this.bot && !this.cinematic && this.sim.charge.resting && this.sim.charge.share < 1) this.hud.guide.charging(WORDS.objective.charging, this.sim.charge.share);
+    // #613 / #784: charging from anything (the fountain, a bench, a Charger, a snack, the sun): show it
+    if (this.bot && !this.cinematic) this.showCharging(wdt);
     if (!this.cinematic) this.checkCozyUnlocks();
     if (rect) this.updateFallingLeaves(wdt, wind, rect);
     this.vfx.update(wdt, wind);

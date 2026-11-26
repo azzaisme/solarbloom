@@ -159,6 +159,8 @@ export const WORDS = {
     showWhere: 'Show me where',
     /** #613: resting at home (the fountain or the house), shown while it charges */
     charging: 'Charging up',
+    /** #784: meditating at a Charger that has no power just now (night, or no Solar Panel with it) */
+    chargerNeedsSun: 'The charger is waiting for sunshine',
     /** #605: Show me where with nowhere to point */
     nowhere: 'Nothing to point at just now',
     /** a count, only for things gathered or restored by hand */
