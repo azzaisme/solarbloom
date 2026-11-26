@@ -33,6 +33,7 @@ export interface OldCityHost {
   openStorage?(title: string): void;
   /** E23.9.1: opens the backpack's journal at a page */
   openPage?(id: string): void;
+  talkToTide?(panel: OldCityPanel, talk: () => void): void;
   /** plays a sound by name, if the game has it */
   sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
   /** redraws the ground tile at a cell */
@@ -196,7 +197,7 @@ export class OldCityController {
       return true;
     }
     if (!this.panel.isOpen) return false;
-    this.panel.close();
+    this.panel.back();
     return true;
   }
 
@@ -221,9 +222,14 @@ export class OldCityController {
       return true;
     }
     if (keeper && this.sim.keepers.visible(keeper.id)) {
-      const r = this.sim.keepers.interact(keeper.id);
-      if (r === 'gave' || r === 'done' || r === 'woke') this.host.sound('deliver');
-      this.host.bot.visuals.play('interact');
+      const talk = () => {
+        const r = this.sim.keepers.interact(keeper.id);
+        if (r === 'gave' || r === 'done' || r === 'woke') this.host.sound('deliver');
+        this.host.bot.visuals.play('interact');
+      };
+      if (keeper.id === 'tide' && this.sim.keepers.step(keeper.id) !== 'asleep' && this.host.talkToTide) {
+        this.host.talkToTide(this.panel, talk);
+      } else talk();
       return true;
     }
     // E23.9.1: a page of the maker's journal: keep it and read it (again, if it was read before)
