@@ -1175,11 +1175,14 @@ export class Game {
    * world (done once this exists), the chunks round bloombot built with those models, and a few frames drawn
    * with everything in place (shaders compiled).
    */
+  /** #782: the loading screen has faded (`shown`): gifts and hints wait for it, so none plays behind it unseen */
+  private onScreen = false;
   /** Notes for the player that wait until the loading screen has faded (`shown`), so none expires unseen. */
   private openingNotes: (() => void)[] = [];
 
   /** E23.1.1: the loading screen has faded and the world is on screen: show the waiting notes. */
   shown() {
+    this.onScreen = true;
     const notes = this.openingNotes.splice(0);
     notes.forEach((n, i) => setTimeout(n, 400 + i * 600));
   }
@@ -4248,14 +4251,14 @@ export class Game {
     this.cozyCheckAt = this.clock + 1;
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Grow it in an empty plot on green ground.</small>`, 'gold', 4.5);
     // #782: the fountain's first step gives the first decoration (a save already past it, once)
-    const gift = this.cozy.giveFirstDecor();
+    const gift = this.onScreen ? this.cozy.giveFirstDecor() : undefined;
     if (gift) {
       this.decorGift(gift);
       this.houseHintAfter = this.clock + HOUSE_HINT_WAIT; // the gift's toast first, the house's after it
     }
     // #782: once, when the house can first be mended: where to go and what to press
     const hs = this.sim.house;
-    if (this.clock >= this.houseHintAfter && hs.open() && hs.level === 0 && !this.sim.state.salvage?.seen?.includes(HOUSE_HINT)) {
+    if (this.onScreen && this.clock >= this.houseHintAfter && hs.open() && hs.level === 0 && !this.sim.state.salvage?.seen?.includes(HOUSE_HINT)) {
       this.sim.salvage.see(HOUSE_HINT);
       this.hud.toast(WORDS.house.canMend, 'gold', 7);
     }
