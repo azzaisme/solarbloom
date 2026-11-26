@@ -75,6 +75,8 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     const steps = [
       { done: d.fog !== 'hidden', label: 'Out of the fog, beside ground you cleared' },
       { done: cleared || d.restored >= d.need, label: `Turn ${d.need} patches of ground green (${Math.min(d.restored, d.need)} of ${d.need})` },
+      // #787: a gated region's works (power, water or drones) come before its landmark can wake
+      ...(s.works.def(a.region ?? id) ? [{ done: s.works.running(a.region ?? id), label: esc(s.works.def(a.region ?? id)!.goal) }] : []),
       { done: cleared, label: `Wake the ${esc(a.landmarkName)}` },
     ];
     checklist = steps.map((x) => `<li>${x.done ? '✅' : '⬜'} ${x.label}</li>`).join('');

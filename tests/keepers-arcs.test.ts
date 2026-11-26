@@ -74,6 +74,11 @@ describe('E23.9.2: every Keeper, from waking to friendship', () => {
       sim.bot = { roofId: GROUND, x: k.x + 0.5, z: k.z + 1.5 };
       // the store is reached from anywhere once it's near; hand everything over from the pack to be sure
       for (const [m, n] of Object.entries(k.landmark) as [MaterialId, number][]) sim.inventory.withdraw(m, n);
+      // #787: a gated region's landmark waits on its works (tests/region-works.test.ts builds them for real)
+      if (sim.works.gated(r.id)) {
+        expect(sim.landmarks.problem(r.id)).toContain(sim.works.def(r.id)!.dark);
+        sim.works.start(r.id);
+      }
       expect(sim.landmarks.interact(r.id)).toBe('woke');
       expect(sim.keepers.step(k.id)).toBe('settled');
       expect(said.at(-1)).toContain(story.arc.tender[0]);

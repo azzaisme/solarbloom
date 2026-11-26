@@ -254,6 +254,9 @@ export class Advisor {
     const pinned = s.keepers.pinned();
     if (pinned) {
       const k = s.keepers.def(pinned.id);
+      // #787: its landmark waits on the region's works: lead to the dark piece and say what to build there
+      const w = s.keepers.step(pinned.id) === 'landmark' ? s.works.def(k.region) : undefined;
+      if (w && !s.works.running(k.region)) return { topic: 'keeper', text: pinned.text, label: '🔧 Show me where', action: { kind: 'focus', x: w.x, z: w.z }, place: { kind: 'machine', name: w.name } };
       return { topic: 'keeper', text: pinned.text, label: `🤖 Find ${k.name}`, action: { kind: 'focus', x: k.x, z: k.z }, place: { kind: 'keeper', name: k.name } };
     }
     const shut = REGIONS.filter((q) => q.gate.opensRegion !== false && !s.gates.isOpen(q.gate.id));

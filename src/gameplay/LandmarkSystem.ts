@@ -46,6 +46,9 @@ export class LandmarkSystem {
     if (done < need) return `Turn more of ${r.name} green first: ${done} of ${need}`;
     const k = this.sim.keepers.def(r.keeper);
     if (this.sim.keepers.step(r.keeper) !== 'landmark') return `${k.name} has something to ask first`;
+    // #787: a gated region's landmark waits on its works (power, water or drones: only building gives them)
+    const w = this.sim.works.def(r.id);
+    if (w && !this.sim.works.running(r.id)) return `The ${r.landmark.name} can't wake yet. ${w.dark} ${w.how}`;
     return undefined;
   }
 
