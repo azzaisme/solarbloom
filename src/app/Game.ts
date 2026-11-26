@@ -31,6 +31,9 @@ import { isExtra } from '../gameplay/FarmExtras';
 import { EXPLORE } from '../rendering/CameraController';
 import { HOUSE, HOUSE_GROWTH, KEEPSAKES, OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { HouseInterior } from '../rendering/HouseInterior';
+
+/** #782: saved once the player has been told the house can be mended (presentation: `salvage.seen`). */
+const HOUSE_HINT = 'house:canMend';
 import { allPiles, seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
@@ -4201,6 +4204,12 @@ export class Game {
     // #782: the fountain's first step gives the first decoration (a save already past it, once)
     const gift = this.cozy.giveFirstDecor();
     if (gift) this.decorGift(gift);
+    // #782: once, when the house can first be mended: where to go and what to press
+    const hs = this.sim.house;
+    if (hs.open() && hs.level === 0 && !this.sim.state.salvage?.seen?.includes(HOUSE_HINT)) {
+      this.sim.salvage.see(HOUSE_HINT);
+      this.hud.toast(WORDS.house.canMend, 'gold', 7);
+    }
     for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;

@@ -192,6 +192,8 @@ export const WORDS = {
   },
   /** #782: the house grows */
   house: {
+    /** the fountain's first step: the house can be mended now */
+    canMend: '🏡 The old shed can be mended now<small>Walk up to its front wall, beside the door, and press {interact} to see what it needs.</small>',
     /** Go home (the Home's gift): Bloombot is on its doorstep */
     home: '🏡 Home again<small>Bloombot is on its own doorstep.</small>',
     /** a level reached: its name, what it brings, and that there is an inside to go into */
