@@ -45,7 +45,7 @@ describe('First power in the park', () => {
 
     sim.bot = { roofId: GROUND, x: 12.5, z: 11.5 };
     const before = sim.charge.value();
-    sim.charge.use('sprint', 60);
+    sim.charge.use('sprint', 300); // well down: the Charger fills fast (#784)
     expect(sim.charge.value()).toBeLessThan(before);
     const drained = sim.charge.value();
     sim.advance(3);

@@ -42,6 +42,7 @@ export class RestorationSystem {
     const seconds = (n: number) => (Math.max(1, Math.ceil(n)) === 1 ? 'a second' : `${Math.ceil(n)} seconds`);
     const roof = this.sim.grid.roof(t.roofId);
     if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'You can\'t reach this rooftop yet' };
+    if (roof.interior) return { ok: false, reason: 'Nothing grows on the floorboards: decorate the house instead' }; // #782
     const fog = this.sim.areas.fogReason(t);
     if (fog) return { ok: false, reason: fog };
     if (t.blocked && t.feature === 'water') return { ok: false, reason: 'The open sea: nothing grows out there' };
@@ -419,6 +420,7 @@ export class RestorationSystem {
     t.pollution = 0;
     t.growthRemainingSec = 0;
     t.growSource = undefined;
+    this.sim.trees?.planted(t); // trees grow over game days from now
     if (source === 'overflow') this.sim.transitions.lush(t, this.sim.time + TUNING.neighbourhood.reservoir.lushSeconds);
     this.sim.grid.touch(t);
     this.sim.state.stats.tilesRestored++;

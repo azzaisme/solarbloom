@@ -2,7 +2,8 @@ import { decoration, decorKey, decorKeyOf, decorOccupant, decorValue, type Decor
 import { GROUND } from '../core/GameState';
 import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, FIRST_DECOR, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
+import { PARK_SET } from '../data/oldcity';
 import type { Sim } from './Sim';
 import type { DecorRecipe } from '../data/crafting';
 
@@ -146,7 +147,7 @@ export class Cozy {
     if ('cat' in u) return 'it turns up somewhere'; // never names what leaves it (epic rule 8)
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
     if ('find' in u) return 'you dig it out of a buried box';
-    if ('research' in u) return 'you work it out at the crafting table in the house';
+    if ('research' in u) return 'you work it out at the workbench beside the house';
     return `the fog lifts from ${u.areas} place${u.areas === 1 ? '' : 's'}`;
   }
 
@@ -257,13 +258,31 @@ export class Cozy {
   /** What a locked decoration waits for. */
   private decorHint(o: DecorOption): string {
     const r = decorRecipe(this.sim, o.id);
-    if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the crafting table';
+    if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the workbench';
     return r ? this.sim.crafting.unlockLabel(r.unlock).replace('🔒 ', '') : this.hint(o.unlock);
   }
 
   /** The tray's list: every decoration, unlocked or with what it waits for. */
   decorChoices(): DecorChoice[] {
     return DECOR_OPTIONS.map((o) => ({ option: o, unlocked: this.isDecorUnlocked(o), hint: this.isDecorUnlocked(o) ? undefined : this.decorHint(o) }));
+  }
+
+  /**
+   * #782: the first decoration, a gift once the fountain reaches its first step. A save already past that step gets
+   * it too, once. It comes made (free to place, as often as you like) and counts as announced, so its own toast is
+   * the only one. If bloombot has made every gift already, the step is still remembered and nothing is given.
+   * Returns the gift when one was given now.
+   */
+  giveFirstDecor(): DecorOption | undefined {
+    const sv = this.sim.state.salvage;
+    if (!sv || sv.decorGift || sv.tier < FIRST_DECOR.step) return undefined;
+    const id = FIRST_DECOR.gifts.find((g) => !!decorRecipe(this.sim, g) && !this.sim.crafting.decorMade(g));
+    sv.decorGift = id ?? FIRST_DECOR.gifts[0];
+    if (!id) return undefined;
+    this.sim.crafting.giveDecor(id);
+    const s = this.write();
+    if (!(s.decorUnlocked ??= []).includes(id)) s.decorUnlocked.push(id);
+    return DECOR_OPTION[id];
   }
 
   /** Unlocks every decoration whose milestone has been met, once each (saved). Returns the new ones. */
@@ -290,15 +309,59 @@ export class Cozy {
     const o = DECOR_OPTION[kind];
     if (!o) return 'There is no such decoration';
     if (!this.isDecorUnlocked(o)) return decorRecipe(this.sim, o.id) ? `Not made yet: ${this.decorHint(o)}` : `Unlocks when ${this.hint(o.unlock)}`;
-    if (this.groundOnly && roofId !== GROUND) return 'Decorations go on the city’s ground for now';
+    const inside = this.sim.house.isInside(roofId);
+    if (this.groundOnly && roofId !== GROUND && !inside) return 'Decorations go on the city’s ground for now';
     if (this.decorCount() >= DECOR_GEN.max) return `The city holds ${DECOR_GEN.max} decorations at most: remove one first`;
+    if (inside) {
+      // #782: the house holds as many as its level allows; the door and the furniture stay clear
+      const h = this.sim.house;
+      if (!h.hasInside()) return 'The house has no inside yet';
+      if (this.insideCount() >= h.decorMax()) return `The ${h.current()!.name.toLowerCase()} holds ${h.decorMax()} decorations: pick one up first, or grow the house`;
+      const [dx, dz] = h.doorInside();
+      if (x === dx && z === dz) return 'Keep the door of the house clear';
+      const f = h.furnitureAt(x, z);
+      if (f) return `${f.name[0].toUpperCase()}${f.name.slice(1)} stands here`;
+    }
     const t = this.sim.grid.peek(roofId, x, z); // never loads a chunk (the sim decides that)
     if (!t) return 'Nothing to stand it on here';
     if (t.feature === 'water' && !t.blocked) return 'Not in the water';
     const why = this.sim.build.footprintProblem(roofId, x, z, 1, ['restored']);
     if (why) return why === 'Needs green or mossy ground: press {pulse} on it first' ? 'Press {pulse} to turn the ground here green first' : why;
     if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
+    if (this.atHouseDoor(roofId, x, z)) return 'Keep the door of the house clear';
+    // #782 × #783: the square in front of the workbench is where Bloombot stands to use it
+    const bf = roofId === GROUND ? this.sim.bench?.front() : undefined;
+    if (bf && bf.x === x && bf.z === z) return 'Keep the space in front of the workbench clear';
     return undefined;
+  }
+
+  /** #782: decorations inside the house. */
+  insideCount(): number {
+    const id = this.sim.house.layerId;
+    return this.decorations().filter((d) => d.roofId === id).length;
+  }
+
+  /**
+   * #782: the house grew and its furniture took these cells: a decoration standing on one moves to the nearest free
+   * floor (nothing placed is lost), or, with no free floor left, back into the build menu (it stays made).
+   */
+  clearCells(cells: { roofId: string; x: number; z: number }[]) {
+    for (const c of cells) {
+      const d = this.decorAt(c.roofId, c.x, c.z);
+      if (!d) continue;
+      this.removeDecor(c.roofId, c.x, c.z);
+      const free = this.sim.grid
+        .tilesOf(c.roofId)
+        .filter((t) => !t.blocked && !t.occupantId)
+        .sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
+      for (const t of free) if (!this.placeDecor(d.kind, d.rot, c.roofId, t.x, t.z)) break;
+    }
+  }
+
+  /** #782: the ground at the house's door (where the house stands): decorations go round it, never in the way in. */
+  private atHouseDoor(roofId: string, x: number, z: number): boolean {
+    const sh = PARK_SET.shed;
+    return roofId === GROUND && x === sh.door[0] && z === sh.door[1] && this.sim.grid.peek(GROUND, sh.x, sh.z)?.prop === 'shed';
   }
 
   /**

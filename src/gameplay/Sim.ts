@@ -1,4 +1,4 @@
-import { machinesStamp } from '../core/GameState';
+import { GROUND, machinesStamp } from '../core/GameState';
 import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Grid } from '../core/Grid';
@@ -33,9 +33,11 @@ import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
 import { MoveSpots } from './MoveSpots';
 import { FountainSystem } from './FountainSystem';
+import { HouseSystem } from './HouseSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
+import { RegionWorks } from './RegionWorks';
 import { LandmarkSystem } from './LandmarkSystem';
 import { WaterSystem } from './WaterSystem';
 import { Crafting } from './Crafting';
@@ -50,6 +52,8 @@ import { WildlifeSystem } from './Wildlife';
 import { BuriedSystem } from './Buried';
 import { DroneFuel } from './DroneFuel';
 import { Clock } from './Clock';
+import { TreeGrowth, stampGiants } from './TreeGrowth';
+import { CraftBench, stampBench } from './CraftBench';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
 import { PlotWork } from './PlotWork';
@@ -57,6 +61,7 @@ import { FarmSystem } from './FarmSystem';
 import { CompostSystem } from './CompostSystem';
 import { FarmExtras } from './FarmExtras';
 import { Weather } from './Weather';
+import { Seasons } from './Seasons';
 import { DecaySystem } from './DecaySystem';
 
 /**
@@ -104,6 +109,8 @@ export class Sim {
   readonly moves: MoveSpots;
   /** E21.6: the fountain's tiers and deliveries. */
   readonly fountain: FountainSystem;
+  /** #782: the house's levels (the ruined shed → the Home) and their deliveries. */
+  readonly house: HouseSystem;
   /** E21.8: the Keepers and their requests. */
   readonly keepers: KeeperSystem;
   /** E23.8.3: the causeway and the endless mainland. */
@@ -112,6 +119,8 @@ export class Sim {
   readonly journal: JournalSystem;
   /** E21.9: waking landmarks and their lasting rewards. */
   readonly landmarks: LandmarkSystem;
+  /** #787: each region's works (power, water or drones) its landmark waits on. */
+  readonly works: RegionWorks;
   /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
   readonly water: WaterSystem;
   /** E23.6.1: the crafting table (components; machine and decoration recipes). */
@@ -138,14 +147,20 @@ export class Sim {
   readonly droneFuel: DroneFuel;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
+  /** Trees grow over game days (owner, 26 Nov 2026), and world giants stand in the woodland. */
+  readonly trees: TreeGrowth;
   /** E23.7.1.3: finds that are out only at night. */
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
+  /** #830: the seasons (spring, summer, autumn, winter) on the game clock. See gameplay/Seasons. */
+  readonly seasons: Seasons;
   /** E23.5.1: gathering biomass from restored ground. */
   readonly gather: GatherSystem;
   /** E27.2 (#680): gathering from and pruning the plant plots */
   readonly plotWork: PlotWork;
+  /** #783: the workbench beside the house, where Bloombot crafts. */
+  readonly bench: CraftBench;
   /** E23.5.2: planters and crops. */
   readonly farm: FarmSystem;
   /** E23.5.3: compost bins and Bio Digesters (old-city rules). */
@@ -183,6 +198,9 @@ export class Sim {
         const t = this.grid.peek(at.roofId, at.x, at.z);
         if (t && !t.occupantId) t.occupantId = decorOccupant(k);
       }
+      // #783: the workbench's square, then world giants: their trunk cells are solid, as a decoration's tile
+      if (c.layer === GROUND) stampBench(this.state, c.tiles);
+      if (c.layer === GROUND) stampGiants(this, c.tiles);
     };
     // The world travels with the state (for saving) but is never part of its JSON.
     Object.defineProperty(state, 'world', { value: this.grid, enumerable: false, configurable: true, writable: true });
@@ -202,12 +220,16 @@ export class Sim {
     this.buried = new BuriedSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
+    this.trees = new TreeGrowth(this);
     this.nightFinds = new NightFinds(this);
+    this.seasons = new Seasons(this);
     this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
     this.moves = new MoveSpots(this);
     this.fountain = new FountainSystem(this);
+    this.house = new HouseSystem(this);
+    this.house.sync(); // #782: the inside of a house already mended (its room and furniture)
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
@@ -232,6 +254,7 @@ export class Sim {
     this.automation = new Automation(this); // E23.6.4: after the grid (the Assembler is a consumer)
     this.chargers = new ChargerSystem(this);
     this.lights = new Lights(this);
+    this.works = new RegionWorks(this); // #787: after the grid and the water (a works piece is a load on the power lines)
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
@@ -247,6 +270,10 @@ export class Sim {
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
     this.mainland.wire(); // E23.8.3.2: after every system (the grid and water network) is built
+    // #783: the workbench beside the house (a new game, or an older save's first load), once machines, decorations
+    // and pipes are all in place so it only takes a free square
+    this.bench = new CraftBench(this);
+    this.bench.ensure();
   }
 
   get time() {
@@ -344,15 +371,18 @@ export class Sim {
     this.parkGrowth.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
+    this.seasons.tick();
     this.weather.tick();
     this.farm.tick(dt);
     this.compost.tick(dt);
     this.farmExtras.tick(dt);
+    this.works.tick(dt); // #787
     this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
     this.decay.tick();
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
+    this.trees.tick();
     this.ecosystem.tick();
     this.metrics.tick(dt);
     s.rngState = this.rng.state;

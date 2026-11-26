@@ -265,7 +265,7 @@ export class TrMeshBuilder {
       }
       C[c] = r; C[c + 1] = gg; C[c + 2] = b; C[c + 3] = 255;
       const flex = g.pos[i * 4 + 3];
-      W[c + 3] = flex >= 2 ? flex - 2 : flex;
+      W[c + 3] = flex; // with its LEAF_FLAG and SEASON_FLAG (the transition shader takes them off)
       if (morph) {
         if (attachments[attachment]?.first === i) pivot = attachments[attachment++].at;
         const [ax, ay, az] = pivot;

@@ -138,6 +138,8 @@ const BODIES = {
   tree: R(10.6, 13.5, 2.8, 7.5, 1, 'wood') + P('M12 2.8a5 5 0 0 0-4.6 3.1A4.6 4.6 0 0 0 4 10.4 4.6 4.6 0 0 0 8 15h8a4.6 4.6 0 0 0 4-4.6 4.6 4.6 0 0 0-3.4-4.4A5 5 0 0 0 12 2.8z', 'leaf') + HI('M8.6 7.6a3 3 0 0 1 2.6-2'),
   pine: R(10.8, 18, 2.4, 3.6, .8, 'wood') + P('M12 2 6.5 9.5h2.8L5 15h4l-4.5 4h15L15 15h4l-4.3-5.5h2.8z', 'teal'),
   fallLeaf: P(LEAF, 'orange') + L('M4 21c3-5 7-8.6 11.5-11', '#3a2a1a'),
+  // #830: winter
+  snowflake: P('M12 7.2l4.2 2.4v4.8L12 16.8l-4.2-2.4V9.6z', 'fog') + L('M12 2.5v19M3.8 7.2l16.4 9.6M3.8 16.8l16.4-9.6M9.4 4.2 12 6.6l2.6-2.4M9.4 19.8 12 17.4l2.6 2.4', '#11608f', 1.7),
   grain: L('M12 21V6', '#3a2a1a', 1.6) + E(9.6, 8.5, 1.6, 2.6, 'gold') + E(14.4, 8.5, 1.6, 2.6, 'gold') + E(9.6, 13, 1.6, 2.6, 'gold') + E(14.4, 13, 1.6, 2.6, 'gold') + E(12, 4.6, 1.5, 2.4, 'gold'),
   butterfly: P('M11.6 11.5C10 6.5 6.2 3.6 3.6 5s.6 6.8 8 6.5z', 'violet') + P('M12.4 11.5C14 6.5 17.8 3.6 20.4 5s-.6 6.8-8 6.5z', 'violet') + P('M11.5 12.5C7 13 4.6 16 6 18.4s4.8-.8 5.5-5.9z', 'pink') + P('M12.5 12.5c4.5.5 6.9 3.5 5.5 5.9s-4.8-.8-5.5-5.9z', 'pink') + L('M12 7v12', '#3a2a1a', 1.6),
   bird: P('M4 13c2-4.5 6-6.5 10.5-5.5L19 5l-1.6 4.4c1.2 1.4 1.6 3.2 1.2 5C17.6 18 13 20 8.6 18.6 6.2 17.8 4.6 15.8 4 13z', 'water') + C(15.2, 10.2, .9, 'dark') + P('M19.4 11.2 22 12l-2.6.8z', 'orange'),
@@ -200,6 +202,10 @@ const BODIES = {
   crate: R(4, 6, 16, 14, 1.8, 'wood') + L('M4 11h16M12 6v14', '#3a2a1a', 1.2) + P('M4 6l2.4-2.5h11.2L20 6z', 'wood'),
   // E19: plot options
   carrot: P('M14.5 9.5 5 20.5l11.2-8.8a2.6 2.6 0 0 0-1.7-2.2z', 'orange') + L('M9 15.6l1.6 1.2M11.6 12.8l1.4 1.2', '#b5560f', 1.1) + P('M15.4 8.6c-.4-2.6.6-4.6 2.8-5.4.6 2.4-.6 4.6-2.8 5.4z', 'leaf') + P('M16 9.4c2.2-1.2 4.4-.8 5.6 1-2 1.2-4.2.8-5.6-1z', 'leaf'),
+  // #785: the fruit from fruit trees (pear, peach, lemon; the apple is below)
+  pear: P('M12 6c-1.6 0-2.2 1.6-2.2 3.4 0 1.8-3.8 3.2-3.8 7.2 0 3 2.6 5 6 5s6-2 6-5c0-4-3.8-5.4-3.8-7.2C14.2 7.6 13.6 6 12 6z', 'sun') + L('M12 6c0-1.2.4-2.4 1.4-3.4', '#3a2a1a', 1.4) + P('M13.2 4.2c.8-1.6 2.6-2.2 4.4-1.6-.8 1.6-2.6 2.2-4.4 1.6z', 'leaf') + HI('M8.2 15.2a3 3 0 0 1 1.4-2.2'),
+  peach: P('M12 7.6c-4.2 0-7.2 3-7.2 6.8S8 21 12 21s7.2-2.8 7.2-6.6S16.2 7.6 12 7.6z', 'orange') + L('M12 8c-1.4 3.2-1.4 8.6 0 12.6', '#c9502f', 1.1) + P('M12 7.6c.6-2 2.4-3.4 4.8-3.2-.6 2.2-2.4 3.4-4.8 3.2z', 'leaf') + HI('M7.4 12.4a3.4 3.4 0 0 1 2-2.4'),
+  lemon: P('M3 13c1.4-4 4.8-6.6 9-6.6s7.6 2.6 9 6.6c-1.4 4-4.8 6.6-9 6.6S4.4 17 3 13z', 'sun') + L('M3 13H1.8M21 13h1.2', '#b08a10', 1.4) + P('M12 6.4c.6-2 2.4-3.2 4.6-3-.6 2-2.4 3.2-4.6 3z', 'leaf') + HI('M6.6 11.6a4 4 0 0 1 2.4-2.4'),
   apple: P('M12 7.5c-2.4-1.6-7-1-7 4.6 0 4.6 3 8.4 5.2 8.4.8 0 1.2-.4 1.8-.4s1 .4 1.8.4c2.2 0 5.2-3.8 5.2-8.4 0-5.6-4.6-6.2-7-4.6z', 'red') + L('M12 7.5c0-1.6.4-3 1.4-4', '#3a2a1a', 1.4) + P('M13 5.4c.6-1.8 2.4-2.6 4.4-2-.6 1.8-2.4 2.6-4.4 2z', 'leaf') + HI('M7.6 11a3 3 0 0 1 1.8-2.2'),
   cup: P('M4.5 9h12v5.5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z', 'cream') + L('M16.5 10.6h1.6a2.2 2.2 0 0 1 0 4.4h-1.8', '#3a2a1a', 1.6) + L('M8.5 3.5c-.8 1 .8 2 0 3M12 3.5c-.8 1 .8 2 0 3', '#a39d90', 1.2) + P('M3.5 20.5h15v1h-15z', 'stone'),
   slide: L('M5 21V6M9 21V6M5 9.5h4M5 13h4M5 16.5h4', '#3a2a1a', 1.6) + P('M9 6c4 0 5 10 11.5 14l-1 1.2C12.6 17 12 8.4 9 8.4z', 'red') + P('M4 5h6v1.6H4z', 'gold'),
@@ -265,6 +271,7 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   beehive: 'flower', // E23.5.4
   fishPond: 'fish',
   orchard: 'apple',
+  giantTree: 'tree',
   mushroomLog: 'tree',
   wormBin: 'garden',
   birdBox: 'bird',
@@ -298,17 +305,17 @@ export const ROLE_ICONS: Record<string, IconName> = {
 /** Every emoji the game's strings use, drawn as one of the icons above. */
 export const EMOJI_ICONS: Record<string, IconName> = {
   '⚡': 'energy', '💧': 'water', '🌿': 'biomass',
-  '✨': 'sparkle', '🌸': 'flower', '💮': 'whiteFlower', '🌻': 'sunflower', '🌱': 'sprout', '🌳': 'tree', '🌲': 'pine', '🍂': 'fallLeaf', '🌾': 'grain',
+  '✨': 'sparkle', '🌸': 'flower', '💮': 'whiteFlower', '🌻': 'sunflower', '🌱': 'sprout', '🌳': 'tree', '🌲': 'pine', '🍂': 'fallLeaf', '🌾': 'grain', '❄': 'snowflake',
   '☀': 'sun', '🌞': 'sun', '🔆': 'sun', '🌙': 'moon', '🌈': 'rainbow', '🌊': 'wave', '🌫': 'fog', '🌧': 'rain', '🌟': 'star', '💥': 'burst',
   '🦋': 'butterfly', '🐦': 'bird', '🐟': 'fish', '🐱': 'cat', '🐾': 'paw', '🤖': 'robot',
-  '⛲': 'fountain', '📡': 'relay', '🛰': 'satellite', '🛸': 'drone', '🚀': 'rocket', '💠': 'crystal', '🏺': 'vase', '🏢': 'building', '🏙': 'building', '🗼': 'building',
+  '⛲': 'fountain', '📡': 'relay', '🛰': 'satellite', '🛸': 'drone', '🚀': 'rocket', '💠': 'crystal', '🏺': 'vase', '🏡': 'home', '🏢': 'building', '🏙': 'building', '🗼': 'building',
   '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🔋': 'battery', '🌬': 'windTurbine', '🔦': 'bulb', '🔌': 'charger', '🏗': 'crane',
   '🔒': 'lock', '🔓': 'lock', '✅': 'check', '⬜': 'box', '⏳': 'hourglass', '🔗': 'link', '🔀': 'merge', '🔁': 'repeat', '⬆': 'up', '⚠': 'warning', '❔': 'question',
   '📋': 'clipboard', '🧹': 'broom', '🪑': 'bench', '💡': 'bulb', '💰': 'coins', '🧩': 'puzzle', '👑': 'crown', '🧠': 'brain', '🕸': 'web', '✋': 'hand',
   '⚙': 'settings', '🔧': 'wrench', '▶': 'play', '⏸': 'pause', '⏩': 'fastForward', '⏭': 'fastForward',
   // Cultivator / slab-breakdown strings.
   // E19 plot options.
-  '🥕': 'carrot', '🍎': 'apple', '☕': 'cup', '🛝': 'slide', '🌹': 'flower', '🌼': 'sunflower', '🪴': 'pot', '🚲': 'bike', '💦': 'water', '🎻': 'note',
+  '🥕': 'carrot', '🍎': 'apple', '🍐': 'pear', '🍑': 'peach', '🍋': 'lemon', '☕': 'cup', '🛝': 'slide', '🌹': 'flower', '🌼': 'sunflower', '🪴': 'pot', '🚲': 'bike', '💦': 'water', '🎻': 'note',
   '🚣': 'boat', '🐸': 'frog', '🛖': 'hut', '🪟': 'glasshouse',
   // E19.2 decorations.
   '🌷': 'flower', '🎏': 'rainbow', '🛢': 'vase',

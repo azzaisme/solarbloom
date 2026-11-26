@@ -195,6 +195,9 @@ const leaf = {
   hue: { oak: [92, 112], birch: [78, 94], willow: [82, 98], pine: [130, 146], cherry: [330, 346], shrub: [80, 112] } as Record<string, [number, number]>,
   shrubTip: '#5fbf43',
   ivy: '#4f9a4a',
+  /** Tree leaves through a tree's life: Frog Green on a sapling, deepening to Leaf Green once grown. */
+  young: '#8eb94a',
+  grown: '#5f9537',
 };
 
 const wood = {
@@ -483,6 +486,9 @@ const signal = {
   /** the Bloom Pulse's ring racing out over the ground, and its sparks */
   bloomPulse: '#ffe27a',
   bloomPulseGreen: '#8dffb4',
+  /** #784: Bloombot charging (a bench, the fountain, a Charger, a snack): warm gold motes and mint ones rising off it */
+  chargeSpark: '#ffd968',
+  chargeSparkMint: '#9dffc8',
   /** the Solarbloom lotus (Emblem.ts), drawn in outline. In the world: its light (the halo, the glow along its lines
    * and the bright thread in them, leaves greener), its painted line under the light by day (gold, the leaves green),
    * and the goal's symbol in the centre petal, painted and glowing (rest in blue and cyan, so low charge stands apart).
@@ -628,8 +634,45 @@ const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, 
 export const PALETTE = {
   ...families,
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
+  /**
+   * #782: Bloombot's house, level by level (the patched Shed, the Cottage, the two-storey House, the Home) and its
+   * inside: warm planks and plaster, a tin, tile or slate roof, painted doors and shutters, glass that glows at dusk.
+   */
+  house: {
+    plank: '#b07c52', plankLight: '#c99a6c', plankDark: '#7d5a3e', patch: '#d2ad7e', beam: '#6a4c35',
+    tin: '#8b949a', tinDark: '#6f777d', tile: '#c46a46', tileDark: '#a5573a', slate: '#6c7880', slateDark: '#58636a',
+    plaster: '#efe6d4', plasterShade: '#ddd2bd', stone: '#bdb3a2', stoneDark: '#9d9384', brick: '#a8573c',
+    door: '#5f8a6a', doorHome: '#3f6f8f', shutter: '#7aa287', trim: '#f6f0e2', glass: '#bfe0e8', glassGlow: '#ffd98a',
+    step: '#b9b0a2', lamp: '#ffe2a0', fence: '#f2ede2', fencePost: '#d9d1c0', gardenSoil: '#6a5440',
+    floor: ['#c79a6b', '#bd8f61', '#cfa476'], floorGap: '#8d6a4b', wallIn: '#f1e7d2', wallInShade: '#e2d5bb', skirting: '#a0784f',
+    rug: '#c86f5a', rugEdge: '#efd9a8', blanket: '#7fa7c9', pillow: '#f6f1e6', bedWood: '#9c6d45', chestBand: '#6d6457',
+    shelf: '#a7774c', desk: '#9a6a40', book: ['#c8574a', '#4f86a8', '#e1b54a', '#6f9a5a'], paper: '#f3ead2',
+    apron: '#5e8f4a', apronEdge: '#4d7a3c', rail: '#e8dcc4',
+  },
+  /**
+   * #830: the seasons (rendering/SeasonLook). `grass`: the colour green grass, lawns, shrubs and leaves drift toward in
+   * each season (summer is the world's own green). `autumn`: deciduous leaves turning gold, orange and russet. `blossom`:
+   * spring's soft pink and white blossom. `frost`: winter's frost and light snow; `snow`: falling snowflakes.
+   */
+  season: {
+    grass: { spring: '#9ccf5a', summer: '#6fa84a', autumn: '#b5a24c', winter: '#9fae96' },
+    autumn: ['#e0a93a', '#d9772e', '#b8452c'],
+    /** the last brown leaves hanging on in winter */
+    withered: '#8c6a45',
+    blossom: ['#f6b9cf', '#fbeef2'],
+    frost: '#e9f1f6',
+    snow: '#f4f8fb',
+  },
+  /**
+   * #787: a region's works (ChunkRenderer `works`): a cabinet, winch, power feed or dome motor (power), a drinking
+   * fountain, inlet or watering channel (water), clockwork or a lift's winding gear (drones). Dark: dull metal, an
+   * unlit lamp, a dry bed, rust and dust. Running: a warm lamp, clear water, bright brass, a mint status light.
+   */
+  works: { cabinet: '#5d6770', cabinetLit: '#6f8a8f', door: '#4c545b', lampOff: '#4a4640', lampOn: '#ffd56a', statusOff: '#7a3f36', statusOn: '#7cf7c8', cable: '#3f4246', rust: '#8a5a40', dust: '#a89f92', brass: '#c9a14a', steelClean: '#9aa4ad', bedDry: '#9a8a70', crack: '#6b5d4c', water: '#4cc3ea', waterHi: '#9fe3f5', moss: '#7fb35a', crystalOff: '#6e7a80', crystalOn: '#7cf7c8' },
   /** E23.7.2.2: the house's radio (the forecast) */
   radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
+  /** #783: the workbench beside the house, drawn by hand when its model isn't loaded (as the model: a warm top, cream legs) */
+  workbench: { top: '#b4703f', edge: '#8e5530', leg: '#e2d6bc', foot: '#6b4a2c', rack: '#9a6238', iron: '#4b4741', handle: '#c9a14a' },
   /** #628: the little tools and things Bloombot holds while it works (BotProps) */
   botProps: { metal: '#8d949b', metalDark: '#5d646b', wood: '#9a6b3f', cloth: '#b89c72', basket: '#c99a55', can: '#5fa8a0', brass: '#c9a14a', paper: '#f3ead2', stem: '#5c9a4c', petal: '#f39ab4', core: '#ffd25a', shell: '#f2c6b0', fruit: '#e0573f', glow: '#94ff6e' },
   /** #627: Sun soak's solar panel on Bloombot's pack: dark blue glass */
@@ -852,6 +895,26 @@ export const PALETTE = {
   lilyPad: leaf.mid,
   bloomPale: '#fff6c2',
   mist: '#d8f4ff',
+  /**
+   * #785: fruit trees. Unripe fruit (pale and deep green), each tree's ripe colour (a red apple, an orange apricot, a
+   * rosy plum: all far from the leaves, so a ripe tree shows from a distance), the blossom, the stalks, and the mulch
+   * ring round the trunk.
+   */
+  orchard: {
+    unripe: '#8fc24e',
+    unripeDark: '#5f8f34',
+    /** half way: the green warms to a golden blush before the ripe colour comes in (never a muddy brown) */
+    turning: '#e6c443',
+    /** each fruit's ripe colour (data/fruit), all far from the leaves */
+    ripe: { apple: '#e2433a', pear: '#d6b33a', peach: '#f2814a', lemon: '#f7dd2e' } as Record<string, string>,
+    /** a ripe pear's russet blush and a peach's red cheek, on the sunny side */
+    blush: { apple: '#c9302f', pear: '#c98a3a', peach: '#e0513f', lemon: '#f2c21e' } as Record<string, string>,
+    ripeLight: '#ffd0a8',
+    blossom: ['#fdf1f4', '#f9cddb', '#e7a9bf'] as string[],
+    blossomHeart: '#f6d36b',
+    stalk: '#6b5a33',
+    mulch: '#6b4a32',
+  },
   /** Tide sketches: the pencil's graphite */
   sketchPencil: '#352f29',
 };

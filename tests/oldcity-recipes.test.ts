@@ -47,6 +47,7 @@ describe('E21.3: recipes', () => {
       ground(sim, x, z);
       if (MACHINES[type].areaTypes) continue; // needs its area type (the Reservoir Garden)
       if (MACHINES[type].mainlandOnly) continue; // only past the causeway: paid exactly in tests/mainland-steel
+      if (MACHINES[type].regions) continue; // only in its region (a giant tree, Elder Grove): paid exactly in tests/giant-trees
       if (type === 'pump' || type === 'desalination') continue; // on a bank / the shore only: paid exactly in tests/water-*.test.ts
       if (sim.water.unlockFor(type)) sim.state.salvage!.keepers.sluice = { step: 'request1' }; // E23.4: Cistern Basin's unlocks
       stock(sim, type);
@@ -83,7 +84,7 @@ describe('E21.3: recipes', () => {
     ground(sim, 12, 12);
     // E23.6.1: a component is named with where it is made; a material with its region once seen
     sim.inventory.add('scrap', 20);
-    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Motor 🌀: make it at the crafting table in the house');
+    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Motor 🌀: make it at the workbench beside the house');
     sim.inventory.add('motor', 2);
     expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️');
     sim.state.areas.clockPlaza = { fog: 'frontier', revealedAt: 0, sealed: true };

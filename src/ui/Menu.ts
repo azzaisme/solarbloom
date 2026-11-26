@@ -14,7 +14,7 @@ import { type BarItem, barHtml, fillGlyphs, icon, panelStyle, wireBar } from './
  * save Quit to title makes can't be written (storage full or turned off), it asks first, with the hold-to-confirm
  * dialog (Confirm.ts): the safe choice, Keep playing, has the focus.
  */
-export type MenuItem = 'resume' | 'backpack' | 'map' | 'photo' | 'settings' | 'save' | 'title' | 'desktop';
+export type MenuItem = 'resume' | 'backpack' | 'map' | 'home' | 'photo' | 'settings' | 'save' | 'title' | 'desktop';
 
 export interface MenuHeader {
   name: string;
@@ -33,14 +33,17 @@ export interface MenuHost {
   desktop: boolean;
   /** true when quitting now would lose progress (its save can't be written): Quit asks first */
   unsaved?(): boolean;
+  /** #782: the Home lets Bloombot go home from anywhere: offers Go home */
+  canGoHome?(): boolean;
 }
 
-const ICON: Record<MenuItem, string> = { resume: 'play', backpack: 'pack', map: 'map', photo: 'camera', settings: 'gear', save: 'save', title: 'door', desktop: 'door' };
+const ICON: Record<MenuItem, string> = { resume: 'play', backpack: 'pack', map: 'map', home: 'home', photo: 'camera', settings: 'gear', save: 'save', title: 'door', desktop: 'door' };
 
 const LABELS: Record<MenuItem, string> = {
   resume: 'Resume',
   backpack: 'Backpack',
   map: 'Map',
+  home: 'Go home',
   photo: 'Photo mode',
   settings: 'Settings',
   save: 'Save now',
@@ -76,7 +79,7 @@ export class Menu {
     this.el.setAttribute('role', 'dialog');
     this.el.setAttribute('aria-modal', 'true');
     this.el.setAttribute('aria-labelledby', 'menuName');
-    const items: MenuItem[] = ['resume', 'backpack', 'map', 'photo', 'settings', 'save', 'title', ...(host.desktop ? (['desktop'] as MenuItem[]) : [])];
+    const items: MenuItem[] = ['resume', 'backpack', 'map', 'home', 'photo', 'settings', 'save', 'title', ...(host.desktop ? (['desktop'] as MenuItem[]) : [])];
     const bar: BarItem[] = [
       { press: 'choose', label: 'Choose' },
       { press: 'back', label: 'Resume' },
@@ -107,6 +110,8 @@ export class Menu {
     const when = [h.day !== undefined ? `Day ${h.day}` : '', h.time ?? '', `played ${playedText(h.played)}`].filter(Boolean).join(' · ');
     this.where.innerHTML = `<p class="menu-region">${esc(h.region)}</p><p class="menu-time pn-soft">${esc(when)}</p>`;
     this.note('');
+    const home = this.el.querySelector<HTMLElement>('#menu-home');
+    if (home) home.hidden = !this.host.canGoHome?.();
     this.el.hidden = false;
     this.el.classList.add('open');
     this.el.querySelector<HTMLElement>('#menu-resume')?.focus({ focusVisible: true } as FocusOptions);

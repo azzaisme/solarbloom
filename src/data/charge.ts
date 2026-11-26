@@ -3,13 +3,14 @@
 // Walking is free; pulses, abilities and sprinting cost charge. At zero bloombot walks on, slower, and can't pulse.
 
 import { FARM_USES } from './farm';
+import { FRUIT_IDS, FRUITS, type FruitId } from './fruit';
 
 /** a full charge with no research (the meter's 100%) */
 const FULL = 100;
 
 export interface EdibleDef {
   /** the backpack item eaten (E23.5.1's farm items) */
-  id: 'biomass' | 'food' | 'honey';
+  id: 'biomass' | 'food' | FruitId | 'honey';
   name: string;
   /** charge one unit gives back (from E23.5.1's FARM_USES: its share of a full battery) */
   charge: number;
@@ -40,18 +41,33 @@ export const CHARGE = {
   edibles: [
     // E23.5.4.1: honey from beehives, a strong snack
     { id: 'honey', name: 'Honey', charge: FARM_USES.honey.charge * FULL, seconds: 3 },
+    // #785: fruit from fruit trees, sweet snacks between Honey and Food (the sweetest first)
+    ...[...FRUIT_IDS].sort((a, b) => FRUITS[b].sweet - FRUITS[a].sweet).map((f): EdibleDef => ({ id: f, name: FRUITS[f].name, charge: FARM_USES[f].charge * FULL, seconds: 3 })),
     { id: 'food', name: 'Food', charge: FARM_USES.food.charge * FULL, seconds: 3 },
     { id: 'biomass', name: 'Greens', charge: FARM_USES.biomass.charge * FULL, seconds: 2 },
   ] as EdibleDef[],
-  /** E23.3.3: sitting and meditating at a charger, per second (fast, free, on the grid) */
-  meditatePerSecond: 6,
+  /**
+   * #784: the charging sources, fastest first, and the order must hold (tests/charging-order.test.ts): a Charger
+   * (the payoff for building), then a bench (a clearly felt trickle, 2 a second), then the fountain or the house
+   * (1 a second, so Bloombot is never stuck). Knacks multiply them (Pylon the Charger, Gable both kinds of rest):
+   * the Charger is quick enough that one starting Solar Panel (2/3 of its draw, less in cloud) still beats a bench
+   * with Gable's Easy rest.
+   */
+  /** E23.3.3: sitting and meditating at a charger, per second at full power (fast, free, on the grid) */
+  meditatePerSecond: 10,
   /**
    * Home: standing still for a moment by the fountain or the house trickles charge back, so bloombot is never stuck
    * with an empty charge and an empty backpack. Benches (E23.2.3) trickle too, and sleeping (E23.7) fills it.
    */
-  home: { radius: 3, perSecond: 0.5, stillSeconds: 1.5 },
-  /** E23.2.3: sitting on a bench, per second (a trickle) */
-  benchPerSecond: 0.4,
+  home: { radius: 3, perSecond: 1, stillSeconds: 1.5 },
+  /** E23.2.3 / #784: sitting on a bench, per second (a trickle the player can see the meter rise with) */
+  benchPerSecond: 2,
+  /**
+   * #784: so the player sees Bloombot charging, from any source: it counts as charging for `holdSeconds` after the
+   * last charge came in (sources tick at different points of a frame); sparkles rise from it every `sparkleEvery`
+   * seconds, `sparkles` at a time, `lift` tiles above its feet.
+   */
+  feedback: { holdSeconds: 0.35, sparkleEvery: 0.32, sparkles: 3, lift: 0.55 },
   /** the active-play profile a full charge is sized for: a pulse every few seconds, sprinting part of the time */
   active: { pulseEverySeconds: 8, sprintShare: 0.25, minutes: 10 },
 } as const;

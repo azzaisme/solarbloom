@@ -15,9 +15,20 @@ export { CHUNK, hashString, tileId, tileRandom };
 export { canalRow };
 
 const inList = (list: readonly (readonly [number, number])[] | undefined, x: number, z: number) => !!list && list.some(([a, b]) => a === x && b === z);
+/**
+ * #782: the house's inside: clean floorboards over its whole chunk, so the room can grow a level at a time without
+ * regenerating (its size bounds it, Grid.inBounds); furniture marks its own cells (HouseSystem.sync).
+ */
+function interiorTile(seed: number, layer: LayerData, x: number, z: number): TileData | undefined {
+  if (x < 0 || z < 0 || x >= CHUNK || z >= CHUNK) return undefined;
+  const variant = Math.floor(tileRandom(seed, hashString(layer.id), x, z, 2) * 10000);
+  return { id: tileId(layer.id, x, z), roofId: layer.id, x, z, ground: 'restored', pollution: 0, variant, blocked: false, growthRemainingSec: 0, bloom: 0 };
+}
+
 /** The starting state of one tile, before any play. `undefined` outside a bounded layer. */
 export function generateTile(seed: number, layer: LayerData, x: number, z: number): TileData | undefined {
   if (layer.kind === 'ground') return generateGround(seed, layer, x, z);
+  if (layer.interior) return interiorTile(seed, layer, x, z);
   if (x < 0 || z < 0 || x >= layer.width || z >= layer.depth) return undefined;
   const lh = hashString(layer.id);
   const def = layer.template ? ROOF_TEMPLATES[layer.template] : undefined;
@@ -60,6 +71,8 @@ export function stampOldCity(t: TileData): TileData {
   if (p.kind === 'shed') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: 'shed' });
   // E25 (#626): a sealed vault (a squat strongroom with an iron door) and a stash (a lidded box)
   if (p.kind === 'vault') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `vault:${p.vault.id}` });
+  // #787: a region's works: a machine-sized piece on its own cell (machines are built round it)
+  if (p.kind === 'works') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `works:${p.works.region}` });
   if (p.kind === 'stash') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `stash:${p.stash.id}` });
   // E21.24: a lookout: a bench and a telescope on a terrace's edge
   if (p.kind === 'lookout') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `lookout:${p.id}` });

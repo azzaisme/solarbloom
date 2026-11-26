@@ -5,7 +5,7 @@ import { CHUNK } from '../core/Hash';
 import { GROUND } from '../core/GameState';
 import { chunkKey } from '../core/Grid';
 import { polyDist } from '../core/Picking';
-import type { TileData } from '../core/types';
+import type { TileData, TileTransition } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
 import { RARE_PLANT_DEFAULT, RARE_PLANTS } from '../data/pulse';
@@ -20,14 +20,16 @@ import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
 import { fitOnGround, geoRadius, type GroundFit } from './GroundFit';
 import { LOOK } from '../data/look';
-import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
+import { GATE_MODELS, HOUSE_GARDEN, LANDING, PARK_SET } from '../data/oldcity';
+import { drawGardenFence, drawHouse, type HouseSink } from './HouseArt';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageBounds, foliageMaterial, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type TreeStage, type Lod } from './TreeGen';
-import { treeSpot, treeStage, treeWorldOf } from './TreePlacement';
+import { TREE_GROWTH, treeSpot, treeWorldOf } from './TreePlacement';
+import { warmGiants } from './GiantTreeGen';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, reedGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, beachDressing, buildingDressing, grassTufts, lawnFringe, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
 import { zoneAt, type PlantingZone } from './PlantingZones';
@@ -45,6 +47,7 @@ import type { WarmupSample } from './ShaderWarmup';
 import { clearWaterCovers, clearWaterDisturbers, setWaterCovers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
 import { clearWaterLife, lifeForTile, outletSpots, setWaterLife, type LifeSpot } from './WaterLife';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer, type TreeBloom } from './transitions/TransitionRenderer';
+import { worksOf } from '../data/works';
 import { MOVE_TRIPS } from '../data/moveSpots';
 
 /** A land tile for `waterDistance`: its corner, its rounded corners, and whether it slopes into the water as a bank. */
@@ -483,6 +486,8 @@ const DEAD = PALETTE.ground.dead;
 /** E21.5: the gate models' length in metres (#379), so a gate model can be fitted to its cells. */
 const GATE_LENGTH: Record<string, number> = { barricade: 4, 'bridge-broken': 14, 'bridge-repaired': 14, 'skybridge-collapsed': 12, 'lift-bridge': 6, 'glide-perch': 1.2 };
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+/** #783: the workbench model (1.42 m across, 0.86 m deep, 1.5 m to the top of its tool rack) at about Bloombot's size */
+const WORKBENCH_SCALE = 0.65;
 /**
  * Curved paths: the radius of the quarter circle that rounds a path's corner (half a tile: stepped tiles join into
  * one curve), segments per corner, how far the piece stands above the tile top (restored / not), and the width of
@@ -1346,12 +1351,22 @@ export class ChunkRenderer {
       this.moveSpot(b, t, prop, x, y, z);
       return true;
     }
+    if (prop.startsWith('works:')) {
+      this.works(b, prop.slice(6), x, y, z);
+      return true;
+    }
     if (prop === 'shed') {
       const sh = PARK_SET.shed;
       if (t.x !== sh.x || t.z !== sh.z) return true;
       const cx = sh.x + sh.size / 2;
       const cz = sh.z + sh.size / 2;
       const house = this.sim.state.salvage?.house ?? 0;
+      if (house >= 1) {
+        // #782: the house mended, level by level (HouseArt)
+        drawHouse(b as HouseSink, house, sh, y);
+        if (house >= HOUSE_GARDEN.level) drawGardenFence(b as HouseSink, HOUSE_GARDEN, y); // the garden is on the house's own terrace
+        return true;
+      }
       const W = sh.size - 0.3;
       const wall = house >= 1 ? PALETTE.wood.mid : PALETTE.wood.deep;
       // four walls (the front one broken until the shed is patched), a sagging roof
@@ -1364,6 +1379,172 @@ export class ChunkRenderer {
       return true;
     }
     return false;
+  }
+
+  /**
+   * #783: the workbench, outside beside the house: its model (a wooden table with a vice, a tool rack along the back
+   * and a drawer at the front) turned so its front faces the open square, or the same shape in boxes until it loads.
+   */
+  private workbench(b: Sink, x: number, y: number, z: number, [dx, dz]: [number, number]) {
+    const rot = Math.atan2(dx, dz); // the model's front is its +Z
+    if (this.batch?.add('workbench', x, y, z, rot, WORKBENCH_SCALE)) return;
+    const P = PALETTE.workbench;
+    // local (across, along the front) → world: `a` runs across the front, `f` toward it
+    const at = (a: number, f: number, up: number): [number, number, number] => [x + a * dz + f * dx, y + up, z - a * dx + f * dz];
+    const size = (w: number, hgt: number, d: number): [number, number, number] => (dx ? [d, hgt, w] : [w, hgt, d]);
+    b.add('box', P.top, at(0, 0, 0.56), size(0.92, 0.06, 0.56));
+    b.add('box', P.edge, at(0, 0.27, 0.51), size(0.92, 0.05, 0.03));
+    for (const a of [-0.4, 0.4]) for (const f of [-0.22, 0.22]) {
+      b.add('box', P.leg, at(a, f, 0.3), size(0.07, 0.42, 0.07));
+      b.add('box', P.foot, at(a, f, 0.05), size(0.08, 0.1, 0.08));
+    }
+    b.add('box', P.edge, at(0, 0.2, 0.36), size(0.3, 0.1, 0.12)); // the drawer
+    b.add('box', P.rack, at(0, -0.25, 0.75), size(0.9, 0.32, 0.04)); // the back board
+    b.add('box', P.rack, at(0.18, -0.2, 0.86), size(0.44, 0.04, 0.1)); // the tool rack
+    for (const a of [0.02, 0.12, 0.22, 0.32]) b.add('box', P.iron, at(a, -0.17, 0.76), size(0.02, 0.18, 0.02));
+    b.add('box', P.iron, at(-0.3, 0.05, 0.65), size(0.12, 0.12, 0.12)); // the vice
+    b.add('box', P.handle, at(-0.3, 0.13, 0.65), size(0.16, 0.02, 0.02));
+    b.add('box', P.iron, at(0.22, 0.1, 0.6), size(0.18, 0.03, 0.06)); // a hammer
+    b.add('box', P.handle, at(0.08, 0.1, 0.6), size(0.14, 0.02, 0.02));
+  }
+
+  /**
+   * #787: a region's works (data/works), on its own tile: dark until power, water or drones reach it, then running for
+   * good (sim.works; the tile is touched to redraw it). Drawn from primitives, about Bloombot's height so it reads from
+   * the follow camera. Power pieces get a lamp that lights; water pieces a bed that fills; drone pieces gears that come
+   * clean and bright.
+   */
+  private works(b: Sink, region: string, x: number, y: number, z: number) {
+    const def = worksOf(region);
+    if (!def) return;
+    const on = this.sim.works.running(region);
+    const W = PALETTE.works;
+    const lamp = (lx: number, ly: number, lz: number, r = 0.09) => {
+      b.add('sphere', on ? W.lampOn : W.lampOff, [lx, ly, lz], r * 2, on ? 1 : 0);
+      if (on) b.add('sphere', W.lampOn, [lx, ly, lz], r * 3.2, 0.35);
+    };
+    const status = (lx: number, ly: number, lz: number) => b.add('sphere', on ? W.statusOn : W.statusOff, [lx, ly, lz], 0.07, on ? 1 : 0.15);
+    switch (def.look) {
+      case 'junction': {
+        // a tall metal cabinet on a plinth, a cable running into the ground, a lamp on top and a status light on its door
+        b.add('box', PALETTE.stone.dark, [x, y + 0.05, z], [0.7, 0.1, 0.5]);
+        b.add('box', on ? W.cabinetLit : W.cabinet, [x, y + 0.5, z], [0.6, 0.8, 0.4]);
+        b.add('box', W.door, [x, y + 0.5, z + 0.205], [0.48, 0.66, 0.02]);
+        b.add('box', W.cable, [x - 0.22, y + 0.12, z - 0.26], [0.08, 0.24, 0.12]);
+        b.add('cylinder', PALETTE.metal.iron, [x, y + 1.0, z], [0.05, 0.2, 0.05]);
+        lamp(x, y + 1.16, z, 0.1);
+        status(x + 0.16, y + 0.74, z + 0.22);
+        if (!on) b.add('box', W.rust, [x + 0.1, y + 0.3, z + 0.215], [0.2, 0.12, 0.01]);
+        break;
+      }
+      case 'winch': {
+        // a capstan winch: a drum on a base, its chain coiled round, a lamp post beside it
+        b.add('box', PALETTE.wood.dark, [x, y + 0.08, z], [0.85, 0.16, 0.85]);
+        b.add('cylinder', on ? PALETTE.metal.steel : W.rust, [x, y + 0.45, z], [0.42, 0.6, 0.42]);
+        for (let i = 0; i < 4; i++) b.add('cylinder', on ? W.brass : PALETTE.metal.iron, [x, y + 0.24 + i * 0.13, z], [0.46, 0.04, 0.46]);
+        b.add('cylinder', PALETTE.metal.dark, [x, y + 0.8, z], [0.2, 0.1, 0.2]);
+        for (const [dx, dz] of [[0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]]) b.add('box', PALETTE.wood.mid, [x + dx * 0.9, y + 0.86, z + dz * 0.9], [dx ? 0.4 : 0.06, 0.05, dz ? 0.4 : 0.06]);
+        b.add('cylinder', PALETTE.metal.iron, [x + 0.34, y + 0.6, z + 0.34], [0.04, 1.2, 0.04]);
+        lamp(x + 0.34, y + 1.24, z + 0.34);
+        break;
+      }
+      case 'feed':
+      case 'motor': {
+        // the Rooftop Core's power feed (a pillar under a crystal) and the dome's motor (a squat housing with a fan)
+        if (def.look === 'feed') {
+          b.add('box', PALETTE.stone.grey, [x, y + 0.1, z], [0.7, 0.2, 0.7]);
+          b.add('cylinder', on ? W.cabinetLit : W.cabinet, [x, y + 0.5, z], [0.34, 0.6, 0.34]);
+          for (const dy of [0.32, 0.68]) b.add('cylinder', on ? W.brass : PALETTE.metal.iron, [x, y + dy, z], [0.38, 0.05, 0.38]);
+          b.add('cone', on ? W.crystalOn : W.crystalOff, [x, y + 1.02, z], [0.3, 0.44, 0.3], on ? 1 : 0);
+          if (on) b.add('sphere', W.crystalOn, [x, y + 1.0, z], 0.5, 0.3);
+          b.add('box', W.cable, [x, y + 0.04, z + 0.42], [0.08, 0.08, 0.2]);
+        } else {
+          b.add('box', PALETTE.stone.dark, [x, y + 0.06, z], [0.85, 0.12, 0.85]);
+          b.add('box', on ? W.cabinetLit : W.cabinet, [x, y + 0.36, z], [0.72, 0.5, 0.6]);
+          b.add('cylinder', on ? PALETTE.metal.steel : W.rust, [x, y + 0.7, z], [0.5, 0.18, 0.5]);
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            b.add('box', on ? W.brass : PALETTE.metal.iron, [x + Math.cos(a) * 0.2, y + 0.81, z + Math.sin(a) * 0.2], [0.18, 0.03, 0.06]);
+          }
+          b.add('cylinder', PALETTE.metal.iron, [x - 0.3, y + 0.6, z - 0.24], [0.04, 0.9, 0.04]);
+          lamp(x - 0.3, y + 1.1, z - 0.24);
+          status(x + 0.2, y + 0.45, z + 0.31);
+        }
+        break;
+      }
+      case 'fountain': {
+        // a stone drinking fountain: a round basin on a short column, a spout; dry until water reaches it
+        b.add('cylinder', PALETTE.stone.light, [x, y + 0.08, z], [0.8, 0.16, 0.8]);
+        b.add('cylinder', PALETTE.stone.warm, [x, y + 0.3, z], [0.3, 0.3, 0.3]);
+        b.add('cylinder', PALETTE.stone.light, [x, y + 0.5, z], [0.62, 0.14, 0.62]);
+        b.add('cylinder', on ? W.water : W.bedDry, [x, y + 0.575, z], [0.5, 0.02, 0.5], on ? 0.2 : 0);
+        b.add('cylinder', PALETTE.stone.mid, [x, y + 0.75, z], [0.08, 0.36, 0.08]);
+        if (on) {
+          b.add('cylinder', W.waterHi, [x, y + 0.98, z], [0.05, 0.14, 0.05], 0.5);
+          b.add('sphere', W.waterHi, [x, y + 1.06, z], 0.1, 0.5);
+          b.add('cylinder', W.water, [x, y + 0.165, z], [0.7, 0.01, 0.7], 0.15);
+        } else b.add('box', W.crack, [x + 0.1, y + 0.586, z], [0.3, 0.005, 0.03]);
+        break;
+      }
+      case 'valve': {
+        // the springs' pump: a squat pump body on a stone pad, a pipe stub into the ground, a big valve wheel on top
+        b.add('box', PALETTE.stone.dark, [x, y + 0.06, z], [0.85, 0.12, 0.85]);
+        b.add('cylinder', on ? W.cabinetLit : W.cabinet, [x - 0.08, y + 0.36, z], [0.46, 0.5, 0.46]);
+        b.add('box', on ? PALETTE.metal.steel : W.rust, [x + 0.28, y + 0.22, z], [0.3, 0.16, 0.16]);
+        b.add('cylinder', on ? PALETTE.metal.steel : W.rust, [x + 0.38, y + 0.12, z], [0.18, 0.24, 0.18]);
+        b.add('cylinder', PALETTE.metal.iron, [x - 0.08, y + 0.7, z], [0.05, 0.2, 0.05]);
+        b.add('cylinder', on ? W.brass : W.rust, [x - 0.08, y + 0.82, z], [0.44, 0.04, 0.44]);
+        for (const [dx, dz] of [[0.2, 0], [-0.2, 0], [0, 0.2], [0, -0.2]]) b.add('box', on ? W.brass : W.rust, [x - 0.08 + dx / 2, y + 0.82, z + dz / 2], [dx ? 0.2 : 0.03, 0.03, dz ? 0.2 : 0.03]);
+        status(x + 0.17, y + 0.5, z + 0.24);
+        b.add('cylinder', PALETTE.metal.iron, [x - 0.32, y + 0.6, z - 0.3], [0.04, 1.1, 0.04]);
+        lamp(x - 0.32, y + 1.2, z - 0.3);
+        if (on) b.add('sphere', W.waterHi, [x + 0.44, y + 0.04, z], 0.22, 0.4);
+        break;
+      }
+      case 'channel': {
+        // the greenhouse's watering channel: a stone channel across the tile between planting kerbs
+        b.add('box', PALETTE.stone.grey, [x, y + 0.08, z], [0.95, 0.16, 0.6]);
+        b.add('box', on ? W.water : W.bedDry, [x, y + 0.165, z], [0.95, 0.01, 0.38], on ? 0.2 : 0);
+        if (!on) for (const dx of [-0.25, 0.15]) b.add('box', W.crack, [x + dx, y + 0.172, z + 0.04], [0.22, 0.005, 0.03]);
+        for (const dz of [-0.36, 0.36]) b.add('box', PALETTE.wood.dark, [x, y + 0.2, z + dz], [0.95, 0.12, 0.1]);
+        for (const dx of [-0.3, 0, 0.3]) b.add('sphere', on ? W.moss : W.dust, [x + dx, y + 0.3, z + 0.36], on ? 0.18 : 0.1);
+        // a spout at its head, where the pipe's water comes in
+        b.add('box', PALETTE.stone.dark, [x - 0.44, y + 0.3, z], [0.12, 0.44, 0.5]);
+        if (on) b.add('box', W.waterHi, [x - 0.36, y + 0.24, z], [0.06, 0.12, 0.26], 0.4);
+        break;
+      }
+      case 'clockwork':
+      case 'liftgear': {
+        // the Clock Tower's clockwork (a nest of gears on a plinth) and the lift's winding gear (a wheel on a frame):
+        // rusty or dusty while seized; drones work them clean, bright and ticking
+        const dirt = def.look === 'clockwork' ? W.rust : W.dust;
+        b.add('box', PALETTE.stone.dark, [x, y + 0.15, z], [0.8, 0.3, 0.8]);
+        const gear = (gx: number, gy: number, gz: number, r: number, teeth: number) => {
+          b.add('cylinder', on ? W.brass : dirt, [gx, gy, gz], [r * 2, 0.08, r * 2], on ? 0.1 : 0);
+          b.add('cylinder', on ? W.steelClean : PALETTE.metal.iron, [gx, gy + 0.05, gz], [r * 0.5, 0.06, r * 0.5]);
+          for (let i = 0; i < teeth; i++) {
+            const a = (i / teeth) * Math.PI * 2;
+            b.add('box', on ? W.brass : dirt, [gx + Math.cos(a) * r, gy, gz + Math.sin(a) * r], [0.07, 0.08, 0.07]);
+          }
+        };
+        if (def.look === 'clockwork') {
+          b.add('cylinder', PALETTE.metal.iron, [x, y + 0.5, z], [0.06, 0.4, 0.06]);
+          gear(x - 0.1, y + 0.36, z - 0.05, 0.28, 10);
+          gear(x + 0.22, y + 0.5, z + 0.2, 0.16, 7);
+          gear(x - 0.05, y + 0.72, z + 0.05, 0.2, 8);
+          status(x + 0.3, y + 0.3, z + 0.41);
+        } else {
+          for (const dx of [-0.32, 0.32]) b.add('box', on ? W.steelClean : PALETTE.metal.iron, [x + dx, y + 0.7, z], [0.08, 1.1, 0.08]);
+          b.add('box', on ? W.steelClean : PALETTE.metal.iron, [x, y + 1.25, z], [0.72, 0.08, 0.1]);
+          gear(x, y + 0.4, z, 0.3, 12);
+          b.add('cylinder', on ? W.steelClean : dirt, [x, y + 0.8, z], [0.3, 0.3, 0.3]);
+          b.add('cylinder', PALETTE.metal.dark, [x, y + 1.02, z], [0.04, 0.4, 0.04]);
+          lamp(x + 0.32, y + 1.34, z, 0.08);
+        }
+        if (!on) for (const [dx, dz] of [[0.25, -0.3], [-0.3, 0.25]]) b.add('sphere', W.dust, [x + dx, y + 0.3, z + dz], 0.12);
+        break;
+      }
+    }
   }
 
   /**
@@ -1838,6 +2019,12 @@ export class ChunkRenderer {
       };
       for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + 0.5, d.rot, !!v.far);
     }
+    // #783: the workbench beside the house
+    const wb = s.bench?.at;
+    if (wb && Math.floor(wb.x / CHUNK) === v.cx && Math.floor(wb.z / CHUNK) === v.cz && fog !== 'hidden') {
+      b.grey = 0;
+      this.workbench(b, wb.x + 0.5, h + 0.08 + s.grid.groundOffset(GROUND, wb.x, wb.z), wb.z + 0.5, s.bench.facing());
+    }
     this.fb = fb;
     this.sink = b;
     for (const t of v.towers ?? []) for (const e of t.entities) e.destroy();
@@ -1975,7 +2162,7 @@ export class ChunkRenderer {
     if ((t.feature ?? 'lawn') === 'water') return false;
     const spot = treeSpot(t, this.areaType, treeWorldOf(this.sim)); // P7-E29: from the generated world
     if (!spot) return false;
-    const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: trees fade with low water
+    const stage = this.sim.trees.stage(t); // E23.4.4: trees fade with low water
     if (!stage) return false;
     const growth = this.treeBloom;
     if (growth?.outgoing) return true;
@@ -2008,6 +2195,7 @@ export class ChunkRenderer {
   private warm: Generator<void> | undefined = (function* () {
     yield* warmFlora(); // Look 3: grass, flowers and shrubs first (every restored tile uses them)
     yield* warmTemplates();
+    yield* warmGiants(); // giant trees: their own entities (GiantTrees), but the same slices
   })();
   private warmTrees() {
     if (!this.warm) return;
@@ -2312,6 +2500,27 @@ export class ChunkRenderer {
 
   private treeBloom?: TreeBloom;
 
+  /** Trees growing into a stage they reached by age (TreeGrowth), by tile id: the stage they grew from, and when. */
+  private treeGrows = new Map<string, { from: number; t0: number }>();
+
+  /** A tree grew a stage as it aged: it grows into it on screen over a few seconds (a step down just redraws). */
+  treeGrew(t: TileData, from: number, to: number) {
+    if (from >= 1 && to > from) this.treeGrows.set(t.id, { from, t0: this.sim.time });
+    this.markTile(t);
+  }
+
+  private treeGrowOf(t: TileData): TileTransition | undefined {
+    const g = this.treeGrows.get(t.id);
+    if (!g) return undefined;
+    if (this.sim.time > g.t0 + TREE_GROWTH.morph) {
+      this.treeGrows.delete(t.id);
+      return undefined;
+    }
+    const stage = this.sim.trees.stage(t) ?? 0;
+    // addTree grows a bloom transition from `from - (bloom - stage)`: start from the stage it grew from
+    return { k: 'bloom', t0: g.t0, d: TREE_GROWTH.morph, from: g.from + ((t.bloom || 1) - stage) };
+  }
+
   private readonly host: ChunkHost = (() => {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -2338,6 +2547,7 @@ export class ChunkRenderer {
         return self.slabCap;
       },
       slab: (sink: Sink, hex: string, p: [number, number, number], s: [number, number, number]) => self.slabInto(sink, hex, p, s),
+      treeGrow: (t: TileData) => self.treeGrowOf(t),
       set slabCap(v) {
         self.slabCap = v;
       },

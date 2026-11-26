@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
 const out = process.argv[2] ?? 'docs/review/farm';
 mkdirSync(out, { recursive: true });
 const server = await preview({ preview: { port: 4254, strictPort: true }, logLevel: 'silent' });
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const errors = [];
 const check = (ok, what) => {
@@ -321,7 +321,7 @@ try {
   }
   if (placed.orchard) {
     await face(placed.orchard[0].x, placed.orchard[0].z);
-    check(/Harvest the Fruit Tree/.test(await promptFor(/Harvest the Fruit Tree/)), `the fruit tree has fruit (${await prompt()})`);
+    check(/Pick the ripe fruit/.test(await promptFor(/Pick the ripe fruit/)), `the fruit tree has ripe fruit (${await prompt()})`);
     await snap('fruit-tree');
   }
   if (placed.mushroomLog) {

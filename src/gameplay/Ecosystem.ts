@@ -2,7 +2,9 @@ import { CHUNK } from '../core/Hash';
 import { decorKey } from '../core/Decor';
 import { GROUND } from '../core/GameState';
 import { generateTile } from '../core/Generation';
-import { bloomCounts, plantsOf } from '../core/TilePack';
+import { bloomCounts, plantsOf, treeAtsOf } from '../core/TilePack';
+import { gameSecondsOf } from './Clock';
+import { isGiantOccupant } from './TreeGrowth';
 import { PLANT_LOAD, PULSE_LOAD } from '../data/pulse';
 import type { Chunk } from '../core/Grid';
 import type { TileData } from '../core/types';
@@ -10,7 +12,7 @@ import { TUNING } from '../data/tuning';
 import { DIVERSITY } from '../data/farmExtras';
 import { isBuilt } from '../data/machines';
 // Pure, deterministic placement (type-only imports from TreeGen): the same tree tiles the renderer draws.
-import { treeSpot, treeWorldOf } from '../rendering/TreePlacement';
+import { giantNear, nextTreeStep, treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
 import type { Sim } from './Sim';
 
 /**
@@ -130,6 +132,8 @@ interface ChunkTally {
   features: number;
   pollinators: number;
   rarePollinators: number;
+  /** game seconds when a tree here next grows a stage (its count changes then), if one is still growing */
+  nextGrow?: number;
 }
 
 const SPECIES_BIT: Record<string, number> = { oak: 1, cherry: 2, birch: 4, pine: 8, willow: 16 };
@@ -201,6 +205,15 @@ export class EcosystemSystem {
       }
       this.dirty.clear();
     }
+    // chunks where a tree has grown a stage since they were counted (saved chunks too: trees grow while away)
+    const now = gameSecondsOf(s.state);
+    for (const [key, t] of this.tallies) {
+      if (t.nextGrow === undefined || t.nextGrow > now) continue;
+      const [layer, cx, cz] = key.split('|');
+      const packed = s.grid.pending[key];
+      if (packed) this.tallies.set(key, this.tallyPacked(key, packed));
+      else if (s.grid.peek(layer, Number(cx) * CHUNK, Number(cz) * CHUNK)) this.tallies.set(key, this.tallyChunk(s.grid.chunkAt(layer, Number(cx), Number(cz))!));
+    }
     let budget = all ? Infinity : TUNING.ecosystem.pendingChunksPerRecount;
     while (budget-- > 0 && this.pendingTodo.length) {
       const key = this.pendingTodo.pop()!;
@@ -262,7 +275,7 @@ export class EcosystemSystem {
     return out;
   }
 
-  private tallyTile(out: ChunkTally, t: Pick<TileData, 'ground' | 'bloom' | 'feature' | 'x' | 'z' | 'blocked' | 'occupantId' | 'plant'>, type: string | undefined) {
+  private tallyTile(out: ChunkTally, t: Pick<TileData, 'ground' | 'bloom' | 'feature' | 'x' | 'z' | 'blocked' | 'occupantId' | 'plant' | 'treeAt'>, type: string | undefined, now = gameSecondsOf(this.sim.state)) {
     if (t.ground !== 'restored') return;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
     out.stages[stage]++;
@@ -277,17 +290,23 @@ export class EcosystemSystem {
       out.water++;
       return;
     }
-    if (!type || t.occupantId) return;
-    const spot = treeSpot(t, type, treeWorldOf(this.sim));
-    if (!spot) return;
-    if (stage >= 2) out.species |= SPECIES_BIT[spot.species] ?? 0;
-    if (stage >= 3) out.thrivingTrees++;
+    // trees count as they grow (owner: count a tree once it has grown); a giant's trunk cells count as oaks
+    const giant = isGiantOccupant(t.occupantId);
+    if (!type || (t.occupantId && !giant)) return;
+    const species = giant ? 'oak' : treeSpot(t, type, treeWorldOf(this.sim))?.species;
+    if (!species) return;
+    const tree = treeStage(t, t.bloom, now, giant) ?? 0;
+    const next = nextTreeStep(t, now, giant);
+    if (next !== undefined) out.nextGrow = Math.min(out.nextGrow ?? Infinity, next);
+    if (tree >= 2) out.species |= SPECIES_BIT[species] ?? 0;
+    if (tree >= 3) out.thrivingTrees++;
   }
 
   /** Estimate for a saved chunk that isn't loaded: stages from the packed columns, the rest from generation. */
   private tallyPacked(key: string, packed: string): ChunkTally {
     const out: ChunkTally = { stages: bloomCounts(packed), thrivingTrees: 0, water: 0, species: 0, features: 0, pollinators: 0, rarePollinators: 0 };
     const plants = plantsOf(packed);
+    const treeAts = treeAtsOf(packed);
     const [layerId, cxs, czs] = key.split('|');
     const layer = this.sim.grid.layer(layerId);
     if (!layer) return out;
@@ -305,7 +324,7 @@ export class EcosystemSystem {
       const occupied =
         this.sim.grid.machinesInChunk(key).some((m) => x >= m.x && x < m.x + m.size && z >= m.z && z < m.z + m.size) ||
         this.sim.grid.decorInChunk(key).includes(decorKey(layerId, x, z)); // E19.2: decorations occupy like machines
-      this.tallyTile(out, { ground: 'restored', bloom: Number(packed[N + i]) || 1, feature: g.feature, x, z, blocked: g.blocked, occupantId: occupied ? 'm' : undefined, plant: plants.get(i) }, type);
+      this.tallyTile(out, { ground: 'restored', bloom: Number(packed[N + i]) || 1, feature: g.feature, x, z, blocked: g.blocked, occupantId: occupied ? 'm' : giantNear(treeWorldOf(this.sim), x, z) ? 'giant:' : undefined, plant: plants.get(i), treeAt: treeAts.get(i) }, type);
     }
     return out;
   }

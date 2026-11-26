@@ -1,3 +1,4 @@
+import type { Season } from './seasons';
 // E23.5.4 (#389, #429–#434): beyond planters. Each thing to tend plugs into a system that already exists, and every
 // creature is wild and attracted, never kept. All data, no rules; starting values for tuning.
 
@@ -26,19 +27,57 @@ export const FISH_POND = {
   feedReach: 2,
 };
 
-/** E23.5.4.3 (#431): orchards. Fruit trees planted once. */
+/**
+ * E23.5.4.3 (#431, #785): orchards. Fruit trees planted once. A tree grows for `grownDays`, then fruits once a game
+ * day (48 minutes of play), so a player sees a picking in a normal session. Each day's fruit shows on the tree as it
+ * comes: the branches are bare just after picking, then flower, set small green fruit, swell and colour up until ripe.
+ */
 export const ORCHARD = {
-  /** game days from planting to the first fruit, then between crops */
-  firstFruitDays: 3,
-  fruitDays: 2,
-  /** food one picking gives */
+  /** game days from planting to a grown tree (it grows on screen meanwhile) */
+  grownDays: 0.25,
+  /** game days from planting, or from the last picking, to ripe fruit (fertile soil speeds it up) */
+  fruitDays: 1,
+  /** fruit one picking gives (Fruit, a snack) */
   fruit: 4,
+  /** seconds Interact is held to pick a ripe tree */
+  holdSeconds: 0.9,
   /** game days until a tree wants pruning again; pruning gives timber, and an unpruned tree just fruits a little less */
   pruneDays: 4,
   timber: 3,
   /** an overgrown tree's crop, times this (never zero) */
   overgrownFruit: 0.5,
+  /**
+   * how far through a day's ripening (0 just picked … 1 ripe) the branches stay bare, then flower, then carry fruit
+   * that is "nearly ripe". The tree's look changes in `looks` steps a day, and these sit on its steps (twelfths), so
+   * the words always match what the tree shows.
+   */
+  looks: 12,
+  bareUntil: 1 / 12,
+  blossomUntil: 4 / 12,
+  nearlyRipe: 9 / 12,
+  /** #785: what a fruit tree does without a season: every day, bare after picking, flowers, then fruit */
+  daily: { ripens: true, blossom: true } as OrchardSeasonRule,
+  /** #830: by season: it flowers in spring, fruits every day in summer and autumn, and rests in winter */
+  seasons: {
+    spring: { ripens: false, blossom: true },
+    summer: { ripens: true, blossom: false },
+    autumn: { ripens: true, blossom: false },
+    winter: { ripens: false, blossom: false },
+  } as Record<Season, OrchardSeasonRule>,
+  /** how far a tree in its spring flowers shows (a look step: fully open) */
+  seasonBloom: 3 / 12,
 };
+
+/** #785 → #830: what a season lets a fruit tree do: ripen fruit, and flower (in its daily cycle, or all season). */
+export interface OrchardSeasonRule {
+  ripens: boolean;
+  blossom: boolean;
+  /** a newly planted tree waiting on its first crop (#831: it comes in any season but winter) */
+  first?: boolean;
+}
+
+/** What a fruit tree shows: still growing up, bare (just picked), in flower, green fruit, nearly ripe, or ripe. */
+export type FruitPhase = 'young' | 'bare' | 'blossom' | 'green' | 'nearly' | 'ripe';
 
 /** E23.5.4.4 (#432): mushroom logs and worm bins. */
 export const MUSHROOM_LOG = {

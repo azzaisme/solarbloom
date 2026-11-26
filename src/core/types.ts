@@ -11,6 +11,8 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   | 'beehive'
   | 'fishPond'
   | 'orchard'
+  // giant trees (owner, 26 Nov 2026): planted in the woodland, growing over game days
+  | 'giantTree'
   | 'mushroomLog'
   | 'wormBin'
   | 'birdBox'
@@ -99,6 +101,11 @@ export interface TileData {
   ramp?: boolean;
   /** E23.2.2: what a loaded pulse grew here (unset: plain grass and moss). Saved. */
   plant?: PlantKind;
+  /**
+   * When this tile's tree was planted (its ground restored), in game seconds (`gameSecondsOf`). Trees grow over game
+   * days from then (TreePlacement TREE_GROWTH); unset once grown, and on tiles with no tree. Saved.
+   */
+  treeAt?: number;
 }
 
 /** E23.2.2: what grows from a pulse's load: a wildflower meadow (seeds), a region's rare plants, a grove (fertiliser). */
@@ -135,6 +142,11 @@ export interface LayerData {
   template?: string;
   /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */
   cluster?: string;
+  /**
+   * #782: the inside of Bloombot's house: a room of floorboards, not a rooftop (nothing grows, no machines, no fog;
+   * drawn by rendering/HouseInterior and shown only while Bloombot is inside).
+   */
+  interior?: boolean;
 }
 
 /** Kept as an alias while the rooftop-era code is ported (City 12 removes it). */
@@ -151,6 +163,8 @@ export interface MachineData {
   /** Resources paid for a machine whose recipe changed, used when it is dismantled. */
   buildCost?: Partial<Record<ItemId, number>>;
   boostUntil: number; // solar bloom boost
+  /** A planted giant tree: when it was planted (game seconds); it grows from a young tree over game days. */
+  plantedAt?: number;
   /** E23.12 (#528): a Lucky Cat's Golden Relay: this relay carries power further, for good. */
   golden?: boolean;
   timer: number; // per-machine automation timer
@@ -361,6 +375,8 @@ export interface LinkState {
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
 export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser' | 'honey'
+  // #785: picked from fruit trees (data/fruit FRUIT_IDS)
+  | 'apple' | 'pear' | 'peach' | 'lemon'
   // E23.8.3.2: from the mainland's industrial ruins only
   | 'steel';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
@@ -419,6 +435,8 @@ export interface SalvageState {
   blueprints: string[];
   /** E21.11: the house's level (0 = the ruined shed) */
   house: number;
+  /** #782: what has been handed in toward the house's next level (part deliveries; cleared when it grows) */
+  houseDelivered?: Partial<Record<MaterialId, number>>;
   /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
   /** E23.7.4: when each pile that isn't full last gained a unit (sim time), by pile id: it refills from there */
@@ -427,12 +445,18 @@ export interface SalvageState {
   items?: string[];
   /** E21.9: lasting region rewards in effect (data/oldcity RewardId), in the order they were won */
   rewards?: string[];
+  /** #787: regions whose works run (power, water or drones reached them), by region id in map order; for good */
+  works?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
-  /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
+  /** #783: where the workbench stands, beside the house (set on a new game, or on the first load of an older save) */
+  bench?: { x: number; z: number };
+  /** E23.6.1: the workbench's queue (recipe id, crafts left, seconds left on the one in hand) */
   craft?: { id: string; n: number; left: number }[];
   /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
   decorMade?: string[];
+  /** #782: the decoration given when the fountain reached its first step (set once; absent before then) */
+  decorGift?: string;
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
   /** E23.6.4: what each supply crate holds, by machine id */
@@ -599,6 +623,13 @@ export interface GameState {
   charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
+  /** #830: the seasons (optional: a save from before them starts a fresh spring on the day it first loads) */
+  seasons?: SeasonsState;
+}
+
+/** #830: the year began on this game day (spring's first day); the season is worked out from the game clock. */
+export interface SeasonsState {
+  startDay: number;
 }
 
 /**

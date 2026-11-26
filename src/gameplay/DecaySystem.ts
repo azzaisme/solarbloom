@@ -34,6 +34,11 @@ export class DecaySystem {
     this.initialized = true;
   }
 
+  /** Cozy Mode (the setting): plants never wilt, and (#785) an unpruned fruit tree only looks shaggy. */
+  get cozyMode(): boolean {
+    return this.cozy;
+  }
+
   setCozyMode(on: boolean) {
     if (on === this.cozy) return;
     this.cozy = on;
@@ -89,6 +94,7 @@ export class DecaySystem {
         t.pollution = 25;
         t.bloom = 0;
         t.plant = undefined;
+        sim.trees?.lost(t);
         t.tr = undefined;
         t.lushUntil = undefined;
         t.lushAt = undefined;

@@ -53,6 +53,7 @@ export const BUILD_TAB: Record<BuildableType | 'pipe', BuildTabId> = {
   beehive: 'farm',
   fishPond: 'farm',
   orchard: 'farm',
+  giantTree: 'farm',
   mushroomLog: 'farm',
   wormBin: 'farm',
   butterflyGarden: 'farm',
@@ -87,7 +88,8 @@ const LINES: Record<BuildableType | 'pipe', string> = {
   motherTree: 'Every patch you turn green nearby feeds it, until it bursts everything around it into flower at once.',
   beehive: 'Bees settle once flowers or herbs grow nearby. They make honey and speed up the crops around it.',
   fishPond: 'Kept filled from water nearby or a pipe. Its water feeds the planters it reaches, so they need no fertiliser.',
-  orchard: 'Planted once, it fruits every few days. Prune it now and then for timber.',
+  orchard: 'Planted once, it flowers in spring and fruits every day through summer and autumn: apples, pears, peaches or lemons, by where it grows. Prune it now and then for Timber.',
+  giantTree: 'Starts as a young tree and grows over many days into a giant you can walk under. Only in Elder Grove.',
   mushroomLog: 'Feed it compost and keep it shaded: mushrooms come up at night and in fog.',
   wormBin: 'Feed the worms scraps and the compost bins beside it work twice as fast.',
   butterflyGarden: 'Butterflies come when flowers or herbs grow nearby.',
@@ -119,6 +121,7 @@ const SHORT: Partial<Record<BuildableType, string>> = {
   butterflyGarden: 'Butterflies',
   hedgehogHouse: 'Hedgehog',
   orchard: 'Fruit tree',
+  giantTree: 'Giant tree',
 };
 
 export interface BuildCost {
@@ -225,7 +228,7 @@ function decorItem(sim: Sim, id: string): BuildItem | undefined {
     kind: o.solid ? 'Free to place · stands in the way' : 'Free to place · walk right over it',
     line: o.blurb,
     locked: !open,
-    lockText: open ? undefined : 'Make it at the table',
+    lockText: open ? undefined : 'Make it at the workbench',
     cost: [],
     affordable: open,
   };

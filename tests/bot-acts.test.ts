@@ -31,9 +31,9 @@ describe('Bloombot acts out every Interact verb (#628)', () => {
 
   it('every hold the Old City runs has a looping act', () => {
     const kinds = [...read('src/app/OldCity.ts').matchAll(/startHold\('(\w+)'/g)].map((m) => m[1]);
-    expect(new Set(kinds)).toEqual(new Set(['salvage', 'pry', 'gather']));
+    expect(new Set(kinds)).toEqual(new Set(['salvage', 'pry', 'gather', 'pick']));
     for (const k of kinds) expect(HOLD_ACTS[k]).toBeDefined();
-    expect(HOLD_ACTS).toMatchObject({ salvage: 'rummage', pry: 'pry', gather: 'gather' });
+    expect(HOLD_ACTS).toMatchObject({ salvage: 'rummage', pry: 'pry', gather: 'gather', pick: 'harvest' });
   });
 
   it('each act has a small effect, and the held ones keep making it while they work', () => {
