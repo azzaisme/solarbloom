@@ -67,7 +67,7 @@ describe('E23.6.4: jobs done by hand open their automation', () => {
     const sim = park();
     sim.state.salvage!.keepers.atlas = { step: 'request1' };
     expect(sim.build.isUnlocked('assembler')).toBe(false);
-    expect(sim.build.lockLabel('assembler')).toMatch(/Make components at the crafting table \(0 of 12\)/);
+    expect(sim.build.lockLabel('assembler')).toMatch(/Make components at the workbench \(0 of 12\)/);
     sim.inventory.add('copper', 40);
     sim.crafting.craft('wire', HAND_JOBS.craft.times);
     sim.crafting.work(1000);

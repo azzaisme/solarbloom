@@ -84,7 +84,7 @@ describe('E21.3: recipes', () => {
     ground(sim, 12, 12);
     // E23.6.1: a component is named with where it is made; a material with its region once seen
     sim.inventory.add('scrap', 20);
-    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Motor 🌀: make it at the crafting table in the house');
+    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Motor 🌀: make it at the workbench beside the house');
     sim.inventory.add('motor', 2);
     expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️');
     sim.state.areas.clockPlaza = { fog: 'frontier', revealedAt: 0, sealed: true };

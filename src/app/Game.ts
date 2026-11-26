@@ -2563,12 +2563,11 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
-    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start. Facing the shed's walls
-    // uses the table (listed first, so it wins the tie); the door in front of it is for the radio and the bed.
-    const sh = PARK_SET.shed;
-    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+    // #783: the workbench stands outside beside the house from the start: walk up to it and Interact opens crafting.
+    // The house is a home only (its radio by day, its bed from dusk).
+    if (s.bench.isAt(GROUND, f.x, f.z))
       out.push({
-        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        kind: 'machine', id: 'craft:bench', verb: 'Use', name: 'the workbench', distance: fd, at: front, frame: { roofId: GROUND, x: f.x, z: f.z, size: 1 },
         run: () => {
           this.oc?.panel.close();
           this.hud.craft.open();
@@ -3753,7 +3752,7 @@ export class Game {
     const why = pipes.layProblem(p.roofId, t.x, t.z) ?? (this.inReach(p.roofId, t.x, t.z, 1) ? undefined : TOO_FAR);
     this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.12);
     const have = this.sim.inventory.available('pipe');
-    const left = `${have} Pipe${have === 1 ? '' : 's'} at hand (the crafting table makes them)`;
+    const left = `${have} Pipe${have === 1 ? '' : 's'} at hand (the workbench makes them)`;
     this.hud.showTip(x, y, `<b>Pipe</b>Carries water from a pump or a reservoir to whatever stands beside it.<br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to lay · ${left}</span>`}`);
   }
 

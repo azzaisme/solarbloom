@@ -187,7 +187,7 @@ export class Hud {
   readonly panels: Panels;
   /** E22.6: the backpack screen (and the storage panel) */
   readonly backpack: Backpack;
-  /** E23.6.1: the crafting table */
+  /** E23.6.1: the crafting panel (#783: opened at the workbench beside the house) */
   readonly craft: CraftTable;
   /** E23.2.1: bloombot's charge, the only meter */
   readonly charge: ChargeMeter;

@@ -905,6 +905,12 @@ export const PARK_SET = {
   ],
   /** E21.11: the ruined shed, north-west of the fountain (3 × 3; its door faces the fountain, on the south-east) */
   shed: { x: 2, z: 2, size: 3, door: [4, 5] as [number, number] },
+  /**
+   * #783: the workbench, outside against the house's east wall from the first day (crafting is no longer done in the
+   * house). It is one square; its front (the drawer and the tools) faces east, so Bloombot walks up from the path.
+   * An older save gets it here too, or on the nearest free square beside the house (gameplay/CraftBench).
+   */
+  bench: { x: 5, z: 3 },
   level: 1,
   /** broad steps down to the beach through the south gate */
   ramps: [{ x: 6, z: 14, w: 4, d: 2, dir: 's', from: 1, to: 0, kind: 'stair' }] as RampDef[],

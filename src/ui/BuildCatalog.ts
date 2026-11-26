@@ -228,7 +228,7 @@ function decorItem(sim: Sim, id: string): BuildItem | undefined {
     kind: o.solid ? 'Free to place · stands in the way' : 'Free to place · walk right over it',
     line: o.blurb,
     locked: !open,
-    lockText: open ? undefined : 'Make it at the table',
+    lockText: open ? undefined : 'Make it at the workbench',
     cost: [],
     affordable: open,
   };
