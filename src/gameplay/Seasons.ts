@@ -1,5 +1,6 @@
 import type { GameState } from '../core/types';
-import { SEASON_DAYS, SEASON_WORDS, SEASONS, seasonLine, type Season } from '../data/seasons';
+import { SEASON_DAYS, SEASON_WORDS, SEASONS, SNOW_BUILD, seasonLine, type Season } from '../data/seasons';
+import type { WeatherKind } from '../data/weather';
 import { DAY_SECONDS } from '../data/time';
 import { gameDayOf, gameSecondsOf } from './Clock';
 import type { Sim } from './Sim';
@@ -97,12 +98,45 @@ export class Seasons {
     this.sim.state.seasons = { startDay: today - (idx * SEASON_DAYS + d - 1) };
   }
 
+  /**
+   * #830: how much snow lies on the garden now, 0 (none) … 1 (all white). Worked out from the winter's weather so
+   * far (each day's weather is fixed by the seed, so a reload, sleeping or a photo always shows the same snow):
+   * snowy days lay it down, dry days melt some, and spring melts the rest.
+   */
+  snowCover(): number {
+    const n = this.now();
+    if (n.season !== 'winter' && n.season !== 'spring') return 0;
+    const today = gameDayOf(this.sim.state);
+    const f = this.sim.clock.gameDayFraction();
+    const winterStart = n.season === 'winter' ? today - (n.day - 1) : today - (n.day - 1) - SEASON_DAYS;
+    const kindOn = (day: number): WeatherKind => (day === today ? this.sim.weather.kind() : this.sim.weather.kindOn(day));
+    const cover = snowBuild(winterStart, n.season === 'winter' ? today : winterStart + SEASON_DAYS - 1, n.season === 'winter' ? f : 1, kindOn);
+    if (n.season === 'winter') return cover;
+    const into = n.day - 1 + f; // game days into spring
+    return Math.max(0, cover * (1 - into / SNOW_BUILD.springMeltDays));
+  }
+
   /** Per sim step: announces a new season. */
   tick() {
     const n = this.now();
     if (this.last !== undefined && n.season !== this.last) this.sim.bus.emit('season.changed', { season: n.season, from: this.last, year: n.year });
     this.last = n.season;
   }
+}
+
+/**
+ * #830: snow cover after the winter days `from` … `to` (the last day only `lastShare` of the way through), each day's
+ * weather from `kindOn`: a snowy day adds SNOW_BUILD.perSnowDay, a dry one melts by its weather.
+ */
+export function snowBuild(from: number, to: number, lastShare: number, kindOn: (day: number) => WeatherKind): number {
+  let c = 0;
+  for (let d = from; d <= to; d++) {
+    const share = d === to ? lastShare : 1;
+    const k = kindOn(d);
+    c = k === 'snow' ? c + SNOW_BUILD.perSnowDay * share : c - SNOW_BUILD.melt[k] * share;
+    c = Math.min(1, Math.max(0, c));
+  }
+  return c;
 }
 
 export function nextSeason(s: Season): Season {

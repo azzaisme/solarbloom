@@ -3273,7 +3273,7 @@ export class Game {
   private updateSeasonLook() {
     const n = this.sim.seasons.now();
     const sc = sceneNow(this.sim, this.photo);
-    this.seasonNow = seasonLookAt(n.season, n.progress, sc.f, sc.weather === 'snow');
+    this.seasonNow = seasonLookAt(n.season, n.progress, sc.f, sc.weather === 'snow', this.sim.seasons.snowCover());
     seasonShading.set(this.seasonNow);
   }
 

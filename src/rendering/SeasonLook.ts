@@ -17,6 +17,8 @@ import { PALETTE } from './Palette';
 /** The look at one moment (data/seasons SeasonLookDef), plus the grass colour it drifts toward (linear RGB). */
 export interface SeasonLookNow extends SeasonLookDef {
   grassColour: [number, number, number];
+  /** snow lying on the garden, 0 … 1 (all white): built up over snowy winter days (Seasons.snowCover) */
+  snow: number;
 }
 
 /** sRGB hex → linear RGB 0 … 1 (how the shaders compare colours). */
@@ -35,7 +37,7 @@ const smooth = (x: number) => {
  * fraction (0 dawn) and whether snow is falling. The last `SEASON_LOOK_TIMING.blend` of each season eases into the
  * next season's look, so nothing pops.
  */
-export function seasonLookAt(season: Season, progress: number, dayFraction = 0.3, snowing = false): SeasonLookNow {
+export function seasonLookAt(season: Season, progress: number, dayFraction = 0.3, snowing = false, snowCover = 0): SeasonLookNow {
   const i = SEASONS.indexOf(season);
   const nextS = SEASONS[(i + 1) % SEASONS.length];
   const a = SEASON_LOOK[season];
@@ -53,6 +55,7 @@ export function seasonLookAt(season: Season, progress: number, dayFraction = 0.3
     frost: mix(a.frost, b.frost),
     leafFall: mix(a.leafFall, b.leafFall),
     grassColour: [ga[0] + (gb[0] - ga[0]) * k, ga[1] + (gb[1] - ga[1]) * k, ga[2] + (gb[2] - ga[2]) * k],
+    snow: Math.min(1, Math.max(0, snowCover)),
   };
   // a frosty winter morning, and fresh snow on a snowy day (only where there is frost already: winter)
   if (out.frost > 0) {
@@ -72,7 +75,7 @@ export function seasonUniforms(look: SeasonLookNow): Record<string, number[]> {
   const S = PALETTE.season;
   return {
     uSeasonA: [look.grass, look.autumn, look.bare, look.blossom],
-    uSeasonB: [look.frost, 1, 0, 0],
+    uSeasonB: [look.frost, 1, look.snow ?? 0, 0],
     uSeasonGrass: look.grassColour,
     uSeasonAut0: linear(S.autumn[0]),
     uSeasonAut1: linear(S.autumn[1]),
@@ -100,7 +103,7 @@ export class SeasonShading {
     const d = t === 'low' ? 0 : 1;
     if (d === this.detail) return;
     this.detail = d;
-    this.values = { ...this.values, uSeasonB: [this.values.uSeasonB[0], d, 0, 0] };
+    this.values = { ...this.values, uSeasonB: [this.values.uSeasonB[0], d, this.values.uSeasonB[2], 0] };
     for (const m of this.mats) m.setParameter('uSeasonB', this.values.uSeasonB);
   }
 
@@ -138,7 +141,7 @@ export const seasonShading = new SeasonShading();
  */
 export const SEASON_GLSL = /* glsl */ `
 uniform vec4 uSeasonA; // grass shift, autumn, bare, blossom
-uniform vec4 uSeasonB; // frost, detail (0 on Low), unused
+uniform vec4 uSeasonB; // frost, detail (0 on Low), snow lying (0 … 1, all white), unused
 uniform vec3 uSeasonGrass;
 uniform vec3 uSeasonAut0;
 uniform vec3 uSeasonAut1;
@@ -177,12 +180,14 @@ vec3 sbSeasonColour(vec3 c, vec3 n, vec3 p) {
 		vec3 t = uSeasonGrass * (sbsLum(c) / max(sbsLum(uSeasonGrass), 0.001));
 		c = mix(c, t, g * uSeasonA.x);
 	}
-	if (uSeasonB.x > 0.001) {
+	if (uSeasonB.x > 0.001 || uSeasonB.z > 0.001) {
 		float up = smoothstep(0.35, 0.9, n.y);
 		float nz = sbsNoise(p.xz * 2.1);
 		if (uSeasonB.y > 0.5) nz = 0.65 * nz + 0.35 * sbsNoise(p.xz * 6.7 + 3.1);
-		float f = up * smoothstep(1.0 - uSeasonB.x, 1.0 - uSeasonB.x + 0.22, nz);
-		c = mix(c, uSeasonFrost * mix(0.7, 0.88, up), f * 0.7);
+		// lying snow widens the frost's patches until they join (past 1 every upward face is covered), and thickens it
+		float cover = uSeasonB.x + uSeasonB.z * 1.3;
+		float f = up * smoothstep(1.0 - cover, 1.0 - cover + 0.22, nz);
+		c = mix(c, uSeasonFrost * mix(0.7, 0.88 + 0.07 * uSeasonB.z, up), f * (0.7 + 0.25 * uSeasonB.z));
 	}
 	return c;
 }

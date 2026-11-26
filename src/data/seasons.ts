@@ -93,5 +93,17 @@ export const SEASON_LOOK: Record<Season, SeasonLookDef> = {
   winter: { grass: 0.55, autumn: 0.35, bare: 0.86, blossom: 0, frost: 0.32, leafFall: 0.25 },
 };
 
+/**
+ * #830: snow builds up. Each snowy winter day lays down `perSnowDay` of cover (1 = the whole garden white; there is no
+ * cap below that), spread through the day as it falls. A dry winter day melts some of it (`melt`, by the weather), and
+ * once spring comes the rest melts away over `springMeltDays`. Only the look changes: snow never slows, hides or
+ * blocks anything.
+ */
+export const SNOW_BUILD = {
+  perSnowDay: 0.45,
+  melt: { sunny: 0.35, cloudy: 0.12, rain: 0.5, wind: 0.15, storm: 0.3, fog: 0.08, snow: 0 } as Record<WeatherKind, number>,
+  springMeltDays: 0.8,
+};
+
 /** The look's timing: the last `blend` of each season eases into the next; a winter dawn adds `dawnFrost`. */
 export const SEASON_LOOK_TIMING = { blend: 0.34, dawnFrost: 0.3 };

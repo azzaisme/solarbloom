@@ -164,6 +164,26 @@ try {
   s = await seasonNow(page);
   check(s.weather === 'snow' && s.flakes > 50, `snow falls in winter (${s.flakes} flakes)`);
   await page.screenshot({ path: `${dir}/winter-snowfall.png` });
+
+  // snow builds up: a winter whose first two days were snowy, on a snowy third day, lies thick (no cap)
+  const deep = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const s = g.sim;
+    s.seasons.jumpTo('winter', 3);
+    const today = s.clock.gameDay();
+    let years = 0;
+    while (years < 200 && !(s.weather.kindOn(today + years * 12 - 2) === 'snow' && s.weather.kindOn(today + years * 12 - 1) === 'snow')) years++;
+    (s.state.clock ??= { offset: 0.06 * 2880 }).offset += years * 12 * 2880; // whole years on: still winter, day 3
+    s.weather.forceForTest('snow', 1e6);
+    const before = s.seasons.snowCover();
+    return { years, season: s.seasons.season(), day: s.seasons.dayOfSeason(), before };
+  });
+  await wait(8000);
+  const lying = await page.evaluate(() => ({ cover: window.solarbloom.sim.seasons.snowCover(), shader: window.solarbloom.seasonShading.current.uSeasonB[2] }));
+  check(deep.season === 'winter' && deep.day === 3 && lying.cover >= 0.88 && lying.shader >= 0.88, `snow builds up over snowy days, all the way to white (${JSON.stringify({ ...deep, ...lying })})`);
+  await page.addStyleTag({ content: '#toasts, .toast { display: none !important; }' });
+  await page.screenshot({ path: `${dir}/winter-deep-snow.png` });
+  await page.evaluate(() => document.querySelectorAll('style').forEach((st) => st.textContent.includes('#toasts, .toast') && st.remove()));
   await goTo(page, 'autumn', 2, 'wind', 2000);
   const leaves = await page.waitForFunction(
     () => window.solarbloom.vfx.particles.filter((p) => p.active && p.leaf && p.color[0] > p.color[1]).length,

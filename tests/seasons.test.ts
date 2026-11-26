@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/core/GameState';
 import type { GameState } from '../src/core/types';
-import { SEASON_DAYS, SEASON_LOOK, SEASON_WEATHER_ODDS, SEASON_WORDS, SEASONS, WINTER_COZY, seasonLine, type Season } from '../src/data/seasons';
+import { SEASON_DAYS, SEASON_LOOK, SEASON_WEATHER_ODDS, SEASON_WORDS, SEASONS, SNOW_BUILD, WINTER_COZY, seasonLine, type Season } from '../src/data/seasons';
 import { DAY, DAY_SECONDS, gameDays } from '../src/data/time';
 import { WEATHER, WEATHER_KINDS } from '../src/data/weather';
-import { nextSeason, seasonOf, seasonOnDayOf } from '../src/gameplay/Seasons';
+import { nextSeason, seasonOf, seasonOnDayOf, snowBuild } from '../src/gameplay/Seasons';
 import { Sim } from '../src/gameplay/Sim';
 import { buildGiant } from '../src/rendering/GiantTreeGen';
 import { PALETTE } from '../src/rendering/Palette';
@@ -340,5 +340,56 @@ describe('#830: which leaves follow the seasons', () => {
     expect(plainFlex(0.7 + LEAF_FLAG)).toBeCloseTo(0.7, 6);
     expect(plainFlex(0.7 + SEASON_FLAG)).toBeCloseTo(0.7, 6);
     expect(plainFlex(0.7 + LEAF_FLAG + SEASON_FLAG)).toBeCloseTo(0.7, 6);
+  });
+});
+
+describe('#830: snow builds up', () => {
+  const all = (k: 'snow' | 'sunny' | 'cloudy') => () => k;
+
+  it('snowy days lay it down, through the day, with no cap below a white garden', () => {
+    expect(snowBuild(10, 10, 0.5, all('snow'))).toBeCloseTo(SNOW_BUILD.perSnowDay / 2, 6);
+    expect(snowBuild(10, 10, 1, all('snow'))).toBeCloseTo(SNOW_BUILD.perSnowDay, 6);
+    expect(snowBuild(10, 12, 1, all('snow'))).toBe(1); // three snowy days: all white
+  });
+
+  it('dry days melt it by their weather, never below none', () => {
+    const kinds: Record<number, 'snow' | 'sunny' | 'cloudy'> = { 10: 'snow', 11: 'snow', 12: 'cloudy' };
+    const c = snowBuild(10, 12, 1, (d) => kinds[d]);
+    expect(c).toBeCloseTo(2 * SNOW_BUILD.perSnowDay - SNOW_BUILD.melt.cloudy, 6);
+    expect(snowBuild(10, 12, 1, (d) => (d === 10 ? 'snow' : 'sunny'))).toBe(0);
+  });
+
+  it('only winter and the first of spring have snow; a reload shows the same snow; spring melts it', () => {
+    const sim = fresh(9);
+    sim.seasons.jumpTo('autumn', 2);
+    expect(sim.seasons.snowCover()).toBe(0);
+    sim.seasons.jumpTo('winter', 3);
+    sim.weather.forceForTest('snow', gameDays(1));
+    skip(sim, 0.5);
+    const c = sim.seasons.snowCover();
+    expect(c).toBeGreaterThan(0);
+    // the same winter's weather is fixed, so a reload agrees (the held test weather aside: hold it again)
+    const again = reload(sim);
+    again.weather.forceForTest('snow', gameDays(1));
+    expect(again.seasons.snowCover()).toBeCloseTo(c, 6);
+    sim.seasons.jumpTo('spring', 1);
+    const f = sim.clock.gameDayFraction();
+    skip(sim, SNOW_BUILD.springMeltDays + 0.05 - f);
+    expect(sim.seasons.snowCover()).toBe(0);
+    sim.seasons.jumpTo('summer', 1);
+    expect(sim.seasons.snowCover()).toBe(0);
+  });
+
+  it('the shaders get it as uSeasonB.z, and it never changes anything but the look', () => {
+    expect(seasonUniforms(seasonLookAt('winter', 0.5, 0.3, true, 0.8)).uSeasonB[2]).toBeCloseTo(0.8, 6);
+    expect(seasonLookAt('winter', 0.5, 0.3, true, 3).snow).toBe(1);
+    const run = (snow: boolean) => {
+      const sim = fresh(3);
+      sim.seasons.jumpTo('winter', 3);
+      sim.weather.forceForTest(snow ? 'snow' : 'cloudy', gameDays(1));
+      sim.advance(60);
+      return { charge: sim.state.charge, bloom: sim.weather.bloomSpeed() };
+    };
+    expect(run(true)).toEqual(run(false));
   });
 });
