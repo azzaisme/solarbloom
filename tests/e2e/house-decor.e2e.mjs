@@ -29,7 +29,7 @@ const check = (ok, what) => {
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const toasts = (page) => page.evaluate(() => [...document.querySelectorAll('#toasts .toast')].map((t) => t.innerText.replace(/\s+/g, ' ').trim()).join(' | '));
-const keyOf = (page, action) => page.evaluate((a) => window.solarbloom.bindings.keys[a][0], action);
+const keyOf = (page, action) => page.evaluate((a) => window.solarbloom.bindings.keys[a].find((k) => !/^Mouse/.test(k)), action);
 const press = async (page, code) => page.keyboard.press(code.replace(/^Key/, '').replace(/^Digit/, ''));
 
 try {
@@ -124,6 +124,7 @@ try {
           const t = g.sim.grid.get('g', x, z);
           const st = g.sim.grid.get('g', x, z + 1);
           if (!t || !st || t.blocked || t.occupantId || st.blocked || st.occupantId || t.feature === 'water' || g.cozy.spotAt('g', x, z)) continue;
+          if (x === dx && z === dz) continue; // the door stays clear (checked below)
           if (out.some(([a, b]) => Math.abs(a - x) + Math.abs(b - z) < 2)) continue;
           t.ground = 'restored';
           t.pollution = 0;
@@ -134,6 +135,14 @@ try {
     return out;
   });
   check(spots.length === 2, `green ground by the house (${JSON.stringify(spots)})`);
+  const door = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const t = g.sim.grid.get('g', 4, 5);
+    t.ground = 'restored';
+    g.sim.grid.touch(t);
+    return g.cozy.canDecorate('pot', 'g', 4, 5) ?? '';
+  });
+  check(/door of the house clear/.test(door), `the house's door stays clear ("${door}")`);
   const placeKey = await keyOf(page, 'pulse');
   for (const [x, z] of spots) {
     await page.evaluate(([x, z]) => {

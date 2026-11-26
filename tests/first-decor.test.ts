@@ -22,6 +22,7 @@ function scene(seed = 7) {
     for (let z = dz - r; z <= dz + r && cells.length < 3; z++)
       for (let x = dx - r; x <= dx + r && cells.length < 3; x++) {
         const t = sim.grid.get(GROUND, x, z);
+        if (x === dx && z === dz) continue; // the door stays clear
         if (!t || t.blocked || t.occupantId || t.feature === 'water' || cozy.spotAt(GROUND, x, z) || cells.includes(t)) continue;
         t.ground = 'restored';
         t.pollution = 0;
@@ -118,5 +119,20 @@ describe('#782: the first decoration is a gift at the fountain’s first step', 
     expect(text).toContain('Flower pot');
     expect(text).toMatch(/Decorations/);
     expect(text).not.toMatch(/\b(click|tap)\b/i);
+  });
+});
+
+describe('#782: decorations go round the house, never in its door', () => {
+  it('the ground at the door refuses a decoration; the ground beside it takes one', () => {
+    const { sim, cozy } = scene();
+    sim.state.salvage!.tier = 1;
+    cozy.giveFirstDecor();
+    const [dx, dz] = PARK_SET.shed.door;
+    const t = sim.grid.get(GROUND, dx, dz)!;
+    t.ground = 'restored';
+    t.pollution = 0;
+    sim.grid.touch(t);
+    expect(cozy.canDecorate('pot', GROUND, dx, dz)).toMatch(/door of the house clear/);
+    expect(bannedIn('Keep the door of the house clear')).toEqual([]);
   });
 });

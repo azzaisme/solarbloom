@@ -1125,6 +1125,16 @@ export interface HouseLevel {
   gives: string[];
 }
 
+/**
+ * #782: the house grows one level at a time, each a delivery handed in at its door (a bit at a time; part deliveries
+ * are saved), from the fountain's first step on (the step that gives "the house plot"). Before that it is the ruined
+ * shed, with no inside. `room` is the inside's size and `decor` how many decorations it holds.
+ */
+export const HOUSE_GROWTH = {
+  /** the fountain step from which the house can be mended */
+  opensAtStep: 1,
+};
+
 export const HOUSE: HouseLevel[] = [
   { level: 1, name: 'Shed', delivery: { scrap: 15, timber: 10 }, room: 6, decor: 12, gives: ['A bed', 'A storage chest', 'The Workbench moves in'] },
   { level: 2, name: 'Cottage', delivery: { timber: 30, glass: 20, clay: 20 }, room: 8, decor: 40, gives: ['Keepsake shelf', 'Journal desk'] },

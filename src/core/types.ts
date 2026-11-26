@@ -428,6 +428,8 @@ export interface SalvageState {
   blueprints: string[];
   /** E21.11: the house's level (0 = the ruined shed) */
   house: number;
+  /** #782: what has been handed in toward the house's next level (part deliveries; cleared when it grows) */
+  houseDelivered?: Partial<Record<MaterialId, number>>;
   /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
   /** E23.7.4: when each pile that isn't full last gained a unit (sim time), by pile id: it refills from there */

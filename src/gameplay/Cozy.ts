@@ -3,6 +3,7 @@ import { GROUND } from '../core/GameState';
 import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, FIRST_DECOR, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
+import { PARK_SET } from '../data/oldcity';
 import type { Sim } from './Sim';
 import type { DecorRecipe } from '../data/crafting';
 
@@ -316,7 +317,14 @@ export class Cozy {
     const why = this.sim.build.footprintProblem(roofId, x, z, 1, ['restored']);
     if (why) return why === 'Needs green or mossy ground: press {pulse} on it first' ? 'Press {pulse} to turn the ground here green first' : why;
     if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
+    if (this.atHouseDoor(roofId, x, z)) return 'Keep the door of the house clear';
     return undefined;
+  }
+
+  /** #782: the ground at the house's door (where the house stands): decorations go round it, never in the way in. */
+  private atHouseDoor(roofId: string, x: number, z: number): boolean {
+    const sh = PARK_SET.shed;
+    return roofId === GROUND && x === sh.door[0] && z === sh.door[1] && this.sim.grid.peek(GROUND, sh.x, sh.z)?.prop === 'shed';
   }
 
   /**

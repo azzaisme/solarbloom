@@ -33,6 +33,7 @@ import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
 import { MoveSpots } from './MoveSpots';
 import { FountainSystem } from './FountainSystem';
+import { HouseSystem } from './HouseSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
@@ -105,6 +106,8 @@ export class Sim {
   readonly moves: MoveSpots;
   /** E21.6: the fountain's tiers and deliveries. */
   readonly fountain: FountainSystem;
+  /** #782: the house's levels (the ruined shed → the Home) and their deliveries. */
+  readonly house: HouseSystem;
   /** E21.8: the Keepers and their requests. */
   readonly keepers: KeeperSystem;
   /** E23.8.3: the causeway and the endless mainland. */
@@ -214,6 +217,7 @@ export class Sim {
     this.gates = new GateSystem(this);
     this.moves = new MoveSpots(this);
     this.fountain = new FountainSystem(this);
+    this.house = new HouseSystem(this);
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
