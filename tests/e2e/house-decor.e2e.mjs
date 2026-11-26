@@ -166,6 +166,16 @@ try {
     await page.waitForFunction(([x, z]) => !!window.solarbloom.cozy.decorAt('g', x, z), [x, z], { timeout: 60_000, polling: 300 }).catch(() => {});
   }
   const placed = await page.evaluate((spots) => spots.map(([x, z]) => window.solarbloom.cozy.decorAt('g', x, z)?.kind ?? null), spots);
+  if (!placed.every((k) => k === 'pot'))
+    console.log(
+      '  why:',
+      JSON.stringify(
+        await page.evaluate((spots) => {
+          const g = window.solarbloom;
+          return { tool: g.hud.currentTool, fail: document.querySelector('.fail, #fail, .tip')?.textContent ?? '', each: spots.map(([x, z]) => ({ x, z, can: g.cozy.canDecorate('pot', 'g', x, z) ?? 'ok', why: g.decorProblem?.('pot', 'g', x, z) ?? 'ok' })), bot: g.bot.pose };
+        }, spots),
+      ),
+    );
   check(placed.every((k) => k === 'pot'), `two Flower pots stand by the house (${placed.join(', ')})`);
   await page.evaluate(([x, z]) => {
     const g = window.solarbloom;
