@@ -147,7 +147,7 @@ export class Cozy {
     if ('cat' in u) return 'it turns up somewhere'; // never names what leaves it (epic rule 8)
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
     if ('find' in u) return 'you dig it out of a buried box';
-    if ('research' in u) return 'you work it out at the crafting table in the house';
+    if ('research' in u) return 'you work it out at the workbench beside the house';
     return `the fog lifts from ${u.areas} place${u.areas === 1 ? '' : 's'}`;
   }
 
@@ -258,7 +258,7 @@ export class Cozy {
   /** What a locked decoration waits for. */
   private decorHint(o: DecorOption): string {
     const r = decorRecipe(this.sim, o.id);
-    if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the crafting table';
+    if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the workbench';
     return r ? this.sim.crafting.unlockLabel(r.unlock).replace('🔒 ', '') : this.hint(o.unlock);
   }
 

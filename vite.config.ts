@@ -22,7 +22,7 @@ const QUICK = [
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world
-  'crafting', 'research', 'drone-fuel', 'automation',
+  'crafting', 'crafting-bench', 'research', 'drone-fuel', 'automation',
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
@@ -47,7 +47,7 @@ const QUICK = [
   // Phase 8: audio (the dead-to-living soundscape, mix, music, manifest)
   'audio',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
-  'clear-path', 'goal-reachable', 'bloombot-levels', 'bloombot-page', 'park-growth', 'knacks', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
+  'clear-path', 'goal-reachable', 'bloombot-levels', 'bloombot-page', 'park-growth', 'knacks', 'charging-order', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
   'first-time-text',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',

@@ -172,7 +172,7 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'pw-lines', branch: 'power', name: 'Long lines', about: 'Copper drawn thinner reaches further.', cost: { copper: 12 }, days: 0.1, opens: { keeper: 'mastRow' }, gives: { upgrade: 'poleReach' } },
   { id: 'pw-solar', branch: 'power', name: 'Clear glass', about: 'Panels that drink more of the sun.', cost: { glass: 12, sunstone: 2 }, days: 0.15, opens: { material: 'glass' }, gives: { upgrade: 'solarYield' } },
   { id: 'pw-battery', branch: 'power', name: 'Deep cells', about: 'Batteries that keep the night going.', cost: { scrap: 16, copper: 10 }, days: 0.2, opens: { project: 'pw-lines' }, gives: { upgrade: 'batteryStore' } },
-  { id: 'pw-station', branch: 'power', name: 'A second bench', about: 'Room in the house to work on two things at once.', cost: { timber: 16, glass: 10, gears: 6 }, days: 0.3, opens: { project: 'pw-battery' }, gives: { station: 2 } },
+  { id: 'pw-station', branch: 'power', name: 'A bigger workbench', about: 'Room at the workbench to work on two things at once.', cost: { timber: 16, glass: 10, gears: 6 }, days: 0.3, opens: { project: 'pw-battery' }, gives: { station: 2 } },
   // Water
   { id: 'wt-pump', branch: 'water', name: 'Old pump drawings', about: 'How the city used to lift water, kindly.', cost: { clay: 10, copper: 6 }, days: 0.15, opens: { keeper: 'cistern' }, gives: { upgrade: 'pumpRate' } },
   { id: 'wt-reservoir', branch: 'water', name: 'Fired clay', about: 'Tighter walls for bigger reservoirs.', cost: { clay: 16 }, days: 0.15, opens: { material: 'clay' }, gives: { upgrade: 'reservoirSize' } },

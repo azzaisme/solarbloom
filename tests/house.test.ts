@@ -94,6 +94,7 @@ describe('#782: the house grows a level at a time', () => {
     expect(sim.build.place('solar', id, 2, 3)).toBeUndefined();
     sim.bot = { roofId: id, x: 2.5, z: 3.5 };
     expect(sim.inventory.nearStore()).toBe(true);
+    expect(sim.charge.atHome()).toBe(true); // inside is home: standing still there rests Bloombot, as by the fountain
   });
 });
 

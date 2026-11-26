@@ -346,6 +346,19 @@ export class Vfx {
     }
   }
 
+  /**
+   * #784: Bloombot charging: glowing gold and mint motes drifting up off it (bigger and slower than ground sparkles,
+   * so it reads from the play camera), plus a twinkle. Calm, no fall, with reduced motion.
+   */
+  chargeSparkle(pos: pc.Vec3, count: number) {
+    const rm = this.reducedMotion;
+    for (let i = 0; i < count; i++) {
+      const hex = i % 2 ? PALETTE.signal.chargeSparkMint : PALETTE.signal.chargeSpark;
+      this.burst(pos, 1, { up: rm ? 0.5 : 0.9, speed: rm ? 0.08 : 0.35, size: 0.09, life: rm ? 1 : 1.3, gravity: -0.3, hex, glow: 1 });
+    }
+    this.sparkles(pos, 1, rm);
+  }
+
   private free(): Particle | undefined {
     return this.particles.find((x) => !x.active);
   }

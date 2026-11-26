@@ -12,7 +12,7 @@ import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell
 import './craft.css';
 
 /**
- * E23.6.1 (#435): the crafting table, in the house from the start. A full-screen panel with two tabs, Craft and
+ * E23.6.1 (#435): the crafting panel. #783: opened at the workbench, outside beside the house from the start. A full-screen panel with two tabs, Craft and
  * Upgrade, under E22's panel rules: the game pauses while it is open (the table keeps working: the panel runs it),
  * LB / RB or Q / E change tab, arrows or the d-pad move the focus ring, Enter or A press, Esc or B close.
  *
@@ -133,8 +133,8 @@ export class CraftTable {
     this.el.setAttribute('aria-modal', 'true');
     this.el.setAttribute('aria-labelledby', 'crTitle');
     this.el.innerHTML =
-      `<div class="panel sheet bp-card"><header class="sheet-head"><span class="pn-badge sun">${icon('hammer')}</span><h2 id="crTitle">Crafting table</h2><span class="sheet-sub">Paused</span><span class="grow"></span><button class="pn-btn ghost sheet-back" data-back>${glyph('back')}Back</button></header>` +
-      `<div class="sheet-tabs">${tabEnd(-1)}<div role="tablist" aria-label="Crafting table">${CRAFT_TABS.map((t) => `<button role="tab" id="crtab-${t.id}" data-tab="${t.id}" aria-controls="crBody" aria-selected="false" tabindex="-1">${icon(TAB_ICON[t.id])}${t.label}</button>`).join('')}</div>${tabEnd(1)}</div>` +
+      `<div class="panel sheet bp-card"><header class="sheet-head"><span class="pn-badge sun">${icon('hammer')}</span><h2 id="crTitle">Workbench</h2><span class="sheet-sub">Paused</span><span class="grow"></span><button class="pn-btn ghost sheet-back" data-back>${glyph('back')}Back</button></header>` +
+      `<div class="sheet-tabs">${tabEnd(-1)}<div role="tablist" aria-label="Workbench">${CRAFT_TABS.map((t) => `<button role="tab" id="crtab-${t.id}" data-tab="${t.id}" aria-controls="crBody" aria-selected="false" tabindex="-1">${icon(TAB_ICON[t.id])}${t.label}</button>`).join('')}</div>${tabEnd(1)}</div>` +
       `<div class="sheet-body bp-body" id="crBody" role="tabpanel"></div>` +
       `<footer class="sheet-foot"><p class="bp-live" role="status" aria-live="polite"></p><span class="pn-acts"></span></footer></div>`;
     parent.appendChild(this.el);
@@ -220,8 +220,8 @@ export class CraftTable {
   show(tab: CraftTabId, focusTab = false) {
     if (!this.tabsNow().some((t) => t.id === tab)) tab = 'craft';
     this.current = tab;
-    // #610: one name for it everywhere, the one its prompt uses ("Use the crafting table"), research or not
-    this.el.querySelector('#crTitle')!.textContent = 'Crafting table';
+    // #610: one name for it everywhere, the one its prompt uses ("Use the workbench"), research or not
+    this.el.querySelector('#crTitle')!.textContent = 'Workbench';
     const many = this.tabsNow().length > 1;
     for (const e of this.el.querySelectorAll<HTMLElement>('.pn-tab-end')) e.hidden = !many;
     for (const b of this.tabs.querySelectorAll<HTMLElement>('[data-tab]')) {
@@ -317,7 +317,7 @@ export class CraftTable {
     const btn = (n: number) => `<button class="pn-btn${n === 1 ? ' primary' : ''}" id="cr-make-${n}" data-make="${n}" aria-label="${esc(`Make ${r.name} ${n === 1 ? 'once' : `${n} times`}`)}" ${r.problem ? 'aria-disabled="true"' : ''}>Make ${n === 1 ? '1' : n}</button>`;
     const q = sim.crafting.queue();
     const queue = q.length
-      ? `<h4>On the table</h4><ul class="cr-queue">${q
+      ? `<h4>On the workbench</h4><ul class="cr-queue">${q
           .map(
             (j, i) =>
               `<li>${materialIcon(j.id as ComponentId, 24)} <span>${j.n} ${esc(itemDef(j.id as ItemId).name)}</span>${i === 0 ? `<span class="cr-bar pn-bar" aria-hidden="true"><i style="width:${Math.round((sim.crafting.progress() ?? 0) * 100)}%"></i></span>` : ''}<button class="pn-btn small" id="cr-cancel-${i}" data-cancel="${i}" aria-label="${esc(`Stop making ${itemDef(j.id as ItemId).name}, and take back what it used`)}">Stop</button></li>`,
