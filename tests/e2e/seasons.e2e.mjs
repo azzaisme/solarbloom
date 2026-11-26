@@ -100,6 +100,21 @@ try {
   page.on('pageerror', (e) => errors.push(e.message));
   await startGame(page, `http://localhost:${PORT}`, { settings: { hints: false } });
   await wait(3000);
+  // every toast the game shows, as it appears (several can queue, so a single look could miss one)
+  const watchToasts = (p) =>
+    p.evaluate(() => {
+      window.__toasts = [];
+      new MutationObserver(() => {
+        for (const t of document.querySelectorAll('.toast')) {
+          const text = t.innerText.replace(/\s+/g, ' ').trim();
+          if (text && !window.__toasts.includes(text)) window.__toasts.push(text);
+        }
+      }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+  /** Waits (up to 40 s of real time) for a toast matching `re`; its text, or '' */
+  const toastSeen = (p, re) =>
+    p.waitForFunction((src) => window.__toasts.find((t) => new RegExp(src).test(t)), re.source, { timeout: 40_000, polling: 250 }).then((h) => h.jsonValue()).catch(() => '');
+  await watchToasts(page);
 
   // ── a new garden starts in spring ──
   let s = await seasonNow(page);
@@ -118,10 +133,12 @@ try {
   ];
   const looks = {};
   for (const [season, weather, toast] of seasons) {
-    await goTo(page, season, 2, weather, 2500);
+    await goTo(page, season, 2, weather, 500);
     s = await seasonNow(page);
     check(s.season === season, `jumped to ${season}`);
-    check(s.toasts.some((t) => toast.test(t)), `a warm toast greets ${season}: "${s.toasts.find((t) => toast.test(t)) ?? s.toasts.join(' | ')}"`);
+    const seen = await toastSeen(page, toast);
+    check(!!seen && !/[{}]/.test(seen), `a warm toast greets ${season}: "${seen}"`);
+    await page.waitForFunction((src) => [...document.querySelectorAll('.toast')].some((t) => new RegExp(src).test(t.innerText)), toast.source, { timeout: 20_000 }).catch(() => {});
     await page.screenshot({ path: `${dir}/${season}-arrives.png` });
     await wait(7000); // the toast fades and the world settles
     s = await seasonNow(page);
@@ -173,6 +190,7 @@ try {
   check(!wx.winter.storm, 'no storms in winter');
 
   // ── sleeping through the last night of a season wakes Bloombot in the next one ──
+  await page.evaluate(() => (window.__toasts = []));
   const slept = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
@@ -185,9 +203,7 @@ try {
     return { ok, before, after: s.seasons.season(), day: s.seasons.dayOfSeason() };
   });
   check(slept.ok && slept.before === 'summer' && slept.after === 'autumn' && slept.day === 1, `sleeping through summer's last night wakes to autumn, day 1 (${JSON.stringify(slept)})`);
-  await wait(1500);
-  s = await seasonNow(page);
-  check(s.toasts.some((t) => /Autumn is turning the leaves/.test(t)), 'and autumn gets its toast');
+  check(!!(await toastSeen(page, /Autumn is turning the leaves/)), 'and autumn gets its toast');
 
   // ── saves and loads ──
   await goTo(page, 'winter', 3, 'snow', 1000);

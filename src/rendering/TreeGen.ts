@@ -217,7 +217,11 @@ export const DECIDUOUS: Record<Species, boolean> = { oak: true, cherry: true, bi
 
 /** #830: marks a deciduous tree's leaves (cards and leafy clumps) with SEASON_FLAG. */
 function seasonal(g: TreeGeo, sp: Species): TreeGeo {
-  if (!DECIDUOUS[sp]) return g;
+  return DECIDUOUS[sp] ? markSeasonLeaves(g) : g;
+}
+
+/** #830: marks every leaf card and leafy clump of a geometry with SEASON_FLAG (giant trees use it too). */
+export function markSeasonLeaves<T extends TreeGeo>(g: T): T {
   const n = g.pos.length / 4;
   const mark = new Uint8Array(n);
   for (const s of g.leafStarts ?? []) for (let j = 0; j < LEAF_CARD_VERTICES && s + j < n; j++) mark[s + j] = 1;

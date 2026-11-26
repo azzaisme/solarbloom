@@ -78,7 +78,7 @@ const QUICK = [
   'tree-placement',
   'p7-terrain', 'tile-markers',
   // #787: the regions' works (power, water, drones) and the unlock-order walk
-  'region-works',
+  'region-works', 'seasons',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
