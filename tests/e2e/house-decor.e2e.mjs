@@ -132,6 +132,8 @@ try {
           const st = g.sim.grid.get('g', x, z + 1);
           if (!t || !st || t.blocked || t.occupantId || st.blocked || st.occupantId || t.feature === 'water' || g.cozy.spotAt('g', x, z)) continue;
           if (x === dx && z === dz) continue; // the door stays clear (checked below)
+          const bf = g.sim.bench?.front();
+          if (bf && bf.x === x && bf.z === z) continue; // so does the workbench's front (#783)
           if (out.some(([a, b]) => Math.abs(a - x) + Math.abs(b - z) < 2)) continue;
           t.ground = 'restored';
           t.pollution = 0;
@@ -155,7 +157,7 @@ try {
     await page.evaluate(([x, z]) => {
       const g = window.solarbloom;
       g.bot.teleport('g', x + 0.5, z + 1.5);
-      g.bot.pose.facing = Math.PI; // facing −z, towards the cell
+      g.bot.turnTo(Math.PI); // turning to face −z, towards the cell (the view follows)
       g.bot.following = true;
       g.bot.lastInput = 'keys';
       g.pointer.inside = false;

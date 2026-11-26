@@ -136,3 +136,18 @@ describe('#782: decorations go round the house, never in its door', () => {
     expect(bannedIn('Keep the door of the house clear')).toEqual([]);
   });
 });
+
+describe('#782 × #783: decorations keep the workbench usable', () => {
+  it('the square in front of the workbench refuses a decoration', () => {
+    const { sim, cozy } = scene();
+    sim.state.salvage!.tier = 1;
+    cozy.giveFirstDecor();
+    const f = sim.bench.front()!;
+    expect(f).toBeDefined();
+    const t = sim.grid.get(GROUND, f.x, f.z)!;
+    t.ground = 'restored';
+    t.pollution = 0;
+    sim.grid.touch(t);
+    expect(cozy.canDecorate('pot', GROUND, f.x, f.z)).toMatch(/in front of the workbench clear/);
+  });
+});

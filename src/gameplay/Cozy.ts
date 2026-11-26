@@ -329,6 +329,9 @@ export class Cozy {
     if (why) return why === 'Needs green or mossy ground: press {pulse} on it first' ? 'Press {pulse} to turn the ground here green first' : why;
     if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
     if (this.atHouseDoor(roofId, x, z)) return 'Keep the door of the house clear';
+    // #782 × #783: the square in front of the workbench is where Bloombot stands to use it
+    const bf = roofId === GROUND ? this.sim.bench?.front() : undefined;
+    if (bf && bf.x === x && bf.z === z) return 'Keep the space in front of the workbench clear';
     return undefined;
   }
 
