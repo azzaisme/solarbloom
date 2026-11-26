@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
 const out = process.argv[2] ?? 'docs/review/farm';
 mkdirSync(out, { recursive: true });
 const server = await preview({ preview: { port: 4254, strictPort: true }, logLevel: 'silent' });
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const errors = [];
 const check = (ok, what) => {
