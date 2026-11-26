@@ -23,7 +23,7 @@ export interface PowerRole {
   battery?: { capacity: number | ((m: PowerNode) => number); rate: number };
   /**
    * A load. `draw` may return 0 when the machine is idle (a charger with no bloombot on it). Consumers in a
-   * `dims` class (lamps) take whatever is left and dim; everything else is all or nothing.
+   * `dims` class (lamps and chargers) can use partial power; other loads are all or nothing.
    */
   /** Never links to anything else: a network of its own (a solar garden light with its own panel and battery). */
   standalone?: boolean;
@@ -186,9 +186,14 @@ export class PowerGrid {
 
   /** Does this machine have the power it needs? Always true for machines the grid does not power. */
   isPowered(m: PowerNode | undefined): boolean {
-    if (!m || !this.roleOf(m)?.consumer) return true;
+    return this.servedShare(m) > 0;
+  }
+
+  /** The share of a consumer's draw served by the last solve, before visual easing. */
+  servedShare(m: PowerNode | undefined): number {
+    if (!m || !this.roleOf(m)?.consumer) return 1;
     this.fresh();
-    return (this.servedFrac.get(m.id) ?? 0) > 0;
+    return this.servedFrac.get(m.id) ?? 0;
   }
 
   /**
