@@ -115,6 +115,8 @@ export interface GameEvents {
   'journal.page': { id: string };
   /** E21.9: a region's landmark woke (by bloombot's own delivery). */
   'landmark.woken': { region: string };
+  /** #787: a region's works started running (power, water or drones reached them): its landmark can wake */
+  'works.running': { region: string; x: number; z: number };
   'tile.restoring': { tile: TileData; source: RestoreSource };
   'tile.restored': { tile: TileData; source: RestoreSource; chainId: number };
   'tile.decayChanged': { tile: TileData };

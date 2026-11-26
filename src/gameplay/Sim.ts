@@ -36,6 +36,7 @@ import { FountainSystem } from './FountainSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
+import { RegionWorks } from './RegionWorks';
 import { LandmarkSystem } from './LandmarkSystem';
 import { WaterSystem } from './WaterSystem';
 import { Crafting } from './Crafting';
@@ -114,6 +115,8 @@ export class Sim {
   readonly journal: JournalSystem;
   /** E21.9: waking landmarks and their lasting rewards. */
   readonly landmarks: LandmarkSystem;
+  /** #787: each region's works (power, water or drones) its landmark waits on. */
+  readonly works: RegionWorks;
   /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
   readonly water: WaterSystem;
   /** E23.6.1: the crafting table (components; machine and decoration recipes). */
@@ -242,6 +245,7 @@ export class Sim {
     this.automation = new Automation(this); // E23.6.4: after the grid (the Assembler is a consumer)
     this.chargers = new ChargerSystem(this);
     this.lights = new Lights(this);
+    this.works = new RegionWorks(this); // #787: after the grid and the water (a works piece is a load on the power lines)
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
@@ -359,6 +363,7 @@ export class Sim {
     this.farm.tick(dt);
     this.compost.tick(dt);
     this.farmExtras.tick(dt);
+    this.works.tick(dt); // #787
     this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
     this.decay.tick();
     this.cat.tick();

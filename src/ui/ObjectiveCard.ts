@@ -1,3 +1,4 @@
+import type { WorksDef } from '../data/works';
 import { $, esc, HudPart } from './HudPart';
 import type { Sim } from '../gameplay/Sim';
 import type { Place, Suggestion, SuggestionAction } from '../gameplay/Advisor';
@@ -157,11 +158,21 @@ function nextStep(sim: Sim, advice: Suggestion | undefined): Pick<Objective, 'ne
         patchKeeperId: pinned.id,
       };
     }
+    // #787: the landmark waits on its works: the card, the arrow and the beam lead to the dark piece, not the Keeper
+    const w = step === 'landmark' ? worksWaiting(sim, pinned.id) : undefined;
+    if (w) return { next: w.goal, topic: 'keeper', where: { kind: 'focus', x: w.x, z: w.z }, place: { kind: 'machine', name: w.name } };
     const k = sim.keepers.def(pinned.id);
     return { next: pinned.text, topic: 'keeper', where: { kind: 'focus', x: k.x, z: k.z }, place: { kind: 'keeper', name: k.name } };
   }
   const step = sim.advisor.fountainStep() ?? advice;
   return step ? { next: step.text, topic: step.topic, where: step.action, place: step.place } : {};
+}
+
+/** #787: a Keeper's region whose landmark is still waiting on its works (power, water or drones), if any. */
+export function worksWaiting(sim: Sim, keeperId: string): WorksDef | undefined {
+  const region = sim.keepers.def(keeperId).region;
+  const w = sim.works.def(region);
+  return w && !sim.works.running(region) ? w : undefined;
 }
 
 /**
