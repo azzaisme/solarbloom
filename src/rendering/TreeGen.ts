@@ -1037,4 +1037,7 @@ export function* warmTemplates(): Generator<void> {
 /** Look 3: the geometry helpers, shared with the flower, shrub, vine and prop builders (Flora.ts, Props.ts). */
 export type { PuffOpts };
 export { Buf, puff, tube, plate, randDir, hsl, hex, mix, scaleC, add, sub, mul, norm, cross, dot, len, clamp, lerp, rotateAxis, SUN };
+/** Giant trees (GiantTreeGen.ts) grow their limbs and leaves the same way. */
+export { limb, spray, LEAVES };
+export type { LimbOpts, Crown, Tip };
 export type { V, C, Palette };

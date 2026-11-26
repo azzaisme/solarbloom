@@ -104,6 +104,8 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   // (Timber) the bird box and hedgehog house; Keeper gardens hand over the worm bin, fish pond, butterfly garden
   // and bat box (`gift`).
   { id: 'orchard', name: 'Fruit tree', cost: { seeds: 4, biomass: 6 }, unlock: { keeper: 'elderGrove' }, builds: 'orchard' },
+  // giant trees (owner, 26 Nov 2026): the woodland is where they grow, and where planting them is learnt
+  { id: 'giantTree', name: 'Giant tree', cost: { seeds: 12, biomass: 30, fertiliser: 2 }, unlock: { keeper: 'elderGrove' }, builds: 'giantTree' },
   { id: 'mushroomLog', name: 'Mushroom log', cost: { planks: 3, compost: 1 }, unlock: { keeper: 'glasshouse' }, builds: 'mushroomLog' },
   { id: 'birdBox', name: 'Bird box', cost: { planks: 2 }, unlock: { keeper: 'saltwind' }, builds: 'birdBox' },
   { id: 'hedgehogHouse', name: 'Hedgehog house', cost: { planks: 3, biomass: 2 }, unlock: { keeper: 'saltwind' }, builds: 'hedgehogHouse' },

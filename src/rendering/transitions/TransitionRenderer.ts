@@ -50,6 +50,8 @@ export interface ChunkHost {
   slabCap?: (hex: string, p: [number, number, number], s: [number, number, number]) => void;
   /** E23.13: draws the tile's ground slab into `sink` (as a box, or rounded off where it pokes out into water) */
   slab?(sink: Sink, hex: string, p: [number, number, number], s: [number, number, number]): void;
+  /** A tree that grew a stage as it aged (TreeGrowth) and is growing into it on screen: a bloom transition for its tree only. */
+  treeGrow?(t: TileData): TileTransition | undefined;
 }
 
 const NULL_SINK: Sink & GeoSink = { add() {}, grey: 0 };
@@ -290,7 +292,8 @@ export class TransitionRenderer {
     const decoLive = live && detailed && kind !== 'soften';
     const treeTransition = live && tr?.k === 'restore'
       ? { ...tr, t0: tr.t0 + tr.d * this.durScale * WINDOWS.restore.in[0], d: tr.d * (1 - WINDOWS.restore.in[0]) }
-      : live && tr?.k === 'bloom' ? tr : undefined;
+      : live && tr?.k === 'bloom' ? tr
+      : !tr && !far ? host.treeGrow?.(t) : undefined;
     const treeBloom = treeTransition ? { transition: treeTransition, mesh: tb, staticFoliage: B.fb, reducedMotion: this.reducedMotion } : undefined;
     host.treeBloom = treeBloom;
     let end = 0;
@@ -340,6 +343,8 @@ export class TransitionRenderer {
     }
     host.slabCap = undefined;
     host.treeBloom = undefined;
+    // a tree growing into its next stage keeps the chunk live until it has
+    if (treeTransition && !tr && !this.reducedMotion && this.time < treeTransition.t0 + treeTransition.d) end = Math.max(end, treeTransition.t0 + treeTransition.d);
     host.setFoliage(B.fb);
     if (!to) return end;
     // The living surface.

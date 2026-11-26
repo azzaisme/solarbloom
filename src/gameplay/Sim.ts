@@ -1,4 +1,4 @@
-import { machinesStamp } from '../core/GameState';
+import { GROUND, machinesStamp } from '../core/GameState';
 import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Grid } from '../core/Grid';
@@ -50,6 +50,7 @@ import { WildlifeSystem } from './Wildlife';
 import { BuriedSystem } from './Buried';
 import { DroneFuel } from './DroneFuel';
 import { Clock } from './Clock';
+import { TreeGrowth, stampGiants } from './TreeGrowth';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
 import { PlotWork } from './PlotWork';
@@ -138,6 +139,8 @@ export class Sim {
   readonly droneFuel: DroneFuel;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
+  /** Trees grow over game days (owner, 26 Nov 2026), and world giants stand in the woodland. */
+  readonly trees: TreeGrowth;
   /** E23.7.1.3: finds that are out only at night. */
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
@@ -183,6 +186,8 @@ export class Sim {
         const t = this.grid.peek(at.roofId, at.x, at.z);
         if (t && !t.occupantId) t.occupantId = decorOccupant(k);
       }
+      // world giants: their trunk cells are solid, as a decoration's tile
+      if (c.layer === GROUND) stampGiants(this, c.tiles);
     };
     // The world travels with the state (for saving) but is never part of its JSON.
     Object.defineProperty(state, 'world', { value: this.grid, enumerable: false, configurable: true, writable: true });
@@ -202,6 +207,7 @@ export class Sim {
     this.buried = new BuriedSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
+    this.trees = new TreeGrowth(this);
     this.nightFinds = new NightFinds(this);
     this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
@@ -353,6 +359,7 @@ export class Sim {
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
+    this.trees.tick();
     this.ecosystem.tick();
     this.metrics.tick(dt);
     s.rngState = this.rng.state;

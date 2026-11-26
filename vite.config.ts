@@ -17,6 +17,8 @@ const QUICK = [
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics',
   'relay-city', 'no-growing-prices', 'look', 'wall-edges', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
   'bloombot-walk', 'bindings', 'padFocus', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glow-setting', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art', 'keeper-seat', 'model-wait', 'visitor-models', 'visitor-sit-shape', 'bloombot-settle',
+  // giant trees, and trees that grow over game days (26 Nov 2026)
+  'giant-trees',
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world

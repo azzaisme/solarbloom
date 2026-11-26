@@ -89,6 +89,7 @@ export class DecaySystem {
         t.pollution = 25;
         t.bloom = 0;
         t.plant = undefined;
+        sim.trees?.lost(t);
         t.tr = undefined;
         t.lushUntil = undefined;
         t.lushAt = undefined;

@@ -17,6 +17,8 @@ export interface MachineDef {
   cityOnly?: boolean;
   /** E23.8.3.2: only buildable on the mainland. */
   mainlandOnly?: boolean;
+  /** Only grows in these Old City regions (data/oldcity RegionId): giant trees, in the woodland. */
+  regions?: string[];
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -159,6 +161,15 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared'],
     blurb: 'Planted once, it fruits every few days. Prune it now and then for timber.',
   },
+  giantTree: {
+    type: 'giantTree',
+    name: 'Giant Tree',
+    icon: '🌳',
+    size: 2,
+    allowedGround: ['restored', 'prepared'],
+    regions: ['elderGrove'],
+    blurb: 'Starts as a young tree and grows over many days into a giant you can walk under.',
+  },
   mushroomLog: {
     type: 'mushroomLog',
     name: 'Mushroom Log',
@@ -297,7 +308,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 };
 
 /** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter; E23.4 the water; E23.6.4 / E23.6.5 automation). */
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'beehive', 'fishPond', 'orchard', 'mushroomLog', 'wormBin', 'birdBox', 'batBox', 'hedgehogHouse', 'butterflyGarden', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator', 'crate', 'assembler'];
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'beehive', 'fishPond', 'orchard', 'giantTree', 'mushroomLog', 'wormBin', 'birdBox', 'batBox', 'hedgehogHouse', 'butterflyGarden', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator', 'crate', 'assembler'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

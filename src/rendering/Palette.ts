@@ -195,6 +195,9 @@ const leaf = {
   hue: { oak: [92, 112], birch: [78, 94], willow: [82, 98], pine: [130, 146], cherry: [330, 346], shrub: [80, 112] } as Record<string, [number, number]>,
   shrubTip: '#5fbf43',
   ivy: '#4f9a4a',
+  /** Tree leaves through a tree's life: Frog Green on a sapling, deepening to Leaf Green once grown. */
+  young: '#8eb94a',
+  grown: '#5f9537',
 };
 
 const wood = {

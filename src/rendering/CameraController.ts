@@ -84,7 +84,68 @@ export const EXPLORE = {
   recentreSpeed: 90,
   /** the camera stays at least this far above the ground under it */
   clearance: 0.35,
+  /** Giant trees: the camera stays this far outside a trunk, and this far under a canopy's lowest leaves */
+  trunkGap: 0.45,
+  canopyGap: 0.7,
+  /** the boom never pulls in shorter than this share of itself for a trunk (it would sit in bloombot's back) */
+  minBoom: 0.28,
+  /** seconds the boom takes to swing back out once a trunk is no longer in the way (it pulls in at once) */
+  boomOut: 0.45,
 };
+
+/**
+ * Giant trees (GiantTrees.ts): what the follow camera keeps clear of. A trunk is a vertical post the boom pulls in
+ * short of; a canopy is a ceiling the camera stays under (a smooth height field: the leaves' underside over the
+ * canopy, rising beyond its reach), so the camera passes under the leaves and they never hide bloombot.
+ */
+export interface CameraBlockers {
+  /** trunks (centre and radius) within `r` of (x, z) */
+  trunks(x: number, z: number, r: number): readonly { x: number; z: number; trunkR: number }[];
+  /** the lowest the leaves come over (x, z), world y (Infinity: open sky) */
+  ceiling(x: number, z: number): number;
+}
+
+/**
+ * How much of the boom from `p` (the pivot) to `c` (the camera) is clear of the trunks: 1 when nothing is in the
+ * way, else the share up to just before the first trunk it meets (looking along the ground, as the trunks stand).
+ */
+export function boomClear(p: { x: number; z: number }, c: { x: number; z: number }, trunks: readonly { x: number; z: number; trunkR: number }[], gap = EXPLORE.trunkGap): number {
+  const dx = c.x - p.x, dz = c.z - p.z;
+  const L = Math.hypot(dx, dz);
+  if (L < 1e-6) return 1;
+  let best = 1;
+  for (const t of trunks) {
+    const r = t.trunkR + gap;
+    // the ray p + s·d (s in world units) meets the circle where |p + s·d − t| = r
+    const ux = dx / L, uz = dz / L;
+    const ox = p.x - t.x, oz = p.z - t.z;
+    const b = ox * ux + oz * uz;
+    const cc = ox * ox + oz * oz - r * r;
+    if (cc <= 0) continue; // the pivot is inside the gap already (bloombot pressed to the bark): nothing to cut
+    const disc = b * b - cc;
+    if (disc < 0) continue;
+    const s = -b - Math.sqrt(disc);
+    if (s < 0 || s > L) continue;
+    best = Math.min(best, s / L);
+  }
+  return best;
+}
+
+/**
+ * The highest the camera may be (world y) so the line from the pivot `p` to it stays `gap` under every canopy it
+ * passes beneath: the line is checked along its length, so leaves never come between bloombot and the camera.
+ */
+export function ceilingFor(p: { x: number; y: number; z: number }, c: { x: number; z: number }, ceiling: (x: number, z: number) => number, gap = EXPLORE.canopyGap, steps = 12): number {
+  let top = Infinity;
+  for (let i = 1; i <= steps; i++) {
+    const f = i / steps;
+    const lim = ceiling(p.x + (c.x - p.x) * f, p.z + (c.z - p.z) * f) - gap;
+    if (lim === Infinity) continue;
+    // y(f) = p.y + f (camY − p.y) ≤ lim  ⇒  camY ≤ p.y + (lim − p.y) / f
+    top = Math.min(top, p.y + Math.max(0, lim - p.y) / f);
+  }
+  return top;
+}
 
 export class CameraController {
   readonly entity: pc.Entity;
@@ -131,6 +192,12 @@ export class CameraController {
   private shoulder = 0;
   /** E21.22: the ground's height under a point (world y), so the camera never ends below it */
   ground?: (x: number, z: number) => number;
+  /** Giant trees: trunks the boom pulls in short of, canopies it stays under */
+  blockers?: CameraBlockers;
+  /** the share of the boom shown (eases back out after a trunk; pulls in at once) */
+  private boomShown = 1;
+  /** the share of the boom clear of trunks in the last placement */
+  private boomFree = 1;
 
   constructor(
     private app: pc.AppBase,
@@ -464,6 +531,8 @@ export class CameraController {
       this.explorePitch += (this.pitchGoal - this.explorePitch) * e;
       this.lead.lerp(this.lead, this.leadGoal, e);
       this.shoulder += (this.shoulderGoal - this.shoulder) * (this.reducedMotion ? 1 : 1 - Math.exp(-dt / 0.25));
+      // past a trunk, the boom swings back out smoothly (it pulled in at once, in `apply`)
+      this.boomShown = this.boomFree <= this.boomShown || this.reducedMotion ? this.boomFree : this.boomShown + (this.boomFree - this.boomShown) * (1 - Math.exp(-dt / EXPLORE.boomOut));
     }
     if (!this.cinematic) {
       const k = 1 - Math.exp(-dt * this.follow);
@@ -564,6 +633,22 @@ export class CameraController {
       }
       y = Math.max(y, this.ground(x, z) + EXPLORE.clearance);
     }
+    if (this.explore && this.blockers && ch > 0.5) {
+      // Giant trees: the boom pulls in short of a trunk between bloombot and the camera (at once, so it never shows
+      // the inside of the bark; it swings back out in `update`), and the camera keeps under the canopy
+      const B = this.blockers;
+      const reach = Math.hypot(x - t.x, z - t.z);
+      this.boomFree = Math.max(EXPLORE.minBoom, boomClear(t, { x, z }, B.trunks(t.x, t.z, reach + 1)));
+      const k = Math.min(this.boomShown, this.boomFree);
+      if (k < 1) {
+        x = t.x + (x - t.x) * k;
+        z = t.z + (z - t.z) * k;
+        y = t.y + (y - t.y) * k;
+      }
+      // lowered, not pulled in: the view keeps its distance and looks along under the leaves
+      const top = ceilingFor(t, { x, z }, B.ceiling);
+      if (y > top) y = Math.max(top, this.ground ? this.ground(x, z) + EXPLORE.clearance : top);
+    } else this.boomFree = this.boomShown = 1;
     this.entity.setPosition(x, y, z);
     this.entity.lookAt(t);
     this.markDirty();

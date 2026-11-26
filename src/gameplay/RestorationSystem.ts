@@ -419,6 +419,7 @@ export class RestorationSystem {
     t.pollution = 0;
     t.growthRemainingSec = 0;
     t.growSource = undefined;
+    this.sim.trees?.planted(t); // trees grow over game days from now
     if (source === 'overflow') this.sim.transitions.lush(t, this.sim.time + TUNING.neighbourhood.reservoir.lushSeconds);
     this.sim.grid.touch(t);
     this.sim.state.stats.tilesRestored++;

@@ -3,11 +3,12 @@ import { MACHINES, machineName } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
 import { MATERIALS, STORE, type MaterialCost } from '../data/salvage';
-import { regionById, regionPond } from '../core/OldCityLayout';
+import { regionById, regionOfCell, regionPond } from '../core/OldCityLayout';
 import { isMainlandCell } from '../core/Mainland';
 import type { MaterialId } from '../core/types';
 import { isMaterial, itemDef } from '../data/items';
 import { fountainLock } from './Crafting';
+import { gameSecondsOf } from './Clock';
 import type { Sim } from './Sim';
 
 /** E19.2: what building over a decoration says (a decoration is free and instant to remove). */
@@ -172,6 +173,11 @@ export class BuildSystem {
       const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];
       if (!def.areaTypes.includes(t.type)) return fail(`Only grows in a ${def.areaTypes.map((a) => AREA_TYPES[a as AreaType].name.toLowerCase()).join(' or ')} area`);
     }
+    // giant trees grow only in their region (the woodland), every cell of them
+    if (def.regions && (roofId !== GROUND || ![0, def.size - 1].every((d) => def.regions!.includes(regionOfCell(x + d, z + d)?.id ?? '')))) {
+      const names = def.regions.map((id) => regionById(id)?.name ?? id).join(' or ');
+      return fail(`${def.name}: only grows in ${names}`);
+    }
     const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround) ?? s.water.placeProblem(type, roofId, x, z); // E23.4.2: a pump on a bank
     if (why) return fail(why);
     if (!s.inventory.canPay(recipe)) return fail(this.missingLabel(type) ?? 'Missing materials', true);
@@ -213,6 +219,7 @@ export class BuildSystem {
     built[type] = (built[type] ?? 0) + 1;
     const def = MACHINES[type];
     const m: MachineData = { id: s.newId('m'), type, roofId, x, z, size: def.size, boostUntil: 0, timer: 0, charge: 0 };
+    if (type === 'giantTree') m.plantedAt = gameSecondsOf(s.state); // it grows from a young tree over game days
     if (LEGACY_POWER_COST[type]) m.buildCost = { ...recipe };
     s.state.machines.push(m);
     for (const c of s.grid.footprint(roofId, x, z, def.size)) if (c) c.occupantId = m.id;

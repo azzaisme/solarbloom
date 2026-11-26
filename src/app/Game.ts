@@ -62,6 +62,7 @@ import { FarmlandView } from '../rendering/FarmlandArt';
 import { PipeVisuals } from '../rendering/PipeVisuals';
 import { WaterOverlay } from '../rendering/WaterOverlay';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
+import { GiantTrees } from '../rendering/GiantTrees';
 import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
@@ -139,7 +140,7 @@ import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PHOTO_FILTERS } from '../data/photo';
 import { sceneNow } from './PhotoScene';
-import { daylightAt } from '../gameplay/Clock';
+import { daylightAt, gameSecondsOf } from '../gameplay/Clock';
 import { GLOOMY } from '../gameplay/PowerEnv';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
@@ -259,6 +260,8 @@ export class Game {
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
+  /** Giant trees: the woodland's own and the ones the player planted (their own entities; the camera keeps clear) */
+  readonly giants: GiantTrees;
   /** #466: farmland ground (dry, watered, fertilised); empty until the farm's tilled fields (#517) give it tiles */
   readonly farmland: FarmlandView;
   /** E23.4.1: water levels drawn on the water (the drained bed) */
@@ -435,6 +438,7 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.giants = new GiantTrees(this.sim, this.scene.world, this.app.graphicsDevice, (x, z) => this.groundY(x, z));
     this.farmland = new FarmlandView(this.scene.world, this.app.graphicsDevice);
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
       for (const t of tiles) this.chunks.markTile(t);
@@ -719,6 +723,7 @@ export class Game {
       this.camera.explore = true;
       this.chunks.fadeTo = 0.3; // E21.22: buildings between the camera and bloombot fade to 30%
       this.camera.ground = (x, z) => this.groundY(x, z);
+      this.camera.blockers = this.giants.blockers; // giant trees: round their trunks, under their leaves
       this.glyphs.deckBuild = !!desktopApi()?.deck;
       bot.lastInput = this.startDevice; // E22.12: the title's first input picked the glyph set
       this.hud.setKeyMap('keys', this.bindings);
@@ -913,7 +918,7 @@ export class Game {
       for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
         const t = this.sim.grid.get(GROUND, tx, tz);
         if (!t || t.feature === 'water') continue;
-        const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: a faded tree sheds like its stage
+        const stage = this.sim.trees.stage(t); // E23.4.4: a faded tree sheds like its stage
         if (!stage || stage < 2) continue;
         const area = this.sim.areas.areaOf(t);
         const spot = area ? treeSpot(t, this.sim.areas.info(area).type, treeWorldOf(this.sim)) : undefined;
@@ -948,7 +953,7 @@ export class Game {
       if (!t) return undefined;
       if (t.feature === 'water') return t.ground === 'restored' ? { ground: 'restored', bloom: 0, water: true } : { ground: 'polluted', bloom: 0 };
       if (t.feature === 'building' || (t.blocked && !t.unblocked)) return { ground: t.ground, bloom: 0, solid: true };
-      return { ground: t.ground, bloom: t.bloom, tree: treeStage(t, this.sim.water.bloomShown(t)) ?? 0 };
+      return { ground: t.ground, bloom: t.bloom, tree: this.sim.trees.stage(t) ?? 0 };
     };
     const [fx, fy, fz] = bot ? bot.world() : [this.camera.target.x, 0, this.camera.target.z];
     const restored = this.sim.progression.restoredCount(HOME);
@@ -3228,7 +3233,7 @@ export class Game {
       if (x + 0.5 < view.x0 || x + 0.5 > view.x1 || z + 0.5 < view.z0 || z + 0.5 > view.z1) continue;
       const tile = this.sim.grid.peek(GROUND, x, z);
       if (!tile || tile.blocked || tile.feature === 'water' || this.sunkAt(x, z)) continue;
-      const stage = treeStage(tile, this.sim.water.bloomShown(tile));
+      const stage = this.sim.trees.stage(tile);
       if (!stage || stage < 2 || this.transitions.fadeWindow(tile)) continue;
       const area = this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z));
       const spot = treeSpot(tile, area.type, world);
@@ -3371,7 +3376,7 @@ export class Game {
     if (t.occupantId) return this.sim.occupant(t)?.type === 'core' ? 'landmark' : undefined;
     if (t.blocked) return t.prop && (/^(pile|gate):/.test(t.prop) || t.prop === 'pillar' || t.prop === 'stump') ? 'ruin' : undefined;
     const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z)).type, treeWorldOf(this.sim));
-    const stage = treeStage(t);
+    const stage = treeStage(t, t.bloom, gameSecondsOf(this.sim.state));
     return spot && stage && stage >= 3 ? 'tree' : undefined;
   }
 
@@ -3505,7 +3510,7 @@ export class Game {
   /** E19: the build hologram's shape for a machine type: its model, or a footprint block. */
   private holoShape(type: MachineData['type'], size: number): HoloShape {
     const m = MACHINE_MODELS[type];
-    return m ? { kind: 'model', name: m[0], scale: m[1] * (size > 1 ? 1.3 : 1) } : { kind: 'block', height: type === 'motherTree' ? 1.1 : size > 2 ? 1.2 : 0.45 };
+    return m ? { kind: 'model', name: m[0], scale: m[1] * (size > 1 ? 1.3 : 1) } : { kind: 'block', height: type === 'motherTree' || type === 'giantTree' ? 1.1 : size > 2 ? 1.2 : 0.45 };
   }
 
   private previewAt(p: Pick | undefined, x: number, y: number) {
@@ -4443,6 +4448,8 @@ export class Game {
     const s = this.sim;
     for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.decayChanged', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
     b.on('tile.decayChanged', ({ tile }) => this.grid.refresh(tile, false));
+    // trees grow over game days: one that grew a stage grows into it on screen
+    b.on('tree.grew', ({ tile, from, to }) => this.chunks.treeGrew(tile, from, to));
     // the waymark's Bloom Pulse: the game's own deeds finish the goal it stands on (never just the goal moving on)
     // a pile stays the goal until it is dug out: only its last dig blooms
     b.on('pile.salvaged', ({ x, z, left }) => left === 0 && this.waymark.done(['pile'], { x, z }));
@@ -5469,6 +5476,7 @@ export class Game {
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
     const wind = this.weatherVisuals.wind;
     if (rect) this.chunks.update(wdt, rect, this.camera.target, this.camera.zoom, wind); // streams while paused; the wind and growth wait
+    this.giants.update(this.camera.target, this.camera.entity.getPosition(), !!this.settings.reducedMotion);
     detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);

@@ -365,7 +365,11 @@ export class FoliageBuilder {
   grey = 0;
   tris = 0;
 
-  add(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number) {
+  /**
+   * `fade`: false for a tree that must never fade or drop out near the camera or under the cursor (a giant tree, whose
+   * canopy the follow camera goes under on purpose): its tree height is written as 0, which the shader skips.
+   */
+  add(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number, fade = true) {
     // E23.12.3: a tree or shrub tall enough to hide a cat, for the CPU line of sight
     if (SOLID_SINK.current) SOLID_SINK.current.foliage(foliageShapeOf(g), x, y, z, scale);
     const nv = g.pos.length / 4;
@@ -378,7 +382,7 @@ export class FoliageBuilder {
     const c = Math.cos(rotY), s = Math.sin(rotY);
     const P = this.pos.a, N = this.nrm.a, C = this.col.a, I = this.idx.a, T = this.tree.a;
     let p = this.pos.n, n = this.nrm.n, k = this.col.n, q4 = this.tree.n;
-    const th = g.height * scale;
+    const th = fade ? g.height * scale : 0;
     const grey = this.grey;
     for (let i = 0; i < nv; i++) {
       const px = g.pos[i * 4], py = g.pos[i * 4 + 1], pz = g.pos[i * 4 + 2];
