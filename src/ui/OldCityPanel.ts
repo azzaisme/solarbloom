@@ -46,6 +46,7 @@ export class OldCityPanel {
   private foot: HTMLElement;
   private render?: () => string;
   private act?: (act: string, arg: string) => void;
+  private onBack?: () => void;
   /** the markup on show (a redraw that changes nothing leaves the DOM, and the focus, alone) */
   private shown = '';
   /** called whenever the panel closes */
@@ -63,14 +64,14 @@ export class OldCityPanel {
     root.appendChild(this.el);
     wireBar(this.el, (p) => {
       if (p !== 'back') return false;
-      this.close();
+      this.back();
       return true;
     });
     this.el.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
       if (!b || (b as HTMLButtonElement).disabled) return;
       const act = b.dataset.act!;
-      if (act === 'close') return this.close();
+      if (act === 'close') return this.back();
       this.act?.(act, b.dataset.arg ?? '');
       this.refresh();
     });
@@ -80,7 +81,8 @@ export class OldCityPanel {
     return this.el.classList.contains('open');
   }
 
-  open(render: () => string, act: (act: string, arg: string) => void) {
+  open(render: () => string, act: (act: string, arg: string) => void, onBack?: () => void) {
+    this.onBack = onBack;
     this.render = render;
     this.act = act;
     this.el.classList.add('open');
@@ -118,12 +120,18 @@ export class OldCityPanel {
     }
   }
 
+  back() {
+    if (this.onBack) this.onBack();
+    else this.close();
+  }
+
   close() {
     if (!this.isOpen) return;
     this.el.classList.remove('open');
     this.shown = '';
     this.render = undefined;
     this.act = undefined;
+    this.onBack = undefined;
     this.onClose?.();
   }
 }

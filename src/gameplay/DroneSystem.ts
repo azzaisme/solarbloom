@@ -2,10 +2,11 @@ import { GROUND, machinesStamp } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import type { DroneData, DroneRole, MachineData, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
+import type { BotAt } from './Inventory';
 import type { Sim } from './Sim';
 
 /** E23.6.3: 'docked' = its hub is short of power, water or biomass; it waits at home and starts again by itself. */
-export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling' | 'docked' | 'asleep';
+export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling' | 'docked' | 'asleep' | 'following';
 
 /**
  * Drone AI runs purely on grid targets. Positions are roof-local continuous coordinates;
@@ -79,7 +80,7 @@ export class DroneSystem {
     return this.oldHome()?.id;
   }
 
-  /** Wakes the old drone: it lifts off its lamp and starts tending the ground around it. True if it was asleep. */
+  /** Wakes the old drone: it leaves its lamp to keep Bloombot company. True if it was asleep. */
   wakeOld(): boolean {
     if (!this.oldAsleep) return false;
     this.sim.state.oldDroneAwake = true;
@@ -279,6 +280,7 @@ export class DroneSystem {
     let best: TileData | undefined;
     let bestD = Infinity;
     const intel = s.upgrades.chainIntel(hub);
+    const buddy = d.old ? s.bot : undefined;
     // #287: helpers work around bloombot: jobs near it score better, fading out over nearBotRadius.
     const bot = s.state.bot;
     const R = TUNING.drone.nearBotRadius;
@@ -288,6 +290,7 @@ export class DroneSystem {
       return d >= R ? 0 : TUNING.drone.nearBotBonus * (1 - d / R);
     };
     for (const t of inRange) {
+      if (buddy && !this.buddyCanHelp(buddy, t)) continue;
       const mode = modeOf(t);
       if (mode === 'off') continue; // "Leave this area alone"
       if (!s.restoration.helperMay(t)) continue; // E21.9: bloombot's share first
@@ -310,6 +313,7 @@ export class DroneSystem {
     if (best) return best;
     // Nothing left to restore in range: nurture green tiles toward full bloom instead.
     for (const t of inRange) {
+      if (buddy && !this.buddyCanHelp(buddy, t)) continue;
       if (!nurturable(t) || modeOf(t) === 'off' || !s.restoration.helperMay(t)) continue;
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
@@ -351,8 +355,7 @@ export class DroneSystem {
     return this.sim.state.machines.find((m) => m.starter && m.type === 'solar' && m.roofId === GROUND);
   }
 
-  private moveToward(d: DroneData, tx: number, tz: number, dt: number): boolean {
-    const speed = this.speedOf(d);
+  private moveToward(d: DroneData, tx: number, tz: number, dt: number, speed = this.speedOf(d)): boolean {
     const dx = tx - d.px;
     const dz = tz - d.pz;
     const dist = Math.hypot(dx, dz);
@@ -365,6 +368,36 @@ export class DroneSystem {
     d.px += (dx / dist) * step;
     d.pz += (dz / dist) * step;
     return false;
+  }
+
+  /** The old drone can leave Bloombot's side briefly for a job close to both Bloombot and the lamp. */
+  private buddyCanHelp(buddy: BotAt, tile: TileData): boolean {
+    return tile.roofId === buddy.roofId &&
+      Math.hypot(tile.x + 0.5 - buddy.x, tile.z + 0.5 - buddy.z) <= TUNING.drone.old.workNearBot;
+  }
+
+  private followBuddy(d: DroneData, bot: BotAt, dt: number) {
+    if (d.mode === 'working' || d.mode === 'flying') {
+      const tile = d.targetTileId ? this.sim.grid.byTileId(d.targetTileId) : undefined;
+      if (tile && this.buddyCanHelp(bot, tile)) return;
+      if (tile && d.far) [d.px, d.pz] = this.farPos(d, tile);
+      this.setTarget(d, undefined);
+      d.far = undefined;
+      d.mode = 'idle';
+      d.timer = TUNING.drone.retrySeconds;
+    }
+    if (this.roofOf(d) !== bot.roofId || Math.hypot(d.px - bot.x, d.pz - bot.z) > TUNING.drone.old.catchupDistance) {
+      d.roofId = bot.roofId;
+      d.px = bot.x;
+      d.pz = bot.z;
+    } else {
+      this.moveToward(d, bot.x, bot.z, dt, TUNING.drone.old.followSpeed);
+    }
+    if (d.mode === 'returning') {
+      d.mode = 'idle';
+      d.homing = undefined;
+    }
+    this.status.set(d.id, 'following');
   }
 
   /** E18: an idle drone of a non-Restorer role looks for its role's job (see DroneRoles). */
@@ -470,6 +503,14 @@ export class DroneSystem {
         d.pz = hub.z + hub.size / 2;
         continue;
       }
+      const buddy = d.old ? s.bot : undefined;
+      if (buddy) this.followBuddy(d, buddy, dt);
+      // Older saves or offline simulation can tick without a live Bloombot on this layer.
+      else if (d.old && this.roofOf(d) !== hub.roofId) {
+        d.roofId = undefined;
+        d.px = hub.x + hub.size / 2;
+        d.pz = hub.z + hub.size / 2;
+      }
       switch (d.mode) {
         case 'idle': {
           d.timer -= dt;
@@ -509,11 +550,12 @@ export class DroneSystem {
           }
           const job = this.findJob(d);
           if (!job) {
+            d.timer = TUNING.drone.retrySeconds;
+            if (buddy) break;
             this.status.set(d.id, 'napping');
             const hx = hub.x + hub.size / 2;
             const hz = hub.z + hub.size / 2;
             if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
-            d.timer = TUNING.drone.retrySeconds;
             break;
           }
           // E23.1.4: a job costs no energy; the hub runs on the grid (above). E23.6.3: the role's water or biomass
@@ -526,7 +568,7 @@ export class DroneSystem {
           d.homing = undefined;
           d.mode = 'flying';
           // Far from the camera the flight is timed, not stepped: same arrival tick, no per-tick moves.
-          if (job.roofId === hub.roofId && this.roofOf(d) === hub.roofId && this.isFar(hub)) {
+          if (!buddy && job.roofId === hub.roofId && this.roofOf(d) === hub.roofId && this.isFar(hub)) {
             const speed = this.speedOf(d);
             d.far = { fx: d.px, fz: d.pz, t0: s.time, t1: s.time + Math.hypot(job.x + 0.5 - d.px, job.z + 0.5 - d.pz) / speed };
           }

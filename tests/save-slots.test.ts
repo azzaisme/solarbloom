@@ -78,6 +78,21 @@ describe('E22.12: save slots', () => {
     expect(heads.map((h) => h?.name)).toEqual([undefined, 'Rooftop garden', undefined]);
   });
 
+  it('keeps each exact sketch once and clears it only with its garden', () => {
+    const store = memory();
+    const first = service(store, 1);
+    const second = service(store, 2);
+    const page = { seed: 39, title: 'Frog', note: 'It stayed still.', image: 'data:image/jpeg;base64,/9j/2Q==' };
+    expect(first.keepSketch(page)).toBe(true);
+    expect(first.keepSketch({ ...page, note: 'A repeated save' })).toBe(true);
+    expect(service(store, 1).sketches()).toEqual([page]);
+    expect(second.sketches()).toEqual([]);
+    expect(second.keepSketch(page)).toBe(true);
+    first.deleteSlot();
+    expect(first.sketches()).toEqual([]);
+    expect(second.sketches()).toEqual([page]);
+  });
+
   it('keeps backups per slot', () => {
     const store = memory();
     store.setItem(slotKey(2), JSON.stringify({ ...new Sim(createInitialState(9)).state, version: 99 }));

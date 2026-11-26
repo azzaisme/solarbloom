@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { GroundState } from '../src/core/types';
 import { COMPONENT_IDS, COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES, type Unlock } from '../src/data/crafting';
 import { CAT_DECOR, DECOR_OPTION } from '../src/data/cozy';
 import { LIGHTS } from '../src/data/lights';
@@ -150,30 +149,27 @@ describe('E23.6.1: the crafting table', () => {
     expect(sim.inventory.stored('wire')).toBe(1);
   });
 
-  it('a crafting-table machine is built from its recipe, unlocks when its Keeper wakes, and comes down whole', () => {
+  it('the starter power machines refund what was paid, including machines from older saves', () => {
     const sim = oldSim();
-    for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
-      const t = sim.grid.get(GROUND, 12 + dx, 12 + dz)!;
-      t.ground = 'restored' as GroundState;
+    for (const x of [12, 13]) {
+      const t = sim.grid.get(GROUND, x, 12)!;
+      t.ground = 'restored';
       t.pollution = 0;
       sim.grid.touch(t);
     }
-    expect(sim.build.recipe('solar')).toEqual({ scrap: 4, glassPane: 2, wire: 1 });
-    expect(sim.build.isUnlocked('solar')).toBe(false);
-    expect(sim.build.lockLabel('solar')).toBe('🔒 Wake Tally in Old Market');
-    sim.state.salvage!.keepers.tally = { step: 'request1' };
-    expect(sim.build.isUnlocked('solar')).toBe(true);
-    sim.inventory.add('scrap', 4);
-    sim.inventory.add('wire', 1);
-    expect(sim.build.check('solar', GROUND, 12, 12).reason).toMatch(/Glass pane/);
-    sim.inventory.add('glassPane', 2);
-    const m = sim.build.place('solar', GROUND, 12, 12)!;
-    expect(m).toBeDefined();
+    sim.inventory.add('scrap', 6);
+    const solar = sim.build.place('solar', GROUND, 12, 12)!;
+    const charger = sim.build.place('charger', GROUND, 13, 12)!;
+    expect(sim.inventory.count('scrap')).toBe(0);
+    expect(sim.build.remove(solar.id)).toBe(true);
+    expect(sim.inventory.count('scrap')).toBe(3);
     expect(sim.inventory.count('glassPane')).toBe(0);
-    expect(sim.build.remove(m.id)).toBe(true);
-    expect(sim.inventory.count('glassPane')).toBe(2);
-    expect(sim.inventory.count('wire')).toBe(1);
-    expect(sim.inventory.count('scrap')).toBe(4);
+    expect(sim.inventory.count('wire')).toBe(0);
+
+    delete charger.buildCost; // an existing save predates the Scrap-only recipe
+    expect(sim.build.remove(charger.id)).toBe(true);
+    expect(sim.inventory.count('scrap')).toBe(7);
+    expect(sim.inventory.count('wire')).toBe(2);
   });
 
   it('the table lists the components known, and only machines that can be built', () => {
@@ -186,7 +182,7 @@ describe('E23.6.1: the crafting table', () => {
     expect(wire.label).toBe('Wire, makes 2 from 2 Copper, 0 at hand');
     expect(rows.find((r) => r.id === 'motor')!.problem).toBeDefined();
     // at fountain tier 1 the table knows the home kit (the compost bin, E23.5.3) and the Water Condenser; each Keeper adds its machines
-    expect(machineRows(sim).map((m) => m.id)).toEqual(['compostBin', 'condenser']);
+    expect(machineRows(sim).map((m) => m.id)).toEqual(['solar', 'charger', 'compostBin', 'condenser']);
     for (const k of KEEPERS) sim.state.salvage!.keepers[k.id] = { step: 'settled' };
     expect(machineRows(sim).map((m) => m.id)).toEqual(MACHINE_RECIPES.filter((r) => r.builds && sim.crafting.unlocked(r.unlock)).map((r) => r.id));
     expect(machineRows(sim).map((m) => m.id)).toContain('solar');

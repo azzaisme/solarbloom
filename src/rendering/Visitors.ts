@@ -18,7 +18,7 @@ const MODEL_URLS = import.meta.glob('../../assets/raw/models/visitors/{badger,bu
   import: 'default',
   eager: true,
 }) as Record<string, string>;
-const modelUrl = (kind: string) => MODEL_URLS[`../../assets/raw/models/visitors/${kind}.glb`];
+export const visitorModelUrl = (kind: string) => MODEL_URLS[`../../assets/raw/models/visitors/${kind}.glb`];
 
 /**
  * E23.2.4.2 (#415): the animals that come over while bloombot sits. Each flies or walks in from a few tiles away,
@@ -183,7 +183,7 @@ export class Visitors {
 
   /** Loads a kind's own model into an actor; the placeholder is hidden once it is in. */
   private load(a: Actor) {
-    const url = modelUrl(a.kind);
+    const url = visitorModelUrl(a.kind);
     if (!url || !this.app) return;
     this.app.assets.loadFromUrl(url, 'container', (err, asset) => {
       if (err || !asset || !a.root.parent) return; // (the visitors were torn down meanwhile)

@@ -13,6 +13,12 @@ import type { Sim } from './Sim';
 /** E19.2: what building over a decoration says (a decoration is free and instant to remove). */
 export const DECOR_IN_WAY = 'A decoration is here: remove it first';
 
+/** Refund the old components for machines built before the early power recipes. */
+const LEGACY_POWER_COST: Partial<Record<BuildableType, MaterialCost>> = {
+  solar: { scrap: 4, glassPane: 2, wire: 1 },
+  charger: { scrap: 4, wire: 2 },
+};
+
 export interface PlacementCheck {
   ok: boolean;
   reason?: string;
@@ -180,7 +186,7 @@ export class BuildSystem {
     const s = this.sim;
     const m = s.machine(id);
     if (!m || m.type === 'core' || m.starter) return false;
-    const recipe = this.recipe(m.type as BuildableType);
+    const recipe = m.buildCost ?? LEGACY_POWER_COST[m.type] ?? this.recipe(m.type);
     for (const t of s.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t && t.occupantId === m.id) t.occupantId = undefined;
     s.grid.unindexMachine(m);
     if (m.type === 'droneHub') {
@@ -201,11 +207,13 @@ export class BuildSystem {
       s.bus.emit('action.failed', { reason: chk.reason! });
       return undefined;
     }
-    s.inventory.pay(this.recipe(type)!);
+    const recipe = this.recipe(type)!;
+    s.inventory.pay(recipe);
     const built = this.ensureBuiltCounts();
     built[type] = (built[type] ?? 0) + 1;
     const def = MACHINES[type];
     const m: MachineData = { id: s.newId('m'), type, roofId, x, z, size: def.size, boostUntil: 0, timer: 0, charge: 0 };
+    if (LEGACY_POWER_COST[type]) m.buildCost = { ...recipe };
     s.state.machines.push(m);
     for (const c of s.grid.footprint(roofId, x, z, def.size)) if (c) c.occupantId = m.id;
     s.grid.indexMachine(m);

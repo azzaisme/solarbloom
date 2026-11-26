@@ -1,7 +1,5 @@
 import { PARK } from '../core/Areas';
-import type { ComponentId, ItemId, MaterialId } from '../core/types';
-import { COMPONENT_RECIPES } from '../data/crafting';
-import { isComponent, itemDef } from '../data/items';
+import type { MaterialId } from '../core/types';
 import { REGIONS } from '../data/oldcity';
 import { MATERIALS } from '../data/salvage';
 import type { Sim } from '../gameplay/Sim';
@@ -77,7 +75,7 @@ export function otherRequests(sim: Sim): string[] {
  * ProgressionSystem advances the step by one at most per tick). Actions are named through `keyFor` (bloombot's key
  * or pad button); no step speaks of clicks, taps, rates or upgrades. After the last step: the advisor (E23.1.5).
  */
-export const FIRST_STEPS = 9;
+export const FIRST_STEPS = 8;
 
 export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'interact') => string): { text: string; target?: string } {
   const park = sim.areas.counts(PARK).restored;
@@ -103,65 +101,24 @@ export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'inter
       const k = r ? sim.keepers.def(r.keeper) : undefined;
       return { text: k ? `A robot sleeps in ${r!.name}. Press ${keyFor('pulse')} beside ${k.name} to stir it, then press ${keyFor('interact')} to give it any 5 things` : 'A robot sleeps behind each pile of rubble: pry one open and wake it' };
     }
-    case 7:
-      return panelHint(sim, keyFor);
     default:
       // E23.1.5: after the first fifteen minutes the hint line carries the advisor's next step in the loop
       return { text: withKeys(sim.advisor.suggest().text, keyFor) };
   }
 }
 
-/**
- * E23.1.4 (#536): what the first Solar Panel still needs: components to make at the table and materials to salvage
- * for them (from its crafting recipe, against what bloombot carries and keeps in the store). Nothing in either: it
- * can be built.
- */
-export function panelNeeds(sim: Sim): { craft: ComponentId[]; salvage: MaterialId[] } {
-  const have = (id: ItemId) => sim.inventory.count(id) + sim.inventory.stored(id);
-  const total = new Map<MaterialId, number>();
-  const craft: ComponentId[] = [];
-  const cost = sim.crafting.machineRecipe('solar')?.cost ?? {};
-  for (const [id, n] of Object.entries(cost) as [ItemId, number][]) {
-    if (!isComponent(id)) {
-      total.set(id, (total.get(id) ?? 0) + n);
-      continue;
-    }
-    const short = n - have(id);
-    if (short <= 0) continue;
-    const r = COMPONENT_RECIPES.find((c) => c.id === id)!;
-    const crafts = Math.ceil(short / r.makes);
-    craft.push(id);
-    for (const [m, k] of Object.entries(r.cost) as [MaterialId, number][]) total.set(m, (total.get(m) ?? 0) + crafts * k);
+/** An optional first build while the fountain is still dry and Bloombot has the Scrap to try it. */
+export function earlyPowerHint(sim: Sim): string | undefined {
+  if (sim.fountain.tier > 0 || sim.state.stats.tilesRestored < 4 || sim.build.built('charger')) return undefined;
+  if (sim.build.count('solar') === 0) {
+    return sim.build.affordable('solar')
+      ? 'Open Build with {buildMenu}. Choose Power and place a ☀️ Solar Panel on green ground.'
+      : undefined;
   }
-  const salvage = [...total].filter(([m, n]) => have(m) < n).map(([m]) => m);
-  return { craft, salvage };
-}
-
-/**
- * E23.1.4 (#536): the first Solar Panel, after the first Keeper. It is a Keeper's craft (Tally, in the Old Market),
- * so the step says where to go in the world's words, and never asks for what can't be had yet: the Keeper's
- * barricade, then the Keeper, then each missing material where it's found (prying its barricade first), then the
- * components at the table, then the build.
- */
-function panelHint(sim: Sim, keyFor: (a: 'pulse' | 'interact') => string): { text: string; target?: string } {
-  const u = sim.crafting.machineRecipe('solar')?.unlock;
-  if (u && !sim.crafting.unlocked(u)) {
-    const r = 'keeper' in u ? REGIONS.find((q) => q.id === u.keeper) : undefined;
-    if (!r) return { text: `The ☀️ Solar Panel: ${sim.crafting.unlockLabel(u).replace('🔒 ', '')}` };
-    const k = sim.keepers.def(r.keeper);
-    if (!sim.gates.isOpen(r.gate.id)) return { text: `${k.name} in ${r.name} knows how to make a ☀️ Solar Panel: hold ${keyFor('interact')} beside the rubble into ${r.name} to pry it open` };
-    return { text: `${k.name} sleeps in ${r.name} and knows how to make the ☀️ Solar Panel. Press ${keyFor('pulse')} beside it to stir it, then press ${keyFor('interact')} to give it any 5 things` };
+  if (sim.build.affordable('charger')) {
+    return 'Open Build with {buildMenu}. Under Power, place a 🔌 Charger right beside your Solar Panel.';
   }
-  const need = panelNeeds(sim);
-  const m = need.salvage[0];
-  if (m) {
-    const home = MATERIALS[m].home.includes('park') ? undefined : REGIONS.find((q) => MATERIALS[m].home.includes(q.id));
-    const what = `${MATERIALS[m].icon} ${MATERIALS[m].name}`;
-    if (home && !sim.gates.isOpen(home.gate.id)) return { text: `The ☀️ Solar Panel needs ${what}, found in ${home.name}: hold ${keyFor('interact')} beside the rubble into it to pry it open` };
-    return { text: `Dig ${what} out of the glinting piles${home ? ` in ${home.name}` : ''} for the ☀️ Solar Panel: hold ${keyFor('interact')} beside one` };
-  }
-  if (need.craft.length) return { text: `Make ${need.craft.map((c) => `${itemDef(c).icon} ${itemDef(c).name}`).join(' and ')} at the crafting table in the house, for the ☀️ Solar Panel` };
-  return { text: 'Build a ☀️ Solar Panel from the build menu' };
+  return undefined;
 }
 
 /** Which first-fifteen-minutes step the game is on: the first not yet done (ProgressionSystem moves one at a time). */
@@ -170,11 +127,9 @@ export function oldCityStep(sim: Sim): number {
   if (!sv) return 0;
   const salvaged = Object.keys(sv.piles).length > 0;
   const seeds = (sv.pack.seeds ?? 0) + (sv.store.seeds ?? 0) + (sv.delivered.seeds ?? 0) > 0 || sv.tier >= 1;
-  const solar = sim.state.machines.some((m) => m.type === 'solar' && !m.starter);
   const pried = REGIONS.some((r) => r.ring === 1 && r.gate.opensRegion !== false && sv.opened.includes(r.gate.id));
   const keeper = REGIONS.some((r) => sv.opened.includes(r.gate.id) && (sv.keepers[r.keeper]?.step ?? 'asleep') !== 'asleep');
-  // E23.1.4 (#536): the Solar Panel comes after the first Keeper: it is Tally's craft, made from the Old Market's glass
-  const done = [salvaged, sim.state.stats.tilesRestored >= 4, seeds, sim.areas.counts(PARK).restored >= 60 || sv.tier >= 1, sv.tier >= 1, pried, keeper, solar];
+  const done = [salvaged, sim.state.stats.tilesRestored >= 4, seeds, sim.areas.counts(PARK).restored >= 60 || sv.tier >= 1, sv.tier >= 1, pried, keeper];
   const i = done.indexOf(false);
   return i < 0 ? done.length : i;
 }

@@ -122,6 +122,8 @@ import { Turntable } from '../rendering/Turntable';
 import { nextGrowth, partsAdded, pieceOf, type BotGrowth } from '../data/botParts';
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
+import { TideSketchbook } from '../ui/TideSketchbook';
+import type { OldCityPanel } from '../ui/OldCityPanel';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
@@ -369,6 +371,7 @@ export class Game {
   private selected?: string;
   /** E21: the Old City's panels and held actions */
   private oc?: OldCityController;
+  private tideSketchbook?: TideSketchbook;
   /** E21.8: the Keepers */
   private keepers?: KeeperVisuals;
   /** E23.2.3: sitting on benches and meditating at chargers */
@@ -645,6 +648,7 @@ export class Game {
       // #629: the Bloombot page's live look at Bloombot
       this.turntable = new Turntable(this.app, () => this.bot?.visuals);
       this.turntable.reducedMotion = !!this.settings.reducedMotion;
+      this.hud.backpack.savedSketches = () => this.saver.sketches();
       this.hud.backpack.botView = (canvas, row) => {
         const tt = this.turntable!;
         tt.show(canvas);
@@ -2074,7 +2078,7 @@ export class Game {
     else if (this.resting?.active) this.resting.stand(); // E23.2.3: Back stands bloombot up before any menu
     else if (this.hud.trayOpen) this.hud.buildMenu.back(); // E23.11: the slot picker first, then the menu
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
-    else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.hud.backpackOpen) this.hud.backpack.back();
     else if (this.hud.craft.isOpen) this.hud.craft.close();
     else if (this.hud.crate.isOpen) this.hud.crate.close();
     else if (this.selected) this.select(undefined);
@@ -2541,7 +2545,7 @@ export class Game {
     const pile = s.salvage.pileAt(f.x, f.z);
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: s.upgrades.salvageHold, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
-    if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : s.keepers.giftFor(keeper.id) ? 'Give a gift to' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
+    if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : keeper.id !== 'tide' && s.keepers.giftFor(keeper.id) ? 'Give a gift to' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
     const page = s.journal.pageAt(f.x, f.z);
     if (page) out.push({ kind: 'cache', id: `page:${page}`, verb: 'Read', name: s.journal.found(page) ? 'the page again' : 'the page', distance: fd, at: front, run });
     const sp = setPieceAt(f.x, f.z);
@@ -2675,6 +2679,19 @@ export class Game {
       bot: this.bot!,
       bindings: this.bindings,
       game: this,
+      talkToTide: (panel: OldCityPanel, talk: () => void) => {
+        this.tideSketchbook ??= new TideSketchbook(panel, this.saver, async (seed) => {
+          const [{ captureFrog }, { drawPencil }] = await Promise.all([
+            import('../rendering/SketchCapture'), import('../rendering/SketchPencil'),
+          ]);
+          return drawPencil(await captureFrog(this.app, seed), seed);
+        });
+        const keepers = this.sim.keepers;
+        const talkLabel = keepers.giftFor('tide') ? 'Give Tide a gift'
+          : keepers.step('tide') === 'request1' ? 'About your request' : 'Talk with Tide';
+        this.tideSketchbook.open(talk, talkLabel);
+        this.syncPanelPause();
+      },
       // E23.9.1: a page read from its post opens the journal at it
       openPage: (id: string) => {
         this.oc?.panel.close();
@@ -4261,6 +4278,7 @@ export class Game {
 
   private droneLabel(role: DroneRole, status: DroneStatus, short?: string, lit = false): string {
     if (status === 'asleep') return `fast asleep on the old lamp: press ${this.hudKey('interact')} at the lamp to wake it`;
+    if (status === 'following') return 'flying along beside Bloombot, helping with the ground nearby';
     const work: Record<DroneRole, string> = {
       restorer: 'turning grey ground green',
       gardener: 'watering the ground',
@@ -4632,7 +4650,8 @@ export class Game {
       if ((machine.tier ?? 1) >= 3) return; // a superstructure's foundation: its own messages (super.stage)
       const first = s.state.machines.filter((m) => m.type === machine.type && !m.starter).length === 1;
       const msg: Partial<Record<MachineData['type'], string>> = {
-        solar: '☀️ Your Solar Panel is soaking up the sun and powering the machines joined to it.',
+        solar: '☀️ Put a Charger right beside this Solar Panel to give Bloombot a place to fill its Charge.',
+        charger: '🔌 In daylight, press {interact} beside your powered Charger to sit and refill Charge.',
         condenser: '💧 Your Water Condenser is running: it gathers water from the air all on its own.',
         pollinator: '🌸 Pollinator Garden planted. Turn the ground beside it green and watch the flowers spread.',
         droneHub: '🛸 Drone Hub built. A little drone flies out and helps turn the ground green nearby.',
@@ -4704,7 +4723,7 @@ export class Game {
       this.drones.wake(droneId);
       this.sfx.at(p, (q) => q.powerUp());
       this.tweens.add(0.01, () => {}, { delay: 0.45, done: () => this.sfx.at(p, (q) => q.drone('restorer')) });
-      this.hud.toast('🛸 The old drone wakes up!<small>It tends the ground around its lamp, turning it green bit by bit, and keeps Bloombot company.</small>', 'gold', 5);
+      this.hud.toast('🛸 The old drone wakes up!<small>You have a little buddy! It follows Bloombot and helps turn nearby ground green in the park.</small>', 'gold', 5);
       this.save();
     });
     b.on('drone.jobStarted', ({ droneId }) => {

@@ -1,0 +1,25 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Tide’s sketchbook</title>
+<link rel="stylesheet" href="/src/ui/styles.css">
+<canvas id="test" width="640" height="480"></canvas><div id="hud"></div>
+<script type="module">
+import * as pc from 'playcanvas';
+import { OldCityPanel } from '/src/ui/OldCityPanel.ts';
+import { TideSketchbook } from '/src/ui/TideSketchbook.ts';
+import { captureFrog } from '/src/rendering/SketchCapture.ts';
+import { drawPencil } from '/src/rendering/SketchPencil.ts';
+import { SaveService } from '/src/app/SaveService.ts';
+import { Backpack } from '/src/ui/Backpack.ts';
+import { Sim } from '/src/gameplay/Sim.ts';
+import { createInitialState } from '/src/core/GameState.ts';
+
+const app = new pc.Application(document.querySelector('canvas'));
+app.start();
+const hud = document.querySelector('#hud');
+const save = new SaveService();
+const panel = new OldCityPanel(hud);
+const book = new TideSketchbook(panel, save, async seed => drawPencil(await captureFrog(app, seed), seed));
+const bag = new Backpack(hud, { sim: new Sim(createInitialState(11)) });
+bag.savedSketches = () => save.sketches();
+window.tide = () => book.open(() => {}, 'Talk with Tide');
+window.collection = () => bag.open('collection');
+</script></html>
