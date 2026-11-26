@@ -1605,7 +1605,8 @@ export class Game {
     const tide = this.keepers?.headWorld('tide');
     if (!tide) return;
     const [x, y, z] = this.bot.world();
-    const target: [number, number, number] = [(x + tide.x) / 2, (y + tide.y) / 2, (z + tide.z) / 2];
+    // The chase camera already lifts its pivot above the ground. Keep the faces above the toolbar.
+    const target: [number, number, number] = [(x + tide.x) / 2, y + 0.15, (z + tide.z) / 2];
     // Look across the pair so standing one tile in front of Tide doesn't hide either character.
     const side = Math.atan2(tide.z - z, x - tide.x) * 180 / Math.PI;
     const yaw = Math.cos(side * Math.PI / 180) > 0 ? side + 180 : side;

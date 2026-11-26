@@ -62,11 +62,13 @@ export async function capturePhotoSketch(
         }
       });
     });
-    const expired = new Promise<never>((_, reject) => {
-      timeout = setTimeout(() => reject(new Error('The photo frame did not finish.')), 12000);
-    });
     app.renderNextFrame = true;
-    const [photo, pixels] = await Promise.race([Promise.all([image, depth]), expired]);
+    const photo = await image;
+    // A stalled GPU depth read must not discard the picture. The colour pass can still guide the strokes.
+    const withoutDepth = new Promise<null>((resolve) => {
+      timeout = setTimeout(() => resolve(null), 6000);
+    });
+    const pixels = await Promise.race([depth?.catch(() => null) ?? Promise.resolve(null), withoutDepth]);
     return photoFields(photo, pixels);
   } finally {
     clearTimeout(timeout);
