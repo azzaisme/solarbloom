@@ -1,5 +1,6 @@
 import { DAY_SECONDS } from '../data/time';
-import { WEATHER, WEATHER_KINDS, WEATHER_ODDS, WEATHER_RULES, WEATHER_WORDS, type WeatherEffects, type WeatherKind } from '../data/weather';
+import { WEATHER, WEATHER_KINDS, WEATHER_RULES, WEATHER_WORDS, type WeatherEffects, type WeatherKind } from '../data/weather';
+import { SEASON_WEATHER_ODDS, WINTER_COZY, type Season } from '../data/seasons';
 import type { Rng } from '../core/Rng';
 import type { Sim } from './Sim';
 
@@ -30,9 +31,14 @@ export class Weather {
   /** The weather on a game day (deterministic: the seed and the day). */
   kindOn(day: number): WeatherKind {
     if (day <= 1) return WEATHER_RULES.firstDay;
-    const raw = rawKind(this.sim.state.seed, day);
-    if (raw === 'storm' && (day < WEATHER_RULES.noStormBeforeDay || rawKind(this.sim.state.seed, day - 1) === 'storm')) return 'rain';
+    const raw = rawKind(this.sim.state.seed, day, this.seasonOn(day));
+    if (raw === 'storm' && (day < WEATHER_RULES.noStormBeforeDay || rawKind(this.sim.state.seed, day - 1, this.seasonOn(day - 1)) === 'storm')) return 'rain';
     return raw;
+  }
+
+  /** #830: the season of a game day (the weather is weighted by it: spring showers, summer sun, autumn wind, winter snow). */
+  private seasonOn(day: number): Season {
+    return this.sim.seasons?.seasonOnDay(day) ?? 'summer';
   }
 
   /** The weather now. */
@@ -48,7 +54,11 @@ export class Weather {
 
   /** The whole row of effects now. */
   effects(): WeatherEffects {
-    return WEATHER[this.kind()];
+    const e = WEATHER[this.kind()];
+    // #830: Cozy Mode keeps winter's short grey days from slowing the solar panels
+    const s = this.sim.seasons;
+    if (s?.cozy && s.season() === 'winter' && e.solar < WINTER_COZY.solarFloor) return { ...e, solar: WINTER_COZY.solarFloor };
+    return e;
   }
 
   /** Solar share (folded into `sim.clock.solarFactor()`). */
@@ -129,12 +139,13 @@ export class Weather {
   }
 }
 
-/** A day's weather before the rules (weighted by WEATHER_ODDS). */
-function rawKind(seed: number, day: number): WeatherKind {
-  const total = WEATHER_KINDS.reduce((a, k) => a + WEATHER_ODDS[k], 0);
+/** A day's weather before the rules (weighted by its season's odds, data/seasons SEASON_WEATHER_ODDS). */
+function rawKind(seed: number, day: number, season: Season): WeatherKind {
+  const odds = SEASON_WEATHER_ODDS[season];
+  const total = WEATHER_KINDS.reduce((a, k) => a + odds[k], 0);
   let r = hash01(seed, day) * total;
   for (const k of WEATHER_KINDS) {
-    r -= WEATHER_ODDS[k];
+    r -= odds[k];
     if (r < 0) return k;
   }
   return 'sunny';

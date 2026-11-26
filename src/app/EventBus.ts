@@ -27,6 +27,8 @@ export interface GameEvents {
   'clock.slept': { from: number; day: number; real: boolean };
   /** E23.7.1: "follow my clock" switched on or off. */
   'clock.mode': { real: boolean };
+  /** #830: a new season began (on the step it turned; never on loading). */
+  'season.changed': { season: import('../data/seasons').Season; from: import('../data/seasons').Season; year: number };
   /** E23.7.2: a new day's weather (or a held one, in tests and photo mode never). */
   'weather.changed': { kind: import('../data/weather').WeatherKind; day: number };
   /** E23.7.2.3: a storm blew in at dawn: fresh salvage (E23.7.4 refills the piles). */

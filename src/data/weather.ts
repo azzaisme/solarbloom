@@ -5,8 +5,8 @@
  * The weather is one kind per game day, chosen at dawn from the seed and the day, so the forecast at the house is
  * always right about tomorrow.
  */
-export type WeatherKind = 'sunny' | 'cloudy' | 'rain' | 'wind' | 'storm' | 'fog';
-export const WEATHER_KINDS: readonly WeatherKind[] = ['sunny', 'cloudy', 'rain', 'wind', 'storm', 'fog'];
+export type WeatherKind = 'sunny' | 'cloudy' | 'rain' | 'wind' | 'storm' | 'fog' | 'snow';
+export const WEATHER_KINDS: readonly WeatherKind[] = ['sunny', 'cloudy', 'rain', 'wind', 'storm', 'fog', 'snow'];
 
 export interface WeatherEffects {
   /** share of solar output (times the time of day) */
@@ -42,10 +42,17 @@ export const WEATHER: Record<WeatherKind, WeatherEffects> = {
   wind: { solar: 0.9, wind: 0.85, rain: 0, planterDrying: 1.2, evaporation: 0, bloomSpeed: 1, gatherBonus: 2, blowsInSalvage: false, lightning: 0, view: 1, fogFinds: false, overcast: 0.2 },
   storm: { solar: 0, wind: 1, rain: 2, planterDrying: 0, evaporation: 0, bloomSpeed: 1.25, gatherBonus: 1.5, blowsInSalvage: true, lightning: 2, view: 0.65, fogFinds: false, overcast: 1 },
   fog: { solar: 0.6, wind: 0, rain: 0, planterDrying: 0.7, evaporation: 0, bloomSpeed: 1, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 0.32, fogFinds: true, overcast: 0.85 },
+  // #830: winter's light snow. Gentle by design: as much sun as a cloudy day, the planters stay damp (they never dry
+  // out under snow) and the melt trickles a little into the ponds; ground blooms at its usual pace.
+  snow: { solar: 0.8, wind: 0, rain: 0.3, planterDrying: 0, evaporation: 0, bloomSpeed: 1, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 0.85, fogFinds: false, overcast: 0.5 },
 };
 
-/** How often each kind comes up (weights). Day 1 is always sunny: the first morning is a gentle one. */
-export const WEATHER_ODDS: Record<WeatherKind, number> = { sunny: 34, cloudy: 22, rain: 18, wind: 12, storm: 6, fog: 8 };
+/**
+ * How often each kind comes up over a whole year (weights). Day 1 is always sunny: the first morning is a gentle one.
+ * #830: each day's weather is picked with its season's own weights (data/seasons SEASON_WEATHER_ODDS); this is the
+ * year's average, kept for anything that wants the overall picture.
+ */
+export const WEATHER_ODDS: Record<WeatherKind, number> = { sunny: 34, cloudy: 22, rain: 18, wind: 12, storm: 6, fog: 8, snow: 8 };
 
 /** A storm never follows a storm (and never comes in the first days, before bloombot has a home). */
 export const WEATHER_RULES = { firstDay: 'sunny' as WeatherKind, noStormBeforeDay: 4 };
@@ -58,4 +65,5 @@ export const WEATHER_WORDS: Record<WeatherKind, { name: string; forecast: string
   wind: { name: 'Windy', forecast: 'Tomorrow: wind. Turbines will spin, and leaves will blow about.' },
   storm: { name: 'Storm', forecast: 'Tomorrow: a storm. The turbines will spin their hardest, there will be no sun, and the wind may wash new things up on the beach.' },
   fog: { name: 'Fog', forecast: 'Tomorrow: fog. You won’t see far, and strange things will be about.' },
+  snow: { name: 'Snow', forecast: 'Tomorrow: light snow. The planters stay damp, and the panels still catch the light.' },
 };

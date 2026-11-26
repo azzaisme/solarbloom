@@ -631,6 +631,20 @@ const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, 
 export const PALETTE = {
   ...families,
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
+  /**
+   * #830: the seasons (rendering/SeasonLook). `grass`: the colour green grass, lawns, shrubs and leaves drift toward in
+   * each season (summer is the world's own green). `autumn`: deciduous leaves turning gold, orange and russet. `blossom`:
+   * spring's soft pink and white blossom. `frost`: winter's frost and light snow; `snow`: falling snowflakes.
+   */
+  season: {
+    grass: { spring: '#9ccf5a', summer: '#6fa84a', autumn: '#b5a24c', winter: '#9fae96' },
+    autumn: ['#e0a93a', '#d9772e', '#b8452c'],
+    /** the last brown leaves hanging on in winter */
+    withered: '#8c6a45',
+    blossom: ['#f6b9cf', '#fbeef2'],
+    frost: '#e9f1f6',
+    snow: '#f4f8fb',
+  },
   /** E23.7.2.2: the house's radio (the forecast) */
   radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
   /** #628: the little tools and things Bloombot holds while it works (BotProps) */

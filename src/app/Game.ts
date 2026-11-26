@@ -12,7 +12,7 @@ import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { AudioDebugHUD } from '../audio/AudioDebugHUD';
 import { sampleArea, surfaceOf, type TileSound } from '../audio/AudioMath';
 import { treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
-import { treeGeo } from '../rendering/TreeGen';
+import { DECIDUOUS, treeGeo } from '../rendering/TreeGen';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -146,6 +146,8 @@ import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
 import { WEATHER, WEATHER_WORDS } from '../data/weather';
+import { SEASON_WORDS } from '../data/seasons';
+import { fallingLeafColour, seasonLookAt, seasonShading, type SeasonLookNow } from '../rendering/SeasonLook';
 import { WeatherVisuals, type WeatherLook } from '../rendering/WeatherVisuals';
 import { buildRadio } from '../rendering/HouseRadio';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
@@ -701,6 +703,11 @@ export class Game {
         const d = VISITORS.find((v) => v.id === e.id);
         if (d) this.hud.toast(`${d.icon} ${d.name} came to sit with you<small>New in your visitor log</small>`, '', 3);
       });
+      // #830: a warm toast when a new season arrives
+      this.sim.bus.on('season.changed', (e) => {
+        const w = SEASON_WORDS[e.season];
+        this.hud.toast(`${w.icon} ${w.arrive}<small>${w.detail}</small>`, 'gold', 6);
+      });
       this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
       // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
       this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
@@ -1001,6 +1008,7 @@ export class Game {
   private applySettings() {
     const s = this.settings;
     this.sim.decay.setCozyMode(s.cozyMode === true);
+    this.sim.seasons.setCozyMode(s.cozyMode === true); // #830: winter's grey days don't slow the panels
     this.applyVolumes();
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
@@ -3219,12 +3227,23 @@ export class Game {
   );
 
   private nextFallingLeaf = 0;
+  /** #830: the season's look on screen now (SeasonLook), worked out once a frame */
+  private seasonNow: SeasonLookNow = seasonLookAt('spring', 0);
+
+  /** #830: the season's look: every material that shows it (tint, blossom, autumn, bare trees, frost). */
+  private updateSeasonLook() {
+    const n = this.sim.seasons.now();
+    const sc = sceneNow(this.sim, this.photo);
+    this.seasonNow = seasonLookAt(n.season, n.progress, sc.f, sc.weather === 'snow');
+    seasonShading.set(this.seasonNow);
+  }
 
   private updateFallingLeaves(dt: number, wind: number, view: { x0: number; x1: number; z0: number; z1: number }) {
     if (!dt || this.vfx.reducedMotion || ChunkRenderer.still || this.camera.zoom < 0.7) return;
     this.nextFallingLeaf -= dt;
     if (this.nextFallingLeaf > 0) return;
-    this.nextFallingLeaf = (1.4 + Math.random() * 1.5) / (1 + 1.8 * wind) / this.vfx.density;
+    // #830: autumn sends many more leaves down, spring a few petals, winter's bare trees hardly any
+    this.nextFallingLeaf = (1.4 + Math.random() * 1.5) / (1 + 1.8 * wind) / this.vfx.density / Math.max(0.05, this.seasonNow.leafFall);
     const world = treeWorldOf(this.sim);
     const focus = this.camera.target;
     for (let attempt = 0; attempt < 16; attempt++) {
@@ -3251,7 +3270,7 @@ export class Game {
         px + (tree.pos[root] * c - tree.pos[root + 2] * s) * spot.scale,
         ground + (spot.planter ? 0.16 : 0) + tree.pos[root + 1] * spot.scale,
         pz + (tree.pos[root] * s + tree.pos[root + 2] * c) * spot.scale,
-        ground, [tree.col[root], tree.col[root + 1], tree.col[root + 2]],
+        ground, fallingLeafColour(this.seasonNow, [tree.col[root], tree.col[root + 1], tree.col[root + 2]], DECIDUOUS[spot.species], Math.random(), Math.random()),
       );
       break;
     }
@@ -5624,6 +5643,7 @@ export class Game {
       wv.reducedMotion = this.settings.reducedMotion;
       wv.lowVfx = !!this.settings.lowVfx;
       wv.update(wdt, this.weatherLook(), this.camera.target);
+      this.updateSeasonLook();
       this.sky.wind = wv.wind;
       this.clouds.gust = wv.wind;
     }
