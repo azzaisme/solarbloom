@@ -265,6 +265,7 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   beehive: 'flower', // E23.5.4
   fishPond: 'fish',
   orchard: 'apple',
+  giantTree: 'tree',
   mushroomLog: 'tree',
   wormBin: 'garden',
   birdBox: 'bird',

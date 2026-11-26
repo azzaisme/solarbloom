@@ -119,6 +119,8 @@ export interface GameEvents {
   'tile.prepared': { tile: TileData };
   'tile.softened': { tile: TileData };
   'tile.nurtured': { tile: TileData; level: number; auto?: boolean };
+  /** A tree grew a stage as it aged (TreeGrowth): `from`, `to` its stages (0 none). */
+  'tree.grew': { tile: TileData; from: number; to: number };
   /** Look 6.16: a tile became (or stayed) lush; its wet mask soaks in. */
   'tile.lush': { tile: TileData };
   /** Look 6.10: a tap knocked a tile's transition along. */

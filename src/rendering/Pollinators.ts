@@ -4,7 +4,7 @@ import type { Sim } from '../gameplay/Sim';
 import { assignBatch, group, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 import { hash01, tilesIn, type Rect } from './FaunaPlan';
-import { treeSpot, treeStage, treeWorldOf, type TreeSpot } from './TreePlacement';
+import { treeSpot, treeWorldOf, type TreeSpot } from './TreePlacement';
 import { PALETTE } from './Materials';
 import { PLANT_LOAD, PULSE_LOAD } from '../data/pulse';
 
@@ -171,9 +171,9 @@ export class Pollinators {
       // grown trees (saplings drop nothing): cherries shed petals, other broadleaves the odd leaf, pines nothing
       const crowns: Crown[] = [];
       if (on)
-        for (const t of tilesIn(this.sim, rect!, (t) => (treeStage(t, this.sim.water.bloomShown(t)) ?? 0) >= 2, 120)) {
+        for (const t of tilesIn(this.sim, rect!, (t) => (this.sim.trees.stage(t) ?? 0) >= 2, 120)) {
           const spot = treeSpot(t, type(t), treeWorldOf(this.sim));
-          if (spot && spot.species !== 'pine') crowns.push({ t, spot, stage: treeStage(t, this.sim.water.bloomShown(t))! }); // E23.4.4: faded by low water
+          if (spot && spot.species !== 'pine') crowns.push({ t, spot, stage: this.sim.trees.stage(t)! }); // E23.4.4: faded by low water
         }
       this.cherries = crowns.filter((c) => c.spot.species === 'cherry').slice(0, 24);
       this.broadleaves = crowns.filter((c) => c.spot.species !== 'cherry').slice(0, 24);

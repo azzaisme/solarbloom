@@ -5,7 +5,7 @@ import { CHUNK } from '../core/Hash';
 import { GROUND } from '../core/GameState';
 import { chunkKey } from '../core/Grid';
 import { polyDist } from '../core/Picking';
-import type { TileData } from '../core/types';
+import type { TileData, TileTransition } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
 import { RARE_PLANT_DEFAULT, RARE_PLANTS } from '../data/pulse';
@@ -27,7 +27,8 @@ import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageBounds, foliageMaterial, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type TreeStage, type Lod } from './TreeGen';
-import { treeSpot, treeStage, treeWorldOf } from './TreePlacement';
+import { TREE_GROWTH, treeSpot, treeWorldOf } from './TreePlacement';
+import { warmGiants } from './GiantTreeGen';
 import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, reedGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, beachDressing, buildingDressing, grassTufts, lawnFringe, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
 import { zoneAt, type PlantingZone } from './PlantingZones';
@@ -1975,7 +1976,7 @@ export class ChunkRenderer {
     if ((t.feature ?? 'lawn') === 'water') return false;
     const spot = treeSpot(t, this.areaType, treeWorldOf(this.sim)); // P7-E29: from the generated world
     if (!spot) return false;
-    const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: trees fade with low water
+    const stage = this.sim.trees.stage(t); // E23.4.4: trees fade with low water
     if (!stage) return false;
     const growth = this.treeBloom;
     if (growth?.outgoing) return true;
@@ -2008,6 +2009,7 @@ export class ChunkRenderer {
   private warm: Generator<void> | undefined = (function* () {
     yield* warmFlora(); // Look 3: grass, flowers and shrubs first (every restored tile uses them)
     yield* warmTemplates();
+    yield* warmGiants(); // giant trees: their own entities (GiantTrees), but the same slices
   })();
   private warmTrees() {
     if (!this.warm) return;
@@ -2312,6 +2314,27 @@ export class ChunkRenderer {
 
   private treeBloom?: TreeBloom;
 
+  /** Trees growing into a stage they reached by age (TreeGrowth), by tile id: the stage they grew from, and when. */
+  private treeGrows = new Map<string, { from: number; t0: number }>();
+
+  /** A tree grew a stage as it aged: it grows into it on screen over a few seconds (a step down just redraws). */
+  treeGrew(t: TileData, from: number, to: number) {
+    if (from >= 1 && to > from) this.treeGrows.set(t.id, { from, t0: this.sim.time });
+    this.markTile(t);
+  }
+
+  private treeGrowOf(t: TileData): TileTransition | undefined {
+    const g = this.treeGrows.get(t.id);
+    if (!g) return undefined;
+    if (this.sim.time > g.t0 + TREE_GROWTH.morph) {
+      this.treeGrows.delete(t.id);
+      return undefined;
+    }
+    const stage = this.sim.trees.stage(t) ?? 0;
+    // addTree grows a bloom transition from `from - (bloom - stage)`: start from the stage it grew from
+    return { k: 'bloom', t0: g.t0, d: TREE_GROWTH.morph, from: g.from + ((t.bloom || 1) - stage) };
+  }
+
   private readonly host: ChunkHost = (() => {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -2338,6 +2361,7 @@ export class ChunkRenderer {
         return self.slabCap;
       },
       slab: (sink: Sink, hex: string, p: [number, number, number], s: [number, number, number]) => self.slabInto(sink, hex, p, s),
+      treeGrow: (t: TileData) => self.treeGrowOf(t),
       set slabCap(v) {
         self.slabCap = v;
       },

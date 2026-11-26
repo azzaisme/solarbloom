@@ -1,5 +1,7 @@
 import { areaMapFor } from '../core/Areas';
 import { LANDING } from '../data/oldcity';
+import { regionOfCell } from '../core/OldCityLayout';
+import { DAY_SECONDS } from '../data/time';
 import { TERRAIN } from '../data/terrain';
 import { CHUNK, generateTile } from '../core/Generation';
 import type { LayerData, TileData } from '../core/types';
@@ -165,11 +167,13 @@ export interface TreeSpot {
 /** The world as generated, which placement reads (P7-E28 zones and paths). Pure: one per seed and ground layer. */
 export interface TreeWorld {
   /** the generated tile at (x, z): its feature and blocking as the seed made it (never the live state) */
-  peek(x: number, z: number): Pick<TileData, 'feature' | 'blocked' | 'occupantId'> | undefined;
+  peek(x: number, z: number): Pick<TileData, 'feature' | 'blocked' | 'occupantId' | 'level' | 'prop'> | undefined;
   areaAt(x: number, z: number): string;
   info(area: string): { type: string; landmark?: readonly [number, number]; noLandmark?: boolean };
   /** placement per cell, memoised (pure, so it never goes stale) */
   memo: Map<number, ReturnType<typeof treeZone> | null>;
+  /** giant tree candidates per giant grid cell, memoised (pure) */
+  giants?: Map<number, GiantSpot | null>;
 }
 
 const WORLDS = new Map<string, TreeWorld>();
@@ -347,6 +351,8 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
     return { role: 'planter', mix: PLANTER };
   }
   if (!natural) return undefined;
+  // a giant tree's trunk and roots take their cells; nothing else grows right against its trunk
+  if (!roof && giantNear(w, x, z, GIANT.ring)) return undefined;
   if (roof) return hash01(x, z, 1) < rule.share ? { role: 'fallback', mix: rule.grove } : undefined;
   const zone = zoneOfCell(w, x, z, areaType);
   if (zone === 'path_edge' || zone === 'landmark_clearance') return undefined;
@@ -464,10 +470,215 @@ export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'blocked'> & { roofId?: s
 }
 
 /**
- * The growth stage a tile shows (undefined: nothing grows there yet). `bloom` is the stage the tile shows, which
- * low water nearby can fade (E23.4.4: pass `sim.water.bloomShown(t)`); it defaults to the tile's own.
+ * Trees grow over game days (owner, 26 Nov 2026): a tree starts as a sapling when its ground is restored and
+ * reaches each stage only once it is old enough, never at once. The tile's bloom still caps it (a tile left at its
+ * first bloom keeps a sapling). Ages are game seconds (the game clock, `gameSecondsOf`: sleeping moves it on).
+ *   days[i]: the age (game days) a tree needs to show stage i + 1 (sapling, young, full, Radiant)
  */
-export function treeStage(t: Pick<TileData, 'ground' | 'bloom' | 'occupantId'>, bloom = t.bloom): TreeStage | undefined {
-  if (t.ground !== 'restored' || t.occupantId) return undefined;
-  return Math.max(1, Math.min(4, bloom || 1)) as TreeStage;
+export const TREE_GROWTH = {
+  days: [0, 1, 3, 4] as readonly number[],
+  /** giant trees take longer */
+  giantDays: [0, 2, 5, 7] as readonly number[],
+  /** seconds (sim time) a tree takes to grow into its next stage on screen when it reaches it */
+  morph: 20,
+};
+
+/** The stage a tree of this age (game seconds) has grown to, before its bloom caps it. */
+export function ageStage(age: number, giant = false): TreeStage {
+  const days = giant ? TREE_GROWTH.giantDays : TREE_GROWTH.days;
+  let s = 1;
+  for (let i = 1; i < days.length; i++) if (age >= days[i] * DAY_SECONDS) s = i + 1;
+  return s as TreeStage;
+}
+
+/** The age (game seconds) at which a tree is fully grown: past it, its planting time no longer matters. */
+export function grownAge(giant = false): number {
+  const days = giant ? TREE_GROWTH.giantDays : TREE_GROWTH.days;
+  return days[days.length - 1] * DAY_SECONDS;
+}
+
+/**
+ * The growth stage a tile's tree shows (undefined: nothing grows there yet). `bloom` is the stage the tile shows,
+ * which low water nearby can fade (E23.4.4: pass `sim.water.bloomShown(t)`); it defaults to the tile's own. `now`
+ * (game seconds, `gameSecondsOf(state)`) ages the tree from `treeAt`, when it was planted; a tree without a
+ * planting time (grown, or from a save made before trees grew) shows its bloom.
+ */
+export function treeStage(t: Pick<TileData, 'ground' | 'bloom' | 'occupantId' | 'treeAt'>, bloom = t.bloom, now?: number, giant = false): TreeStage | undefined {
+  if (t.ground !== 'restored' || (t.occupantId && !giant)) return undefined;
+  const cap = Math.max(1, Math.min(4, bloom || 1)) as TreeStage;
+  if (now === undefined || t.treeAt === undefined) return cap;
+  return Math.min(cap, ageStage(now - t.treeAt, giant)) as TreeStage;
+}
+
+/**
+ * When (game seconds) the tree's shown stage next changes as it ages, or undefined when ageing can't change it any
+ * more (fully grown, or its bloom caps it where it is).
+ */
+export function nextTreeStep(t: Pick<TileData, 'ground' | 'bloom' | 'treeAt'>, now: number, giant = false, bloom = t.bloom): number | undefined {
+  if (t.ground !== 'restored' || t.treeAt === undefined) return undefined;
+  const cap = Math.max(1, Math.min(4, bloom || 1));
+  const s = ageStage(now - t.treeAt, giant);
+  if (s >= cap) return undefined;
+  const days = giant ? TREE_GROWTH.giantDays : TREE_GROWTH.days;
+  return t.treeAt + days[s] * DAY_SECONDS;
+}
+
+// ───────────── giant trees ─────────────
+
+/**
+ * Giant trees (owner, 26 Nov 2026): huge old trees with a tall bare trunk and a broad canopy well above the
+ * follow camera, so Bloombot walks under the leaves. In the world they grow only in the woodland (Elder Grove: none
+ * at the fountain or on the beach), a few to the region; the player can also plant them there once unlocked
+ * (a `giantTree` machine). A world giant's trunk stands on the corner where four cells meet (its trunk cells): they
+ * are solid (the sim stamps them occupied, as a decoration's tile), and their ground drives the tree: bare and dusty
+ * until one is restored, then leafing out over game days (TREE_GROWTH.giantDays) as far as their bloom allows.
+ */
+export const GIANT = {
+  /** Old City regions where giants grow in the world */
+  regions: ['elderGrove'] as readonly string[],
+  /** one candidate per `cell`² cells, jittered */
+  cell: 12,
+  /** where in its grid cell a giant may stand (share of `cell`), and how many spots are tried there */
+  jitter: [0.15, 0.85] as [number, number],
+  tries: 24,
+  /** trunks at least this far apart (canopies touch, they don't pile up) */
+  spacing: 8,
+  /** cells round the trunk cells where no other tree grows (its roots), and how many of them may be rubble */
+  ring: 1,
+  rubble: 3,
+  /**
+   * cells kept clear (from the trunk's centre) round the region's landmark (its own great tree stands alone), its
+   * gate, the Keeper's patch and seam, and the spots where finds lie
+   */
+  clear: { landmark: 6, gate: 4, seam: 3, patch: 2, spot: 2 },
+  /** the trunk's radius at its foot (tiles); the canopy's size is measured from its geometry (GiantTreeGen) */
+  trunkR: 0.6,
+};
+
+export interface GiantSpot {
+  /** the trunk's lower corner cell: the trunk cells are (gx, gz) … (gx + 1, gz + 1) */
+  gx: number;
+  gz: number;
+  /** the trunk's centre (world x, z): where the four trunk cells meet */
+  x: number;
+  z: number;
+  variant: number;
+  rot: number;
+}
+
+/** Points in the region that a giant keeps clear of. */
+export function giantKeepClear(x: number, z: number): boolean {
+  const r = regionOfCell(x, z);
+  if (!r) return true;
+  const K = GIANT.clear;
+  const pts: [number, number, number][] = [[r.landmark.x + 1, r.landmark.z + 1, K.landmark + 1]];
+  if (r.seam) pts.push([r.seam.x + 1, r.seam.z + 1, K.seam + 1]);
+  for (const c of [...(r.caches ?? []), ...(r.pages ?? [])]) pts.push([c.x + 0.5, c.z + 0.5, K.spot + 0.5]);
+  for (const [gx, gz] of r.gate?.cells ?? []) pts.push([gx + 0.5, gz + 0.5, K.gate + 0.5]);
+  if (r.patch && Math.max(r.patch.x - x, x - (r.patch.x + r.patch.w), r.patch.z - z, z - (r.patch.z + r.patch.d)) <= K.patch) return true;
+  return pts.some(([px, pz, d]) => Math.max(Math.abs(px - x), Math.abs(pz - z)) <= d);
+}
+
+/** The giant candidate of giant grid cell (gx, gz), if it is one (memoised per world). */
+function giantOfCell(w: TreeWorld, cx: number, cz: number): GiantSpot | undefined {
+  const memo = (w.giants ??= new Map());
+  const key = (cx + 0x8000) * 0x10000 + (cz + 0x8000);
+  const hit = memo.get(key);
+  if (hit !== undefined) return hit ?? undefined;
+  const C = GIANT.cell;
+  const [j0, j1] = GIANT.jitter;
+  // most of the world has no giants: a cell with no woodland in it is settled at once (and ends the look-back below)
+  let woods = false;
+  for (let i = 0; i <= 4 && !woods; i++) for (let j = 0; j <= 4 && !woods; j++) woods = GIANT.regions.includes(regionOfCell(Math.floor((cx + i / 4) * C), Math.floor((cz + j / 4) * C))?.id ?? '');
+  if (!woods) {
+    memo.set(key, null);
+    return undefined;
+  }
+  // giants of the cells before this one (in reading order) keep this one at a distance, so canopies don't pile up
+  const before = [[-1, -1], [0, -1], [1, -1], [-1, 0]].map(([dx, dz]) => giantOfCell(w, cx + dx, cz + dz)).filter((g): g is GiantSpot => !!g);
+  let spot: GiantSpot | null = null;
+  // a few spots in the cell's middle, in a seeded order: the first that suits takes it
+  for (let i = 0; i < GIANT.tries && !spot; i++) {
+    const gx = Math.floor((cx + j0 + (j1 - j0) * hash01(cx * 31 + i, cz, 71)) * C);
+    const gz = Math.floor((cz + j0 + (j1 - j0) * hash01(cx, cz * 31 + i, 72)) * C);
+    if (giantFits(w, gx, gz) && before.every((g) => Math.hypot(g.x - gx - 1, g.z - gz - 1) >= GIANT.spacing))
+      spot = { gx, gz, x: gx + 1, z: gz + 1, variant: Math.floor(hash01(cx, cz, 73) * 6), rot: hash01(cx, cz, 74) * Math.PI * 2 };
+  }
+  if (memo.size > 20_000) memo.clear();
+  memo.set(key, spot);
+  return spot ?? undefined;
+}
+
+/** Can a giant's trunk stand with its lower corner cell at (gx, gz)? */
+export function giantFits(w: TreeWorld, gx: number, gz: number): boolean {
+  const home = regionOfCell(gx, gz)?.id;
+  if (!GIANT.regions.includes(home ?? '') || giantKeepClear(gx + 1, gz + 1)) return false;
+  const R = GIANT.ring;
+  const level = w.peek(gx, gz)?.level;
+  let rubble = 0;
+  for (let dz = -R; dz < 2 + R; dz++)
+    for (let dx = -R; dx < 2 + R; dx++) {
+      const x = gx + dx, z = gz + dz;
+      // the whole footprint in the region, at one height; the trunk on open natural ground, the roots round it
+      // among at most a little rubble (an old tree in an old wood)
+      if (regionOfCell(x, z)?.id !== home) return false;
+      const t = w.peek(x, z);
+      if (!t || t.level !== level) return false;
+      const f = t.feature ?? 'lawn';
+      const open = !t.blocked && !t.prop && (f === 'lawn' || f === 'litter' || f === 'clay');
+      const trunk = dx >= 0 && dx < 2 && dz >= 0 && dz < 2;
+      if (!open && (trunk || f === 'building' || ++rubble > GIANT.rubble)) return false;
+    }
+  // and off the paths: nothing hard or wet within two cells of the trunk
+  for (let dz = -2; dz < 4; dz++)
+    for (let dx = -2; dx < 4; dx++) if (isHard(w.peek(gx + dx, gz + dz)) || isWater(w.peek(gx + dx, gz + dz))) return false;
+  return true;
+}
+
+/** The world giant whose trunk cells or surrounding ring (within `ring` cells of them) include (x, z), if any. */
+export function giantNear(w: TreeWorld, x: number, z: number, ring = 0): GiantSpot | undefined {
+  // a cheap gate: giants grow only in their regions
+  if (!GIANT.regions.includes(regionOfCell(x, z)?.id ?? '')) return undefined;
+  const C = GIANT.cell;
+  const cx = Math.floor(x / C), cz = Math.floor(z / C);
+  for (let dz = -1; dz <= 1; dz++)
+    for (let dx = -1; dx <= 1; dx++) {
+      const g = giantOfCell(w, cx + dx, cz + dz);
+      if (g && x >= g.gx - ring && x < g.gx + 2 + ring && z >= g.gz - ring && z < g.gz + 2 + ring) return g;
+    }
+  return undefined;
+}
+
+/** The world giants with a trunk within `r` tiles of (x, z) (centre to trunk). */
+export function giantsWithin(w: TreeWorld, x: number, z: number, r: number): GiantSpot[] {
+  const C = GIANT.cell;
+  const out: GiantSpot[] = [];
+  for (let cz = Math.floor((z - r) / C) - 1; cz <= Math.floor((z + r) / C) + 1; cz++)
+    for (let cx = Math.floor((x - r) / C) - 1; cx <= Math.floor((x + r) / C) + 1; cx++) {
+      const g = giantOfCell(w, cx, cz);
+      if (g && Math.hypot(g.x - x, g.z - z) <= r) out.push(g);
+    }
+  return out;
+}
+
+/** The trunk cells of a giant whose lower corner is (gx, gz). */
+export function giantCells(g: Pick<GiantSpot, 'gx' | 'gz'>): [number, number][] {
+  return [[g.gx, g.gz], [g.gx + 1, g.gz], [g.gx, g.gz + 1], [g.gx + 1, g.gz + 1]];
+}
+
+/** What a giant's trunk cells say about it: restored at all, when it began growing, how far its bloom allows. */
+export function giantGrowth(cells: (Pick<TileData, 'ground' | 'bloom' | 'treeAt'> | undefined)[], now: number): { stage: 0 | TreeStage; next?: number } {
+  // the first cell restored starts it; the furthest-bloomed cell caps it; the oldest planting time ages it
+  let bloom = 0;
+  let at: number | undefined;
+  let grown = false;
+  for (const t of cells) {
+    if (!t || t.ground !== 'restored') continue;
+    bloom = Math.max(bloom, t.bloom || 1);
+    if (t.treeAt === undefined) grown = true;
+    else at = at === undefined ? t.treeAt : Math.min(at, t.treeAt);
+  }
+  if (!bloom) return { stage: 0 };
+  const probe = { ground: 'restored' as const, bloom, occupantId: undefined, treeAt: grown ? undefined : at };
+  return { stage: treeStage(probe, bloom, now, true)!, next: nextTreeStep(probe, now, true, bloom) };
 }

@@ -7,7 +7,7 @@ import type { GroundState, LayerData, PlantKind, RestoreSource, TileData, TileTr
  * Otherwise four columns, compact and very compressible:
  *   ground (1 char/tile) · bloom (1 digit/tile) · pollution (2 base-36 chars/tile) · '|' · extras
  * where extras lists tiles with a growth timer, a grow source, a lush timer, an entry fix or a transition:
- * `i,growth,src,lush,u,tr,lushAt,plant,drySince;…` (`tr` = `kind:t0:duration:dir:from:g`).
+ * `i,growth,src,lush,u,tr,lushAt,plant,drySince,treeAt;…` (`tr` = `kind:t0:duration:dir:from:g`).
  * Occupancy is not saved: it is rebuilt from the machine list. Variant and blocked come from generation.
  */
 const G2C: Record<GroundState, string> = { polluted: 'p', prepared: 'm', growing: 'g', restored: 'r' };
@@ -36,7 +36,7 @@ const N = CHUNK * CHUNK;
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
 function same(a: TileData, b: TileData) {
-  return a.ground === b.ground && a.bloom === b.bloom && Math.round(a.pollution) === b.pollution && !a.growthRemainingSec && !a.growSource && !a.lushUntil && !a.unblocked && !a.tr && !a.plant && a.drySince === undefined;
+  return a.ground === b.ground && a.bloom === b.bloom && Math.round(a.pollution) === b.pollution && !a.growthRemainingSec && !a.growSource && !a.lushUntil && !a.unblocked && !a.tr && !a.plant && a.drySince === undefined && a.treeAt === undefined;
 }
 
 export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
@@ -66,7 +66,7 @@ export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
     b[i] = String(Math.max(0, Math.min(9, t.bloom)));
     const pv = Math.max(0, Math.min(1295, Math.round(t.pollution)));
     p[i] = pv < 36 ? '0' + pv.toString(36) : pv.toString(36);
-    if (t.growthRemainingSec || t.growSource || t.lushUntil || t.unblocked || t.tr || t.plant || t.drySince !== undefined) {
+    if (t.growthRemainingSec || t.growSource || t.lushUntil || t.unblocked || t.tr || t.plant || t.drySince !== undefined || t.treeAt !== undefined) {
       const fields = [
         i,
         t.growthRemainingSec ? r3(t.growthRemainingSec) : '',
@@ -76,8 +76,9 @@ export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
         t.tr ? packTr(t.tr) : '',
         t.lushUntil && t.lushAt !== undefined ? r3(t.lushAt) : '',
       ];
-      if (t.plant || t.drySince !== undefined) fields.push(t.plant ? P2C[t.plant] : '');
-      if (t.drySince !== undefined) fields.push(r3(t.drySince));
+      if (t.plant || t.drySince !== undefined || t.treeAt !== undefined) fields.push(t.plant ? P2C[t.plant] : '');
+      if (t.drySince !== undefined || t.treeAt !== undefined) fields.push(t.drySince !== undefined ? r3(t.drySince) : '');
+      if (t.treeAt !== undefined) fields.push(r3(t.treeAt));
       extras.push(fields.join(','));
     }
   }
@@ -141,11 +142,12 @@ export function unpackChunk(c: Chunk, packed: string) {
     t.tr = undefined;
     t.plant = undefined;
     t.drySince = undefined;
+    t.treeAt = undefined;
   }
   if (bar < 0) return;
   for (const e of packed.slice(bar + 1).split(';')) {
     if (!e) continue;
-    const [is, gs, ss, ls, us, trs, las, ps, ds] = e.split(',');
+    const [is, gs, ss, ls, us, trs, las, ps, ds, ta] = e.split(',');
     const t = c.tiles[Number(is)];
     if (!t) continue;
     if (gs) t.growthRemainingSec = Number(gs);
@@ -159,5 +161,19 @@ export function unpackChunk(c: Chunk, packed: string) {
     if (las && t.lushUntil) t.lushAt = Number(las);
     if (ps && C2P[ps]) t.plant = C2P[ps];
     if (ds && t.ground === 'restored' && Number.isFinite(Number(ds)) && Number(ds) >= 0) t.drySince = Number(ds);
+    if (ta && t.ground === 'restored' && Number.isFinite(Number(ta))) t.treeAt = Number(ta);
   }
+}
+
+/** When each tree was planted (game seconds), by tile index, in a packed chunk (without generating it). */
+export function treeAtsOf(packed: string): Map<number, number> {
+  const out = new Map<number, number>();
+  const bar = packed.indexOf('|', N * 4);
+  if (bar < 0) return out;
+  for (const e of packed.slice(bar + 1).split(';')) {
+    if (!e) continue;
+    const f = e.split(',');
+    if (f[9] && Number.isFinite(Number(f[9])) && packed[Number(f[0])] === 'r') out.set(Number(f[0]), Number(f[9]));
+  }
+  return out;
 }

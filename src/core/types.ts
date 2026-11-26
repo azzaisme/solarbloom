@@ -11,6 +11,8 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   | 'beehive'
   | 'fishPond'
   | 'orchard'
+  // giant trees (owner, 26 Nov 2026): planted in the woodland, growing over game days
+  | 'giantTree'
   | 'mushroomLog'
   | 'wormBin'
   | 'birdBox'
@@ -99,6 +101,11 @@ export interface TileData {
   ramp?: boolean;
   /** E23.2.2: what a loaded pulse grew here (unset: plain grass and moss). Saved. */
   plant?: PlantKind;
+  /**
+   * When this tile's tree was planted (its ground restored), in game seconds (`gameSecondsOf`). Trees grow over game
+   * days from then (TreePlacement TREE_GROWTH); unset once grown, and on tiles with no tree. Saved.
+   */
+  treeAt?: number;
 }
 
 /** E23.2.2: what grows from a pulse's load: a wildflower meadow (seeds), a region's rare plants, a grove (fertiliser). */
@@ -149,6 +156,8 @@ export interface MachineData {
   size: number;
   starter?: boolean;
   boostUntil: number; // solar bloom boost
+  /** A planted giant tree: when it was planted (game seconds); it grows from a young tree over game days. */
+  plantedAt?: number;
   /** E23.12 (#528): a Lucky Cat's Golden Relay: this relay carries power further, for good. */
   golden?: boolean;
   timer: number; // per-machine automation timer
