@@ -9,6 +9,7 @@ import { PLOT_WORK_TUNING } from '../data/cozy';
 import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
+import { ORCHARD } from '../data/farmExtras';
 import { HOLD_ACTS } from '../data/botActs';
 import { crossName, CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
@@ -415,7 +416,7 @@ export class OldCityController {
     this.panel.open(
       () => compostHtml(this.sim, m),
       (act, arg) => {
-        const n = act === 'fill' ? c.fill(m, arg as 'biomass' | 'food') : act === 'take' ? c.take(m, arg as 'compost' | 'fertiliser') : act === 'return' ? c.returnCompost(m) : 0;
+        const n = act === 'fill' ? c.fill(m, arg as 'biomass' | 'food' | 'fruit') : act === 'take' ? c.take(m, arg as 'compost' | 'fertiliser') : act === 'return' ? c.returnCompost(m) : 0;
         if (n > 0) this.host.sound(act === 'take' ? 'salvage' : 'deliver', act === 'take' ? 'seeds' : undefined);
       },
     );
@@ -458,6 +459,20 @@ export class OldCityController {
     const keeper = this.sim.farmExtras.gardenOf(m);
     const req = keeper ? this.sim.farmExtras.request(keeper) : undefined;
     if (keeper && req) this.sim.bus.emit('keeper.said', { keeperId: keeper, lines: [req.ask] });
+  }
+
+  /** #785: holds Interact at a fruit tree with ripe fruit: Bloombot picks it into the backpack. */
+  fruitHold(m: MachineData) {
+    const x = this.sim.farmExtras;
+    const why = x.pickProblem(m);
+    if (why) {
+      const sc = this.host.screenOf(m.x, m.z);
+      this.host.hud.showFail(why, sc.x, sc.y);
+      return;
+    }
+    this.startHold('pick', ORCHARD.holdSeconds, () => {
+      if (x.pick(m) > 0) this.host.sound('salvage', 'biomass');
+    });
   }
 
   /** E23.5.1: clip restored ground for biomass: hold Interact 0.6 s, like salvaging. */

@@ -13,6 +13,7 @@
  * glass sun-petals on the Sun-Catcher Birch, and moss-jar lanterns on Radiant trees.
  */
 import { PALETTE } from './Palette';
+import { FRUITS, type FruitId } from '../data/fruit';
 
 export type Species = 'oak' | 'cherry' | 'birch' | 'pine' | 'willow';
 export const SPECIES: Species[] = ['oak', 'cherry', 'birch', 'pine', 'willow'];
@@ -1013,6 +1014,148 @@ export function buildShrub(variant: number, lod: Lod = 1, flowering?: boolean, b
 }
 
 /** Template cache: one geometry per species / stage / variant / detail. */
+/**
+ * #785: a planted fruit tree's look. `fruit` is how far today's fruit has come (0 just picked … 1 ripe; undefined for
+ * a tree still growing up, which shows no flowers or fruit); `overgrown` a tree that wants pruning.
+ */
+export interface OrchardLook {
+  variant: number;
+  /** the fruit it bears (data/fruit): its ripe colour and its shape */
+  kind: FruitId;
+  /** whether the branches flower in the bare part of the day (the daily cycle, and spring); in summer and autumn
+   *  (#830) the fruit just sets again after picking */
+  blossom: boolean;
+  fruit?: number;
+  overgrown: boolean;
+  /** where in the ripening the branches flower, then the fruit sets (FarmExtras ORCHARD: bareUntil, blossomUntil) */
+  bareUntil: number;
+  blossomUntil: number;
+}
+
+/** How many fruit a grown tree carries, and how big (radius, tiles) they are when they set and when ripe. */
+export const ORCHARD_FRUIT = { count: 18, setR: 0.016, ripeR: 0.05 };
+
+const smooth = (a: number, b: number, k: number) => {
+  const t = clamp((k - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * #785: a fruit tree in the Phase 7 leafy style (P7-E29's fruit form, grown up): a short, flared trunk that opens
+ * into four scaffold limbs (an orchard tree's open centre), forking twigs, and a full, round crown of leaf sprays
+ * over a soft leafy heart. Its fruit sits on the twigs on short stalks, round the outside of the crown where it can
+ * be seen: small and green when it sets, swelling and colouring up until ripe (each tree its own ripe colour, far
+ * from the leaves). Before that the twig ends flower; just after picking the branches are bare. An overgrown tree
+ * grows long upright shoots and a shaggier, wider crown; a pruned one is tidy. The canopy never changes with the
+ * fruit (its own random stream), so a tree keeps its shape all day. Built at full size: the renderer scales a young
+ * tree up as it grows.
+ */
+export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
+  const B = new Buf(3, true);
+  const variant = ((look.variant % TREE_VARIANTS) + TREE_VARIANTS) % TREE_VARIANTS;
+  const R = rng((variant + 1) * 6151 + 41);
+  const sh = shapeOf(variant);
+  const S = 1.12;
+  const bark = BARK.cherry;
+  const barkDark = scaleC(bark, 0.68);
+  const pal = leafPalette('oak', R, sh);
+  const [n, k] = LEAVES[lod];
+  // the trunk, flared at the foot, opening into the scaffold limbs
+  const top = trunk(B, R, 0.34 * S, 0.078 * S, bark, barkDark, 4, 7);
+  const crown: Crown = { heart: [top[0], 0.8 * S, top[2]], r: 0.46 * S, pal };
+  const o: LimbOpts = { upturn: 0.32, kids: [3, 2], fork: 0.72, shrink: 0.62, bark, sides: 6 };
+  const tips: Tip[] = [];
+  const a0 = R() * Math.PI * 2;
+  const arms = 4;
+  const scaffold: { from: V; dir: V }[] = [];
+  for (let i = 0; i < arms; i++) {
+    const a = a0 + (i / arms) * Math.PI * 2 + (R() - 0.5) * 0.35;
+    const dir = norm([Math.cos(a) * 0.78, 0.82 + R() * 0.12, Math.sin(a) * 0.78]);
+    const from: V = [top[0], top[1] - (i % 2) * 0.04 * S, top[2]];
+    scaffold.push({ from, dir });
+    limb(B, R, from, dir, 0.4 * S * (0.9 + R() * 0.2), 0.078 * S * TRUNK_RADIUS_SCALE * 0.62, 0, 2, 0.1, o, tips, i);
+  }
+  // a soft leafy heart so the crown reads full, not see-through between the sprays
+  puff(B, { c: [crown.heart[0], crown.heart[1] - 0.02 * S, crown.heart[2]], r: [0.36 * S, 0.27 * S, 0.36 * S], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.45, seed: variant + 3, detail: 2, clusters: 7, crown: crown.heart, crownR: crown.r });
+  for (const t of tips) spray(B, R, t, Math.round(n * 1.15), 0.2 * S, 0.11 * S * k, crown, 0.7, 0.62, 0.2);
+  // the brass irrigation collar every grown tree wears, with its little status light
+  const tr = 0.078 * S * TRUNK_RADIUS_SCALE;
+  collar(B, 0.0, tr * 0.9, tr * 1.9, 0.045, BRASS);
+  puff(B, { c: [tr * 1.9, 0.035, 0], r: [0.014, 0.014, 0.014], base: CYAN, light: CYAN, dark: scaleC(CYAN, 0.8), flex: 0, seed: 1, detail: 0, lump: 0 });
+
+  // an overgrown tree: long whippy shoots straight up off the limbs, and a shaggier crown (its own random stream)
+  if (look.overgrown) {
+    const RO = rng(variant * 977 + 5);
+    const wild: Crown = { heart: crown.heart, r: crown.r * 1.15, pal };
+    const shoots: Tip[] = [];
+    for (let i = 0; i < 7; i++) {
+      const sc = scaffold[i % arms];
+      const from = add(sc.from, mul(sc.dir, (0.3 + RO() * 0.12) * S));
+      limb(B, RO, from, norm([(RO() - 0.5) * 0.3, 1, (RO() - 0.5) * 0.3]), (0.42 + RO() * 0.16) * S, 0.012 * S, 0, 0, 0.3, { ...o, upturn: 0.6, sides: 4 }, shoots, i);
+    }
+    for (const t of shoots) spray(B, RO, t, Math.round(n * 0.7), 0.16 * S, 0.1 * S * k, wild, 0.8, 0.55, 0.05);
+    for (let i = 0; i < tips.length; i += 2) spray(B, RO, tips[i], Math.round(n * 0.5), 0.3 * S, 0.12 * S * k, wild, 0.75, 0.6, 0.35);
+  }
+
+  // flowers, then fruit, on the twig ends round the outside of the crown (their own random stream)
+  if (look.fruit !== undefined && look.fruit >= look.bareUntil) {
+    const RF = rng(variant * 389 + 17);
+    const ripeCol = hex(PALETTE.orchard.ripe[look.kind]);
+    const blushCol = hex(PALETTE.orchard.blush[look.kind]);
+    const [sw, sh2] = FRUITS[look.kind].shape;
+    const green = hex(PALETTE.orchard.unripe), greenDark = hex(PALETTE.orchard.unripeDark);
+    const stalk = hex(PALETTE.orchard.stalk);
+    const blossom = PALETTE.orchard.blossom.map(hex);
+    const order = tips.map((t, i) => ({ t, i, w: RF() })).sort((a, b) => a.w - b.w);
+    const flowering = look.fruit < look.blossomUntil;
+    const set = (look.fruit - look.blossomUntil) / (1 - look.blossomUntil);
+    const turning = hex(PALETTE.orchard.turning);
+    // a tree in flower is covered in it (every twig end); fruit sets on fewer of them
+    const many = flowering ? (look.blossom ? order.length : 0) : Math.min(ORCHARD_FRUIT.count, order.length);
+    for (let j = 0; j < many; j++) {
+      const t = order[j].t;
+      const out = norm(sub(t.p, crown.heart));
+      const jit: V = [(RF() - 0.5) * 0.08 * S, -0.03 * S - RF() * 0.04 * S, (RF() - 0.5) * 0.08 * S];
+      const seed = j * 13 + variant;
+      if (flowering) {
+        // a little cluster of blossom at the twig end, opening over the first part of the flowering
+        // (buds at the first step, wide open by the middle of the flowering)
+        const open = 0.55 + 0.45 * smooth(look.bareUntil, (look.bareUntil + look.blossomUntil) / 2, look.fruit);
+        const c = add(add(t.p, mul(out, 0.05 * S)), [jit[0], 0.01, jit[2]]);
+        const col = blossom[j % blossom.length];
+        puff(B, { c, r: [0.068 * open, 0.05 * open, 0.068 * open], base: col, light: hex(PALETTE.orchard.blossom[0]), dark: blossom[2], flex: 0.85, seed, detail: 1, lump: 0.25, leafy: false });
+        puff(B, { c: add(c, [0, 0.035 * open, 0]), r: [0.016 * open, 0.01 * open, 0.016 * open], base: hex(PALETTE.orchard.blossomHeart), light: hex(PALETTE.orchard.blossomHeart), dark: hex(PALETTE.orchard.blossomHeart), flex: 0.85, seed, detail: 0, lump: 0 });
+        continue;
+      }
+      // the fruit: it swells from set to ripe, and its colour comes in over the second half
+      const r = lerp(ORCHARD_FRUIT.setR, ORCHARD_FRUIT.ripeR, smooth(0, 1, set) * 0.85 + set * 0.15) * S;
+      const colour = smooth(0.45, 1, set);
+      // green, warming to a golden blush, then the ripe colour
+      const base = colour < 0.5 ? mix(green, turning, colour * 2) : mix(turning, ripeCol, colour * 2 - 1);
+      // a blush on the sunny side once it colours up (a peach's red cheek, a pear's russet)
+      const light = mix(mix(base, blushCol, 0.35 * colour), hex(PALETTE.orchard.ripeLight), 0.25 + 0.1 * colour);
+      const c = add(add(t.p, mul(out, 0.04 * S + r * 0.6)), jit);
+      // a short stalk up to the twig, then the fruit hanging from it
+      const hang = add(c, [0, r * 0.9, 0]);
+      tube(B, [add(hang, [0, 0.03 * S, 0]), hang], [0.006 * S, 0.004 * S], 3, [stalk, stalk], [0.8, 0.85], false);
+      // its own shape: an apple round, a pear tall with a narrow neck, a lemon long, a peach plump
+      puff(B, { c, r: [r * sw, r * sh2, r * sw], base, light, dark: mix(greenDark, scaleC(ripeCol, 0.62), colour), flex: 0.85, seed, detail: 1, lump: 0 });
+      if (look.kind === 'pear') puff(B, { c: add(c, [0, r * sh2 * 0.75, 0]), r: [r * 0.55, r * 0.6, r * 0.55], base, light, dark: base, flex: 0.85, seed: seed + 1, detail: 1, lump: 0 });
+    }
+  }
+  // #830: its leaves follow the seasons (autumn colour, bare in winter); fruit and blossom never carry the flag
+  return markSeasonLeaves(proportion(B, sh, variant, 3).done());
+}
+
+const orchardCache = new Map<string, TreeGeo>();
+/** #785: a fruit tree's geometry, cached by look (the fruit in `steps` steps). */
+export function orchardGeo(look: OrchardLook, lod: Lod = 2): TreeGeo {
+  const key = `${look.variant % TREE_VARIANTS}|${look.kind}|${look.blossom ? 1 : 0}|${look.fruit ?? 'young'}|${look.overgrown ? 1 : 0}|${lod}`;
+  let g = orchardCache.get(key);
+  if (!g) orchardCache.set(key, (g = buildOrchardTree(look, lod)));
+  return g;
+}
+
 const cache = new Map<string, TreeGeo>();
 /** P7-E29: six variants (proportions and greens, SHAPES), was four */
 export const TREE_VARIANTS = 6;

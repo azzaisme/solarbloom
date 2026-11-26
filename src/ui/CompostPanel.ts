@@ -1,3 +1,4 @@
+import { FRUIT_IDS } from '../data/fruit';
 import type { MachineData } from '../core/types';
 import { COMPOST, DIGESTER } from '../data/compost';
 import type { Sim } from '../gameplay/Sim';
@@ -27,6 +28,7 @@ export function compostHtml(sim: Sim, m: MachineData): string {
         ? 'Slowly turning into Fertiliser.'
         : 'Waiting for Greens and food scraps.';
   const room = sim.compost.room(m);
+  const fruitHeld = FRUIT_IDS.filter((f) => inv.count(f) > 0).sort((a, b) => inv.count(b) - inv.count(a))[0];
   const btn = (act: string, arg: string, mat: MaterialIconId, label: string, ok: boolean) => `<button class="pn-btn oc-mat-btn" data-act="${act}"${arg ? ` data-arg="${arg}"` : ''} ${ok ? '' : 'disabled'}>${materialIcon(mat, 24)}${label}</button>`;
   return (
     cardHead({ icon: materialIcon('compost', 30), title: 'Compost Bin', mood: state, tone: full ? 'leaf' : '', badge: 'sun' }) +
@@ -34,6 +36,8 @@ export function compostHtml(sim: Sim, m: MachineData): string {
     `<h3 class="pn-label">Put in</h3><div class="oc-row oc-col">` +
     btn('fill', 'biomass', 'biomass', 'All my Greens', !!inv.count('biomass') && room >= 1) +
     btn('fill', 'food', 'food', 'All my Food', !!inv.count('food') && room >= COMPOST.foodWorth) +
+    // #785: fruit rots down like Food (every kind carried, in one go)
+    (fruitHeld ? btn('fill', 'fruit', fruitHeld, 'All my fruit', room >= COMPOST.foodWorth) : '') +
     btn('return', '', 'compost', 'My Compost, to turn into Fertiliser', !!inv.count('compost') && !full) +
     `</div><h3 class="pn-label">Take</h3><div class="oc-row">` +
     btn('take', 'fertiliser', 'fertiliser', 'Fertiliser', fert > 0) +

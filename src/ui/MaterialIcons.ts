@@ -43,6 +43,14 @@ const BODY: Record<ItemId | 'biomass' | 'unknown', string> = {
   sunCell: `<rect x="3" y="9" width="26" height="18" rx="2"/><path d="M12 9 V27 M20 9 V27 M3 18 H29" class="mi-line"/><circle cx="25" cy="7" r="4" class="mi-hi"/>`,
   // E23.5.1 Food: a carrot with its leaves
   food: `<path d="M9 27 C7 25 9 20 13 15 L19 9 L23 13 L17 19 C12 23 11 29 9 27 Z"/><path d="M20 8 C19 4 21 2 23 2 M22 10 C25 8 28 9 30 11 M21 9 C24 5 27 5 28 6" class="mi-line"/><path d="M12 20 L15 21 M15 16 L17 18" class="mi-line"/>`,
+  // #785 Apple: an apple with its stalk and a leaf
+  apple: `<path d="M16 11 C11 7 4 9 4 17 C4 24 9 29 13 29 C14.5 29 15 28 16 28 C17 28 17.5 29 19 29 C23 29 28 24 28 17 C28 9 21 7 16 11 Z"/><path d="M16 11 C16 8 17 5 19 3" class="mi-line"/><path d="M18 7 C20 3 25 3 26 5 C24 8 20 8 18 7 Z" class="mi-hi"/><circle cx="10" cy="16" r="2" class="mi-hi"/>`,
+  // #785 Pear: a pear, narrow at the top, with its stalk and a leaf
+  pear: `<path d="M16 6 C13 6 12.5 9 12.5 12 C12.5 15 7 17 7 23 C7 27.5 11 30 16 30 C21 30 25 27.5 25 23 C25 17 19.5 15 19.5 12 C19.5 9 19 6 16 6 Z"/><path d="M16 6 C16 4.5 16.5 3 18 2" class="mi-line"/><path d="M17.5 4.5 C19.5 1.5 24 2 24.5 3.5 C22.5 6 19.5 6 17.5 4.5 Z" class="mi-hi"/><circle cx="11.5" cy="22" r="1.8" class="mi-hi"/>`,
+  // #785 Peach: a round peach with its crease and a leaf
+  peach: `<path d="M16 8 C9 8 4 13 4 19 C4 25 9.5 29 16 29 C22.5 29 28 25 28 19 C28 13 23 8 16 8 Z"/><path d="M16 9 C13.5 14 13.5 23 16 28.5" class="mi-line"/><path d="M16 8 C17 5 20 3.5 24 4 C23 7.5 19.5 8.5 16 8 Z" class="mi-hi"/><circle cx="9.5" cy="15.5" r="2" class="mi-hi"/>`,
+  // #785 Lemon: a lemon, pointed at both ends, with a leaf
+  lemon: `<path d="M3.5 18 C5.5 12 10 8 16 8 C22 8 26.5 12 28.5 18 C26.5 24 22 28 16 28 C10 28 5.5 24 3.5 18 Z"/><path d="M3.5 18 L2 18 M28.5 18 L30 18" class="mi-line"/><path d="M16 8 C17 5 20 3.5 24 4 C23 7.5 19.5 8.5 16 8 Z" class="mi-hi"/><circle cx="10" cy="15" r="2" class="mi-hi"/>`,
   // Compost: a heap with crumbs
   compost: `<path d="M3 26 C5 16 11 10 16 10 C21 10 27 16 29 26 Z"/><circle cx="12" cy="19" r="1.6" class="mi-hi"/><circle cx="19" cy="16" r="1.4" class="mi-hi"/><circle cx="21" cy="22" r="1.6" class="mi-hi"/><path d="M16 10 C16 7 18 5 21 5" class="mi-line"/>`,
   // Fertiliser: a tied sack with a drop on it

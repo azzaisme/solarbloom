@@ -209,7 +209,7 @@ export const ACTS: Record<ActId, ActDef> = {
 };
 
 /** The verbs that are held (OldCity.startHold's kinds) and their acts. */
-export const HOLD_ACTS: Record<string, ActId> = { salvage: 'rummage', pry: 'pry', gather: 'gather', prune: 'prune' };
+export const HOLD_ACTS: Record<string, ActId> = { salvage: 'rummage', pry: 'pry', gather: 'gather', prune: 'prune', pick: 'harvest' };
 
 /** The act for an Interact verb (the prompt's verb), or undefined for the ones with poses of their own. */
 export function actForVerb(verb: string): ActId | undefined {
@@ -224,6 +224,7 @@ export const VERB_ACTS: Record<string, ActId | undefined> = {
   Prune: 'prune', // E27.2 (#680): an orchard, the roses, a parklet's planters
   'Dig up': 'dig',
   Harvest: 'harvest',
+  Pick: 'harvest', // #785: ripe fruit off a fruit tree
   Tend: 'tend',
   Feed: 'tend',
   Repair: 'repair',

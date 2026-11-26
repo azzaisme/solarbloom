@@ -159,7 +159,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🍎',
     size: 1,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Planted once, it fruits every few days. Prune it now and then for timber.',
+    blurb: 'Planted once, it flowers in spring and fruits every day through summer and autumn: apples, pears, peaches or lemons, by where it grows. Prune it now and then for Timber.',
   },
   giantTree: {
     type: 'giantTree',

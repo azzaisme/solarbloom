@@ -13,7 +13,7 @@ import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { AudioDebugHUD } from '../audio/AudioDebugHUD';
 import { sampleArea, surfaceOf, type TileSound } from '../audio/AudioMath';
 import { treeSpot, treeStage, treeWorldOf } from '../rendering/TreePlacement';
-import { DECIDUOUS, treeGeo } from '../rendering/TreeGen';
+import { DECIDUOUS, orchardGeo, treeGeo } from '../rendering/TreeGen';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -29,6 +29,9 @@ import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
 import { isExtra } from '../gameplay/FarmExtras';
+import { ORCHARD } from '../data/farmExtras';
+import { FRUITS, isFruit } from '../data/fruit';
+import { fruitShort, fruitTip } from '../ui/FruitWords';
 import { EXPLORE } from '../rendering/CameraController';
 import { HOUSE, HOUSE_GROWTH, KEEPSAKES, OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { HouseInterior } from '../rendering/HouseInterior';
@@ -74,7 +77,7 @@ import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
-import { CropVisuals } from '../rendering/CropVisuals';
+import { CropVisuals, orchardVariant } from '../rendering/CropVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
 import { ShaderWarmup } from '../rendering/ShaderWarmup';
 import { areaPanelHtml } from '../ui/AreaPanel';
@@ -506,7 +509,7 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
-    this.crops = new CropVisuals(this.sim, this.scene.world);
+    this.crops = new CropVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
     this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
     this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
@@ -722,6 +725,20 @@ export class Game {
       this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
       this.sim.bus.on('buried.dug', (e) => this.hud.pickup(MATERIALS[e.material].name, e.n)); // E23.2.2.3
       this.sim.bus.on('biomass.gathered', (e) => e.by === 'bot' && this.hud.pickup(MATERIALS.biomass.name, e.got));
+      // #785: picking a fruit tree shakes it: a little burst in its fruit's colour, and a few leaves drift down
+      this.sim.bus.on('farm.harvested', (e) => {
+        const m = this.sim.machine(e.machineId);
+        if (m?.type !== 'orchard' || !isFruit(e.item)) return;
+        const [x, y, z] = this.machines.worldOf(m);
+        const variant = orchardVariant(m);
+        this.vfx.burst(new pc.Vec3(x, y + 0.85, z), this.settings.reducedMotion ? 3 : 9, { up: 1.2, speed: 0.7, size: 0.05, life: 0.9, gravity: 2.4, hex: PALETTE.orchard.ripe[e.item] });
+        const g = orchardGeo({ variant, kind: e.item, fruit: 0, overgrown: false, blossom: true, bareUntil: ORCHARD.bareUntil, blossomUntil: ORCHARD.blossomUntil });
+        const leaves = g.leafStarts ?? [];
+        for (let i = 0; i < 5 && leaves.length; i++) {
+          const v = leaves[Math.floor(Math.random() * leaves.length)];
+          this.vfx.fallingLeaf(x + g.pos[v * 4], y + g.pos[v * 4 + 1], z + g.pos[v * 4 + 2], y, [g.col[v * 4], g.col[v * 4 + 1], g.col[v * 4 + 2]]);
+        }
+      });
       // E27.2 (#680): a plot Bloombot just picked or pruned shows it at once
       this.sim.bus.on('plot.worked', ({ plotId }) => this.redrawPlot(plotId));
       this.sim.bus.on('planter.harvested', (e) => e.food > 0 && this.hud.pickup(MATERIALS.food.name, e.food));
@@ -2762,10 +2779,15 @@ export class Game {
     if (occ?.type === 'compostBin') out.push({ kind: 'machine', id: `bin:${occ.id}`, verb: 'Open', name: 'the compost bin', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.compostBin(occ) });
     if (occ?.type === 'bioDigester') out.push({ kind: 'machine', id: `dig:${occ.id}`, verb: s.compost.fuel(occ) > 0 ? 'Look at' : 'Feed', name: 'the Bio Digester', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.digester(occ) });
     // E23.5.4: hives, ponds, fruit trees, logs, worm bins and wildlife homes open their panels
-    if (occ && isExtra(occ.type)) {
+    // #785: a fruit tree with ripe fruit is picked straight off the branches by holding Interact (its panel, for
+    // pruning, opens while there's nothing ripe; the prompt says how the fruit is coming along)
+    if (occ?.type === 'orchard' && s.farmExtras.fruitReady(occ))
+      out.push({ kind: 'machine', id: `fruit:${occ.id}`, verb: 'Pick', name: `the ripe ${FRUITS[s.farmExtras.fruitOf(occ)].plural}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, ocHold: ORCHARD.holdSeconds, run: () => oc.fruitHold(occ) });
+    else if (occ && isExtra(occ.type)) {
       const x = s.farmExtras;
-      const verb = (occ.type === 'beehive' && (x.st(occ).ready ?? 0) >= 1) || (occ.type === 'orchard' && x.fruitReady(occ)) || (occ.type === 'mushroomLog' && (x.st(occ).ready ?? 0) >= 1) ? 'Harvest' : 'Look at';
-      out.push({ kind: 'machine', id: `extra:${occ.id}`, verb, name: `the ${MACHINES[occ.type].name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.extra(occ) });
+      const verb = (occ.type === 'beehive' && (x.st(occ).ready ?? 0) >= 1) || (occ.type === 'mushroomLog' && (x.st(occ).ready ?? 0) >= 1) ? 'Harvest' : 'Look at';
+      const how = occ.type === 'orchard' ? `: ${fruitShort(x.fruitOf(occ), x.fruitPhase(occ), x.seasonRule(occ))}` : '';
+      out.push({ kind: 'machine', id: `extra:${occ.id}`, verb, name: `the ${MACHINES[occ.type].name}${how}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.extra(occ) });
     }
     // E27.2 (#680): a plant plot in front, ready to work: gather from it or prune it. While it grows back, Interact
     // opens its picker as before (its look shows it was picked or cut back)
@@ -3766,7 +3788,10 @@ export class Game {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : undefined;
       const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Your pulse gave it a boost: the next flowers to spread from here go a little further</span>' : '';
-      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? `<span class="ok">Ready! Press ${this.press('Q')} to wake it.</span>` : `Press ${this.press('Q')} to see what it does`}${boost}`);
+      // #785: a fruit tree's tip says how its fruit is coming along (and that ripe fruit is picked by holding Interact)
+      const fx = this.sim.farmExtras;
+      const fruit = occ.type === 'orchard' ? fruitTip(fx.fruitOf(occ), fx.fruitPhase(occ), fx.overgrown(occ), this.sim.decay.cozyMode, fx.seasonRule(occ)) : undefined;
+      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? `<span class="ok">Ready! Press ${this.press('Q')} to wake it.</span>` : (fruit ?? `Press ${this.press('Q')} to see what it does`)}${boost}`);
       return;
     }
     if (tool === 'inspect') {

@@ -55,11 +55,12 @@ function build(sim: Sim, type: MachineType, x: number, z: number): MachineData {
   return m!;
 }
 
-/** Runs the farm systems alone for some seconds of play, in minute steps. */
-function run(sim: Sim, seconds: number) {
+/** Runs the farm systems alone for some seconds of play, in minute steps (held in one season if given, #830). */
+function run(sim: Sim, seconds: number, season?: 'spring' | 'summer' | 'autumn' | 'winter') {
   for (let left = seconds; left > 0; left -= 60) {
     const dt = Math.min(60, left);
     sim.state.time += dt;
+    if (season) sim.seasons.jumpTo(season);
     sim.farm.tick(dt);
     sim.compost.tick(dt);
     sim.farmExtras.tick(dt);
@@ -184,22 +185,27 @@ describe('E23.5.4.2: fish ponds', () => {
 });
 
 describe('E23.5.4.3: orchards', () => {
-  it('fruit every few game days after the first crop; pruning gives timber; an unpruned tree fruits less, never none', () => {
+  it('fruit once a game day in summer (#830: trees fruit in summer and autumn); pruning gives timber; an unpruned tree fruits less, never none', () => {
     const sim = farm();
     const tree = build(sim, 'orchard', 12, 16);
-    run(sim, (ORCHARD.firstFruitDays - 0.1) * DAY_SECONDS);
+    run(sim, (ORCHARD.fruitDays - 0.05) * DAY_SECONDS, 'summer');
     expect(sim.farmExtras.fruitReady(tree)).toBe(false);
-    run(sim, 0.2 * DAY_SECONDS);
+    run(sim, 0.1 * DAY_SECONDS, 'summer');
     expect(sim.farmExtras.fruitReady(tree)).toBe(true);
     expect(sim.farmExtras.pick(tree)).toBe(ORCHARD.fruit);
-    run(sim, (ORCHARD.fruitDays + 0.1) * DAY_SECONDS);
+    // a full picking a day until it wants pruning (the fourth day's fruit grows on an overgrown tree)
+    for (let d = 1; d < ORCHARD.pruneDays - 1; d++) {
+      run(sim, ORCHARD.fruitDays * DAY_SECONDS + 60, 'summer');
+      expect(sim.farmExtras.pick(tree), `day ${d + 1}`).toBe(ORCHARD.fruit);
+    }
+    run(sim, (ORCHARD.fruitDays + 0.1) * DAY_SECONDS, 'summer');
     expect(sim.farmExtras.overgrown(tree)).toBe(true);
     // this crop grew while overgrown: half
     expect(sim.farmExtras.pick(tree)).toBe(Math.round(ORCHARD.fruit * ORCHARD.overgrownFruit));
     expect(sim.farmExtras.prune(tree)).toBe(ORCHARD.timber);
     expect(sim.inventory.count('timber')).toBeGreaterThanOrEqual(ORCHARD.timber);
     expect(sim.farmExtras.overgrown(tree)).toBe(false);
-    run(sim, (ORCHARD.fruitDays + 0.1) * DAY_SECONDS);
+    run(sim, (ORCHARD.fruitDays + 0.1) * DAY_SECONDS, 'summer');
     expect(sim.farmExtras.pick(tree)).toBe(ORCHARD.fruit);
   });
 });
