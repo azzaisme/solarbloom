@@ -1,4 +1,6 @@
 import type { ItemId } from '../core/types';
+import type { SavedSketch } from '../app/SaveService';
+import { sketchPage } from './TideSketchbook';
 import type { Sim } from '../gameplay/Sim';
 import { blueprintRows, collection, itemCells, journalPages, oneOffItems, pinRequest, requestRows, TABS, type TabId } from './BackpackModel';
 import { materialIcon } from './MaterialIcons';
@@ -51,6 +53,8 @@ export class Backpack {
   private storage?: string;
   private selMat: ItemId = 'scrap';
   private selPage?: string;
+  private selectedSketch?: SavedSketch;
+  savedSketches?: () => SavedSketch[];
   /** #620: the Bloombot row in focus */
   private selBot?: string;
   /**
@@ -81,14 +85,14 @@ export class Backpack {
     this.titleEl = this.el.querySelector<HTMLElement>('#bpTitle')!;
     this.foot = this.el.querySelector<HTMLElement>('.sheet-foot')!;
     this.el.hidden = true;
-    this.el.querySelector('[data-back]')!.addEventListener('click', () => this.close());
+    this.el.querySelector('[data-back]')!.addEventListener('click', () => this.back());
     wireBar(this.el, (p) => {
       if (p === 'prev' || p === 'next' || p === 'tabs') {
         this.tab(p === 'prev' ? -1 : 1, true);
         return true;
       }
       if (p === 'back') {
-        this.close();
+        this.back();
         return true;
       }
     });
@@ -168,7 +172,17 @@ export class Backpack {
     this.open('journal');
   }
 
+  back() {
+    if (this.current === 'collection' && this.selectedSketch) {
+      const seed = this.selectedSketch.seed;
+      this.selectedSketch = undefined;
+      this.show('collection');
+      this.body.querySelector<HTMLElement>(`#bp-sketch-${seed}`)?.focus();
+    } else this.close();
+  }
+
   close() {
+    this.selectedSketch = undefined;
     if (!this.isOpen) return;
     this.botView?.(undefined, undefined);
     this.el.hidden = true;
@@ -182,6 +196,7 @@ export class Backpack {
   }
 
   show(tab: TabId, focusTab = false) {
+    if (tab !== 'collection') this.selectedSketch = undefined;
     this.current = tab;
     for (const b of this.tabs.querySelectorAll<HTMLElement>('[data-tab]')) {
       const on = b.dataset.tab === tab;
@@ -418,7 +433,14 @@ export class Backpack {
   // ───────── Collection ─────────
 
   private collection(): string {
-    return `<div class="bp-groups">${collection(this.host.sim)
+    if (this.selectedSketch) return `<div class="bp-group"><h3>${esc(this.selectedSketch.title)}</h3>
+      ${sketchPage(this.selectedSketch)}
+      <button class="pn-btn" data-sketch-back>Back to Collection</button></div>`;
+    const pages = this.savedSketches?.() ?? [];
+    const sketches = pages.length ? `<section class="bp-group bp-sketches" aria-labelledby="bp-sketch-title">
+      <h3 id="bp-sketch-title">Tide’s sketches <span class="bp-gcount">${pages.length}</span></h3>
+      <ul>${pages.map((page) => `<li><button class="pn-btn" id="bp-sketch-${page.seed}" data-sketch="${page.seed}">${esc(page.title)}<small>${esc(page.note)}</small></button></li>`).join('')}</ul></section>` : '';
+    return `<div class="bp-groups">${sketches}${collection(this.host.sim)
       .map(
         (g, i) =>
           `<section class="bp-group" tabindex="0" role="group" aria-labelledby="bpg-${i}"><h3 id="bpg-${i}">${esc(g.title)} <span class="bp-gcount">${esc(g.count)}</span></h3>` +
@@ -436,6 +458,14 @@ export class Backpack {
   }
 
   private click(t: HTMLElement) {
+    if (t.closest('[data-sketch-back]')) return this.back();
+    const sketch = t.closest<HTMLElement>('[data-sketch]');
+    if (sketch) {
+      this.selectedSketch = this.savedSketches?.().find((page) => page.seed === Number(sketch.dataset.sketch));
+      this.show('collection');
+      this.body.querySelector<HTMLElement>('[data-sketch-back]')?.focus();
+      return;
+    }
     const go = t.closest<HTMLElement>('[data-bbwhere]');
     if (go) {
       const r = bloombotRows(this.host.sim).find((x) => x.id === go.dataset.bbwhere);
