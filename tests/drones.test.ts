@@ -1,8 +1,54 @@
 import { TUNING } from '../src/data/tuning';
+import { GROUND } from '../src/core/GameState';
+import { Sim } from '../src/gameplay/Sim';
 import { describe, expect, it } from 'vitest';
 import { fill, makeSim, rich, setGround } from './helpers';
 
 describe('drones', () => {
+  it('wakes the old drone as a buddy that follows across the city and up to a rooftop', () => {
+    const sim = makeSim();
+    sim.advance(0.3);
+    const old = sim.state.drones.find((d) => d.old)!;
+    const home = sim.machine(old.hubId)!;
+    const bot = { roofId: GROUND, x: home.x + 1.5, z: home.z + 0.5 };
+    sim.bot = bot;
+    sim.advance(0.3);
+    expect(sim.drones.statusOf(old)).toBe('asleep');
+    expect(old.px).toBe(home.x + 0.5);
+
+    expect(sim.drones.wakeOld()).toBe(true);
+    // Let it start its first nearby job, then leave before the tile finishes.
+    for (let i = 0; i < 32 && !old.targetTileId; i++) sim.tick();
+    const target = old.targetTileId!;
+    expect(target).toBeDefined();
+    expect(sim.drones.isReserved(target)).toBe(true);
+    bot.x += 18;
+    sim.tick();
+    expect(sim.drones.isReserved(target)).toBe(false);
+    expect(sim.drones.statusOf(old)).toBe('following');
+    expect(old.px).toBeCloseTo(bot.x);
+
+    for (let i = 0; i < 16; i++) {
+      bot.x += 4.6 * TUNING.simStep;
+      sim.tick();
+    }
+    expect(old.px).toBeCloseTo(bot.x);
+    expect(old.targetTileId).toBeUndefined();
+    sim.bot = { roofId: 'r1', x: 2.5, z: 3.5 };
+    sim.tick();
+    expect(sim.drones.roofOf(old)).toBe('r1');
+    expect([old.px, old.pz]).toEqual([2.5, 3.5]);
+    expect(sim.state.drones.filter((d) => d.old)).toEqual([old]);
+
+    const loaded = new Sim(structuredClone(sim.state));
+    loaded.bot = sim.bot;
+    loaded.tick();
+    const [buddy] = loaded.state.drones.filter((d) => d.old);
+    expect(buddy.id).toBe(old.id);
+    expect(loaded.drones.oldAsleep).toBe(false);
+    expect(loaded.drones.statusOf(buddy)).toBe('following');
+  });
+
   it('restores tiles automatically and never doubles up via reservations', () => {
     const sim = makeSim();
     rich(sim);
