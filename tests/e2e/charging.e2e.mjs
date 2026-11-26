@@ -1,5 +1,5 @@
 // #784: charging, in the real built game. The player must SEE Bloombot charging, whatever it charges from:
-//  - sitting on a bench: the Charge meter stays on screen (the rest of the HUD fades), glows, and rises about 1 a
+//  - sitting on a bench: the Charge meter stays on screen (the rest of the HUD fades), glows, and rises 2 a
 //    second; sparkles rise from Bloombot; the chip low on screen reads "Charging up";
 //  - standing still by the fountain: a slower trickle, the same signs;
 //  - eating a snack (Food, the Eat key): +25;
@@ -109,7 +109,7 @@ try {
   check(/Charging up/.test(s.chip), `the chip reads "${s.chip}"`);
   check(await sawSparkles(), 'sparkles rise from Bloombot on the bench');
   const bench = await rate(4);
-  check(bench > 0.85 && bench < 1.15, `the bench gives about 1 Charge a second (${bench.toFixed(2)})`);
+  check(bench > 1.8 && bench < 2.2, `the bench gives 2 Charge a second (${bench.toFixed(2)})`);
   const p0 = Number(s.pct.replace(/\D/g, ''));
   await until((p) => Number(document.querySelector('#chargeRow .pct').textContent.replace(/\D/g, '')) >= p + 3, p0);
   s = await look();
@@ -136,7 +136,7 @@ try {
   check(/Charging up/.test(s.chip), `the chip reads "${s.chip}"`);
   check(await sawSparkles(), 'sparkles rise from Bloombot by the fountain');
   const fountain = await rate(4);
-  check(fountain > 0.3 && fountain < bench * 0.8, `the fountain is a slower trickle than the bench (${fountain.toFixed(2)} vs ${bench.toFixed(2)})`);
+  check(fountain > 0.85 && fountain < 1.15 && fountain < bench, `the fountain gives 1 a second, slower than the bench (${fountain.toFixed(2)} vs ${bench.toFixed(2)})`);
   await page.evaluate(() => (window.solarbloom.zoomStep = 0));
   await wait(1500);
   await page.screenshot({ path: `${dir}/fountain-charging.png` });
@@ -204,7 +204,7 @@ try {
   check(s.meter && s.glow && /Charging up/.test(s.chip), `the meter stays, glows, and the chip reads "${s.chip}"`);
   check(await sawSparkles(), 'sparkles rise from Bloombot at the Charger');
   const charger = await rate(2);
-  check(charger > bench * 2, `the Charger is the fastest (${charger.toFixed(2)} vs bench ${bench.toFixed(2)})`);
+  check(charger > bench * 4, `the Charger is the fastest (${charger.toFixed(2)} vs bench ${bench.toFixed(2)})`);
   check(charger > bench && bench > fountain, `the order holds: Charger ${charger.toFixed(2)} > bench ${bench.toFixed(2)} > fountain ${fountain.toFixed(2)}`);
   await page.evaluate(() => window.solarbloom.camera.jumpZoom(6));
   await wait(1200);

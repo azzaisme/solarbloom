@@ -45,18 +45,20 @@ export const CHARGE = {
   ] as EdibleDef[],
   /**
    * #784: the charging sources, fastest first, and the order must hold (tests/charging-order.test.ts): a Charger
-   * (the payoff for building), then a bench (a clearly felt trickle, about 1 a second), then the fountain or the
-   * house (a slow trickle, so Bloombot is never stuck). Knacks multiply them (Pylon the Charger, Gable the rest).
+   * (the payoff for building), then a bench (a clearly felt trickle, 2 a second), then the fountain or the house
+   * (1 a second, so Bloombot is never stuck). Knacks multiply them (Pylon the Charger, Gable both kinds of rest):
+   * the Charger is quick enough that one starting Solar Panel (2/3 of its draw, less in cloud) still beats a bench
+   * with Gable's Easy rest.
    */
   /** E23.3.3: sitting and meditating at a charger, per second at full power (fast, free, on the grid) */
-  meditatePerSecond: 6,
+  meditatePerSecond: 10,
   /**
    * Home: standing still for a moment by the fountain or the house trickles charge back, so bloombot is never stuck
    * with an empty charge and an empty backpack. Benches (E23.2.3) trickle too, and sleeping (E23.7) fills it.
    */
-  home: { radius: 3, perSecond: 0.6, stillSeconds: 1.5 },
+  home: { radius: 3, perSecond: 1, stillSeconds: 1.5 },
   /** E23.2.3 / #784: sitting on a bench, per second (a trickle the player can see the meter rise with) */
-  benchPerSecond: 1,
+  benchPerSecond: 2,
   /**
    * #784: so the player sees Bloombot charging, from any source: it counts as charging for `holdSeconds` after the
    * last charge came in (sources tick at different points of a frame); sparkles rise from it every `sparkleEvery`

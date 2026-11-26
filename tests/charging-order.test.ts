@@ -1,6 +1,6 @@
 // #784: charging. The owner: "Charger is the answer". A Charger stays the fastest way to charge (the payoff for
-// building), a bench gives a clearly felt trickle of about 1 a second, and the fountain stays a slow trickle, felt
-// but well under the bench. A snack gives +25. The order Charger > bench > fountain must hold, with knacks and with
+// building), a bench gives a clearly felt trickle of 2 a second, and the fountain a slower one of 1 a second (the
+// owner's numbers). A snack (Food) gives +25, Honey 40, Greens 8. The order Charger > bench > fountain must hold, with knacks and with
 // a Charger on one starting Solar Panel. And the player must see it charging, whatever it charges from.
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
@@ -67,12 +67,11 @@ function atCharger(sim: Sim, panels: number, solar = 1, cloudy = false): Sim {
 }
 
 describe('#784: the charging sources, in order', () => {
-  it('the tuning: bench about 1 a second, the fountain a slow trickle under it, a Charger the fastest', () => {
-    expect(CHARGE.benchPerSecond).toBeGreaterThanOrEqual(0.9);
-    expect(CHARGE.benchPerSecond).toBeLessThanOrEqual(1.1);
-    expect(CHARGE.home.perSecond).toBeGreaterThanOrEqual(0.5); // felt: no slower than before
-    expect(CHARGE.home.perSecond).toBeLessThanOrEqual(CHARGE.benchPerSecond * 0.75); // well under the bench
-    expect(CHARGE.meditatePerSecond).toBeGreaterThan(CHARGE.benchPerSecond * 3);
+  it('the tuning: bench 2 a second, the fountain 1 a second, a Charger the fastest', () => {
+    expect(CHARGE.benchPerSecond).toBe(2);
+    expect(CHARGE.home.perSecond).toBe(1);
+    expect(CHARGE.home.perSecond).toBeLessThan(CHARGE.benchPerSecond);
+    expect(CHARGE.meditatePerSecond).toBeGreaterThan(CHARGE.benchPerSecond * T.rest); // even past a Gable bench
     expect(POWER.charger.rate).toBe(CHARGE.meditatePerSecond);
   });
 
@@ -113,7 +112,7 @@ describe('#784: the charging sources, in order', () => {
     };
     const bench = measure(onBench(sims()));
     const home = measure(atFountain(sims()));
-    const charger = measure(atCharger(sims(), 2));
+    const charger = measure(atCharger(sims(), 2), 5); // (a Pylon Charger fills it in under 10 seconds)
     expect(bench).toBeCloseTo(CHARGE.benchPerSecond * T.rest, 1);
     expect(home).toBeCloseTo((CHARGE.home.perSecond * T.rest * (10 - CHARGE.home.stillSeconds)) / 10, 1);
     expect(charger).toBeCloseTo(CHARGE.meditatePerSecond * T.charger, 1);
@@ -125,10 +124,10 @@ describe('#784: the charging sources, in order', () => {
     expect(CHARGE.home.perSecond * T.rest).toBeLessThan(CHARGE.benchPerSecond * T.rest);
   });
 
-  it('a snack gives +25 (Food); Honey more, Greens less, best first', () => {
+  it('a snack gives +25 (Food); Honey 40, Greens 8, best first', () => {
     expect(FARM_USES.food.charge * CHARGE.max).toBe(25);
     const by = Object.fromEntries(CHARGE.edibles.map((e) => [e.id, e.charge]));
-    expect(by.food).toBe(25);
+    expect(by).toEqual({ honey: 40, food: 25, biomass: 8 });
     expect(by.honey).toBeGreaterThan(by.food);
     expect(by.biomass).toBeLessThan(by.food);
     const sim = fresh();
