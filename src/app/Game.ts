@@ -1128,7 +1128,7 @@ export class Game {
   /**
    * #784: the player must see Bloombot charging, whatever it charges from. Sparkles rise from Bloombot (calm ones
    * with reduced motion), the meter glows (ChargeMeter reads `chargingFrom` too), and the chip low on screen reads
-   * "Charging up" with how full it is. Meditating at a Charger with no power says what it is waiting for.
+   * "Charging up" with how full it is. Meditating at a Charger with no power says what it is waiting for (sunshine, or a Solar Panel to build).
    */
   private showCharging(dt: number) {
     const c = this.sim.charge;
@@ -1136,7 +1136,9 @@ export class Game {
     const sat = this.sim.rest.sitting;
     if (!from) {
       this.chargeSparkleIn = 0;
-      if (sat?.kind === 'charger' && c.share < 1) this.hud.guide.charging(WORDS.objective.chargerNeedsSun, c.share);
+      const pad = sat?.kind === 'charger' ? this.sim.machine(sat.machineId) : undefined;
+      const waits = pad && this.sim.chargers.waitingFor(pad);
+      if (waits && c.share < 1) this.hud.guide.charging(WORDS.objective.chargerWaits[waits], c.share);
       return;
     }
     if (c.share < 1) this.hud.guide.charging(WORDS.objective.charging, c.share);

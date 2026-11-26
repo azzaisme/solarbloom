@@ -203,8 +203,32 @@ describe('#784: the player sees it charging', () => {
   });
 
   it('the words are plain: "Charging up", and what a dark Charger waits for', () => {
-    for (const w of [WORDS.objective.charging, WORDS.objective.chargerNeedsSun]) expect(bannedIn(w), w).toEqual([]);
-    expect(WORDS.objective.chargerNeedsSun).toMatch(/sunshine/);
+    const waits = WORDS.objective.chargerWaits;
+    for (const w of [WORDS.objective.charging, ...Object.values(waits)]) expect(bannedIn(w), w).toEqual([]);
+    expect(waits.sun).toMatch(/sunshine/);
+    expect(waits.panel).toMatch(/Solar Panel/);
+  });
+
+  it('a dark Charger says what helps: a Solar Panel when none feeds it, sunshine when its panels are in the dark', () => {
+    // no panel joined to it: sunshine would not help, so it asks for a panel
+    const lone = atCharger(fresh(), 0);
+    lone.state.charge = { value: 0 };
+    lone.advance(1);
+    const pad = lone.chargers.docked()!;
+    expect(lone.charge.chargingFrom).toBeUndefined();
+    expect(lone.chargers.waitingFor(pad)).toBe('panel');
+    // panels beside it, at night: it waits for sunshine
+    const night = atCharger(fresh(), 2, 0);
+    night.state.charge = { value: 0 };
+    night.advance(1);
+    const pad2 = night.chargers.docked()!;
+    expect(night.charge.chargingFrom).toBeUndefined();
+    expect(night.chargers.waitingFor(pad2)).toBe('sun');
+    // the sun comes up: it charges, and waits for nothing
+    sky(night, 1);
+    night.advance(1);
+    expect(night.chargers.waitingFor(pad2)).toBeUndefined();
+    expect(night.charge.chargingFrom).toBe('charger');
   });
 
   it('the feedback tuning: held across a frame, sparkles a few times a second', () => {

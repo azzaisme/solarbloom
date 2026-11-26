@@ -3,7 +3,8 @@
 //    second; sparkles rise from Bloombot; the chip low on screen reads "Charging up";
 //  - standing still by the fountain: a slower trickle, the same signs;
 //  - eating a snack (Food, the Eat key): +25;
-//  - meditating at a powered Charger: the fastest of all; with no sun, the chip says the charger waits for sunshine.
+//  - meditating at a powered Charger: the fastest of all; with no sun, the chip says the charger waits for sunshine;
+//    at a Charger with no Solar Panel at all, it says to build one beside it.
 // The order Charger > bench > fountain is checked from the game's own charge as it plays.
 // Screenshots go to SHOTS_DIR (default docs/review/charging-784). Run after `vite build`.
 // Slow software-rendered browsers: E2E_TIMEOUT=900000 and CHROME=/path/to/chromium.
@@ -227,6 +228,44 @@ try {
   s = await look();
   check(!s.glow, 'the meter stops glowing');
   await page.screenshot({ path: `${dir}/charger-no-sun.png` });
+
+  // a Charger with no Solar Panel joined to it at all: sunshine would not help, so it says what to build
+  await key('KeyE');
+  await until(() => !window.solarbloom.sim.rest.sitting);
+  const lone = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const sim = g.sim;
+    sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
+    const at = (x, z) => sim.grid.get('g', x, z);
+    const free = (x, z, lvl) => {
+      const t = at(x, z);
+      return !!t && !t.blocked && !t.occupantId && !t.prop && !t.ramp && t.feature !== 'water' && (t.level ?? 0) === lvl;
+    };
+    // well away from every other machine, so it joins no line
+    const far = (t) => sim.state.machines.every((m) => Math.hypot(m.x - t.x, m.z - t.z) > 8);
+    const spot = sim.areas.tiles('park').find((t) => far(t) && [[0, 0], [-1, 0], [1, 0], [0, 1], [-1, 1], [1, 1], [0, 2]].every(([dx, dz]) => free(t.x + dx, t.z + dz, t.level ?? 0)));
+    const check = sim.build.check.bind(sim.build);
+    const pay = sim.inventory.pay.bind(sim.inventory);
+    sim.build.check = () => ({ ok: true, cost: {}, spotOk: true });
+    sim.inventory.pay = () => true;
+    const t = sim.grid.get('g', spot.x, spot.z);
+    t.ground = 'restored';
+    t.blocked = false;
+    sim.grid.touch(t);
+    const m = sim.build.place('charger', 'g', spot.x, spot.z);
+    sim.build.check = check;
+    sim.inventory.pay = pay;
+    sim.state.charge.value = 10;
+    return { x: spot.x, z: spot.z, id: m.id };
+  });
+  await before(lone.x, lone.z);
+  check(await until(() => /Meditate/.test(document.getElementById('prompt')?.innerText ?? '')), 'facing a Charger with no Solar Panel: the prompt offers to meditate');
+  await key('KeyE');
+  check(await until(() => window.solarbloom.sim.rest.sitting?.kind === 'charger'), 'Bloombot meditates at the lone Charger');
+  check(await until(() => /needs a Solar Panel right beside it/.test(document.getElementById('tallyText')?.textContent ?? '')), 'the chip says the charger needs a Solar Panel beside it (not sunshine)');
+  s = await look();
+  check(!s.glow && !s.from, 'nothing charges Bloombot there');
+  await page.screenshot({ path: `${dir}/charger-no-panel.png` });
 
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 } catch (e) {

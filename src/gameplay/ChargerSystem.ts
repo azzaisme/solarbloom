@@ -46,6 +46,20 @@ export class ChargerSystem {
     return this.docked() === m && !this.full();
   }
 
+  /**
+   * #784: what a charger with no power is waiting for, so the player is told what helps: 'panel' when nothing on its
+   * line makes power (build a Solar Panel right beside it), 'sun' when its panels are in the dark or under cloud,
+   * 'wind' when only turbines feed it, 'power' for anything else. Undefined while it has power.
+   */
+  waitingFor(m: MachineData): 'panel' | 'sun' | 'wind' | 'power' | undefined {
+    if (this.sim.power.servedShare(m) > 0) return undefined;
+    const sources = this.sim.power.networkOf(m)?.sources ?? [];
+    if (!sources.length) return 'panel';
+    if (sources.some((x) => x.type === 'solar')) return 'sun';
+    if (sources.some((x) => x.type === 'windTurbine')) return 'wind';
+    return 'power';
+  }
+
   tick(dt: number): void {
     const m = this.docked();
     if (!m || this.full()) return;
