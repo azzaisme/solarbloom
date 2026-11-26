@@ -166,7 +166,7 @@ export class CropVisuals {
         // #785: the tree itself (TreeGen's orchard tree): flowers, then fruit swelling and colouring up, bare once
         // picked; shaggy when overgrown. A young tree is scaled up as it grows (every frame, see `update`)
         if (!this.device) return;
-        const geo = orchardGeo({ variant: orchardVariant(m), kind: x.fruitOf(m), blossom: x.seasonRule().blossom, fruit: x.fruitShown(m), overgrown: x.overgrown(m), bareUntil: ORCHARD.bareUntil, blossomUntil: ORCHARD.blossomUntil });
+        const geo = orchardGeo({ variant: orchardVariant(m), kind: x.fruitOf(m), blossom: x.seasonRule(m).blossom, fruit: x.fruitShown(m), overgrown: x.overgrown(m), bareUntil: ORCHARD.bareUntil, blossomUntil: ORCHARD.blossomUntil });
         const tree = new pc.Entity('fruit-tree');
         tree.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, geo), foliageMaterial())], castShadows: true, receiveShadows: true });
         tree.setLocalEulerAngles(0, ((m.x * 31 + m.z * 17) % 360) - 180, 0);

@@ -95,8 +95,8 @@ describe('#785 fruit trees: timing', () => {
       if (seen[seen.length - 1] !== p) seen.push(p);
       if (p === 'ripe' && !ripeAt) ripeAt = t + 30;
     }
-    // grown, its branches are bare a little while, then the fruit sets (in summer there are no daily flowers)
-    expect(seen).toEqual(['young', 'bare', 'green', 'nearly', 'ripe']);
+    // a newly planted tree's first crop is a day of its own (#831): it flowers, then its fruit sets
+    expect(seen).toEqual(['young', 'blossom', 'green', 'nearly', 'ripe']);
     expect(x.treeGrowth(tree)).toBe(1);
     // ripe one game day (48 minutes of play) after planting: within a normal play session
     expect(ripeAt).toBeGreaterThan((ORCHARD.fruitDays - 0.01) * DAY_SECONDS);
@@ -130,10 +130,12 @@ describe('#785 fruit trees: timing', () => {
     expect(phases(sim, tree, ORCHARD.fruitDays * DAY_SECONDS + 30, null)).toEqual(['bare', 'blossom', 'green', 'nearly', 'ripe']);
   });
 
-  it('#830 seasons: it flowers all spring, fruits daily through summer and autumn, and rests in winter', () => {
+  it('#830 seasons: an established tree flowers all spring, fruits daily through summer and autumn, rests in winter', () => {
     const sim = farm();
     const tree = plant(sim);
     const x = sim.farmExtras;
+    // a tree that has fruited before (its first crop is its own, see below)
+    (sim.state.salvage!.extras ??= {})[tree.id] = { crops: 1 };
     expect(ORCHARD.seasons).toMatchObject({ spring: { ripens: false, blossom: true }, summer: { ripens: true }, autumn: { ripens: true }, winter: { ripens: false, blossom: false } });
     // spring: once grown it is in flower, and no fruit ripens however long it waits
     expect(phases(sim, tree, 2 * DAY_SECONDS, 'spring')).toEqual(['young', 'blossom']);
@@ -156,14 +158,92 @@ describe('#785 fruit trees: timing', () => {
     expect(x.fruitPhase(tree)).toBe('bare');
   });
 
-  it('the year turning on its own: planted in spring, it flowers, then fruits early in summer', () => {
+  it('#831 first crop: planted in spring, it flowers and its first fruit ripens a game day later', () => {
     const sim = farm();
-    sim.seasons.jumpTo('spring', 1);
     const tree = plant(sim);
-    const seen = phases(sim, tree, 4.2 * DAY_SECONDS, null);
-    expect(seen.slice(0, 2)).toEqual(['young', 'blossom']);
-    expect(sim.seasons.season()).toBe('summer');
-    expect(seen).toContain('ripe');
+    const x = sim.farmExtras;
+    const kind = x.fruitOf(tree);
+    let ripeAt = 0;
+    const seen: FruitPhase[] = ['young'];
+    for (let t = 0; t < 1.2 * DAY_SECONDS; t += 30) {
+      run(sim, 30, 'spring');
+      const p = x.fruitPhase(tree);
+      if (seen[seen.length - 1] !== p) seen.push(p);
+      if (p === 'ripe' && !ripeAt) ripeAt = t + 30;
+    }
+    expect(seen).toEqual(['young', 'blossom', 'green', 'nearly', 'ripe']);
+    expect(Math.abs(ripeAt - ORCHARD.fruitDays * DAY_SECONDS)).toBeLessThanOrEqual(30);
+    // while it comes, the words say fruit is on its way (not "in summer")
+    sim.state.salvage!.extras![tree.id] = { ...x.st(tree), ready: 0, growing: 0.2, crops: 0 };
+    expect(x.fruitPhase(tree)).toBe('blossom');
+    const say = fruitSay(kind, 'blossom', x.seasonRule(tree));
+    expect(say).toBe(`In flower. Little green ${FRUITS[kind].plural} will set soon.`);
+    expect(extraHtml(sim, tree)).toContain(say);
+    expect(extraHtml(sim, tree)).not.toMatch(/in summer/);
+    expect(x.pickProblem(tree)).toBe('The fruit isn’t ripe yet');
+    expect(fruitSay(kind, 'young', x.seasonRule(tree))).toMatch(/Once it’s grown it flowers, then bears/);
+  });
+
+  it('#831 the second crop follows the seasons: after the first picking in spring it flowers until summer', () => {
+    const sim = farm();
+    const tree = plant(sim);
+    const x = sim.farmExtras;
+    run(sim, ORCHARD.fruitDays * DAY_SECONDS + 30, 'spring');
+    expect(x.pick(tree)).toBe(ORCHARD.fruit);
+    expect(x.st(tree).crops).toBe(1);
+    expect(phases(sim, tree, 2 * DAY_SECONDS, 'spring')).toEqual(['blossom']);
+    expect(x.fruitReady(tree)).toBe(false);
+    expect(x.pickProblem(tree)).toBe('It’s flowering: fruit comes in summer');
+    expect(fruitSay(x.fruitOf(tree), 'blossom', x.seasonRule(tree))).toMatch(/come in summer/);
+    // summer: its second crop is ripe within a day
+    expect(phases(sim, tree, ORCHARD.fruitDays * DAY_SECONDS + 30, 'summer')).toEqual(['blossom', 'bare', 'green', 'nearly', 'ripe']);
+  });
+
+  it('#831 planted in winter, the first crop waits for spring, then comes a game day into it', () => {
+    const sim = farm();
+    const tree = plant(sim);
+    const x = sim.farmExtras;
+    const kind = x.fruitOf(tree);
+    expect(fruitSay(kind, 'young', x.seasonRule(tree))).toBe(fruitSay(kind, 'young', { ...ORCHARD.daily, first: true }));
+    run(sim, 30, 'winter');
+    expect(fruitSay(kind, 'young', x.seasonRule(tree))).toMatch(/rests through the winter and bears its first/);
+    expect(phases(sim, tree, 2 * DAY_SECONDS, 'winter')).toEqual(['young', 'bare']);
+    expect(x.fruitReady(tree)).toBe(false);
+    expect(x.st(tree).growing ?? 0).toBe(0);
+    expect(x.pickProblem(tree)).toBe('It’s resting until spring');
+    expect(fruitSay(kind, 'bare', x.seasonRule(tree))).toBe(`Resting for the winter. In spring it flowers and bears its first ${FRUITS[kind].plural}.`);
+    // spring: it flowers, and its first fruit is ripe a day later
+    expect(phases(sim, tree, ORCHARD.fruitDays * DAY_SECONDS + 30, 'spring')).toEqual(['bare', 'blossom', 'green', 'nearly', 'ripe']);
+  });
+
+  it('#831 the first crop comes in summer and autumn as before; trees that have fruited are unaffected', () => {
+    for (const season of ['summer', 'autumn'] as const) {
+      const sim = farm();
+      const tree = plant(sim);
+      run(sim, ORCHARD.fruitDays * DAY_SECONDS + 30, season);
+      expect(sim.farmExtras.fruitReady(tree), season).toBe(true);
+    }
+    // an older garden's tree that has already fruited keeps to the seasons: no fruit in spring
+    const sim = farm();
+    const tree = plant(sim);
+    (sim.state.salvage!.extras ??= {})[tree.id] = { age: 5, sincePrune: 1, crops: 3 };
+    run(sim, 2 * DAY_SECONDS, 'spring');
+    expect(sim.farmExtras.fruitReady(tree)).toBe(false);
+    expect(sim.farmExtras.fruitPhase(tree)).toBe('blossom');
+  });
+
+  it('#831 a spring tree’s first crop saves and carries on after a load', () => {
+    const saver = new SaveService(undefined);
+    const a = farm();
+    const tree = plant(a);
+    run(a, 0.6 * DAY_SECONDS, 'spring');
+    const b = new Sim(saver.deserialize(saver.serialize(a.state))!);
+    const m = b.machine(tree.id)!;
+    expect(b.seasons.season()).toBe('spring');
+    expect(b.farmExtras.st(m)).toEqual(a.farmExtras.st(tree));
+    expect(b.farmExtras.fruitPhase(m)).toBe(a.farmExtras.fruitPhase(tree));
+    run(b, 0.45 * DAY_SECONDS, 'spring');
+    expect(b.farmExtras.fruitReady(m)).toBe(true);
   });
 
   it('fertile soil ripens it sooner, and says how long is left', () => {

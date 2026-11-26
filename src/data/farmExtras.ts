@@ -72,6 +72,8 @@ export const ORCHARD = {
 export interface OrchardSeasonRule {
   ripens: boolean;
   blossom: boolean;
+  /** a newly planted tree waiting on its first crop (#831: it comes in any season but winter) */
+  first?: boolean;
 }
 
 /** What a fruit tree shows: still growing up, bare (just picked), in flower, green fruit, nearly ripe, or ripe. */

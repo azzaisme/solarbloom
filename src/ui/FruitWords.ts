@@ -11,9 +11,11 @@ export function fruitSay(kind: FruitId, phase: FruitPhase, rule: OrchardSeasonRu
   const Some = f.plural[0].toUpperCase() + f.plural.slice(1);
   switch (phase) {
     case 'young':
-      return `A young ${f.name.toLowerCase()} tree, still growing. Once it’s grown it flowers, then bears ${f.plural}.`;
+      return rule.ripens || !rule.first
+        ? `A young ${f.name.toLowerCase()} tree, still growing. Once it’s grown it flowers, then bears ${f.plural}.`
+        : `A young ${f.name.toLowerCase()} tree, still growing. It rests through the winter and bears its first ${f.plural} in spring.`;
     case 'bare':
-      if (!rule.ripens) return `Resting for the winter. It flowers again in spring, and ${f.plural} come in summer.`;
+      if (!rule.ripens) return rule.first ? `Resting for the winter. In spring it flowers and bears its first ${f.plural}.` : `Resting for the winter. It flowers again in spring, and ${f.plural} come in summer.`;
       return rule.blossom ? 'Picked clean. The branches rest a little, then flower again.' : `Picked clean. New ${f.plural} will set again soon.`;
     case 'blossom':
       return rule.ripens ? `In flower. Little green ${f.plural} will set soon.` : `In flower for the spring. ${Some} come in summer.`;

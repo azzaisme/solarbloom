@@ -46,7 +46,7 @@ export function extraHtml(sim: Sim, m: MachineData): string {
       const n = x.fruitYield(m);
       const over = x.overgrown(m);
       const shaggy = !over ? '' : sim.decay.cozyMode ? ' It’s getting shaggy.' : ' It’s getting shaggy and will fruit less until it’s pruned.';
-      const say = `${fruitSay(kind, x.fruitPhase(m), x.seasonRule())}${shaggy}`;
+      const say = `${fruitSay(kind, x.fruitPhase(m), x.seasonRule(m))}${shaggy}`;
       return card(name, say, row(`<button data-act="pick" ${n ? '' : 'disabled'}>${FRUITS[kind].icon} Pick the ${FRUITS[kind].plural}${n ? ` · ${n}` : ''}</button><button data-act="prune" ${over ? '' : 'disabled'}>🪵 Prune it</button>`));
     }
     case 'mushroomLog': {

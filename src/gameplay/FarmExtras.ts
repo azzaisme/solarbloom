@@ -184,7 +184,7 @@ export class FarmExtras {
     if (this.fruitReady(m)) return 'ripe';
     if (this.treeGrowth(m) < 1) return 'young';
     const r = this.fruitShown(m)!;
-    if (r < ORCHARD.blossomUntil) return r >= ORCHARD.bareUntil && this.seasonRule().blossom ? 'blossom' : 'bare';
+    if (r < ORCHARD.blossomUntil) return r >= ORCHARD.bareUntil && this.seasonRule(m).blossom ? 'blossom' : 'bare';
     return r < ORCHARD.nearlyRipe ? 'green' : 'nearly';
   }
 
@@ -194,13 +194,17 @@ export class FarmExtras {
   }
 
   /**
-   * #785 → #830: what the season lets a fruit tree do (ORCHARD.seasons): it flowers in spring, fruits every day in
-   * summer and autumn, and rests in winter. Without a season (a Sim built without its seasons) every day is its own
-   * little year: bare after picking, then flowers, then fruit (ORCHARD.daily).
+   * #785 → #830: what the season lets this fruit tree do (ORCHARD.seasons): it flowers in spring, fruits every day in
+   * summer and autumn, and rests in winter. A newly planted tree's first crop (owner, #831) comes in any season but
+   * winter, about a day after planting: in spring it flowers and then fruits, like a day of its own. Without a season
+   * (a Sim built without its seasons) every day is its own little year (ORCHARD.daily).
    */
-  seasonRule(): OrchardSeasonRule {
+  seasonRule(m: MachineData): OrchardSeasonRule {
     const season = this.sim.seasons?.season();
-    return (season !== undefined && ORCHARD.seasons[season]) || ORCHARD.daily;
+    const rule = (season !== undefined && ORCHARD.seasons[season]) || ORCHARD.daily;
+    if ((this.st(m).crops ?? 0) > 0 || season === undefined) return rule;
+    // its first crop: it ripens whatever the season, except in winter, when it waits for spring
+    return season === 'winter' ? { ...rule, first: true } : { ...ORCHARD.daily, first: true };
   }
 
   /** Game days until the fruit is ripe (0 when it is), at the tree's own pace (fertile soil is quicker). */
@@ -227,7 +231,7 @@ export class FarmExtras {
   pickProblem(m: MachineData): string | undefined {
     if (this.fruitReady(m)) return undefined;
     if (this.fruitPhase(m) === 'young') return 'The tree is still growing';
-    const rule = this.seasonRule();
+    const rule = this.seasonRule(m);
     return rule.ripens ? 'The fruit isn’t ripe yet' : rule.blossom ? 'It’s flowering: fruit comes in summer' : 'It’s resting until spring';
   }
 
@@ -272,7 +276,7 @@ export class FarmExtras {
     const was = { look: this.fruitLook(m), over: this.overgrown(m) };
     st.age = (st.age ?? 0) + days;
     st.sincePrune = (st.sincePrune ?? 0) + days;
-    if ((st.ready ?? 0) < 1 && !this.seasonRule().ripens) st.growing = 0; // out of season: unripe fruit drops, nothing sets
+    if ((st.ready ?? 0) < 1 && !this.seasonRule(m).ripens) st.growing = 0; // out of season: unripe fruit drops, nothing sets
     else if ((st.ready ?? 0) < 1) {
       st.growing = (st.growing ?? 0) + days * machineStrengthAt('orchard', m.x, m.z); // E23.8.1: fertile soil
       if (st.growing >= ORCHARD.fruitDays) {
@@ -293,14 +297,14 @@ export class FarmExtras {
   fruitShown(m: MachineData): number | undefined {
     if (this.fruitReady(m)) return 1;
     if (this.treeGrowth(m) < 1) return undefined;
-    const rule = this.seasonRule();
+    const rule = this.seasonRule(m);
     if (!rule.ripens) return rule.blossom ? ORCHARD.seasonBloom : 0; // spring's flowers, or winter's bare branches
     return fruitStep(this.ripeness(m), ORCHARD.looks) / ORCHARD.looks;
   }
 
   /** The tree's look: how far its fruit has come, in steps (a dozen changes a day), or '-' while it grows up. */
   fruitLook(m: MachineData): string {
-    return `${this.fruitShown(m) ?? '-'}|${this.seasonRule().blossom ? 1 : 0}`;
+    return `${this.fruitShown(m) ?? '-'}|${this.seasonRule(m).blossom ? 1 : 0}`;
   }
 
   // ───────────── E23.5.4.4 mushroom logs and worm bins ─────────────

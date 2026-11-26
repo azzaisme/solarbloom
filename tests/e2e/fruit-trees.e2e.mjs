@@ -140,9 +140,39 @@ try {
   p = await promptFor(/in flower/);
   check(/Look at the Fruit Tree: in flower/.test(p), `the prompt: "${p}"`);
   await snap('02-grown-in-flower-spring');
+  // #831: a newly planted tree's first crop comes in any season but winter: a game day after planting, in spring too
+  await days(0.72, 'spring');
+  const ripeAt = await game((g, s, id) => ({ ripe: s.farmExtras.fruitReady(s.machine(id)), kind: s.farmExtras.fruitOf(s.machine(id)), age: s.farmExtras.st(id).age, season: s.seasons.season() }), tree.id);
+  check(ripeAt.ripe && ripeAt.season === 'spring' && ripeAt.age <= 1.05, `its first crop is ripe a game day after planting, in spring (${ripeAt.kind}, ${ripeAt.age.toFixed(2)} days)`);
+  await wait(2500);
+  p = await promptFor(/Pick the ripe/);
+  check(/Hold Pick the ripe/.test(p), `the prompt: "${p}"`);
+  await snap('02b-first-crop-ripe-spring');
+  // its second crop follows the seasons: picked in spring, it flowers until summer
+  await game((g, s, id) => s.farmExtras.pick(s.machine(id)), tree.id);
+  await days(1.2, 'spring');
+  const second = await game((g, s, id) => ({ ripe: s.farmExtras.fruitReady(s.machine(id)), phase: s.farmExtras.fruitPhase(s.machine(id)) }), tree.id);
+  check(!second.ripe && second.phase === 'blossom', `its second crop waits for summer: still in flower a day later (${second.phase})`);
+  p = await promptFor(/in flower/);
+  check(/Look at the Fruit Tree: in flower/.test(p), `the prompt: "${p}"`);
   await days(1.02, 'summer');
-  const ripeAt = await game((g, s, id) => ({ ripe: s.farmExtras.fruitReady(s.machine(id)), kind: s.farmExtras.fruitOf(s.machine(id)) }), tree.id);
-  check(ripeAt.ripe, `a game day into summer its fruit is ripe (${ripeAt.kind})`);
+  const summer = await game((g, s, id) => s.farmExtras.fruitReady(s.machine(id)), tree.id);
+  check(summer, 'a game day into summer its second crop is ripe');
+
+  // #831: planted in winter, the first crop waits for spring
+  await season('winter');
+  const wintry = await plant(row.x0 + 6, row.z0);
+  check(!!wintry.id, `planted a fruit tree in winter (${wintry.why ?? wintry.id})`);
+  await days(1.2, 'winter');
+  const w = await game((g, s, id) => ({ ripe: s.farmExtras.fruitReady(s.machine(id)), phase: s.farmExtras.fruitPhase(s.machine(id)) }), wintry.id);
+  check(!w.ripe && w.phase === 'bare', `planted in winter it rests, no fruit (${w.phase})`);
+  await face(wintry, 0, -35);
+  p = await promptFor(/resting for the winter/);
+  check(/Look at the Fruit Tree: resting for the winter/.test(p), `the prompt: "${p}"`);
+  await snap('02c-planted-in-winter-resting');
+  await days(1.02, 'spring');
+  const sp = await game((g, s, id) => s.farmExtras.fruitReady(s.machine(id)), wintry.id);
+  check(sp, 'a game day into spring its first crop is ripe');
 
   // ── the row: every stage of a day side by side ──
   const looks = [
