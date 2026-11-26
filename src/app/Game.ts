@@ -1148,7 +1148,7 @@ export class Game {
     // seated, the bot sits on the seat (or the pad) above its feet
     const seat = this.bot.seat;
     const at = seat ? new pc.Vec3(seat.x, seat.y + f.lift, seat.z) : new pc.Vec3(x, y + f.lift, z);
-    this.vfx.sparkles(at, f.sparkles, true);
+    this.vfx.chargeSparkle(at, f.sparkles);
   }
   private models?: ModelLibrary;
   /** the device the title screen was driven with (it picks the first glyph set) */
