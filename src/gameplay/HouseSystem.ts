@@ -1,5 +1,5 @@
-import type { MaterialId } from '../core/types';
-import { HOUSE, HOUSE_GROWTH, type HouseLevel } from '../data/oldcity';
+import type { LayerData, MaterialId, TileData } from '../core/types';
+import { HOUSE, HOUSE_GROWTH, HOUSE_INSIDE, houseDoorInside, houseFurniture, type HouseFurniture, type HouseLevel } from '../data/oldcity';
 import type { Sim } from './Sim';
 
 /**
@@ -110,7 +110,66 @@ export class HouseSystem {
     if (!sv || !this.open() || !this.delivered()) return false;
     sv.house = this.level + 1;
     delete sv.houseDelivered;
+    this.sync();
     this.sim.bus.emit('house.level', { level: sv.house });
     return true;
+  }
+
+  // ───────────── the inside ─────────────
+
+  /** The inside's layer id. */
+  get layerId(): string {
+    return HOUSE_INSIDE.layer;
+  }
+
+  /** The inside's layer (undefined before the house is mended). */
+  layer(): LayerData | undefined {
+    return this.hasInside() ? this.sim.grid.layer(HOUSE_INSIDE.layer) : undefined;
+  }
+
+  /** Is this layer the house's inside? */
+  isInside(roofId: string | undefined): boolean {
+    return roofId === HOUSE_INSIDE.layer;
+  }
+
+  /** The furniture standing in the room now. */
+  furniture(): HouseFurniture[] {
+    return houseFurniture(this.level);
+  }
+
+  /** The piece of furniture on a cell of the room, if any. */
+  furnitureAt(x: number, z: number): HouseFurniture | undefined {
+    return this.furniture().find((f) => x >= f.x && x < f.x + f.w && z >= f.z && z < f.z + f.d);
+  }
+
+  /** The door cell inside (where Bloombot comes in and goes out). */
+  doorInside(): [number, number] {
+    return houseDoorInside(this.level);
+  }
+
+  /**
+   * Makes the inside match the level: its layer (added to the save the first time, grown with each level) and its
+   * cells, furniture blocking its own. Returns the cells furniture now stands on (a decoration there is moved by the
+   * game, Cozy.clearCells). Idempotent; nothing at all for the ruined shed, so an older save is left as it was.
+   */
+  sync(): TileData[] {
+    if (!this.hasInside()) return [];
+    const room = this.room();
+    const st = this.sim.state;
+    let l = st.layers.find((x) => x.id === HOUSE_INSIDE.layer);
+    if (!l) {
+      l = { id: HOUSE_INSIDE.layer, name: 'The house', kind: 'raised', width: room, depth: room, height: HOUSE_INSIDE.height, origin: [...HOUSE_INSIDE.origin], unlocked: true, preview: false, interior: true };
+      st.layers.push(l);
+    }
+    if (l.width !== room) this.sim.grid.resized(l.id);
+    l.width = l.depth = room;
+    this.sim.grid.addLayer(l);
+    const taken: TileData[] = [];
+    for (const t of this.sim.grid.tilesOf(l.id)) {
+      const f = this.furnitureAt(t.x, t.z);
+      t.blocked = !!f;
+      if (f) taken.push(t);
+    }
+    return taken;
   }
 }

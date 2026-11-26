@@ -142,6 +142,11 @@ export interface LayerData {
   template?: string;
   /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */
   cluster?: string;
+  /**
+   * #782: the inside of Bloombot's house: a room of floorboards, not a rooftop (nothing grows, no machines, no fog;
+   * drawn by rendering/HouseInterior and shown only while Bloombot is inside).
+   */
+  interior?: boolean;
 }
 
 /** Kept as an alias while the rooftop-era code is ported (City 12 removes it). */

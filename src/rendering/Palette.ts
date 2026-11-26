@@ -631,6 +631,21 @@ const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, 
 export const PALETTE = {
   ...families,
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
+  /**
+   * #782: Bloombot's house, level by level (the patched Shed, the Cottage, the two-storey House, the Home) and its
+   * inside: warm planks and plaster, a tin, tile or slate roof, painted doors and shutters, glass that glows at dusk.
+   */
+  house: {
+    plank: '#b07c52', plankLight: '#c99a6c', plankDark: '#7d5a3e', patch: '#d2ad7e', beam: '#6a4c35',
+    tin: '#8b949a', tinDark: '#6f777d', tile: '#c46a46', tileDark: '#a5573a', slate: '#6c7880', slateDark: '#58636a',
+    plaster: '#efe6d4', plasterShade: '#ddd2bd', stone: '#bdb3a2', stoneDark: '#9d9384', brick: '#a8573c',
+    door: '#5f8a6a', doorHome: '#3f6f8f', shutter: '#7aa287', trim: '#f6f0e2', glass: '#bfe0e8', glassGlow: '#ffd98a',
+    step: '#b9b0a2', lamp: '#ffe2a0', fence: '#f2ede2', fencePost: '#d9d1c0', gardenSoil: '#6a5440',
+    floor: ['#c79a6b', '#bd8f61', '#cfa476'], floorGap: '#8d6a4b', wallIn: '#f1e7d2', wallInShade: '#e2d5bb', skirting: '#a0784f',
+    rug: '#c86f5a', rugEdge: '#efd9a8', blanket: '#7fa7c9', pillow: '#f6f1e6', bedWood: '#9c6d45', chestBand: '#6d6457',
+    shelf: '#a7774c', desk: '#9a6a40', book: ['#c8574a', '#4f86a8', '#e1b54a', '#6f9a5a'], paper: '#f3ead2',
+    apron: '#5e8f4a', apronEdge: '#4d7a3c', rail: '#e8dcc4',
+  },
   /** E23.7.2.2: the house's radio (the forecast) */
   radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
   /** #628: the little tools and things Bloombot holds while it works (BotProps) */

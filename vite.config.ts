@@ -78,7 +78,7 @@ const QUICK = [
   'tree-placement',
   'p7-terrain', 'tile-markers',
   // #782: the first decoration, a gift at the fountain's first step
-  'first-decor',
+  'first-decor', 'house',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

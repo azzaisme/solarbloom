@@ -309,8 +309,19 @@ export class Cozy {
     const o = DECOR_OPTION[kind];
     if (!o) return 'There is no such decoration';
     if (!this.isDecorUnlocked(o)) return decorRecipe(this.sim, o.id) ? `Not made yet: ${this.decorHint(o)}` : `Unlocks when ${this.hint(o.unlock)}`;
-    if (this.groundOnly && roofId !== GROUND) return 'Decorations go on the city’s ground for now';
+    const inside = this.sim.house.isInside(roofId);
+    if (this.groundOnly && roofId !== GROUND && !inside) return 'Decorations go on the city’s ground for now';
     if (this.decorCount() >= DECOR_GEN.max) return `The city holds ${DECOR_GEN.max} decorations at most: remove one first`;
+    if (inside) {
+      // #782: the house holds as many as its level allows; the door and the furniture stay clear
+      const h = this.sim.house;
+      if (!h.hasInside()) return 'The house has no inside yet';
+      if (this.insideCount() >= h.decorMax()) return `The ${h.current()!.name.toLowerCase()} holds ${h.decorMax()} decorations: pick one up first, or grow the house`;
+      const [dx, dz] = h.doorInside();
+      if (x === dx && z === dz) return 'Keep the door of the house clear';
+      const f = h.furnitureAt(x, z);
+      if (f) return `${f.name[0].toUpperCase()}${f.name.slice(1)} stands here`;
+    }
     const t = this.sim.grid.peek(roofId, x, z); // never loads a chunk (the sim decides that)
     if (!t) return 'Nothing to stand it on here';
     if (t.feature === 'water' && !t.blocked) return 'Not in the water';
@@ -319,6 +330,29 @@ export class Cozy {
     if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
     if (this.atHouseDoor(roofId, x, z)) return 'Keep the door of the house clear';
     return undefined;
+  }
+
+  /** #782: decorations inside the house. */
+  insideCount(): number {
+    const id = this.sim.house.layerId;
+    return this.decorations().filter((d) => d.roofId === id).length;
+  }
+
+  /**
+   * #782: the house grew and its furniture took these cells: a decoration standing on one moves to the nearest free
+   * floor (nothing placed is lost), or, with no free floor left, back into the build menu (it stays made).
+   */
+  clearCells(cells: { roofId: string; x: number; z: number }[]) {
+    for (const c of cells) {
+      const d = this.decorAt(c.roofId, c.x, c.z);
+      if (!d) continue;
+      this.removeDecor(c.roofId, c.x, c.z);
+      const free = this.sim.grid
+        .tilesOf(c.roofId)
+        .filter((t) => !t.blocked && !t.occupantId)
+        .sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
+      for (const t of free) if (!this.placeDecor(d.kind, d.rot, c.roofId, t.x, t.z)) break;
+    }
   }
 
   /** #782: the ground at the house's door (where the house stands): decorations go round it, never in the way in. */

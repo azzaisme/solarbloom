@@ -15,7 +15,7 @@ import { planterHtml } from '../ui/PlanterPanel';
 import { compostHtml, digesterHtml } from '../ui/CompostPanel';
 import { extraHtml } from '../ui/ExtrasPanel';
 import type { TileData } from '../core/types';
-import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
+import { flyUp, fountainHtml, houseHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
 import { setPieceAt } from '../core/OldCityLayout';
 import { MOVE_LEVELS } from '../data/moveSpots';
@@ -529,6 +529,18 @@ export class OldCityController {
       (act) => {
         if (act === 'storage') return this.openStorage('Storage at the fountain');
         if (act === 'giveAll' && this.sim.fountain.giveAll() > 0) this.host.sound('deliver');
+      },
+    );
+  }
+
+  /** #782: the house's panel: see and bring what its next level needs. */
+  openHouse() {
+    this.host.sound('click');
+    this.panel.open(
+      () => houseHtml(this.sim),
+      (act) => {
+        if (act === 'storage') return this.openStorage('Storage at the house');
+        if (act === 'giveAll' && this.sim.house.giveAll() > 0) this.host.sound('deliver');
       },
     );
   }

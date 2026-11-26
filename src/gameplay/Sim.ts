@@ -218,6 +218,7 @@ export class Sim {
     this.moves = new MoveSpots(this);
     this.fountain = new FountainSystem(this);
     this.house = new HouseSystem(this);
+    this.house.sync(); // #782: the inside of a house already mended (its room and furniture)
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
