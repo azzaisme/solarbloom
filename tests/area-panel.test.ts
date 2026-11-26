@@ -6,6 +6,8 @@ import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 import { regionById } from '../src/core/OldCityLayout';
 import { AREA_SPECIALTY, areaPanelData, areaPanelHtml } from '../src/ui/AreaPanel';
+import { regionProgress, regionProgressHtml } from '../src/ui/RegionProgress';
+import { TUNING } from '../src/data/tuning';
 
 function city(seed = 3) {
   const sim = new Sim(createInitialState(seed));
@@ -25,6 +27,26 @@ function restore(sim: Sim, id: string, n: number) {
 }
 
 describe('area panel (City 14.2)', () => {
+  it('shows live patch progress and a tick only when the region meets its target', () => {
+    const sim = city();
+    expect(regionProgress(sim, PARK).target).toBe(TUNING.park.restoredTiles);
+    const id = 'oldMarket';
+    expect(areaPanelHtml(sim, id)).not.toContain('role="progressbar"');
+    sim.gates.open('g-oldMarket', true);
+    restore(sim, id, 3);
+    const progress = regionProgress(sim, id);
+    expect(progress.name).toBe('Old Market');
+    expect(progress.complete).toBe(false);
+    expect(regionProgressHtml(progress)).toContain(`3 of ${progress.target} patches green`);
+    expect(regionProgressHtml(progress)).toContain('aria-valuenow="3"');
+
+    restore(sim, id, progress.target);
+    const full = regionProgress(sim, id);
+    expect(full.complete).toBe(true);
+    expect(full.green).toBe(full.target);
+    expect(regionProgressHtml(full)).toContain('✓');
+  });
+
   it('shows type, specialty, live fog progress, the checklist and machines, and no income bonus (E23.1.4)', () => {
     const sim = city();
     const id = sim.areas.nextGoal()!;

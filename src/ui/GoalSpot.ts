@@ -22,6 +22,7 @@ export interface GoalSpot {
   kind: GoalKind;
   /** short, for a label or a screen reader: "the fountain", "a Scrap pile", "Tally", "the way into Mast Row" */
   name: string;
+  patchKeeperId?: string;
 }
 
 /**
@@ -33,7 +34,7 @@ export function goalSpot(sim: Sim, o: Objective | undefined = objectiveSentence(
   const w = o?.where;
   if (!w) return undefined;
   if (w.kind === 'focus') {
-    return { roofId: w.layer ?? GROUND, x: w.x + 0.5, z: w.z + 0.5, cell: { x: w.x, z: w.z }, kind: o.place?.kind ?? 'spot', name: o.place?.name ?? 'there' };
+    return { roofId: w.layer ?? GROUND, x: w.x + 0.5, z: w.z + 0.5, cell: { x: w.x, z: w.z }, kind: o.place?.kind ?? 'spot', name: o.place?.name ?? 'there', patchKeeperId: o.patchKeeperId };
   }
   if (w.kind === 'wake') {
     const m = sim.machine(w.machineId);

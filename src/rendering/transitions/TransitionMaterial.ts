@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { WIND_GLSL } from '../Wind';
 
 /**
  * Look 6.12 (#181): the material every living transition is drawn with. Two kinds of geometry share it:
@@ -17,10 +18,13 @@ import * as pc from 'playcanvas';
  * transition starts or ends. Reduced motion keeps the timing but drops heave, tilt and overshoot. The Low tier
  * drops the procedural patterns (colour and mask fades only).
  *
- * Per-vertex data (three vec4 streams):
+ * Per-vertex data:
  *   trA = (t0, duration, mode, stagger)    mode 0 still · 1 grow · 2 heave (slab piece) · 3 surface · 4 root
  *   trB = deco: (inA, inB, outA, outB) progress windows · surface: (from colour packed, from pollution, to pollution, kind*8 + state)
  *   trC = deco: (anchor x, y, z, seed)                 · surface: (dir, feature, lushAt, lushUntil)
+ *   Tree morph (mode 5) stores the starting vertex position in trB.xyz. Leaves follow the branch motion while
+ *   their shape changes by trLeaf.xyz over their opening window (trA.w to trB.w). trC.w is the target tree stage.
+ *   trLeaf.w carries wind flex for transitioning foliage.
  * Surface kinds: 0 none · 1 soften · 2 moss · 3 restore · 4 bloom · 5 unblock. States: 0 concrete · 1 moss ·
  * 2 soil · 3 grass · 4 hard (water, clean paving: no cracks).
  */
@@ -28,11 +32,13 @@ import * as pc from 'playcanvas';
 export const SEM_A = pc.SEMANTIC_ATTR13;
 export const SEM_B = pc.SEMANTIC_ATTR14;
 export const SEM_C = pc.SEMANTIC_ATTR15;
+export const SEM_LEAF = pc.SEMANTIC_ATTR12;
 
 const DECL_VS = /* glsl */ `
 attribute vec4 vertex_trA;
 attribute vec4 vertex_trB;
 attribute vec4 vertex_trC;
+attribute vec4 vertex_trLeaf;
 varying vec4 vTrA;
 varying vec4 vTrB;
 varying vec4 vTrC;
@@ -49,6 +55,7 @@ uniform vec4 screen_size;
 #ifdef SCREENSPACE
 uniform float projectionFlipY;
 #endif
+${WIND_GLSL}
 float trProgressAt(vec4 a, vec3 anchorW) {
 	float d = max(a.y * uTrDurScale, 0.001);
 	float p = (uTrTime - a.x) / d;
@@ -60,6 +67,15 @@ vec3 trDisplace(vec3 posW) {
 	if (mode < 0.5 || (mode > 2.5 && mode < 3.5)) return posW;
 	vec3 anc = vertex_trC.xyz;
 	float p = clamp(trProgressAt(vertex_trA, anc), 0.0, 1.0);
+	if (mode > 4.5) {
+		float growth = smoothstep(0.0, 1.0, p);
+		vec3 moved = mix(vertex_trB.xyz, posW, growth);
+		if (vertex_trB.w > 0.0) {
+			float open = smoothstep(vertex_trA.w, vertex_trB.w, p);
+			moved += vertex_trLeaf.xyz * (open - growth) * uTrMotion;
+		}
+		return moved;
+	}
 	// stagger: pieces start one after another inside their window
 	float span = vertex_trB.y - vertex_trB.x;
 	float q = p - vertex_trA.w * span * 0.6;
@@ -91,7 +107,13 @@ vec3 trDisplace(vec3 posW) {
 vec4 evalWorldPosition(vec3 vertexPosition, mat4 modelMatrix) {
 	vec3 localPos = getLocalPosition(vertexPosition);
 	vec4 posW = modelMatrix * vec4(localPos, 1.0);
-	posW.xyz = trDisplace(posW.xyz);
+	vec3 rest = posW.xyz;
+	posW.xyz = trDisplace(rest);
+	if (vertex_trLeaf.w > 0.0) {
+		vec3 anchor = vertex_trC.xyz;
+		float grown = clamp(length(posW.xyz - anchor) / max(length(rest - anchor), 0.001), 0.0, 1.0);
+		posW.xyz += windOffset(posW.xyz, vertex_trLeaf.w * grown);
+	}
 	return posW;
 }
 vec4 getPosition() {
@@ -129,6 +151,7 @@ varying vec4 vTrC;
 uniform float uTrTime;
 uniform float uTrDurScale;
 uniform float uTrDetail;
+uniform float uTrMotion;
 uniform vec3 uTrSea;
 uniform vec4 uTrScrub;
 uniform vec4 uTrStages;
@@ -224,6 +247,16 @@ void getAlbedo() {
 	#ifdef STD_DIFFUSE_VERTEX
 		dAlbedo *= saturate(vVertexColor.rgb);
 	#endif
+	if (vTrA.z > 4.5 && vTrB.w > 0.0) {
+		float p = (uTrTime - vTrA.x) / max(vTrA.y * uTrDurScale, 0.001);
+		if (uTrScrub.w > 0.5 && all(equal(floor(vTrC.xz), uTrScrub.xy))) p = uTrScrub.z;
+		float crest = mix(vTrA.w, vTrB.w, 0.62);
+		float light = smoothstep(crest - 0.16, crest, p) * (1.0 - smoothstep(crest, min(crest + 0.27, 1.0), p));
+		vec3 tint = vTrC.w < 1.5 ? vec3(0.08, 0.50, 0.34) : vec3(0.24, 0.54, 0.10);
+		if (vTrC.w > 2.5) tint = mix(vec3(0.48, 0.50, 0.10), vec3(0.72, 0.43, 0.12), step(3.5, vTrC.w));
+		trGlow = tint * light * (0.40 + 0.18 * max(vNormalW.y, 0.0)) * uTrMotion;
+		return;
+	}
 	if (vTrA.z < 2.5 || vTrA.z > 3.5) return;
 	// E27.1 (#679): the open sea's day lift fades back out by night (Water.seaTintAt)
 	if (vTrC.y > 7.5) dAlbedo *= uTrSea;
@@ -373,6 +406,7 @@ export function transitionMaterial(): pc.StandardMaterial {
   m.setAttribute('vertex_trA', SEM_A);
   m.setAttribute('vertex_trB', SEM_B);
   m.setAttribute('vertex_trC', SEM_C);
+  m.setAttribute('vertex_trLeaf', SEM_LEAF);
   try {
     const chunks = m.getShaderChunks(pc.SHADERLANGUAGE_GLSL);
     chunks.set('litUserDeclarationVS', DECL_VS);
@@ -387,6 +421,9 @@ export function transitionMaterial(): pc.StandardMaterial {
   m.setParameter('uTrTime', 0);
   m.setParameter('uTrDurScale', 1);
   m.setParameter('uTrMotion', 1);
+  m.setParameter('uWindTime', 0);
+  m.setParameter('uWindStrength', 0);
+  m.setParameter('uBloomWave', [0, 0, 0, 0]);
   m.setParameter('uTrDetail', 1);
   m.setParameter('uTrScrub', [0, 0, 0, 0]);
   m.setParameter('uTrStages', [0.08, 0.3, 0.5, 0.7]);

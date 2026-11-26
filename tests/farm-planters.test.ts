@@ -148,7 +148,7 @@ describe('E23.5.2.1: planter growth', () => {
     expect(sim.farm.look(m).ripe).toBe(true);
   });
 
-  it('E23.4.4 (#384): a pond drained with the whole game running: no tile near it drops below restored, nothing planted is lost', () => {
+  it('after a pond drains, wild ground can die while planter crops wilt and wait for water', () => {
     const sim = farm();
     const beds = [planter(sim, 12, 16), planter(sim, 13, 16), planter(sim, 14, 19)];
     for (const m of beds) sow(sim, m, 'radish');
@@ -169,9 +169,9 @@ describe('E23.5.2.1: planter growth', () => {
     const grown = beds.map((m) => sim.farm.bed(m).grown);
     sim.advance(DAY_SECONDS / 4); // a quarter of a dry game day with the whole sim running
     expect(sim.water.levelOf(pondBody(sim).id)).toBeLessThan(0.08);
-    // no tile went back below restored, every planter and crop is still there, waiting
+    // Wild ground loses its cover, while every planter and crop is still there, waiting.
     const after = new Map(land().map((t) => [t.id, t.ground]));
-    for (const id of restoredBefore) expect(after.get(id), id).toBe('restored');
+    expect(restoredBefore.some((id) => after.get(id) === 'polluted')).toBe(true);
     beds.forEach((m, i) => {
       expect(sim.state.machines).toContain(m);
       expect(sim.farm.bed(m).crop).toBe('radish');

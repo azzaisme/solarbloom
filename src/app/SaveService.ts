@@ -15,6 +15,14 @@ export type Slot = 1 | 2 | 3;
 export const slotKey = (slot: Slot) => `${SAVE_KEY}.${slot}`;
 /** The small header stored beside a slot's save, so the title screen never parses whole saves. */
 export const headerKey = (slot: Slot) => `${SAVE_KEY}.${slot}.head`;
+const sketchKey = (slot: Slot) => `${slotKey(slot)}.sketches`;
+
+export interface SavedSketch {
+  seed: number;
+  title: string;
+  note: string;
+  image: string;
+}
 
 /** E22.12: what the title screen shows for a slot. */
 export interface SlotHeader {
@@ -225,11 +233,42 @@ export class SaveService {
     }
   }
 
+  /** The encoded pages live beside the garden so autosaves never have to serialize the images. */
+  sketches(): SavedSketch[] {
+    try {
+      const pages: unknown = JSON.parse(this.storage?.getItem(sketchKey(this.slot)) ?? '[]');
+      if (!Array.isArray(pages)) return [];
+      return pages.filter((page): page is SavedSketch => !!page && Number.isInteger(page.seed) &&
+        typeof page.title === 'string' && typeof page.note === 'string' &&
+        typeof page.image === 'string' && /^data:image\/jpeg;base64,[a-zA-Z0-9+/=]+$/.test(page.image));
+    } catch {
+      return [];
+    }
+  }
+
+  keepSketch(page: SavedSketch): boolean {
+    const pages = this.sketches();
+    if (pages.some((old) => old.seed === page.seed)) return true;
+    return this.writeSketches([page, ...pages]);
+  }
+
+  private writeSketches(pages: SavedSketch[]): boolean {
+    try {
+      if (!this.storage) return false;
+      const key = sketchKey(this.slot);
+      this.storage.setItem(key, JSON.stringify(pages));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** E22.12: deletes a slot's save and header (its backups stay). */
   deleteSlot(slot: Slot = this.slot) {
     try {
       this.storage?.removeItem(slotKey(slot));
       this.storage?.removeItem(headerKey(slot));
+      this.storage?.removeItem(sketchKey(slot));
     } catch {
       /* ignore */
     }

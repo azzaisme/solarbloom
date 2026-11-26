@@ -108,12 +108,14 @@ export class Transitions {
     this.begin(t, 'restore', this.restoreSeconds(t, source, o.quiet), { from: look, dir, delay: o.delay, g: o.g });
   }
 
-  /** One nurture step: grows in from bloom `level - 1`. */
-  bloom(t: TileData, level: number, auto: boolean, delay = 0) {
-    // A step during another step keeps the older starting point, so the growth catches up instead of restarting.
-    const from = t.tr?.k === 'bloom' && trProgress(t.tr, this.now) < 1 && t.tr.from !== undefined ? t.tr.from : level - 1;
+  /** One nurture step, starting from the tree's current age if another step is still playing. */
+  bloom(t: TileData, level: number, auto: boolean, before = level - 1) {
+    const tr = t.tr;
+    const p = trProgress(tr, this.now);
+    const start = tr?.k === 'bloom' ? tr.from ?? before : before;
+    const from = start + (before - start) * p * p * (3 - 2 * p);
     const base = TUNING.transitions.bloom[Math.max(2, Math.min(4, level))] ?? 3;
-    this.begin(t, 'bloom', base * (auto ? TUNING.transitions.autoMult : 1), { from, delay });
+    this.begin(t, 'bloom', base * (auto ? TUNING.transitions.autoMult : 1), { from });
   }
 
   /** An obstacle cleared by the area entry fix crumbles and greens over. */

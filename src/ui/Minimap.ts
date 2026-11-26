@@ -4,6 +4,7 @@ import { GROUND } from '../core/GameState';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import type { GoalSpot } from './GoalSpot';
+import { regionProgress } from './RegionProgress';
 
 /**
  * Bloombot (G.14) / E23.11: the round map at the bottom left, painted like the Sunlit Glass board
@@ -570,6 +571,30 @@ export class Minimap {
       ctx.lineWidth = 2;
       ctx.strokeStyle = p.ring;
       if (awake || this.ready(m.id)) ctx.stroke();
+      if (id && areas.fog(id) !== 'hidden') {
+        const { green, target, complete } = regionProgress(this.sim, id);
+        const x = i * RES, y = j * RES;
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.strokeStyle = p['landmark-off'];
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        if (green > 0) {
+          ctx.beginPath();
+          ctx.arc(x, y, 10, -Math.PI / 2, (green / target) * Math.PI * 2 - Math.PI / 2);
+          ctx.strokeStyle = p['grass-hi'];
+          ctx.stroke();
+        }
+        if (complete) {
+          ctx.beginPath();
+          ctx.moveTo(x - 3.5, y);
+          ctx.lineTo(x - 1, y + 2.5);
+          ctx.lineTo(x + 4, y - 3);
+          ctx.strokeStyle = p.ring;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
     }
   }
 

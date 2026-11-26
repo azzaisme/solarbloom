@@ -229,18 +229,24 @@ export class KeeperSystem {
     return 'talked';
   }
 
-  /** The patch tiles of a Keeper's second request, and how many are restored. */
-  patch(id: string): { restored: number; total: number } {
+  /** The same eligible tiles drive request progress and the objective's ground markers. */
+  *patchTiles(id: string) {
     const p = this.region(id).patch;
+    for (let z = p.z; z < p.z + p.d; z++) {
+      for (let x = p.x; x < p.x + p.w; x++) {
+        const tile = this.sim.grid.get(GROUND, x, z);
+        if (tile && !tile.blocked && !tile.occupantId) yield tile;
+      }
+    }
+  }
+
+  patch(id: string): { restored: number; total: number } {
     let restored = 0;
     let total = 0;
-    for (let z = p.z; z < p.z + p.d; z++)
-      for (let x = p.x; x < p.x + p.w; x++) {
-        const t = this.sim.grid.get(GROUND, x, z);
-        if (!t || t.blocked || t.occupantId) continue;
-        total++;
-        if (t.ground === 'restored') restored++;
-      }
+    for (const tile of this.patchTiles(id)) {
+      total++;
+      if (tile.ground === 'restored') restored++;
+    }
     return { restored, total };
   }
 

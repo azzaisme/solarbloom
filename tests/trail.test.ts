@@ -7,6 +7,8 @@ import { WAYMARK } from '../src/data/waymark';
 import { Sim } from '../src/gameplay/Sim';
 import { trailDots, trailRoute, type TrailRoute } from '../src/gameplay/TrailRoute';
 import { spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
+import { leafFlight, randomLeafLaunch } from '../src/rendering/TrailLeaf';
+import { pavingOverlayLift, RAISED_PAVING_LIFT, RESTORED_PATH_LIFT } from '../src/rendering/PavingSurface';
 import { goalSpot, type GoalSpot } from '../src/ui/GoalSpot';
 import { WORDS } from '../src/ui/words';
 
@@ -254,5 +256,78 @@ describe('#632: the dots along the way', () => {
     const dots = trailDots(pts, 0.7, 50);
     expect(dots).toHaveLength(50);
     expect(dots[0].x).toBeCloseTo(0.7);
+  });
+});
+
+describe('#781: leaving the fountain for the market', () => {
+  it('blocks intact rail and lets Bloombot and the trail use the open market gap', () => {
+    const sim = fresh();
+    const walker = new Walker(sim);
+    const region = REGIONS.find(region => region.id === 'oldMarket')!;
+    const closed = { roofId: GROUND, x: 15.5, z: 7.5, facing: 0 };
+    expect(walker.move(closed, 1, 0)).toBeLessThan(0.5);
+    sim.gates.open(region.gate.id, true);
+    expect(walker.walkable(GROUND, 15, 10)).toBe(true);
+    expect(walker.walkable(GROUND, 16, 10)).toBe(true);
+    expect(walker.fits(GROUND, 15.94, 10.5)).toBe(false);
+    const gap = { roofId: GROUND, x: 15.5, z: 7.5, facing: 0 };
+    expect(walker.move(gap, 1, 0)).toBeCloseTo(1);
+
+    const [x, z] = sim.areas.info(PARK).landmark;
+    const start = { roofId: GROUND, x: x + 2.5, z: z + 0.5, facing: 0 };
+    const patch = region.patch;
+    const goal = { ...at(patch.x + 2, patch.z + 1), patchKeeperId: 'tally' };
+    const route = trailRoute(sim, walker, start, goal);
+    expect(route.reached).toBe(true);
+    const crossing = route.points.find((point, index) => index > 0 && point.x >= 16 && route.points[index - 1].x < 16);
+    expect(crossing?.z).toBeGreaterThanOrEqual(7.5);
+    expect(crossing?.z).toBeLessThanOrEqual(8.5);
+    expect(trailDots(route.points).every(point => walker.fits(GROUND, point.x, point.z, 0.06))).toBe(true);
+    expect([...sim.keepers.patchTiles('tally')].some(tile =>
+      Math.abs(tile.x - Math.floor(end(route).x)) + Math.abs(tile.z - Math.floor(end(route).z)) <= 1
+    )).toBe(true);
+  });
+
+  it('derives leaf direction from the route', () => {
+    const leaves = trailDots([{ x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 3 }], 0.5);
+    expect(leaves[0].heading).toBeCloseTo(Math.PI / 2);
+    expect(leaves.at(-1)?.heading).toBeCloseTo(0);
+  });
+});
+
+describe('falling route leaves and raised paving', () => {
+  it('flutters while descending and settles exactly onto the trail', () => {
+    const samples = [0, 0.25, 0.5, 0.75, 1].map(t => leafFlight(t, 0.43, 0.66, { yaw: -2.1, pitch: 0.5, roll: 0.3 }));
+    for (let i = 1; i < samples.length; i++) expect(samples[i].height).toBeLessThan(samples[i - 1].height);
+    expect(samples[1].roll).not.toBe(samples[2].roll);
+    const { yaw, ...settled } = samples.at(-1)!;
+    expect(yaw).toBe(-2.1);
+    expect(Object.values(settled).every(value => value === 0)).toBe(true);
+  });
+
+  it('starts at the light with an independent initial direction for each leaf', () => {
+    const first = randomLeafLaunch(() => 0.12);
+    const second = randomLeafLaunch(() => 0.83);
+    expect(first.yaw).not.toBe(second.yaw);
+    for (const launch of [first, second]) {
+      const start = leafFlight(0, 1.3, 0.66, launch);
+      expect(start).toMatchObject(launch);
+      expect(start.height).toBe(0.66);
+      expect(leafFlight(1, 1.3, 0.66, launch).yaw).toBe(launch.yaw);
+      expect(Math.abs(start.sideways) + Math.abs(start.along)).toBe(0);
+    }
+  });
+
+  it('clears brick tops and rounded paving corners without lifting plain ground', () => {
+    const sim = fresh();
+    const tile = { ...sim.grid.get(GROUND, 8, 8)!, blocked: false, occupantId: undefined, feature: 'lawn' as const };
+    const brick = { ...tile, feature: 'paving' as const, ground: 'polluted' as const };
+    const flat = { peek: () => undefined };
+    expect(pavingOverlayLift(flat, tile)).toBe(0);
+    expect(pavingOverlayLift(flat, brick)).toBeGreaterThan(RAISED_PAVING_LIFT);
+    expect(pavingOverlayLift(flat, { ...brick, ground: 'restored' })).toBeGreaterThan(RESTORED_PATH_LIFT + 0.004);
+    const corner = { peek: (_: string, x: number, z: number) =>
+      (x === tile.x + 1 && z === tile.z) || (x === tile.x && z === tile.z + 1) ? brick : undefined };
+    expect(pavingOverlayLift(corner, tile)).toBeGreaterThan(RESTORED_PATH_LIFT + 0.004);
   });
 });

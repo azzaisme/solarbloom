@@ -114,6 +114,7 @@ const lawn = {
   sunlit: '#78a962',
   shadow: '#2f6027',
   dryTip: '#b7c25c',
+  wilted: ['#91905a', '#a39a60', '#aba269'],
   /**
    * Grass by bloom stage: index 1 Restored … 4 Radiant. Each stage keeps its own brightness so stages read apart:
    * young grass is light and yellow-green, Blooming mid, Thriving deep, Radiant warm and golden.
@@ -501,10 +502,13 @@ const signal = {
     logoEdge: '#e09a1c',
     logoLeafEdge: '#4f9e3f',
   },
-  /** #632: Show me where's trail of glowing dots on the ground: mint, like the waymark's light it leads to */
-  trail: '#c8ffe8',
-  /** by day: a deeper mint, so it reads on pale ground */
-  trailDay: '#3fe0a8',
+  /** Compass leaves and the restoration target stroke. */
+  trailLeaves: ['#ffb035', '#ffc95d', '#f4aa3d', '#ffdd87'],
+  trailVein: '#ffea9c',
+  trailHeart: '#ffdb79',
+  trailThread: '#ffb52e',
+  trailAura: '#e99418',
+  trailSpark: '#ffe49a',
   /** E19: the build hologram bloombot projects */
   holo: '#a6ff86',
   /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
@@ -530,6 +534,14 @@ const signal = {
      */
     machineHolo: '#0088ff',
   },
+};
+
+const tileMarker = {
+  hover: { line: '#ffe2b4', tip: '#fff4dd', shadow: '#493129' },
+  selected: { line: '#63f5da', tip: '#d5fff3', shadow: '#184f50' },
+  valid: { line: '#98e74e', tip: '#e1ff9c', shadow: '#37531c' },
+  invalid: { line: '#d9532e', tip: '#ff9658', shadow: '#733423' },
+  objective: { line: '#ffbd43', tip: '#ffefa9', shadow: '#77401d' },
 };
 
 /** Scene lights (Look 1 owns lighting; on its branch these move to src/data/look.ts). */
@@ -611,7 +623,7 @@ const cozy = {
   waterShallow: '#7fd0f0',
 };
 
-const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, light, surfaces, pure };
+const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, tileMarker, light, surfaces, pure };
 
 export const PALETTE = {
   ...families,
@@ -840,6 +852,8 @@ export const PALETTE = {
   lilyPad: leaf.mid,
   bloomPale: '#fff6c2',
   mist: '#d8f4ff',
+  /** Tide sketches: the pencil's graphite */
+  sketchPencil: '#352f29',
 };
 
 // ───── colour helpers (pure) ─────

@@ -76,6 +76,7 @@ export class WaterSystem {
   readonly pipes: WaterPipes;
   /** bumped whenever bodies change shape (a water tile changed): the fade cache keys on both */
   private shapeRev = 0;
+  private nearbyWater = new WeakMap<TileData, { shape: number; bodies: Set<WaterBody> }>();
 
   constructor(private sim: Sim) {
     this.pipes = new WaterPipes(sim, this);
@@ -83,7 +84,10 @@ export class WaterSystem {
     // around it; anything else on a water tile (its bloom, say) does not.
     sim.grid.touchListeners.push((t) => {
       this.landRev++;
-      if (!this.byTile.size) return;
+      if (!this.byTile.size) {
+        if (this.isFresh(t)) this.shapeRev++;
+        return;
+      }
       const was = this.byTile.has(t.id);
       if (was === this.isFresh(t)) return;
       if (!was && !SIDES.some(([dx, dz]) => this.byTile.has(sim.grid.peek(GROUND, t.x + dx, t.z + dz)?.id ?? ''))) {
@@ -429,18 +433,24 @@ export class WaterSystem {
   private fullest(t: TileData, reach: number): number | undefined {
     if (t.roofId !== GROUND) return undefined;
     let best: number | undefined;
-    const seen = new Set<WaterBody>();
+    const cached = this.nearbyWater.get(t);
+    const bodies = reach === WATER_NET.reach && cached?.shape === this.shapeRev ? cached.bodies : this.findNearbyWater(t, reach);
+    for (const body of bodies) best = Math.max(best ?? 0, this.levelOf(body.id));
+    return best;
+  }
+
+  /** Water levels change often, but the bodies within reach of a tile rarely move. */
+  private findNearbyWater(t: TileData, reach: number): Set<WaterBody> {
+    const bodies = new Set<WaterBody>();
     const g = this.sim.grid;
     for (let dz = -reach; dz <= reach; dz++)
       for (let dx = -reach; dx <= reach; dx++) {
         const n = g.get(GROUND, t.x + dx, t.z + dz);
-        if (!this.isFresh(n)) continue;
-        const b = this.bodyAt(n)!;
-        if (seen.has(b)) continue;
-        seen.add(b);
-        best = Math.max(best ?? 0, this.levelOf(b.id));
+        const body = this.bodyAt(n);
+        if (body) bodies.add(body);
       }
-    return best;
+    if (reach === WATER_NET.reach) this.nearbyWater.set(t, { shape: this.shapeRev, bodies });
+    return bodies;
   }
 
   /** Bodies with a level of their own (changed at least once), loading them if needed. */
@@ -503,6 +513,7 @@ export class WaterSystem {
    */
   bloomShown(t: TileData): number {
     if (t.ground !== 'restored' || t.bloom <= 1) return t.bloom;
+    if (this.sim.decay.wilting(t)) return 1;
     const f = this.fadeAt(t);
     return f ? Math.max(1, t.bloom - f) : t.bloom;
   }

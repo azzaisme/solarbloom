@@ -1,0 +1,26 @@
+.sketch-page {
+  width: min(100%, 440px);
+  margin: 0 auto 16px;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid #cbb994;
+  background: #f7edd7;
+  color: #413a2f;
+  box-shadow: 0 5px 15px #392e201a;
+}
+.sketch-page img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 40vh;
+  object-fit: contain;
+}
+.sketch-page figcaption {
+  padding: 8px 16px 14px;
+  font: italic 17px/1.35 Georgia, serif;
+}
+.sketch-page figcaption span { white-space: nowrap; }
+.bp-sketches { grid-column: 1 / -1; }
+.bp-groups .bp-sketches ul { grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); }
+.bp-sketches .pn-btn { width: 100%; }
+.bp-sketches .pn-btn small { display: block; font-size: 16px; font-weight: 400; }

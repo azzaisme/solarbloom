@@ -1,3 +1,4 @@
+import { RAISED_PAVING_LIFT, RESTORED_PATH_LIFT } from './PavingSurface';
 import * as pc from 'playcanvas';
 import { roadPlanFor, type RoadPiece, type RoadPlan } from '../core/RoadPlan';
 import { CHUNK } from '../core/Hash';
@@ -24,10 +25,10 @@ import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
-import { FoliageBuilder, foliageBounds, foliageMaterial, treeMesh, updateWind } from './Foliage';
-import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
+import { FoliageBuilder, foliageBounds, foliageMaterial, updateWind } from './Foliage';
+import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type TreeStage, type Lod } from './TreeGen';
 import { treeSpot, treeStage, treeWorldOf } from './TreePlacement';
-import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
+import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, reedGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, beachDressing, buildingDressing, grassTufts, lawnFringe, hash01 as dhash, obstacleClutter, paving, planterBed, turfAt, turfTop, zonedPlanting, zoneOf, type DressCtx, type SolidSink } from './Surfaces';
 import { zoneAt, type PlantingZone } from './PlantingZones';
 import { MODELS, ModelBatch } from './Models';
@@ -43,7 +44,7 @@ import { transitionMaterial } from './transitions/TransitionMaterial';
 import type { WarmupSample } from './ShaderWarmup';
 import { clearWaterCovers, clearWaterDisturbers, setWaterCovers, setWaterDisturbers, type WaterDisturber } from './WaterDisturbance';
 import { clearWaterLife, lifeForTile, outletSpots, setWaterLife, type LifeSpot } from './WaterLife';
-import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
+import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer, type TreeBloom } from './transitions/TransitionRenderer';
 import { MOVE_TRIPS } from '../data/moveSpots';
 
 /** A land tile for `waterDistance`: its corner, its rounded corners, and whether it slopes into the water as a bank. */
@@ -487,12 +488,12 @@ const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
  * one curve), segments per corner, how far the piece stands above the tile top (restored / not), and the width of
  * the white border along the curve.
  */
-const PATH_CURVE = { radius: 0.5, arc: 6, lift: 0.052, liftDead: 0.012, border: 0.07 };
+const PATH_CURVE = { radius: 0.5, arc: 6, lift: RESTORED_PATH_LIFT, liftDead: 0.012, border: 0.07 };
 /**
  * Dead paving stands a little above the earth beside it: how far its painted top is raised (a stone lip shows along
  * its edges and curves), and the soft contact shadow on the ground beside the lip (width in tiles, darkest tint).
  */
-const PAVING_RAISE = { lift: 0.03, shadow: 0.13, dark: 0.58 };
+const PAVING_RAISE = { lift: RAISED_PAVING_LIFT, shadow: 0.13, dark: 0.58 };
 /** City 16.6: the four sides of a road tile and their piece-mask bits (RoadPlan.pieceAt). */
 const ROAD_SIDES = [
   [1, 0, 1],
@@ -689,7 +690,7 @@ export class ChunkRenderer {
   /** Look 3.17: current zoom band (1 mid, 2 near) */
   private band = 1;
   /** Look 3.16: freeze the wind (deterministic screenshots: `?still`) */
-  static still = typeof location !== 'undefined' && /[?&]still/.test(location.search);
+  static still = typeof location !== 'undefined' && /[?&]still\b/.test(location.search);
 
   constructor(
     private sim: Sim,
@@ -822,12 +823,11 @@ export class ChunkRenderer {
   /** Called when the park's stage rises (Game shows a line and a sparkle). */
   onParkStage?: (stage: number, prev: number) => void;
 
-  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1) {
+  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1, wind = 0) {
     this.time += dt;
     this.warmTrees();
-    this.tickGrowing(dt);
     // Phase 5 / Look 3.16: foliage, grass, flowers, vines and banners sway; still with reduced motion or `?still`
-    updateWind(ChunkRenderer.still ? 0 : this.time, this.reducedMotion || ChunkRenderer.still ? 0 : 1);
+    updateWind(ChunkRenderer.still ? 0 : this.time, this.reducedMotion || ChunkRenderer.still ? 0 : 0.65 + 1.2 * wind);
     if (!this.reducedMotion && !ChunkRenderer.still) this.waterTime = this.time;
     const ps = this.sim.grid.isPlayable(GROUND) ? this.sim.progression.parkStage() : 0;
     if (ps !== this.parkStage) {
@@ -1689,6 +1689,7 @@ export class ChunkRenderer {
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
       model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
       bloom: (t) => s.water.bloomShown(t), // E23.4.4: the lawn's colour fades with low water too
+      wilting: (t) => s.decay.wilting(t),
       // P7-E28: planting zones, memoised for this build (a pure function of the cell, so a rebuild matches)
       landmark: s.areas.info(area).noLandmark ? undefined : s.areas.info(area).landmark,
       zone: (x, z) => {
@@ -1760,7 +1761,7 @@ export class ChunkRenderer {
       // E28.W02: natural ground slopes down into the water, its waterline wandering, dressed with stones and plants
       this.shore(b, fb, t, th, !!v.far);
       if (!v.far && this.isWater(t)) {
-        this.poolBanks(b, t, th, gtex);
+        this.poolBanks(b, fb, t, th, gtex);
         // a dead pond's bed: dried, cracked silt painted across the whole pond (no tile grid)
         if (this.siltBed(t)) {
           const k = Math.round(255 * (1 - 0.3 * b.grey));
@@ -1969,17 +1970,37 @@ export class ChunkRenderer {
     return { x0: t.x, z0: t.z, open, cut: this.landCuts(t) ?? [0, 0, 0, 0] };
   }
 
-  /** Adds the tile's tree at its stage, unless it's growing on its own right now. True if the tile has one. */
+  /** Draws one tree at the tile's stage, with a continuous morph during bloom. */
   private addTree(t: TileData, h: number, lod: 0 | 1): boolean {
     if ((t.feature ?? 'lawn') === 'water') return false;
     const spot = treeSpot(t, this.areaType, treeWorldOf(this.sim)); // P7-E29: from the generated world
     if (!spot) return false;
     const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: trees fade with low water
     if (!stage) return false;
-    if (this.growing.has(t.id)) return true;
+    const growth = this.treeBloom;
+    if (growth?.outgoing) return true;
     // Look 3.7: close-up trees at near zoom on High; the single-clump version at mid zoom and below
     const tl: Lod = lod === 1 && this.band >= 2 && this.detail === 'high' ? (this.band === 3 ? 3 : 2) : lod;
-    this.fb.add(treeGeo(spot.species, stage, spot.variant, tl, spot.form), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
+    const geometry = (age: TreeStage) => treeGeo(spot.species, age, spot.variant, tl, spot.form);
+    const x = t.x + 0.5;
+    const y = h + 0.08 + (spot.planter ? 0.16 : 0);
+    const z = t.z + 0.5;
+    const mesh = geometry(stage);
+    if (growth && !growth.reducedMotion) {
+      const tr = growth.transition;
+      // Low water can suppress some or all of the visible bloom stages.
+      const start = tr.k === 'restore' ? (stage === 1 ? 0 : stage)
+        : Math.min(stage, Math.max(1, (tr.from ?? t.bloom - 1) - (t.bloom - stage)));
+      if (start < stage) {
+        const from = Math.floor(start) as TreeStage | 0;
+        const next = Math.max(1, Math.ceil(start)) as TreeStage;
+        growth.mesh.addGeo(mesh, x, y, z, spot.rot, spot.scale, {
+          stage, from: from ? geometry(from) : undefined, next: geometry(next), ageMix: start - from, t0: tr.t0, duration: tr.d,
+        });
+        return true;
+      }
+    }
+    (growth?.staticFoliage ?? this.fb).add(mesh, x, y, z, spot.rot, spot.scale);
     return true;
   }
 
@@ -1992,56 +2013,6 @@ export class ChunkRenderer {
     if (!this.warm) return;
     const t0 = performance.now();
     while (performance.now() - t0 < 3) if (this.warm.next().done) return void (this.warm = undefined);
-  }
-
-  /** Trees growing to a new stage right now: a pooled entity bounces up while the chunk leaves the tree out. */
-  private growing = new Map<string, { e: pc.Entity; t: number; from: number; to: number; tile: TileData; dur: number; lift: number }>();
-  static readonly GROW_SECONDS = 0.9;
-  static readonly MAX_GROWING = 24;
-
-  /** A tile's bloom stage rose (or it was restored): grow its tree, if it has one. */
-  growTree(t: TileData, prevStage: number) {
-    if (this.transitions) return; // Look 6.12: trees grow in through the transition mesh
-    if (t.roofId !== GROUND || this.reducedMotion || this.growing.size >= ChunkRenderer.MAX_GROWING) return;
-    const view = this.views.get(chunkKey(GROUND, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
-    if (!view || view.far) return;
-    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.areaOf(t)!).type, treeWorldOf(this.sim));
-    const stage = treeStage(t, this.sim.water.bloomShown(t));
-    if (!spot || !stage || (t.feature ?? 'lawn') === 'water') return;
-    const old = this.growing.get(t.id);
-    old?.e.destroy();
-    const e = new pc.Entity(`grow-${t.id}`);
-    e.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, treeGeo(spot.species, stage, spot.variant, 1, spot.form)), foliageMaterial())], castShadows: true, receiveShadows: true });
-    const h = this.sim.grid.layer(GROUND)!.height;
-    e.setLocalPosition(t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5);
-    e.setLocalEulerAngles(0, (-spot.rot * 180) / Math.PI, 0);
-    this.root.addChild(e);
-    // Relative size of the previous stage, so a young tree swells into a full one rather than popping from zero.
-    const SIZE = [0, 0.32, 0.62, 1, 1.08];
-    const from = prevStage >= 1 ? SIZE[prevStage] / SIZE[stage] : 0.05;
-    // P7-E29.5 (#738): a specimen (a big lone tree) reaching Thriving or Radiant is a restoration moment: it swells
-    // in slower, overshoots further and stretches up before it settles
-    const special = spot.scale >= 2 && stage >= 3;
-    this.growing.set(t.id, { e, t: 0, from, to: spot.scale, tile: t, dur: special ? ChunkRenderer.GROW_SECONDS * 2.2 : ChunkRenderer.GROW_SECONDS, lift: special ? 0.16 : 0.06 });
-    e.setLocalScale(from * spot.scale, from * spot.scale, from * spot.scale);
-    view.dirty = true;
-  }
-
-  private tickGrowing(dt: number) {
-    for (const [id, g] of this.growing) {
-      g.t += dt;
-      const k = Math.min(1, g.t / g.dur);
-      // ease-out with a soft overshoot: the tree springs up and settles
-      const e = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
-      const sc = g.to * (g.from + (1 - g.from) * e);
-      g.e.setLocalScale(sc, sc * (1 + g.lift * Math.sin(k * Math.PI)), sc);
-      if (k >= 1) {
-        this.growing.delete(id);
-        this.markTile(g.tile); // the chunk takes the tree back…
-        const ge = g.e;
-        setTimeout(() => ge.destroy(), 120); // …and the stand-in goes once that rebuild has had a frame to land
-      }
-    }
   }
 
   /** Dev/perf readout: foliage triangles in loaded chunks. */
@@ -2339,6 +2310,8 @@ export class ChunkRenderer {
     return n.ground === 'restored' || this.livePond(n) ? ALIVE.water : n.ground === 'polluted' ? PALETTE.aqua.bed : PALETTE.ground.wetSoil;
   }
 
+  private treeBloom?: TreeBloom;
+
   private readonly host: ChunkHost = (() => {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -2357,6 +2330,9 @@ export class ChunkRenderer {
         self.level = level;
         fn();
         self.level = old;
+      },
+      set treeBloom(growth: TreeBloom | undefined) {
+        self.treeBloom = growth;
       },
       get slabCap() {
         return self.slabCap;
@@ -3479,7 +3455,7 @@ export class ChunkRenderer {
    * bank of that material in each outer corner, wider where the pool carries on behind the tile, with the odd rock
    * or clump of reeds on it.
    */
-  private poolBanks(b: MeshBuilder, t: TileData, h: number, gtex?: GroundTexGeo[]) {
+  private poolBanks(b: MeshBuilder, fb: FoliageBuilder, t: TileData, h: number, gtex?: GroundTexGeo[]) {
     const g = this.sim.grid;
     const x = t.x + 0.5;
     const z = t.z + 0.5;
@@ -3520,14 +3496,9 @@ export class ChunkRenderer {
         b.add('sphere', PALETTE.stone.pebble, [px, top + 0.04, pz], [0.2, 0.14, 0.17]);
         b.add('sphere', PALETTE.stone.grey, [px + sx * 0.12, top + 0.03, pz - sz * 0.1], [0.13, 0.1, 0.12]);
         if (alive) b.add('sphere', PALETTE.leaf.light, [px, top + 0.09, pz], [0.14, 0.05, 0.12]);
-      } else if (alive && k < 0.9)
-        for (let j = 0; j < 3; j++) {
-          const ht = 0.22 + 0.1 * j;
-          const rx = px + (j - 1) * 0.06;
-          const rz = pz + (j === 1 ? 0.05 : -0.03);
-          b.add('cone', [PALETTE.leaf.dark, PALETTE.leaf.mid, PALETTE.leaf.deep][j], [rx, top + ht / 2, rz], [0.05, ht, 0.05]);
-          if (j === 2 && t.bloom >= 2) b.add('capsule', PALETTE.wood.bark, [rx, top + ht, rz], [0.045, 0.05, 0.045]); // a bulrush
-        }
+      } else if (alive && k < 0.9) {
+        fb.add(reedGeo(t.variant + i, t.bloom >= 2 ? 1 : 0), px, top, pz, k * 6.28, 1);
+      }
     }
     // straight banks, stopping where a rounded corner takes over
     for (const [dx, dz] of EDGE_DIRS) {
@@ -3545,14 +3516,9 @@ export class ChunkRenderer {
         this.rocks.push({ x: ex0, z: ez0, r: 0.12 });
         b.add('sphere', PALETTE.stone.warm, [ex0 + (dz ? 0.16 : 0), surf + 0.03, ez0 + (dx ? 0.16 : 0)], [0.14, 0.12, 0.13]);
         if (this.poolAlive(t)) b.add('sphere', PALETTE.leaf.light, [ex0, surf + 0.14, ez0], [0.15, 0.04, 0.12]);
-      } else if (k < 0.5 && this.poolAlive(t))
-        for (let j = 0; j < 4; j++) {
-          const ht = 0.26 + 0.07 * j;
-          const rx = ex0 + (dz ? (j - 1.5) * 0.07 : (j % 2) * 0.05);
-          const rz = ez0 + (dx ? (j - 1.5) * 0.07 : (j % 2) * 0.05);
-          b.add('cone', [PALETTE.leaf.dark, PALETTE.leaf.mid, PALETTE.leaf.deep, PALETTE.leaf.stalk][j], [rx, surf + ht / 2, rz], [0.045, ht, 0.045]);
-          if (j === 3) b.add('capsule', PALETTE.wood.bark, [rx, surf + ht, rz], [0.04, 0.05, 0.04]);
-        }
+      } else if (k < 0.5 && this.poolAlive(t)) {
+        fb.add(reedGeo(t.variant + dx + dz, 1), ex0, surf, ez0, k * 6.28, 1.2);
+      }
       b.grey = this.greyOf(n);
       const hex = this.topColour(n);
       // (and short of the land's own corner where that is rounded off into the water)
@@ -3656,6 +3622,7 @@ export class ChunkRenderer {
     void r;
     const stage = Math.max(1, Math.min(4, this.sim.water.bloomShown(t) || 1)); // E23.4.4: fades by low water
     const grass = grassTone(stage, t.x, t.z);
+    const planted = !!t.plant && !this.sim.decay.wilting(t);
     const c = this.ctx;
     if (f === 'paving') {
       // Look 3.2: clean stone slabs, moss and tiny flowers in the gaps; a street tree stands in a stone planter.
@@ -3686,7 +3653,7 @@ export class ChunkRenderer {
       this.slab(b, PALETTE.beachSand[((t.variant % 3) + 3) % 3], [x, h, z], [1, 0.16, 1]);
       turfTop(c, t, top);
       beachDressing(c, t, x, z, top);
-      if (t.plant) this.plantExtras(t, x, z, top); // what the player's pulse grew still shows
+      if (planted) this.plantExtras(t, x, z, top);
       return;
     } else {
       this.slab(b, grass, [x, h, z], [1, 0.16, 1]);
@@ -3707,9 +3674,9 @@ export class ChunkRenderer {
     // P7-E28 (#714): natural ground is planted by its zone (lawn, meadow, bed, shore, woodland floor, path border,
     // clearing), in layers that fill in with the bloom stage, instead of the same drifts on every tile
     const zone = zoneOf(c, t.x, t.z);
-    if (t.plant) this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
+    if (planted) this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
     const tree = this.addTree(t, h, 1);
-    zonedPlanting(c, t, stage, x, z, top, zone, tree || !!t.plant);
+    zonedPlanting(c, t, stage, x, z, top, zone, tree || planted);
     if (stage <= 2 && !tree && (zone === 'open_lawn' || zone === 'landmark_clearance') && dhash(t.x, t.z, 67) < 0.07) {
       // the odd pebble in young lawns (seeded), so open lawn doesn't repeat exactly
       b.add('sphere', PALETTE.stone.pebble, this.at(x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6, 0.08), [0.16, 0.08, 0.13]);

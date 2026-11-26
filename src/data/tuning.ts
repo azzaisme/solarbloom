@@ -174,7 +174,10 @@ export const TUNING = {
      * Upgrades don't affect it.
      */
     // E23.7.1: helper timers in game time (3.5 game minutes = 7 s of play; 0.4 = 0.8 s)
-    old: { enabled: true, radius: 6, cycleSeconds: gameMinutes(3.5), flySpeed: 1.5, workSeconds: gameMinutes(0.4) },
+    old: {
+      enabled: true, radius: 6, cycleSeconds: gameMinutes(3.5), flySpeed: 1.5, workSeconds: gameMinutes(0.4),
+      followSpeed: 5.8, workNearBot: 4, catchupDistance: 12,
+    },
     /**
      * E18: drone roles. Every number is a starting guess from the design (the E18 epic, section 4), to tune
      * against the bots in docs/E18_AUDIT.md.
@@ -280,8 +283,10 @@ export const TUNING = {
   autosaveSeconds: 10,
 
   /** The starting park's Core (the fountain): replaces TUNING.core when the game starts in the city. */
-  /** Mega Pulse: manual taps charge it; the next tap after it is full releases a city-scale chain. */
+  /** Taps build a charge, then a held pulse releases it across the ground ahead. */
   mega: {
+    cooldown: 0.45,
+    holdSeconds: 1.6,
     charge: 40,
     baseTiles: 40,
     tilesPerArea: 3, // per cleared area…

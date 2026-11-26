@@ -82,7 +82,7 @@ export const WAYMARK = {
     /** the next goal's beam waits this long after the pulse starts (s), so the two never compete */
     wait: 1.6,
   },
-  /** #632: Show me where draws a trail of soft glowing dots on the ground, along a walkable way to the goal */
+  /** #632: Show me where draws a trail of warm gold leaves on the ground, along a walkable way to the goal */
   trail: {
     /** the route counts as there once it reaches a cell this close to the goal (cells): the goal itself may be solid */
     reach: 2,
@@ -90,39 +90,27 @@ export const WAYMARK = {
     beside: 6,
     /** the route search gives up after looking at this many cells (then the trail goes as close as it got) */
     budget: 40000,
-    /** gap between dots along the way (cells) */
-    spacing: 0.55,
-    /** a dot's bright core, the soft dark rim round it that makes it stand out on pale sand and paving by day, and
-     * where that rim fades out (radius, cells). At night the rim fades away and the core's glow does the work. */
-    dot: 0.21,
-    rim: 0.32,
-    halo: 0.46,
-    /** dots further off grow, so the low camera still sees them: from this far (world units), by this much per unit,
-     * up to this many times their size */
+    /** gap between leaves along the way (cells) */
+    spacing: 0.72,
+    /** A small amount of distance compensation keeps the trail readable from the low follow camera. */
     nearDistance: 5,
-    growth: 0.09,
-    farScale: 2.6,
-    /** how dark the rim is (0 black … 1 the trail's own colour) and how solid by day */
-    rimShade: 0.08,
-    rimAlpha: 0.9,
-    /** how far above the ground the dots lie (world units) */
-    lift: 0.05,
-    /** how fast the trail runs out from bloombot (cells per second); a long way never takes longer than `drawMax` (s) */
-    draw: 22,
-    drawMax: 1.3,
+    growth: 0.055,
+    farScale: 1.55,
+    lift: 0.025,
+    /** Reveal the way in order, leaving time for each leaf to settle. */
+    draw: 11,
+    drawMax: 2.2,
+    fallSeconds: 3.1,
+    fadeIn: 0.48,
     /** how long it stays (s), long enough to walk a good way of it, then how long it takes to fade (s) */
     life: 40,
     fade: 1.4,
-    /** dots bloombot has walked past fade over this many cells */
+    /** leaves bloombot has walked past fade over this many cells */
     behind: 1.2,
-    /** a gentle glow that runs along the trail towards the goal: speed (cells per second), length (cells), lift */
-    run: 7,
-    runLength: 3,
-    runLift: 0.45,
-    /** how bright (kept under 2: the bloom pass multiplies glows of 1 and more), and at night */
-    glow: 1.9,
-    nightGlow: 1.7,
-    /** never more dots than this (a very long way keeps its first stretch, where bloombot is headed now) */
+    /** Warm leaf colours are visible by day, gently brighter at night. */
+    glow: 1.25,
+    nightGlow: 1.55,
+    /** never more leaves than this (a very long way keeps its first stretch, where bloombot is headed now) */
     max: 420,
   },
 };

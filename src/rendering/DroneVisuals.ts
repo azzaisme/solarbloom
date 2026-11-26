@@ -243,9 +243,7 @@ export class DroneVisuals {
   }
 
   /**
-   * Bloombot (G.6): the companion. When set, the first drone floats at bloombot's shoulder whenever it has no
-   * job (idle or flying home), and looks where bloombot looks. Looks only: the sim drone, its jobs and its
-   * timing are untouched; only where it is drawn changes.
+   * Bloombot's world pose, used to draw the companion beside its shoulder once it has caught up in the sim.
    */
   companion?: { x: number; y: number; z: number; facing: number };
 
@@ -738,25 +736,28 @@ export class DroneVisuals {
       const docked = d.mode === 'idle' && (asleep || (!d.old && (status === 'docked' || status === 'waitingEnergy')));
       this.updateGlyph(d, v, hub, docked && !asleep, status, dt, t); // asleep: no sign of anything missing
       this.updateBasket(d, v);
-      const c = d.id === buddy && idle && !docked ? this.companion : undefined; // a docked drone stays on its hub
-      if (c) {
+      const shoulder = d.old ? status === 'following' : idle && !docked;
+      const c = d.id === buddy && shoulder ? this.companion : undefined;
+      const caughtUp = c && Math.hypot(tx - c.x, tz - c.z) < 1.5;
+      if (c && caughtUp) {
         // At bloombot's right shoulder and a little behind, so it never stands between the camera and bloombot.
         const f = c.facing;
         tx = c.x + Math.cos(f) * 0.62 - Math.sin(f) * 0.25;
         tz = c.z - Math.sin(f) * 0.62 - Math.cos(f) * 0.25;
         if (motion) tx += Math.sin(t * 0.9 + v.phase) * 0.06;
-      } else if (idle && motion && !docked) {
+      } else if (idle && motion && !docked && !c) {
         // Lazy figure-eight while napping
         tx += Math.sin(t * 0.6 + v.phase) * 0.35;
         tz += Math.sin(t * 1.2 + v.phase) * 0.18;
       }
-      const k = 1 - Math.exp(-dt * 10);
+      const warp = caughtUp && Math.hypot(tx - v.x, tz - v.z) > TUNING.drone.old.catchupDistance;
+      const k = warp ? 1 : 1 - Math.exp(-dt * 10);
       const dx = tx - v.x;
       const dz = tz - v.z;
       v.x += dx * k;
       v.z += dz * k;
-      const baseY = c ? c.y + 1.15 : w[1] + (docked ? 1.05 : d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
-      v.y += (baseY - v.y) * (1 - Math.exp(-dt * 5));
+      const baseY = c && caughtUp ? c.y + 1.15 : w[1] + (docked ? 1.05 : d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
+      v.y += (baseY - v.y) * (warp ? 1 : 1 - Math.exp(-dt * 5));
       // Hover bob: softer and slower asleep, livelier in a Frenzy; a short hop on a finished restore.
       const bobAmp = BOB.amp * (docked ? 0 : napping ? 0.45 : 1) * motion;
       const bobRate = ((2 * Math.PI) / BOB.period) * (napping ? 0.7 : 1);
@@ -767,9 +768,10 @@ export class DroneVisuals {
       const vel = dt > 0 ? moved / dt : 0;
       const accel = dt > 0 ? (vel - v.vel) / dt : 0;
       v.vel = vel;
-      if (c && Math.hypot(dx, dz) < 0.15) {
-        // Beside bloombot: look where it looks.
-        let diff = (c.facing * 180) / Math.PI - v.yaw;
+      if (c && caughtUp && Math.hypot(dx, dz) < 0.15) {
+        // Beside Bloombot, sometimes glance back at them.
+        const glance = motion ? Math.max(0, Math.sin(t * 0.9 + v.phase)) ** 6 : 0;
+        let diff = (c.facing * 180) / Math.PI - glance * 48 - v.yaw;
         while (diff > 180) diff -= 360;
         while (diff < -180) diff += 360;
         v.yaw += diff * Math.min(1, dt * 5);

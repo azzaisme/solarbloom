@@ -79,6 +79,8 @@ export interface TileData {
   growthRemainingSec: number;
   growSource?: RestoreSource;
   bloom: number; // 0 until restored, then 1..3 (grass → flowers → shrubs)
+  /** When restored ground last began going without care, in simulation seconds. Saved. */
+  drySince?: number;
   /** Reservoir Overflow: biomass bonus on this tile until this sim time. */
   lushUntil?: number;
   /** Look 6.16: when the current lush spell began (the wet mask soaks in from then). */
@@ -146,6 +148,8 @@ export interface MachineData {
   z: number;
   size: number;
   starter?: boolean;
+  /** Resources paid for a machine whose recipe changed, used when it is dismantled. */
+  buildCost?: Partial<Record<ItemId, number>>;
   boostUntil: number; // solar bloom boost
   /** E23.12 (#528): a Lucky Cat's Golden Relay: this relay carries power further, for good. */
   golden?: boolean;

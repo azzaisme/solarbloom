@@ -311,7 +311,7 @@ export class Advisor {
       if (lamp)
         return {
           topic: 'restore',
-          text: 'An old drone is fast asleep on the lamp by the fountain. Walk up to the lamp and press {interact} to wake it, and it will help you turn the park green.',
+          text: 'An old drone is fast asleep on the lamp by the fountain. Walk up to the lamp and press {interact} to wake it. It will follow you and help turn the park green.',
           label: '🛸 Show me where',
           action: { kind: 'focus', x: lamp.x, z: lamp.z },
           place: { kind: 'machine', name: 'the old lamp' },
@@ -375,7 +375,7 @@ export class Advisor {
     let bd = Infinity;
     for (const t of s.areas.tiles(PARK)) {
       const d = Math.abs(t.x - fx) + Math.abs(t.z - fz);
-      if (d >= bd || !s.restoration.checkPulse(t).ok) continue;
+      if (d >= bd || !s.restoration.isEligible(t) || !s.restoration.checkPulse(t).ok) continue;
       best = t;
       bd = d;
     }
