@@ -72,7 +72,7 @@ export function seasonUniforms(look: SeasonLookNow): Record<string, number[]> {
   const S = PALETTE.season;
   return {
     uSeasonA: [look.grass, look.autumn, look.bare, look.blossom],
-    uSeasonB: [look.frost, 0, 0, 0],
+    uSeasonB: [look.frost, 1, 0, 0],
     uSeasonGrass: look.grassColour,
     uSeasonAut0: linear(S.autumn[0]),
     uSeasonAut1: linear(S.autumn[1]),
@@ -92,6 +92,17 @@ export class SeasonShading {
   private mats = new Set<Uniforms>();
   private values: Record<string, number[]> = seasonUniforms(seasonLookAt('summer', 0.3));
   private key = '';
+  /** 1 on Medium and High, 0 on Low (the Steam Deck's): Low's frost takes one noise lookup instead of two */
+  private detail = 1;
+
+  /** The graphics tier (Game sets it with the others): Low draws the frost more cheaply. */
+  setTier(t: 'low' | 'medium' | 'high') {
+    const d = t === 'low' ? 0 : 1;
+    if (d === this.detail) return;
+    this.detail = d;
+    this.values = { ...this.values, uSeasonB: [this.values.uSeasonB[0], d, 0, 0] };
+    for (const m of this.mats) m.setParameter('uSeasonB', this.values.uSeasonB);
+  }
 
   register(m: Uniforms) {
     this.mats.add(m);
@@ -101,6 +112,7 @@ export class SeasonShading {
   /** The look now; returns whether anything changed. */
   set(look: SeasonLookNow): boolean {
     const values = seasonUniforms(look);
+    values.uSeasonB[1] = this.detail;
     const key = [...values.uSeasonA, ...values.uSeasonB, ...values.uSeasonGrass].map((v) => v.toFixed(4)).join(',');
     if (key === this.key) return false;
     this.key = key;
@@ -126,7 +138,7 @@ export const seasonShading = new SeasonShading();
  */
 export const SEASON_GLSL = /* glsl */ `
 uniform vec4 uSeasonA; // grass shift, autumn, bare, blossom
-uniform vec4 uSeasonB; // frost, unused
+uniform vec4 uSeasonB; // frost, detail (0 on Low), unused
 uniform vec3 uSeasonGrass;
 uniform vec3 uSeasonAut0;
 uniform vec3 uSeasonAut1;
@@ -167,7 +179,8 @@ vec3 sbSeasonColour(vec3 c, vec3 n, vec3 p) {
 	}
 	if (uSeasonB.x > 0.001) {
 		float up = smoothstep(0.35, 0.9, n.y);
-		float nz = 0.65 * sbsNoise(p.xz * 2.1) + 0.35 * sbsNoise(p.xz * 6.7 + 3.1);
+		float nz = sbsNoise(p.xz * 2.1);
+		if (uSeasonB.y > 0.5) nz = 0.65 * nz + 0.35 * sbsNoise(p.xz * 6.7 + 3.1);
 		float f = up * smoothstep(1.0 - uSeasonB.x, 1.0 - uSeasonB.x + 0.22, nz);
 		c = mix(c, uSeasonFrost * mix(0.7, 0.88, up), f * 0.7);
 	}

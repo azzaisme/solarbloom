@@ -261,19 +261,37 @@ try {
   await wait(3000);
   await greenPark(low);
   await wait(9000);
-  const ms = {};
-  for (const [season, weather] of [['summer', 'sunny'], ['winter', 'snow'], ['autumn', 'wind'], ['summer', 'sunny']]) {
+  await low.addStyleTag({ content: '#toasts, .toast { display: none !important; }' });
+  for (const [season, weather] of [['spring', 'rain'], ['summer', 'sunny'], ['autumn', 'wind'], ['winter', 'snow']]) {
     await goTo(low, season, 2, weather, 6000);
-    const t = await frameMs(low, 6000);
-    ms[season] = Math.min(ms[season] ?? Infinity, t);
-    await low.addStyleTag({ content: '#toasts, .toast { display: none !important; }' });
     await low.screenshot({ path: `${dir}/low-${season}.png` });
   }
-  console.log(`  frame time on Low (software rendering): ${Object.entries(ms).map(([k, v]) => `${k} ${v.toFixed(1)} ms`).join(', ')}`);
-  check(ms.winter < ms.summer * 1.35 && ms.autumn < ms.summer * 1.35, 'on Low, winter (with snow) and autumn draw within a third of summer\'s frame time');
+  // Software rendering drifts slower over a run, so each look is timed in turn, the order flipped every round, with
+  // the world held still while it is timed (only the drawing is measured: the season's own JS is a fraction of a ms).
+  const ms = {};
+  const timed = [['summer', 'sunny'], ['winter', 'snow'], ['autumn', 'wind']];
+  for (let round = 0; round < 4; round++)
+    for (const [season, weather] of round % 2 ? [...timed].reverse() : timed) {
+      await goTo(low, season, 2, weather, 4000);
+      await low.evaluate(() => window.solarbloom.pause.set('blur', true));
+      await wait(500);
+      (ms[season] ??= []).push(await frameMs(low, 5000));
+      await low.evaluate(() => window.solarbloom.pause.set('blur', false));
+    }
+  const median = (v) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)];
+  console.log(`  frame time on Low (software rendering), by round: ${Object.entries(ms).map(([k, v]) => `${k} ${v.map((x) => x.toFixed(0)).join('/')} ms`).join(', ')}`);
+  check(median(ms.winter) < median(ms.summer) * 1.15 && median(ms.autumn) < median(ms.summer) * 1.15, `on Low, winter (with snow) and autumn draw about as fast as summer (medians ${['summer', 'winter', 'autumn'].map((k) => median(ms[k]).toFixed(0)).join(', ')} ms)`);
+  const cpu = await low.evaluate(() => new Promise((done) => {
+    const g = window.solarbloom; const wv = g.weatherVisuals; const up = wv.update.bind(wv); const sl = g.updateSeasonLook.bind(g);
+    let t = 0, n = 0;
+    wv.update = (...a) => { const t0 = performance.now(); up(...a); t += performance.now() - t0; };
+    g.updateSeasonLook = () => { const t0 = performance.now(); sl(); t += performance.now() - t0; n++; };
+    setTimeout(() => { delete wv.update; delete g.updateSeasonLook; done(t / Math.max(1, n)); }, 5000);
+  }));
+  check(cpu < 2, `the season's look and the snow take ${cpu.toFixed(2)} ms of JS a frame`);
   await goTo(low, 'winter', 2, 'snow', 5000);
   const lowFlakes = await low.evaluate(() => window.solarbloom.weatherVisuals.flakesShown);
-  check(lowFlakes > 0 && lowFlakes < 300, `Low draws fewer snowflakes (${lowFlakes})`);
+  check(lowFlakes > 0 && lowFlakes <= 140, `Low draws a third of the snowflakes (${lowFlakes} of 420)`);
   check(lowErrors.length === 0, `no page errors on Low (${lowErrors.slice(0, 3).join(' | ')})`);
 } catch (e) {
   failures.push(String(e?.stack ?? e));

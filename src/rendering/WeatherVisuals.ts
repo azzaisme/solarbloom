@@ -36,6 +36,8 @@ export class WeatherVisuals {
   private t = 0;
   reducedMotion = false;
   lowVfx = false;
+  /** #830: the Low graphics setting (the Steam Deck's): a third of the snowflakes */
+  lowTier = false;
 
   constructor(app: pc.AppBase, parent: pc.Entity) {
     let seed = 99;
@@ -103,6 +105,8 @@ export class WeatherVisuals {
   private flakeMat: pc.StandardMaterial;
   private snowEntity: pc.Entity;
   private snowA = 0;
+  /** flakes drawn last frame (the rest are parked below the world and need no update) */
+  private lastShown = FLAKES;
 
   /** #830: how much snow is falling now, 0 … 1, eased (the e2e reads it). */
   get snow(): number {
@@ -111,7 +115,7 @@ export class WeatherVisuals {
 
   /** How many flakes are drawn now (the e2e and the Low setting's check read it). */
   get flakesShown(): number {
-    return this.snowEntity.enabled ? Math.floor(FLAKES * this.snowA * (this.lowVfx ? 0.45 : 1)) : 0;
+    return this.snowEntity.enabled ? Math.floor(FLAKES * this.snowA * (this.lowTier ? 0.33 : this.lowVfx ? 0.45 : 1)) : 0;
   }
 
   /** 0 clear … 1 storm grey, eased (DayNight and the sky read it). */
@@ -200,6 +204,8 @@ export class WeatherVisuals {
     this.snowEntity.enabled = show;
     if (!show) return;
     const count = this.flakesShown;
+    const shown = this.lastShown;
+    this.lastShown = count;
     const fall = 0.9 * dt;
     const drift = (0.12 + this.windNow * 0.5) * dt;
     const p = this.flakePos;
@@ -208,6 +214,7 @@ export class WeatherVisuals {
       const f = this.flakes[i];
       const j = i * 18;
       if (i >= count) {
+        if (i >= shown) break; // already parked out of sight
         for (let v = 0; v < 6; v++) {
           p[j + v * 3] = around.x;
           p[j + v * 3 + 1] = -50;
@@ -233,7 +240,13 @@ export class WeatherVisuals {
     }
     this.flakeMesh.setPositions(p);
     this.flakeMesh.update(pc.PRIMITIVE_TRIANGLES, false);
-    this.flakeMat.opacity = 0.9 * Math.min(1, this.snowA * 1.5);
-    this.flakeMat.update();
+    // draw only the flakes in use (Low draws a third)
+    this.flakeMesh.primitive[0].count = count * FLAKE_I.length;
+    // the material only changes while the snow fades in or out
+    const op = Math.round(0.9 * Math.min(1, this.snowA * 1.5) * 50) / 50;
+    if (op !== this.flakeMat.opacity) {
+      this.flakeMat.opacity = op;
+      this.flakeMat.update();
+    }
   }
 }

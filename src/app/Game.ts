@@ -1065,6 +1065,7 @@ export class Game {
     // Look 3: surface detail, the leaf pattern and foliage density follow Look 1's graphics tier.
     detailTextures.setTier(this.gfxTier);
     setLeafTier(this.gfxTier);
+    seasonShading.setTier(this.gfxTier); // #830: Low's frost is cheaper
     if (this.chunks) this.chunks.setDetail(this.deck ? DECK.detail : this.gfxTier);
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
@@ -3233,6 +3234,8 @@ export class Game {
   );
 
   private nextFallingLeaf = 0;
+  /** #830: the season shading every season material reads (the e2e and perf checks read and set it) */
+  readonly seasonShading = seasonShading;
   /** #830: the season's look on screen now (SeasonLook), worked out once a frame */
   private seasonNow: SeasonLookNow = seasonLookAt('spring', 0);
 
@@ -5665,6 +5668,7 @@ export class Game {
       const wv = this.weatherVisuals;
       wv.reducedMotion = this.settings.reducedMotion;
       wv.lowVfx = !!this.settings.lowVfx;
+      wv.lowTier = this.gfxTier === 'low'; // #830: fewer snowflakes on Low
       wv.update(wdt, this.weatherLook(), this.camera.target);
       this.updateSeasonLook();
       this.sky.wind = wv.wind;
