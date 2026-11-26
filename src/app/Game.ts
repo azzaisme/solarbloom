@@ -3821,9 +3821,16 @@ export class Game {
       dz = Math.cos(b.pose.facing);
       d = 1;
     }
-    const want = Math.min(reach, Math.max(1, d));
+    let want = Math.min(reach, Math.max(1, d));
     fx = b.pose.x + (dx / d) * want;
     fz = b.pose.z + (dz / d) * want;
+    // #782: the aim is measured to a point, reach to the square's middle: step back until that square is in reach,
+    // so a hologram at the edge of reach never lands on a square that then says "Too far"
+    while (want > 1 && !this.inReach(b.pose.roofId, Math.floor(fx), Math.floor(fz), 1)) {
+      want = Math.max(1, want - 0.25);
+      fx = b.pose.x + (dx / d) * want;
+      fz = b.pose.z + (dz / d) * want;
+    }
     const tile = this.sim.grid.get(b.pose.roofId, Math.floor(fx), Math.floor(fz));
     return tile ? { roofId: b.pose.roofId, fx, fz, tile } : undefined;
   }
