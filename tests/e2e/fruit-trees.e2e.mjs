@@ -68,14 +68,14 @@ try {
   /** Sets the season for the look of the world (the trees' leaves follow it) without passing any time. */
   const season = (name) => game((g, s, name) => s.seasons.jumpTo(name), name);
   /** Stands Bloombot just south of a tree, facing it, the camera behind and close in. */
-  const face = (m, zoom = 0) =>
-    game((g, s, { m, zoom }) => {
+  const face = (m, zoom = 0, turn = 25) =>
+    game((g, s, { m, zoom, turn }) => {
       g.bot.teleport('g', m.x + 0.5, m.z + 1.5);
       Object.assign(g.bot.pose, { roofId: 'g', x: m.x + 0.5, z: m.z + 1.5, facing: Math.PI });
       g.bot.walk = undefined;
-      g.camera.turnTo(25, true);
+      g.camera.turnTo(turn, true);
       g.zoomStep = zoom; // the bot camera's zoom step (0: the close view)
-    }, { m, zoom });
+    }, { m, zoom, turn });
 
   await startGame(page, `http://localhost:${PORT}`, { settings: { hints: false } });
   await page.addStyleTag({ content: CLEAN });
@@ -125,7 +125,7 @@ try {
   const tree = await plant(row.x0 + 7, row.z0);
   check(!!tree.id, `planted a fruit tree (${tree.why ?? tree.id})`);
   if (!tree.id) throw new Error('no fruit tree to test');
-  await face(tree);
+  await face(tree, 0, -35); // this end of the row looks toward the open garden, not the edge of the map
   let p = await promptFor(/Fruit Tree: still growing/);
   check(/Look at the Fruit Tree: still growing/.test(p), `just planted, the prompt says it's growing: "${p}"`);
   await snap('01-just-planted');
@@ -284,6 +284,7 @@ try {
   });
 
   // ── saves: the fruit's progress survives a reload, and it ripens on from there ──
+  await game((g, s, id) => s.farmExtras.pick(s.machine(id)), ripe.id); // picked again: start from bare
   await days(0.5);
   const saved = await game((g, s, id) => ({ st: s.farmExtras.st(id), phase: s.farmExtras.fruitPhase(s.machine(id)) }), ripe.id);
   await page.evaluate(() => window.solarbloom.saveNow?.());
