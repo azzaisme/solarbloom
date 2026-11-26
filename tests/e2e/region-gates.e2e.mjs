@@ -178,7 +178,7 @@ try {
     return out;
   });
   for (const p of list) {
-    await frame(p.x + 0.5, p.z + 0.5, 1.4, 30, 7000);
+    await frame(p.x + 0.5, p.z + 0.5, 1.9, 30, 7000);
     const dark = await run((r) => !window.solarbloom.sim.works.running(r), p.region);
     check(dark, `${p.region}: its ${p.look} is dark`);
     await shot(`g-${p.region}-dark`);
