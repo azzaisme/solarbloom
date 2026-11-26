@@ -12,6 +12,7 @@ import { RESEARCH } from '../data/research';
 import { CHARGE } from '../data/charge';
 import { TURN } from '../data/botMotion';
 import { Stride, Turner } from '../gameplay/Turner';
+import { REST, seatFeet } from '../data/rest';
 
 /**
  * Bloombot (#234): input, movement and the camera follow (G.2, G.3, G.11, G.12). The game owns what an action
@@ -41,6 +42,15 @@ interface Walk {
   facingFor?: number;
   arrive?: () => void;
   stuckFor: number;
+}
+
+/** Where bloombot sits (its feet; E23.2.3), facing out along `facing`; `step`: see BotController.seat. */
+export interface Seat {
+  x: number;
+  y: number;
+  z: number;
+  facing: number;
+  step?: number;
 }
 
 export class BotController {
@@ -91,8 +101,59 @@ export class BotController {
   padCapture?: (button: number) => boolean;
   /** any gamepad button press, by index (the rebinding screen listens here) */
   onButton?: (button: number) => void;
-  /** E23.2.3: sitting (a bench, a charger): drawn here instead of at its pose, and input doesn't move it */
-  seat?: { x: number; y: number; z: number; facing: number };
+  /**
+   * E23.2.3: sitting (a bench, a charger): drawn here instead of at its pose, and input doesn't move it. `step`: on a
+   * bench, how far in front of the seat it stands before it sits back onto it (REST.onto; set by sitOn).
+   */
+  seat?: Seat;
+  /** getting onto a seat: the feet as drawn, stepping up to just in front of it; `down` sits once there */
+  private seatWalk?: { x: number; z: number; down: () => void };
+  /** standing up off a seat: drawn coming forward off it as the stand-up clip rises */
+  private rising?: Seat;
+  /** after getting up (or stopping on the way to a seat): how far from its pose it is drawn, walked back to nothing */
+  private drawnOff?: { x: number; z: number };
+  /**
+   * Sits on `seat`. With a `step` (a bench) it first steps from where it stands to `step` in front of the seat,
+   * facing it, then `down()` starts the sitting pose, whose clip turns it round and lowers it back onto the seat
+   * (BloombotVisuals.seatShare). Without one (a charger) it is there at once.
+   */
+  sitOn(seat: Seat, down: () => void) {
+    this.walk = undefined;
+    const from = this.drawnAt();
+    this.rising = undefined;
+    this.drawnOff = undefined;
+    this.seat = seat;
+    const to = seatFeet(seat, seat.step ?? 0, 0);
+    if (!seat.step || Math.hypot(to.x - from.x, to.z - from.z) < 0.02) down();
+    else this.seatWalk = { x: from.x, z: from.z, down };
+  }
+
+  /**
+   * Stands up from the seat: off a bench it comes forward off the seat and down to the ground as the stand-up clip
+   * rises, then walks back to its pose; stopped on the way to the seat, it just walks back.
+   */
+  leaveSeat() {
+    const st = this.seat;
+    const walking = this.seatWalk;
+    this.seat = undefined;
+    this.seatWalk = undefined;
+    if (walking) this.walkBackFrom(walking.x, walking.z);
+    else if (st?.step) this.rising = st;
+  }
+
+  /** Bloombot's feet as drawn now (on the ground: its pose unless it is getting onto or off a seat). */
+  private drawnAt(): { x: number; z: number } {
+    const p = this.pose;
+    if (this.seatWalk) return { x: this.seatWalk.x, z: this.seatWalk.z };
+    if (this.rising) return seatFeet(this.rising, this.rising.step ?? 0, this.visuals.seatShare);
+    return { x: p.x + (this.drawnOff?.x ?? 0), z: p.z + (this.drawnOff?.z ?? 0) };
+  }
+
+  private walkBackFrom(x: number, z: number) {
+    const off = { x: x - this.pose.x, z: z - this.pose.z };
+    this.drawnOff = Math.hypot(off.x, off.z) > 0.01 ? off : undefined;
+  }
+
   /** E23.2.3: moving while seated stands bloombot up */
   onSeatMove?: () => void;
   /** true while input must not move bloombot (cinematics, open modal, paused) */
@@ -236,6 +297,19 @@ export class BotController {
     return true;
   }
 
+  /**
+   * Walk to the cell (cx, cz), then face the cell `face` and run `arrive` (getting to the front of a bench to sit on
+   * it). False when there is no way there.
+   */
+  goToCell(roofId: string, cx: number, cz: number, face: { x: number; z: number }, arrive: () => void): boolean {
+    if (roofId !== this.pose.roofId) return false;
+    const path = this.walker.path(roofId, this.pose.x, this.pose.z, (x, z) => x === cx && z === cz, { x: cx, z: cz });
+    if (!path) return false;
+    this.walk = { path, face, arrive, stuckFor: 0 };
+    this.following = true;
+    return true;
+  }
+
   get walking(): boolean {
     return !!this.walk;
   }
@@ -332,21 +406,52 @@ export class BotController {
       }
     }
     if (this.seat && mag > 0.3 && !this.frozen()) this.onSeatMove?.();
-    if (this.seat) {
-      const st = this.seat;
+    const st = this.seat ?? this.rising;
+    if (st) {
       this.walk = undefined;
       this.speed = 0;
       this.sprinting = false;
       this.stride.stop();
-      // #670: it turns round onto the seat rather than snapping to face out
-      this.turner.face(st.facing);
-      this.turner.update(dt);
-      this.visuals.setTurn(this.turner.left, this.turner.vel, 0);
       this.moveQuiet();
-      this.visuals.place(st.x, st.y, st.z, this.pose.facing);
-      this.visuals.setMotion(0, false);
+      let at: { x: number; z: number };
+      let pace = 0;
+      const w = this.seatWalk;
+      if (w) {
+        // stepping up to just in front of the seat, facing it
+        const to = seatFeet(st, st.step ?? 0, 0);
+        const dx = to.x - w.x;
+        const dz = to.z - w.z;
+        const d = Math.hypot(dx, dz);
+        const step = Math.min(d, REST.onto.walk * dt);
+        if (d > 0.1) this.turner.faceTo(w.x, w.z, to.x, to.z);
+        if (step > 0) {
+          w.x += (dx / d) * step;
+          w.z += (dz / d) * step;
+          pace = dt > 0 ? step / dt : 0;
+        }
+        at = { x: w.x, z: w.z };
+        if (d - step < 0.005) {
+          this.seatWalk = undefined;
+          w.down();
+        }
+      } else {
+        // #670: it turns round onto the seat rather than snapping to face out; it comes back onto the seat (and
+        // forward off it) only with the clip's hips (seatShare)
+        this.turner.face(st.facing);
+        const share = this.visuals.seatShare;
+        at = seatFeet(st, st.step ?? 0, share);
+        if (this.rising && share <= 0) {
+          // up: it walks back to where it stood
+          this.rising = undefined;
+          this.walkBackFrom(at.x, at.z);
+        }
+      }
+      this.turner.update(dt);
+      this.visuals.setTurn(this.turner.left, this.turner.vel, pace);
+      this.visuals.place(at.x, st.y, at.z, this.pose.facing);
+      this.visuals.setMotion(pace, false);
       this.visuals.update(dt);
-      this.follow(st.x, st.y, st.z);
+      this.follow(at.x, st.y, at.z);
       return;
     }
     const frozen = this.frozen();
@@ -482,14 +587,29 @@ export class BotController {
     const accel = dt > 0 ? (this.stride.pace - this.lastPace) / dt : 0;
     this.lastPace = this.stride.pace;
     this.stillFor = mag > 0.01 || this.walk || this.speed > 0.05 || back ? 0 : this.stillFor + dt;
-    this.visuals.setMove({ pace: this.speed, accel, walk: BOT.walk * wade, run: BOT.sprint * stride * wade, climb, wading, still: this.stillFor });
-    this.visuals.setTurn(t.left, t.vel, this.speed);
-    this.visuals.place(x, y, z, p.facing);
+    // after getting up off a seat: it walks back to its pose from where it stood up (input moves it as usual)
+    let shown = this.speed;
+    const drawn = this.drawnOff;
+    if (drawn) {
+      const d = Math.hypot(drawn.x, drawn.z);
+      const step = Math.min(d, REST.onto.walk * dt);
+      const idle = mag < 0.01 && !this.walk;
+      if (idle && d > 0.1) t.faceTo(p.x + drawn.x, p.z + drawn.z, p.x, p.z);
+      drawn.x -= (drawn.x / d) * step;
+      drawn.z -= (drawn.z / d) * step;
+      if (idle) shown = dt > 0 ? step / dt : 0;
+      if (d - step < 0.005) this.drawnOff = undefined;
+    }
+    const ox = this.drawnOff?.x ?? 0;
+    const oz = this.drawnOff?.z ?? 0;
+    this.visuals.setMove({ pace: shown, accel, walk: BOT.walk * wade, run: BOT.sprint * stride * wade, climb, wading, still: this.stillFor });
+    this.visuals.setTurn(t.left, t.vel, shown);
+    this.visuals.place(x + ox, y, z + oz, p.facing);
     this.visuals.setTired(flat);
     // #671: running blends the run clip in by speed (the visuals), so the loop here is just the walk
-    this.visuals.setMotion(this.speed, false);
+    this.visuals.setMotion(shown, false);
     this.visuals.update(dt);
-    this.follow(x, y, z);
+    this.follow(x + ox, y, z + oz);
   }
 
   private follow(x: number, y: number, z: number) {
@@ -506,6 +626,8 @@ export class BotController {
     Object.assign(this.pose, { roofId, x, z });
     this.walker.settle(this.pose);
     this.walk = undefined;
+    this.rising = undefined;
+    this.drawnOff = undefined;
     this.stride.stop();
     this.following = true;
   }
