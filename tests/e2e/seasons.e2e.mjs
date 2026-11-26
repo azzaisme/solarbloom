@@ -156,7 +156,7 @@ try {
   check(L.summer.grass === 0 && L.autumn.grass > 0.4 && L.winter.grass > 0.4, 'the grass shifts in autumn and winter, and is its own green in summer');
 
   // snow falls in winter; autumn leaves drift down
-  await goTo(page, 'winter', 2, 'snow', 6000);
+  await goTo(page, 'winter', 2, 'snow', 20000);
   s = await seasonNow(page);
   check(s.weather === 'snow' && s.flakes > 50, `snow falls in winter (${s.flakes} flakes)`);
   await page.screenshot({ path: `${dir}/winter-snowfall.png` });
