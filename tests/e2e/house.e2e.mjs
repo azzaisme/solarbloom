@@ -128,9 +128,10 @@ try {
   await wait(4000);
   s = await page.evaluate(() => {
     const g = window.solarbloom;
-    return { roof: g.bot.pose.roofId, indoors: g.camera.isIndoors, room: g.sim.grid.layer('house')?.width, shown: !!g.houseInside?.visible };
+    return { roof: g.bot.pose.roofId, indoors: g.camera.isIndoors, room: g.sim.grid.layer('house')?.width, shown: !!g.houseInside?.visible, dry: !!g.weatherLook().indoors };
   });
   check(s.roof === 'house' && s.indoors && s.room === 6 && s.shown, `inside: the Shed's room (${s.room} × ${s.room}), drawn, with the indoor camera`);
+  check(s.dry, 'no rain or snow falls inside');
   await page.screenshot({ path: `${dir}/inside-1-shed.png` });
 
   // put a decoration down inside (the gift pot, made), from the build menu's piece in hand
