@@ -66,7 +66,7 @@ export class TideSketchbook {
 
   private showPhoto(page: SavedSketch, back: () => void, next?: () => void) {
     this.panel.open(() => cardHead({ icon: icon('book', 'l'), title: 'Tide’s sketchbook', mood: page.title, dock: 'sheet' }) +
-      `<div class="oc-content">${sketchPage(page)}
+      `<div class="oc-content tide-photo-page">${sketchPage(page)}
        <p role="status">Saved to Backpack → Collection</p>
        <div class="oc-row">${next ? '<button class="pn-btn" data-act="another">Show another</button>' : ''}
        <button class="pn-btn primary" data-act="tide">Back to Tide</button></div></div>`, (action) => {
