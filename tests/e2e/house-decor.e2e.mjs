@@ -84,6 +84,13 @@ try {
   check(/Flower pot/.test(giftToast) && /Decorations/.test(giftToast) && /by the house/.test(giftToast), 'the toast says what it is and where to put it');
   check(!/[{}]/.test(giftToast) && giftToast.includes(bmKey.replace(/<[^>]*>/g, '').trim() || '§'), `…and names the player’s own key (${bmKey.replace(/<[^>]*>/g, '')}), no {placeholders}`);
   await page.screenshot({ path: `${dir}/gift-toast.png` });
+  // after it, once, the house's own hint: it can be mended now
+  const mend = await page
+    .waitForFunction(() => [...document.querySelectorAll('#toasts .toast')].some((t) => /can be mended now/i.test(t.innerText)), null, { timeout: LONG, polling: 300 })
+    .then(() => true)
+    .catch(() => false);
+  const mt = (await toasts(page)).split(' | ').find((x) => /can be mended now/i.test(x)) ?? '';
+  check(mend && !/[{}]/.test(mt) && /press [A-Z]/i.test(mt), `then the house's hint: "${mt}"`);
 
   s = await page.evaluate(() => {
     const g = window.solarbloom;

@@ -34,6 +34,8 @@ import { HouseInterior } from '../rendering/HouseInterior';
 
 /** #782: saved once the player has been told the house can be mended (presentation: `salvage.seen`). */
 const HOUSE_HINT = 'house:canMend';
+/** #782: seconds the house's hint waits after the gift's toast, so the two never crowd the toast queue together */
+const HOUSE_HINT_WAIT = 20;
 import { allPiles, seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
@@ -4203,10 +4205,13 @@ export class Game {
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Grow it in an empty plot on green ground.</small>`, 'gold', 4.5);
     // #782: the fountain's first step gives the first decoration (a save already past it, once)
     const gift = this.cozy.giveFirstDecor();
-    if (gift) this.decorGift(gift);
+    if (gift) {
+      this.decorGift(gift);
+      this.houseHintAfter = this.clock + HOUSE_HINT_WAIT; // the gift's toast first, the house's after it
+    }
     // #782: once, when the house can first be mended: where to go and what to press
     const hs = this.sim.house;
-    if (hs.open() && hs.level === 0 && !this.sim.state.salvage?.seen?.includes(HOUSE_HINT)) {
+    if (this.clock >= this.houseHintAfter && hs.open() && hs.level === 0 && !this.sim.state.salvage?.seen?.includes(HOUSE_HINT)) {
       this.sim.salvage.see(HOUSE_HINT);
       this.hud.toast(WORDS.house.canMend, 'gold', 7);
     }
@@ -4218,6 +4223,9 @@ export class Game {
       if (Math.hypot(bx - (pp.x + pp.size / 2), bz - (pp.z + pp.size / 2)) > 4.5 || this.bot.pose.roofId !== GROUND) this.hud.closePlotPicker();
     }
   }
+
+  /** #782: the house's hint waits until this clock time (the gift's toast has its moment first) */
+  private houseHintAfter = 0;
 
   /**
    * #782: the first decoration arrived. One toast says what it is and how to put it down; the build menu opens on it
