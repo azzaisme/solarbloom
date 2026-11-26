@@ -197,8 +197,8 @@ export const WORDS = {
     /** Go home (the Home's gift): Bloombot is on its doorstep */
     home: '🏡 Home again<small>Bloombot is on its own doorstep.</small>',
     /** a level reached: its name, what it brings, and that there is an inside to go into */
-    grew: (name: string, gives: string, decor: number, first = false) =>
-      `🏡 Bloombot’s house is a ${String(name).toLowerCase()} now<small>${first ? 'Walk up to the door and press {interact} to go inside. ' : ''}${gives}, and room inside for ${decor} decorations.</small>`,
+    grew: (name: string, gives: string, decor: number, first = false, goHome = false) =>
+      `🏡 Bloombot’s house is a ${String(name).toLowerCase()} now<small>${first ? 'Walk up to the door and press {interact} to go inside. ' : ''}${gives}, and room inside for ${decor} decorations.${goHome ? ' To go home from anywhere, press {menu} and choose Go home.' : ''}</small>`,
     /** what a level brings, as one line ("A bed, a storage chest, a radio by the window") */
     gives: (gives: readonly string[] | string) => [gives].flat().map((g, i) => (i ? g[0].toLowerCase() + g.slice(1) : g)).join(', '),
   },

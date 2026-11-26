@@ -4999,7 +4999,7 @@ export class Game {
         if (t) this.chunks.markTile(t);
       }
       const lv = HOUSE[level - 1];
-      if (lv) this.hud.toast(WORDS.house.grew(lv.name, WORDS.house.gives(lv.gives), lv.decor, level === 1), 'gold', 7);
+      if (lv) this.hud.toast(WORDS.house.grew(lv.name, WORDS.house.gives(lv.gives), lv.decor, level === 1, level === HOUSE_GROWTH.goHomeLevel), 'gold', 7);
       const [wx, wy, wz] = s.grid.tileWorld(s.grid.get(GROUND, sh.x + 1, sh.z + 1)!);
       this.vfx.ring(new pc.Vec3(wx, wy + 0.1, wz), PALETTE.gold, 3, 0.9);
       this.vfx.burst(new pc.Vec3(wx, wy + 1.4, wz), 20, { up: 3, speed: 1.6, size: 0.07, life: 1.3 });
