@@ -204,7 +204,7 @@ export class AreaSystem {
   ready(id: string): boolean {
     const f = this.fog(id);
     const r = regionById(id);
-    return !!r && (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id) && this.sim.keepers.step(r.keeper) === 'landmark';
+    return !!r && (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id) && this.sim.keepers.step(r.keeper) === 'landmark' && (this.sim.works?.running(id) ?? true); // #787: and its works run
   }
 
   /** Announces an area that has just become ready (once). */

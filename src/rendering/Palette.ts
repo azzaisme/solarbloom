@@ -646,6 +646,12 @@ export const PALETTE = {
     shelf: '#a7774c', desk: '#9a6a40', book: ['#c8574a', '#4f86a8', '#e1b54a', '#6f9a5a'], paper: '#f3ead2',
     apron: '#5e8f4a', apronEdge: '#4d7a3c', rail: '#e8dcc4',
   },
+  /**
+   * #787: a region's works (ChunkRenderer `works`): a cabinet, winch, power feed or dome motor (power), a drinking
+   * fountain, inlet or watering channel (water), clockwork or a lift's winding gear (drones). Dark: dull metal, an
+   * unlit lamp, a dry bed, rust and dust. Running: a warm lamp, clear water, bright brass, a mint status light.
+   */
+  works: { cabinet: '#5d6770', cabinetLit: '#6f8a8f', door: '#4c545b', lampOff: '#4a4640', lampOn: '#ffd56a', statusOff: '#7a3f36', statusOn: '#7cf7c8', cable: '#3f4246', rust: '#8a5a40', dust: '#a89f92', brass: '#c9a14a', steelClean: '#9aa4ad', bedDry: '#9a8a70', crack: '#6b5d4c', water: '#4cc3ea', waterHi: '#9fe3f5', moss: '#7fb35a', crystalOff: '#6e7a80', crystalOn: '#7cf7c8' },
   /** E23.7.2.2: the house's radio (the forecast) */
   radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
   /** #628: the little tools and things Bloombot holds while it works (BotProps) */

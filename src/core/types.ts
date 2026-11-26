@@ -443,6 +443,8 @@ export interface SalvageState {
   items?: string[];
   /** E21.9: lasting region rewards in effect (data/oldcity RewardId), in the order they were won */
   rewards?: string[];
+  /** #787: regions whose works run (power, water or drones reached them), by region id in map order; for good */
+  works?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
   /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
