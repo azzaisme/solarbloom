@@ -138,6 +138,8 @@ const BODIES = {
   tree: R(10.6, 13.5, 2.8, 7.5, 1, 'wood') + P('M12 2.8a5 5 0 0 0-4.6 3.1A4.6 4.6 0 0 0 4 10.4 4.6 4.6 0 0 0 8 15h8a4.6 4.6 0 0 0 4-4.6 4.6 4.6 0 0 0-3.4-4.4A5 5 0 0 0 12 2.8z', 'leaf') + HI('M8.6 7.6a3 3 0 0 1 2.6-2'),
   pine: R(10.8, 18, 2.4, 3.6, .8, 'wood') + P('M12 2 6.5 9.5h2.8L5 15h4l-4.5 4h15L15 15h4l-4.3-5.5h2.8z', 'teal'),
   fallLeaf: P(LEAF, 'orange') + L('M4 21c3-5 7-8.6 11.5-11', '#3a2a1a'),
+  // #830: winter
+  snowflake: P('M12 7.2l4.2 2.4v4.8L12 16.8l-4.2-2.4V9.6z', 'fog') + L('M12 2.5v19M3.8 7.2l16.4 9.6M3.8 16.8l16.4-9.6M9.4 4.2 12 6.6l2.6-2.4M9.4 19.8 12 17.4l2.6 2.4', '#11608f', 1.7),
   grain: L('M12 21V6', '#3a2a1a', 1.6) + E(9.6, 8.5, 1.6, 2.6, 'gold') + E(14.4, 8.5, 1.6, 2.6, 'gold') + E(9.6, 13, 1.6, 2.6, 'gold') + E(14.4, 13, 1.6, 2.6, 'gold') + E(12, 4.6, 1.5, 2.4, 'gold'),
   butterfly: P('M11.6 11.5C10 6.5 6.2 3.6 3.6 5s.6 6.8 8 6.5z', 'violet') + P('M12.4 11.5C14 6.5 17.8 3.6 20.4 5s-.6 6.8-8 6.5z', 'violet') + P('M11.5 12.5C7 13 4.6 16 6 18.4s4.8-.8 5.5-5.9z', 'pink') + P('M12.5 12.5c4.5.5 6.9 3.5 5.5 5.9s-4.8-.8-5.5-5.9z', 'pink') + L('M12 7v12', '#3a2a1a', 1.6),
   bird: P('M4 13c2-4.5 6-6.5 10.5-5.5L19 5l-1.6 4.4c1.2 1.4 1.6 3.2 1.2 5C17.6 18 13 20 8.6 18.6 6.2 17.8 4.6 15.8 4 13z', 'water') + C(15.2, 10.2, .9, 'dark') + P('M19.4 11.2 22 12l-2.6.8z', 'orange'),
@@ -299,7 +301,7 @@ export const ROLE_ICONS: Record<string, IconName> = {
 /** Every emoji the game's strings use, drawn as one of the icons above. */
 export const EMOJI_ICONS: Record<string, IconName> = {
   '⚡': 'energy', '💧': 'water', '🌿': 'biomass',
-  '✨': 'sparkle', '🌸': 'flower', '💮': 'whiteFlower', '🌻': 'sunflower', '🌱': 'sprout', '🌳': 'tree', '🌲': 'pine', '🍂': 'fallLeaf', '🌾': 'grain',
+  '✨': 'sparkle', '🌸': 'flower', '💮': 'whiteFlower', '🌻': 'sunflower', '🌱': 'sprout', '🌳': 'tree', '🌲': 'pine', '🍂': 'fallLeaf', '🌾': 'grain', '❄': 'snowflake',
   '☀': 'sun', '🌞': 'sun', '🔆': 'sun', '🌙': 'moon', '🌈': 'rainbow', '🌊': 'wave', '🌫': 'fog', '🌧': 'rain', '🌟': 'star', '💥': 'burst',
   '🦋': 'butterfly', '🐦': 'bird', '🐟': 'fish', '🐱': 'cat', '🐾': 'paw', '🤖': 'robot',
   '⛲': 'fountain', '📡': 'relay', '🛰': 'satellite', '🛸': 'drone', '🚀': 'rocket', '💠': 'crystal', '🏺': 'vase', '🏡': 'home', '🏢': 'building', '🏙': 'building', '🗼': 'building',

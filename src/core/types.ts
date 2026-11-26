@@ -621,6 +621,13 @@ export interface GameState {
   charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
+  /** #830: the seasons (optional: a save from before them starts a fresh spring on the day it first loads) */
+  seasons?: SeasonsState;
+}
+
+/** #830: the year began on this game day (spring's first day); the season is worked out from the game clock. */
+export interface SeasonsState {
+  startDay: number;
 }
 
 /**

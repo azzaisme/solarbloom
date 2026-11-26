@@ -80,7 +80,7 @@ const QUICK = [
   // #782: the first decoration, a gift at the fountain's first step
   'first-decor', 'house',
   // #787: the regions' works (power, water, drones) and the unlock-order walk
-  'region-works',
+  'region-works', 'seasons',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
