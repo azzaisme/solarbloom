@@ -98,6 +98,9 @@ describe('E21.9: bloombot first', () => {
     expect(sim.areas.fog('mastRow')).not.toBe('cleared');
     expect(sim.areas.ready('mastRow')).toBe(false); // the Pylon has not asked yet
     sim.state.salvage!.keepers.pylon = { step: 'landmark' };
+    // #787: and its works (the Signal Mast's junction box) must run: helpers never start them either
+    expect(sim.areas.ready('mastRow')).toBe(false);
+    sim.works.start('mastRow');
     expect(sim.areas.ready('mastRow')).toBe(true);
     sim.advance(30);
     expect(sim.areas.fog('mastRow')).not.toBe('cleared');
@@ -127,6 +130,7 @@ describe('E21.9: bloombot first', () => {
       sim.state.areas[region] = { fog: 'thinning', revealedAt: 0 };
       for (const t of sim.areas.tiles(region)) if (!t.blocked && !t.occupantId) { t.ground = 'restored'; t.bloom = 1; t.pollution = 0; sim.grid.touch(t); }
       sim.state.salvage!.keepers[r.keeper] = { step: 'landmark' };
+      sim.works.start(region); // #787: its works run (tests/region-works.test.ts builds them for real)
       sim.bot = { roofId: GROUND, x: r.landmark.x + 0.5, z: r.landmark.z - 0.5 };
       for (const [k, v] of Object.entries(KEEPERS.find((q) => q.id === r.keeper)!.landmark)) sim.inventory.addToStore(k as 'scrap', v!), sim.inventory.withdraw(k as 'scrap', v!);
       expect(sim.landmarks.interact(region), region).toBe('woke');

@@ -60,6 +60,8 @@ export function stampOldCity(t: TileData): TileData {
   if (p.kind === 'shed') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: 'shed' });
   // E25 (#626): a sealed vault (a squat strongroom with an iron door) and a stash (a lidded box)
   if (p.kind === 'vault') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `vault:${p.vault.id}` });
+  // #787: a region's works: a machine-sized piece on its own cell (machines are built round it)
+  if (p.kind === 'works') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `works:${p.works.region}` });
   if (p.kind === 'stash') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `stash:${p.stash.id}` });
   // E21.24: a lookout: a bench and a telescope on a terrace's edge
   if (p.kind === 'lookout') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `lookout:${p.id}` });

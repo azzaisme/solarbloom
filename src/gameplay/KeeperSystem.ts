@@ -539,8 +539,12 @@ export class KeeperSystem {
         const p = this.patch(id);
         return `Press {pulse} to turn ${this.region(id).patch.name.toLowerCase()} green for ${d.name}: ${p.restored} of ${p.total}.`;
       }
-      case 'landmark':
+      case 'landmark': {
+        // #787: a gated region's landmark waits on its works first: what is wrong, and what to build where
+        const w = this.sim.works?.def(d.region);
+        if (w && !this.sim.works.running(d.region)) return `${w.dark} ${w.how}`;
         return `Bring ${costText(this.wants(id) ?? {})} to the ${this.region(id).landmark.name} to wake it.`;
+      }
       default: {
         // E23.9.2: until it is a friend, what it loves (the backpack's names; things not found yet stay unnamed)
         if (this.isFriend(id) || !this.story(id)) return `${d.name} looks after ${this.region(id).name}.`;

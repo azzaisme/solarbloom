@@ -82,6 +82,15 @@ describe('area panel (City 14.2)', () => {
     restore(sim, id, 999);
     expect(areaPanelHtml(sim, id, lm.id)).not.toContain('data-wake'); // E21.9: not before its Keeper asks
     sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
+    // #787: the beach's landmark waits on its works: the checklist and the bar say so, and no wake button yet
+    html = areaPanelHtml(sim, id, lm.id);
+    expect(html).toContain(`⬜ ${sim.works.def(id)!.goal}`);
+    expect(html).toContain('Needs power');
+    expect(html).not.toContain('data-wake');
+    sim.works.start(id);
+    html = areaPanelHtml(sim, id, lm.id);
+    expect(html).toContain(`✅ ${sim.works.def(id)!.goal}`);
+    expect(html).toContain('Powered');
     expect(areaPanelHtml(sim, id, lm.id)).toContain(`data-wake="${lm.id}"`);
     expect(sim.areas.clear(id)).toBe(true);
     html = areaPanelHtml(sim, id, lm.id);
