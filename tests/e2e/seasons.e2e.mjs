@@ -90,6 +90,10 @@ async function goTo(page, season, day, weather, settle = 9000) {
     [season, day, weather],
   );
   await wait(settle);
+  // a slow software-rendered browser draws a frame or so a second, so the last weather's rain can still be easing
+  // out: wait for it to be gone before a dry or snowy picture (at a real frame rate it fades in a few seconds)
+  if (weather !== 'rain' && weather !== 'storm')
+    await page.waitForFunction(() => window.solarbloom.weatherVisuals.rainA < 0.02, null, { timeout: 600_000, polling: 1000 }).catch(() => {});
 }
 
 try {
