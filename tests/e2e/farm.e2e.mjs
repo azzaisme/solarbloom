@@ -321,7 +321,7 @@ try {
   }
   if (placed.orchard) {
     await face(placed.orchard[0].x, placed.orchard[0].z);
-    check(/Harvest the Fruit Tree/.test(await promptFor(/Harvest the Fruit Tree/)), `the fruit tree has fruit (${await prompt()})`);
+    check(/Pick the ripe fruit/.test(await promptFor(/Pick the ripe fruit/)), `the fruit tree has ripe fruit (${await prompt()})`);
     await snap('fruit-tree');
   }
   if (placed.mushroomLog) {

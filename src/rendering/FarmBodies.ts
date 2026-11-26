@@ -64,11 +64,17 @@ export function fishPondBody(b: pc.Entity) {
   for (const [x, z] of [[0.3, 0.22], [-0.28, -0.2]] as const) shape(b, 'cone', mat(PALETTE.stemLeaf), { pos: [x, 0.16, z], scale: [0.05, 0.26, 0.05] });
 }
 
-/** E23.5.4: a young fruit tree in a stone ring (its fruit is drawn live). */
+/**
+ * E23.5.4 (#785): the ground a fruit tree stands in: a ring of cream stones round a bed of dark mulch. The tree, its
+ * flowers and its fruit are drawn live (CropVisuals, TreeGen's orchard tree).
+ */
 export function orchardBody(b: pc.Entity) {
-  shape(b, 'torus', mat(PALETTE.stoneCream), { pos: [0, 0.04, 0], scale: [0.5, 0.12, 0.5] });
-  shape(b, 'cylinder', mat(PALETTE.trunk), { pos: [0, 0.4, 0], scale: [0.08, 0.8, 0.08], shadow: true });
-  for (const [x, y, z, s] of [[0, 0.95, 0, 0.62], [0.16, 0.82, 0.1, 0.4], [-0.15, 0.85, -0.08, 0.42]] as const) shape(b, 'sphere', mat(PALETTE.shrubLeaf[0]), { pos: [x, y, z], scale: s, shadow: true });
+  shape(b, 'cylinder', mat(PALETTE.orchard.mulch), { pos: [0, 0.015, 0], scale: [0.62, 0.03, 0.62] });
+  const stone = mat(PALETTE.stoneCream);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    shape(b, 'sphere', stone, { pos: [Math.cos(a) * 0.33, 0.035, Math.sin(a) * 0.33], rot: [0, i * 37, 0], scale: [0.11, 0.07, 0.09], shadow: true });
+  }
 }
 
 /** E23.5.4: a mossy log lying on the ground (its mushrooms are drawn live). */

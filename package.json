@@ -42,6 +42,7 @@
     "test:audio": "vite build && node tests/e2e/audio.e2e.mjs",
     "test:mouse": "vite build && node tests/e2e/mouse-hold.e2e.mjs",
     "test:old-drone": "vite build && node tests/e2e/old-drone.e2e.mjs",
+    "test:fruit-trees": "vite build && node tests/e2e/fruit-trees.e2e.mjs",
     "audio:bake": "python3 tools/audio/bake.py",
     "shots:look2": "vite build && node tests/e2e/look2-shots.mjs",
     "desktop": "vite build && electron . --windowed",

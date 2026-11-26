@@ -184,14 +184,19 @@ describe('E23.5.4.2: fish ponds', () => {
 });
 
 describe('E23.5.4.3: orchards', () => {
-  it('fruit every few game days after the first crop; pruning gives timber; an unpruned tree fruits less, never none', () => {
+  it('fruit once a game day; pruning gives timber; an unpruned tree fruits less, never none', () => {
     const sim = farm();
     const tree = build(sim, 'orchard', 12, 16);
-    run(sim, (ORCHARD.firstFruitDays - 0.1) * DAY_SECONDS);
+    run(sim, (ORCHARD.fruitDays - 0.05) * DAY_SECONDS);
     expect(sim.farmExtras.fruitReady(tree)).toBe(false);
-    run(sim, 0.2 * DAY_SECONDS);
+    run(sim, 0.1 * DAY_SECONDS);
     expect(sim.farmExtras.fruitReady(tree)).toBe(true);
     expect(sim.farmExtras.pick(tree)).toBe(ORCHARD.fruit);
+    // a full picking a day until it wants pruning (the fourth day's fruit grows on an overgrown tree)
+    for (let d = 1; d < ORCHARD.pruneDays - 1; d++) {
+      run(sim, ORCHARD.fruitDays * DAY_SECONDS + 60);
+      expect(sim.farmExtras.pick(tree), `day ${d + 1}`).toBe(ORCHARD.fruit);
+    }
     run(sim, (ORCHARD.fruitDays + 0.1) * DAY_SECONDS);
     expect(sim.farmExtras.overgrown(tree)).toBe(true);
     // this crop grew while overgrown: half

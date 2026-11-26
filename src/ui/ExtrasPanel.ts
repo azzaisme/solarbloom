@@ -4,6 +4,7 @@ import { MACHINES } from '../data/machines';
 import { isHome } from '../gameplay/FarmExtras';
 import type { Sim } from '../gameplay/Sim';
 import { cardHead } from './OldCityPanel';
+import { FRUIT_SAY } from './FruitWords';
 
 /** Short words for a habitat a home still lacks. */
 const LACKS: Record<Habitat, string> = {
@@ -39,10 +40,11 @@ export function extraHtml(sim: Sim, m: MachineData): string {
       return card(name, say);
     }
     case 'orchard': {
-      const ready = x.fruitReady(m);
+      // #785: how the fruit is coming along, in what the tree shows (see FruitWords)
+      const n = x.fruitYield(m);
       const over = x.overgrown(m);
-      const say = (st.age ?? 0) < 0.01 ? 'Just planted.' : ready ? 'Ripe fruit hangs from it.' : (st.crops ?? 0) === 0 ? 'Growing: it will fruit in a few days.' : 'Growing its next fruit.';
-      return card(name, `${say}${over ? ' It is getting overgrown.' : ''}`, row(`<button data-act="pick" ${ready ? '' : 'disabled'}>🍎 Pick the fruit</button><button data-act="prune" ${over ? '' : 'disabled'}>🪵 Prune it</button>`));
+      const say = `${FRUIT_SAY[x.fruitPhase(m)]}${over ? ' It’s getting shaggy and will fruit less until it’s pruned.' : ''}`;
+      return card(name, say, row(`<button data-act="pick" ${n ? '' : 'disabled'}>🍎 Pick the fruit${n ? ` · ${n}` : ''}</button><button data-act="prune" ${over ? '' : 'disabled'}>🪵 Prune it</button>`));
     }
     case 'mushroomLog': {
       const ready = (st.ready ?? 0) >= 1;

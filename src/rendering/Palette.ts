@@ -855,6 +855,21 @@ export const PALETTE = {
   lilyPad: leaf.mid,
   bloomPale: '#fff6c2',
   mist: '#d8f4ff',
+  /**
+   * #785: fruit trees. Unripe fruit (pale and deep green), each tree's ripe colour (a red apple, an orange apricot, a
+   * rosy plum: all far from the leaves, so a ripe tree shows from a distance), the blossom, the stalks, and the mulch
+   * ring round the trunk.
+   */
+  orchard: {
+    unripe: '#8fc24e',
+    unripeDark: '#5f8f34',
+    ripe: ['#e2433a', '#f28a2b', '#d23c66'] as string[],
+    ripeLight: '#ffd0a8',
+    blossom: ['#fdf1f4', '#f9cddb', '#e7a9bf'] as string[],
+    blossomHeart: '#f6d36b',
+    stalk: '#6b5a33',
+    mulch: '#6b4a32',
+  },
   /** Tide sketches: the pencil's graphite */
   sketchPencil: '#352f29',
 };

@@ -37,7 +37,7 @@ const QUICK = [
   'water-levels', 'shoreline', 'fullscreen', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'water-surface', 'water-seams', 'water-disturbance', 'water-life', 'decay',
   'pipe-visuals', 'pipe-visuals-west',
   // E23.5: the farm
-  'farm-items', 'farm-planters', 'farm-compost', 'farm-extras',
+  'farm-items', 'farm-planters', 'farm-compost', 'farm-extras', 'fruit-trees',
   // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
   'lucky-cat-rewards', 'cat-decor', 'cat-secrecy', 'picker-internals', 'cat-sight-cpu', 'cat-sight-schedule',
   // E23.10: the proof
