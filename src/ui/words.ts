@@ -184,6 +184,12 @@ export const WORDS = {
     tooFar: 'Too far: walk closer',
     needs: (what: string) => `Needs ${what}`,
   },
+  /** #782: decorating, from the fountain's first step */
+  decor: {
+    /** the first decoration, a gift: what it is, then how to put it down (the key named) */
+    gift: (icon: string, name: string) =>
+      `${icon} A gift for the house: ${name}<small>Press {buildMenu} and find it under Decorations, then set it down on green ground by the house. Put down as many as you like: they’re free.</small>`,
+  },
   toasts: {
     controlsReset: 'The controls changed in this update, so your own keys are back to the defaults.',
     saved: 'Saved',

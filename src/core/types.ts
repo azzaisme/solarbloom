@@ -442,6 +442,8 @@ export interface SalvageState {
   craft?: { id: string; n: number; left: number }[];
   /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
   decorMade?: string[];
+  /** #782: the decoration given when the fountain reached its first step (set once; absent before then) */
+  decorGift?: string;
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
   /** E23.6.4: what each supply crate holds, by machine id */

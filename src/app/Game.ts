@@ -129,7 +129,7 @@ import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
 import { Cozy } from '../gameplay/Cozy';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS, PLOT_WORK_TUNING } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS, PLOT_WORK_TUNING, type DecorOption } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
 import type { Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
@@ -4068,6 +4068,9 @@ export class Game {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Grow it in an empty plot on green ground.</small>`, 'gold', 4.5);
+    // #782: the fountain's first step gives the first decoration (a save already past it, once)
+    const gift = this.cozy.giveFirstDecor();
+    if (gift) this.decorGift(gift);
     for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
@@ -4075,6 +4078,24 @@ export class Game {
       const [bx, , bz] = this.bot.world();
       if (Math.hypot(bx - (pp.x + pp.size / 2), bz - (pp.z + pp.size / 2)) > 4.5 || this.bot.pose.roofId !== GROUND) this.hud.closePlotPicker();
     }
+  }
+
+  /**
+   * #782: the first decoration arrived. One toast says what it is and how to put it down; the build menu opens on it
+   * next time; and it goes on a free button of the build bar (when one is free and it isn't there already).
+   */
+  private decorGift(o: DecorOption) {
+    const tool: Tool = `decor:${o.id}`;
+    this.hud.toast(WORDS.decor.gift(o.icon, o.name), 'gold', 8);
+    this.hud.buildMenu.showNext(tool);
+    const slots = this.hud.buildBar.slots();
+    const free = slots.indexOf('');
+    if (!slots.includes(tool) && free >= 0) {
+      slots[free] = tool;
+      this.setSetting('hotbar', slots);
+      this.hud.buildBar.render(this.hud.currentTool);
+    }
+    this.save();
   }
 
   /** Look 6.10: the name of the stage a tile's transition is in (inspect panel). */

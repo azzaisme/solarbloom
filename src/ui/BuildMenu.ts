@@ -90,12 +90,20 @@ export class BuildMenu extends HudPart {
     return !!this.el && !this.el.hidden;
   }
 
-  /** Opens on the tab of the piece in hand, else the tab last used, else the first. */
+  /** #782: a piece to show the next time the menu opens (a gift just given), whatever is in hand. */
+  private next?: Tool;
+  showNext(tool: Tool) {
+    this.next = tool;
+  }
+
+  /** Opens on a piece just given (once), else the tab of the piece in hand, else the tab last used, else the first. */
   open(inHand?: Tool) {
     if (!this.el) return;
     this.items = buildItems(this.sim);
     const tabs = buildTabs(this.items);
-    const held = this.items.find((i) => i.tool === inHand);
+    const want = this.next && this.items.some((i) => i.tool === this.next) ? this.next : inHand;
+    this.next = undefined;
+    const held = this.items.find((i) => i.tool === want);
     this.current = held?.tab ?? (tabs.some((t) => t.id === this.current) ? this.current : (tabs[0]?.id ?? 'machines'));
     this.sel = held?.tool;
     this.picking = false;

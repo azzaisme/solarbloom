@@ -2,7 +2,7 @@ import { decoration, decorKey, decorKeyOf, decorOccupant, decorValue, type Decor
 import { GROUND } from '../core/GameState';
 import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, FIRST_DECOR, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
 import type { Sim } from './Sim';
 import type { DecorRecipe } from '../data/crafting';
 
@@ -264,6 +264,24 @@ export class Cozy {
   /** The tray's list: every decoration, unlocked or with what it waits for. */
   decorChoices(): DecorChoice[] {
     return DECOR_OPTIONS.map((o) => ({ option: o, unlocked: this.isDecorUnlocked(o), hint: this.isDecorUnlocked(o) ? undefined : this.decorHint(o) }));
+  }
+
+  /**
+   * #782: the first decoration, a gift once the fountain reaches its first step. A save already past that step gets
+   * it too, once. It comes made (free to place, as often as you like) and counts as announced, so its own toast is
+   * the only one. If bloombot has made every gift already, the step is still remembered and nothing is given.
+   * Returns the gift when one was given now.
+   */
+  giveFirstDecor(): DecorOption | undefined {
+    const sv = this.sim.state.salvage;
+    if (!sv || sv.decorGift || sv.tier < FIRST_DECOR.step) return undefined;
+    const id = FIRST_DECOR.gifts.find((g) => !!decorRecipe(this.sim, g) && !this.sim.crafting.decorMade(g));
+    sv.decorGift = id ?? FIRST_DECOR.gifts[0];
+    if (!id) return undefined;
+    this.sim.crafting.giveDecor(id);
+    const s = this.write();
+    if (!(s.decorUnlocked ??= []).includes(id)) s.decorUnlocked.push(id);
+    return DECOR_OPTION[id];
   }
 
   /** Unlocks every decoration whose milestone has been met, once each (saved). Returns the new ones. */
