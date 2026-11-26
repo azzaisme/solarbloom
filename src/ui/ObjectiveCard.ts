@@ -7,7 +7,7 @@ import { pinnedRequest as pinnedKeeper } from './BackpackModel';
 import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import type { ItemId, MaterialId } from '../core/types';
-import { oldCityHint } from './OldCityGuide';
+import { earlyPowerHint, oldCityHint } from './OldCityGuide';
 import { ITEMS, REGIONS, type RegionDef } from '../data/oldcity';
 
 /**
@@ -140,6 +140,8 @@ export function firstRubble(sim: Sim): RegionDef | undefined {
  */
 function nextStep(sim: Sim, advice: Suggestion | undefined): Pick<Objective, 'next' | 'topic' | 'where' | 'place' | 'count' | 'patchKeeperId'> {
   if (advice && URGENT.has(advice.topic)) return { next: advice.text, topic: advice.topic, where: advice.action, place: advice.place };
+  const power = earlyPowerHint(sim);
+  if (power) return { next: power, topic: 'grid' };
   const pinned = pinnedKeeper(sim); // E22.6: the request the player pinned, else the first open one
   if (pinned) {
     const step = sim.keepers.step(pinned.id);

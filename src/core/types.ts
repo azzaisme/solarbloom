@@ -148,6 +148,8 @@ export interface MachineData {
   z: number;
   size: number;
   starter?: boolean;
+  /** Resources paid for a machine whose recipe changed, used when it is dismantled. */
+  buildCost?: Partial<Record<ItemId, number>>;
   boostUntil: number; // solar bloom boost
   /** E23.12 (#528): a Lucky Cat's Golden Relay: this relay carries power further, for good. */
   golden?: boolean;

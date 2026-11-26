@@ -9,7 +9,7 @@ import type { Sim } from './Sim';
  */
 export class ChargerSystem {
   constructor(private sim: Sim) {
-    sim.power.register('charger', { consumer: { shed: 'charger', draw: (m) => (this.charging(m as MachineData) ? POWER.draw.charger : 0) } });
+    sim.power.register('charger', { consumer: { shed: 'charger', dims: true, draw: (m) => (this.charging(m as MachineData) ? POWER.draw.charger : 0) } });
   }
 
   /** Bloombot is full. */
@@ -48,7 +48,8 @@ export class ChargerSystem {
 
   tick(dt: number): void {
     const m = this.docked();
-    if (!m || this.full() || !this.sim.power.isPowered(m)) return;
-    this.sim.charge.recharge(POWER.charger.rate * dt * this.sim.knacks.charger, 'charger'); // #625 Quick charge (Pylon)
+    if (!m || this.full()) return;
+    const share = this.sim.power.servedShare(m);
+    if (share > 0) this.sim.charge.recharge(POWER.charger.rate * share * dt * this.sim.knacks.charger, 'charger'); // #625 Quick charge (Pylon)
   }
 }

@@ -239,7 +239,7 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    // E23.1.4 (#536): the market's glass, so Tally's Solar Panel can be made once Tally wakes (glass panes): two
+    // E23.1.4 (#536): the market's glass, used in glass panes and in the Market Hall delivery: two
     // just past the barricade, two along the market road, two by the Glassworks. They refill like every pile (E23.7.4).
     piles: [
       P('om-g1', 22, 5, 'glass', 'medium', 'salvage-glass'),
