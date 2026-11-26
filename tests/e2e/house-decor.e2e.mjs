@@ -120,30 +120,8 @@ try {
   const inHand = await page.evaluate(() => window.solarbloom.hud.currentTool);
   check(inHand === 'decor:pot', `"Build" puts it in Bloombot's hands (${inHand})`);
 
-  // Put it down by the house: stand south of a green cell beside the door, facing it, and press the key
-  const spots = await page.evaluate(() => {
-    const g = window.solarbloom;
-    const [dx, dz] = [4, 5]; // PARK_SET.shed.door
-    const out = [];
-    for (let r = 1; r <= 3 && out.length < 2; r++)
-      for (let z = dz - r; z <= dz + r && out.length < 2; z++)
-        for (let x = dx - r; x <= dx + r && out.length < 2; x++) {
-          const t = g.sim.grid.get('g', x, z);
-          const st = g.sim.grid.get('g', x, z + 1);
-          if (!t || !st || t.blocked || t.occupantId || st.blocked || st.occupantId || t.feature === 'water' || g.cozy.spotAt('g', x, z)) continue;
-          if (x === dx && z === dz) continue; // the door stays clear (checked below)
-          const bf = g.sim.bench?.front();
-          if (bf && bf.x === x && bf.z === z) continue; // so does the workbench's front (#783)
-          if (out.some(([a, b]) => Math.abs(a - x) + Math.abs(b - z) < 2)) continue;
-          t.ground = 'restored';
-          t.pollution = 0;
-          g.sim.grid.touch(t);
-          out.push([x, z]);
-        }
-    g.chunks.markAll();
-    return out;
-  });
-  check(spots.length === 2, `green ground by the house (${JSON.stringify(spots)})`);
+  // Put it down by the house: stand near the door, see where the pot's hologram aims (the game's own aim: the view's
+  // heading, within reach), make that ground green, and press the key
   const door = await page.evaluate(() => {
     const g = window.solarbloom;
     const t = g.sim.grid.get('g', 4, 5);
@@ -153,22 +131,35 @@ try {
   });
   check(/door of the house clear/.test(door), `the house's door stays clear ("${door}")`);
   const placeKey = await keyOf(page, 'pulse');
-  for (const [x, z] of spots) {
+  const spots = [];
+  for (const [sx, sz] of [[2.5, 7.5], [5.5, 7.5]]) {
     await page.evaluate(([x, z]) => {
       const g = window.solarbloom;
-      g.bot.teleport('g', x + 0.5, z + 1.5);
-      g.bot.turnTo(Math.PI); // turning to face −z, towards the cell (the view follows)
+      g.bot.teleport('g', x, z);
       g.bot.following = true;
       g.bot.lastInput = 'keys';
       g.pointer.inside = false;
       g.camera.recentre?.();
-    }, [x, z]);
+    }, [sx, sz]);
     await wait(2500);
+    const aim = await page.evaluate(() => {
+      const g = window.solarbloom;
+      const t = g.buildAim?.()?.p?.tile;
+      if (!t || t.blocked || t.occupantId) return null;
+      t.ground = 'restored';
+      t.pollution = 0;
+      g.sim.grid.touch(t);
+      g.chunks.markTile(t);
+      return [t.x, t.z];
+    });
+    if (!aim) continue;
+    await wait(1000);
     await press(page, placeKey);
-    await page.waitForFunction(([x, z]) => !!window.solarbloom.cozy.decorAt('g', x, z), [x, z], { timeout: 60_000, polling: 300 }).catch(() => {});
+    await page.waitForFunction(([x, z]) => !!window.solarbloom.cozy.decorAt('g', x, z), aim, { timeout: 60_000, polling: 300 }).catch(() => {});
+    spots.push(aim);
   }
   const placed = await page.evaluate((spots) => spots.map(([x, z]) => window.solarbloom.cozy.decorAt('g', x, z)?.kind ?? null), spots);
-  if (!placed.every((k) => k === 'pot'))
+  if (!placed.every((k) => k === 'pot') || spots.length < 2)
     console.log(
       '  why:',
       JSON.stringify(
@@ -178,7 +169,8 @@ try {
         }, spots),
       ),
     );
-  check(placed.every((k) => k === 'pot'), `two Flower pots stand by the house (${placed.join(', ')})`);
+  check(spots.every(([x, z]) => Math.max(Math.abs(x - 4), Math.abs(z - 5)) <= 4), `both aimed by the house (${JSON.stringify(spots)})`);
+  check(spots.length === 2 && placed.every((k) => k === 'pot'), `two Flower pots stand by the house (${placed.join(', ')})`);
   await page.evaluate(([x, z]) => {
     const g = window.solarbloom;
     g.selectTool('inspect');
