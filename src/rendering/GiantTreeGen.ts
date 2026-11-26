@@ -87,7 +87,7 @@ export function buildGiant(stage: GiantStage, variant: number, lod: Lod = 1): Gi
   const barkDark = stage === 0 ? mix(barkDeep, dust, 0.35) : barkDeep;
 
   // ── trunk: a tall, gently curving column on a wide root flare ──
-  const H = 6.0 * sh.h;
+  const H = 4.7 * sh.h;
   const segs = lod === 0 ? 5 : 9;
   const sides = lod === 0 ? 8 : 14;
   const lean: V = [(R() - 0.5) * 0.08, 1, (R() - 0.5) * 0.08];
@@ -122,23 +122,23 @@ export function buildGiant(stage: GiantStage, variant: number, lod: Lod = 1): Gi
   for (let i = 0; i < sh.limbs; i++) {
     const a = a0 + (i / sh.limbs) * Math.PI * 2 + (R() - 0.5) * 0.45;
     const from: V = [top[0] * (0.86 + 0.14 * (i % 2)), H * (0.86 + 0.14 * (i % 2)), top[2] * (0.86 + 0.14 * (i % 2))];
-    const dir = norm([Math.cos(a), 0.5 + R() * 0.22, Math.sin(a)]);
+    const dir = norm([Math.cos(a), 0.36 + R() * 0.2, Math.sin(a)]);
     limb(B, R, from, dir, 2.8 * sh.w * (0.92 + R() * 0.16), 0.2, 0, maxDepth, 0.06, o, tips, i);
   }
-  limb(B, R, top, norm([(R() - 0.5) * 0.3, 1, (R() - 0.5) * 0.3]), 2.0 * sh.h, 0.2, 0, maxDepth, 0.06, o, tips);
+  limb(B, R, top, norm([(R() - 0.5) * 0.3, 1, (R() - 0.5) * 0.3]), 1.4 * sh.h, 0.2, 0, maxDepth, 0.06, o, tips);
 
   // ── leaves ──
   if (stage > 0) {
     const pal = giantLeaves(stage, R());
-    const crown: Crown = { heart: [top[0], H + 2.1 * sh.h, top[2]], r: 4.8 * sh.w, pal };
+    const crown: Crown = { heart: [top[0], H + 1.6 * sh.h, top[2]], r: 5 * sh.w, pal };
     const [n0, k] = LEAVES[lod];
-    const n = lod === 0 ? 10 : Math.round(n0 * 1.5);
-    const L = 0.36 * k * (lod === 0 ? 1.1 : 1) * LEAF_SIZE[stage];
+    const n = lod === 0 ? 12 : Math.round(n0 * 1.6);
+    const L = 0.46 * k * (lod === 0 ? 1.1 : 1) * LEAF_SIZE[stage];
     const count = Math.max(1, Math.round(n * LEAF_SHARE[stage]));
     tips.forEach((t, i) => {
       // each spray's leaves come from their own stream: a younger stage shows the first of the same leaves
       const LR = rng(31337 + v * 4099 + i * 131);
-      spray(B, LR, t, count, 0.95, L, crown, 0.55, 0.62, 0.22);
+      spray(B, LR, t, count, 1.2, L, crown, 0.55, 0.62, 0.22);
     });
     if (stage === 4 && lod > 0) radiantGiant(B, R, crown);
   }
