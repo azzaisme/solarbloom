@@ -13,6 +13,7 @@
  * glass sun-petals on the Sun-Catcher Birch, and moss-jar lanterns on Radiant trees.
  */
 import { PALETTE } from './Palette';
+import { FRUITS, type FruitId } from '../data/fruit';
 
 export type Species = 'oak' | 'cherry' | 'birch' | 'pine' | 'willow';
 export const SPECIES: Species[] = ['oak', 'cherry', 'birch', 'pine', 'willow'];
@@ -1019,6 +1020,11 @@ export function buildShrub(variant: number, lod: Lod = 1, flowering?: boolean, b
  */
 export interface OrchardLook {
   variant: number;
+  /** the fruit it bears (data/fruit): its ripe colour and its shape */
+  kind: FruitId;
+  /** whether the branches flower in the bare part of the day (the daily cycle, and spring); in summer and autumn
+   *  (#830) the fruit just sets again after picking */
+  blossom: boolean;
   fruit?: number;
   overgrown: boolean;
   /** where in the ripening the branches flower, then the fruit sets (FarmExtras ORCHARD: bareUntil, blossomUntil) */
@@ -1094,7 +1100,9 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
   // flowers, then fruit, on the twig ends round the outside of the crown (their own random stream)
   if (look.fruit !== undefined && look.fruit >= look.bareUntil) {
     const RF = rng(variant * 389 + 17);
-    const ripeCol = hex(PALETTE.orchard.ripe[variant % PALETTE.orchard.ripe.length]);
+    const ripeCol = hex(PALETTE.orchard.ripe[look.kind]);
+    const blushCol = hex(PALETTE.orchard.blush[look.kind]);
+    const [sw, sh2] = FRUITS[look.kind].shape;
     const green = hex(PALETTE.orchard.unripe), greenDark = hex(PALETTE.orchard.unripeDark);
     const stalk = hex(PALETTE.orchard.stalk);
     const blossom = PALETTE.orchard.blossom.map(hex);
@@ -1103,7 +1111,7 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
     const set = (look.fruit - look.blossomUntil) / (1 - look.blossomUntil);
     const turning = hex(PALETTE.orchard.turning);
     // a tree in flower is covered in it (every twig end); fruit sets on fewer of them
-    const many = flowering ? order.length : Math.min(ORCHARD_FRUIT.count, order.length);
+    const many = flowering ? (look.blossom ? order.length : 0) : Math.min(ORCHARD_FRUIT.count, order.length);
     for (let j = 0; j < many; j++) {
       const t = order[j].t;
       const out = norm(sub(t.p, crown.heart));
@@ -1124,20 +1132,25 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
       const colour = smooth(0.45, 1, set);
       // green, warming to a golden blush, then the ripe colour
       const base = colour < 0.5 ? mix(green, turning, colour * 2) : mix(turning, ripeCol, colour * 2 - 1);
+      // a blush on the sunny side once it colours up (a peach's red cheek, a pear's russet)
+      const light = mix(mix(base, blushCol, 0.35 * colour), hex(PALETTE.orchard.ripeLight), 0.25 + 0.1 * colour);
       const c = add(add(t.p, mul(out, 0.04 * S + r * 0.6)), jit);
       // a short stalk up to the twig, then the fruit hanging from it
       const hang = add(c, [0, r * 0.9, 0]);
       tube(B, [add(hang, [0, 0.03 * S, 0]), hang], [0.006 * S, 0.004 * S], 3, [stalk, stalk], [0.8, 0.85], false);
-      puff(B, { c, r: [r, r * 0.95, r], base, light: mix(base, hex(PALETTE.orchard.ripeLight), 0.35 + 0.15 * colour), dark: mix(greenDark, scaleC(ripeCol, 0.62), colour), flex: 0.85, seed, detail: 1, lump: 0 });
+      // its own shape: an apple round, a pear tall with a narrow neck, a lemon long, a peach plump
+      puff(B, { c, r: [r * sw, r * sh2, r * sw], base, light, dark: mix(greenDark, scaleC(ripeCol, 0.62), colour), flex: 0.85, seed, detail: 1, lump: 0 });
+      if (look.kind === 'pear') puff(B, { c: add(c, [0, r * sh2 * 0.75, 0]), r: [r * 0.55, r * 0.6, r * 0.55], base, light, dark: base, flex: 0.85, seed: seed + 1, detail: 1, lump: 0 });
     }
   }
-  return proportion(B, sh, variant, 3).done();
+  // #830: its leaves follow the seasons (autumn colour, bare in winter); fruit and blossom never carry the flag
+  return markSeasonLeaves(proportion(B, sh, variant, 3).done());
 }
 
 const orchardCache = new Map<string, TreeGeo>();
 /** #785: a fruit tree's geometry, cached by look (the fruit in `steps` steps). */
 export function orchardGeo(look: OrchardLook, lod: Lod = 2): TreeGeo {
-  const key = `${look.variant % TREE_VARIANTS}|${look.fruit ?? 'young'}|${look.overgrown ? 1 : 0}|${lod}`;
+  const key = `${look.variant % TREE_VARIANTS}|${look.kind}|${look.blossom ? 1 : 0}|${look.fruit ?? 'young'}|${look.overgrown ? 1 : 0}|${lod}`;
   let g = orchardCache.get(key);
   if (!g) orchardCache.set(key, (g = buildOrchardTree(look, lod)));
   return g;

@@ -1,3 +1,4 @@
+import type { Season } from './seasons';
 // E23.5.4 (#389, #429–#434): beyond planters. Each thing to tend plugs into a system that already exists, and every
 // creature is wild and attracted, never kept. All data, no rules; starting values for tuning.
 
@@ -54,15 +55,15 @@ export const ORCHARD = {
   bareUntil: 1 / 12,
   blossomUntil: 4 / 12,
   nearlyRipe: 9 / 12,
-  /** #785 → #830: what a fruit tree does without seasons: every day, bare after picking, flowers, then fruit */
+  /** #785: what a fruit tree does without a season: every day, bare after picking, flowers, then fruit */
   daily: { ripens: true, blossom: true } as OrchardSeasonRule,
-  /** and by season, once seasons arrive (#830): flowers in spring, fruit in summer and autumn, resting in winter */
+  /** #830: by season: it flowers in spring, fruits every day in summer and autumn, and rests in winter */
   seasons: {
     spring: { ripens: false, blossom: true },
     summer: { ripens: true, blossom: false },
     autumn: { ripens: true, blossom: false },
     winter: { ripens: false, blossom: false },
-  } as Record<string, OrchardSeasonRule>,
+  } as Record<Season, OrchardSeasonRule>,
   /** how far a tree in its spring flowers shows (a look step: fully open) */
   seasonBloom: 3 / 12,
 };

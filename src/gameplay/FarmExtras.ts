@@ -194,12 +194,12 @@ export class FarmExtras {
   }
 
   /**
-   * #785 → #830: what the season lets a fruit tree do. Until seasons arrive (`sim.seasons`), every day is its own
-   * little year: bare after picking, then flowers, then fruit. With seasons, ORCHARD.seasons says (flowers in spring,
-   * fruit in summer and autumn, resting in winter).
+   * #785 → #830: what the season lets a fruit tree do (ORCHARD.seasons): it flowers in spring, fruits every day in
+   * summer and autumn, and rests in winter. Without a season (a Sim built without its seasons) every day is its own
+   * little year: bare after picking, then flowers, then fruit (ORCHARD.daily).
    */
   seasonRule(): OrchardSeasonRule {
-    const season = (this.sim as unknown as { seasons?: { season(): string } }).seasons?.season();
+    const season = this.sim.seasons?.season();
     return (season !== undefined && ORCHARD.seasons[season]) || ORCHARD.daily;
   }
 

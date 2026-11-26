@@ -31,7 +31,7 @@ import { CROPS } from '../data/crops';
 import { isExtra } from '../gameplay/FarmExtras';
 import { ORCHARD } from '../data/farmExtras';
 import { FRUITS, isFruit } from '../data/fruit';
-import { FRUIT_SHORT, fruitTip } from '../ui/FruitWords';
+import { fruitShort, fruitTip } from '../ui/FruitWords';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { allPiles, seaCell, setPieceAt } from '../core/OldCityLayout';
@@ -2649,7 +2649,7 @@ export class Game {
     else if (occ && isExtra(occ.type)) {
       const x = s.farmExtras;
       const verb = (occ.type === 'beehive' && (x.st(occ).ready ?? 0) >= 1) || (occ.type === 'mushroomLog' && (x.st(occ).ready ?? 0) >= 1) ? 'Harvest' : 'Look at';
-      const how = occ.type === 'orchard' ? `: ${FRUIT_SHORT[x.fruitPhase(occ)]}` : '';
+      const how = occ.type === 'orchard' ? `: ${fruitShort(x.fruitOf(occ), x.fruitPhase(occ), x.seasonRule())}` : '';
       out.push({ kind: 'machine', id: `extra:${occ.id}`, verb, name: `the ${MACHINES[occ.type].name}${how}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.extra(occ) });
     }
     // E27.2 (#680): a plant plot in front, ready to work: gather from it or prune it. While it grows back, Interact
@@ -3651,7 +3651,7 @@ export class Game {
       const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Your pulse gave it a boost: the next flowers to spread from here go a little further</span>' : '';
       // #785: a fruit tree's tip says how its fruit is coming along (and that ripe fruit is picked by holding Interact)
       const fx = this.sim.farmExtras;
-      const fruit = occ.type === 'orchard' ? fruitTip(fx.fruitOf(occ), fx.fruitPhase(occ), fx.overgrown(occ), this.sim.decay.cozyMode) : undefined;
+      const fruit = occ.type === 'orchard' ? fruitTip(fx.fruitOf(occ), fx.fruitPhase(occ), fx.overgrown(occ), this.sim.decay.cozyMode, fx.seasonRule()) : undefined;
       this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? `<span class="ok">Ready! Press ${this.press('Q')} to wake it.</span>` : (fruit ?? `Press ${this.press('Q')} to see what it does`)}${boost}`);
       return;
     }

@@ -120,7 +120,7 @@ export class CropVisuals {
     const st = x.st(m);
     if (m.type === 'beehive') return `${x.hiveSettled(m) ? 1 : 0}|${Math.min(1, Math.floor(st.ready ?? 0))}`;
     if (m.type === 'fishPond') return `${x.pondFilled(m) ? 1 : 0}`;
-    if (m.type === 'orchard') return `${x.fruitLook(m)}|${x.overgrown(m) ? 1 : 0}`;
+    if (m.type === 'orchard') return `${x.fruitOf(m)}|${x.fruitLook(m)}|${x.overgrown(m) ? 1 : 0}`;
     if (m.type === 'mushroomLog') return `${(st.ready ?? 0) >= 1 ? 2 : x.logGrowing(m) ? 1 : 0}`;
     if (m.type === 'wormBin') return `${(st.fed ?? 0) > 0 ? 1 : 0}`;
     return `${x.creatureOut(m) ? 1 : 0}`;
@@ -166,7 +166,7 @@ export class CropVisuals {
         // #785: the tree itself (TreeGen's orchard tree): flowers, then fruit swelling and colouring up, bare once
         // picked; shaggy when overgrown. A young tree is scaled up as it grows (every frame, see `update`)
         if (!this.device) return;
-        const geo = orchardGeo({ variant: orchardVariant(m), fruit: x.fruitShown(m), overgrown: x.overgrown(m), bareUntil: ORCHARD.bareUntil, blossomUntil: ORCHARD.blossomUntil });
+        const geo = orchardGeo({ variant: orchardVariant(m), kind: x.fruitOf(m), blossom: x.seasonRule().blossom, fruit: x.fruitShown(m), overgrown: x.overgrown(m), bareUntil: ORCHARD.bareUntil, blossomUntil: ORCHARD.blossomUntil });
         const tree = new pc.Entity('fruit-tree');
         tree.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, geo), foliageMaterial())], castShadows: true, receiveShadows: true });
         tree.setLocalEulerAngles(0, ((m.x * 31 + m.z * 17) % 360) - 180, 0);

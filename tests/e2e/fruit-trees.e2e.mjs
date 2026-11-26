@@ -1,9 +1,12 @@
 // #785: fruit trees you can actually harvest, in the real built game.
-//  - a row of fruit trees, one at each stage of the day: just planted (small, growing), picked clean, in flower,
-//    small green fruit, nearly ripe, ripe, and ripe but overgrown (shaggy): screenshots of each, and of the row;
-//  - a tree planted for real grows up, flowers and has ripe fruit within one game day (48 minutes of play);
-//  - at a ripe tree the prompt reads "Pick the ripe fruit" (a hold), the hover tip says it's ripe and to hold the
-//    player's own key; holding Interact puts the fruit in the backpack (with the picking act and a fly-up);
+//  - a tree planted for real grows up; in spring (a new garden starts in spring, #830) it flowers, and a game day
+//    into summer its fruit is ripe;
+//  - a row of fruit trees, one at each stage of a summer day: just planted, picked clean, small green fruit, nearly
+//    ripe, ripe, and ripe but overgrown (shaggy): screenshots of each, and of the row;
+//  - one tree through the year: in flower in spring, ripe in summer, ripe among autumn leaves, bare in winter;
+//  - each kind of fruit on its tree (apple, pear, peach, lemon: a tree bears its region's kind);
+//  - at a ripe tree the prompt reads "Pick the ripe apples" (a hold), the hover tip says they're ripe and to hold the
+//    player's own key; holding Interact puts that fruit in the backpack (with the picking act and a fly-up);
 //  - the picked tree shows no fruit until it regrows; the prompt says so;
 //  - the fruit's progress saves: a reload keeps it where it was, and it ripens on from there.
 // Screenshots go to SHOTS_DIR (default docs/review/785). Run after `vite build` (npm run test:fruit-trees).
@@ -53,14 +56,17 @@ try {
     await page.screenshot({ path: `${dir}/${name}.png`, clip, timeout: TIMEOUT });
     console.log(`  📷 ${dir}/${name}.png`);
   };
-  /** Passes game days for the farm systems only (the rest of the world is left alone). */
-  const days = (n) =>
-    game((g, s, n) => {
+  /** Passes game days for the farm systems only (the rest of the world is left alone), held in a season (#830). */
+  const days = (n, season = 'summer') =>
+    game((g, s, { n, season }) => {
       for (let i = 0, steps = Math.round((n * 2880) / 30); i < steps; i++) {
         s.state.time += 30;
+        if (season) s.seasons.jumpTo(season);
         s.farmExtras.tick(30);
       }
-    }, n);
+    }, { n, season });
+  /** Sets the season for the look of the world (the trees' leaves follow it) without passing any time. */
+  const season = (name) => game((g, s, name) => s.seasons.jumpTo(name), name);
   /** Stands Bloombot just south of a tree, facing it, the camera behind and close in. */
   const face = (m, zoom = 0) =>
     game((g, s, { m, zoom }) => {
@@ -114,7 +120,8 @@ try {
       return m ? { id: m.id, x: m.x, z: m.z } : { why: s.build.check('orchard', 'g', x, z).reason };
     }, { x, z });
 
-  // ── one tree planted for real: it grows up and fruits within a game day ──
+  // ── one tree planted for real, in spring: it grows up and flowers; a game day into summer its fruit is ripe ──
+  await season('spring');
   const tree = await plant(row.x0 + 7, row.z0);
   check(!!tree.id, `planted a fruit tree (${tree.why ?? tree.id})`);
   if (!tree.id) throw new Error('no fruit tree to test');
@@ -124,29 +131,29 @@ try {
   await snap('01-just-planted');
   const scale = () => game((g, s, id) => g.crops.trees.get(id)?.shown ?? 0, tree.id);
   const s0 = await scale();
-  await days(0.3);
+  await days(0.3, 'spring');
   await wait(2500);
   const s1 = await scale();
   check(s0 > 0 && s1 > s0 + 0.3, `it grows up on screen (drawn at ${s0.toFixed(2)}, then ${s1.toFixed(2)})`);
   const ph = await game((g, s, id) => s.farmExtras.fruitPhase(s.machine(id)), tree.id);
-  check(ph === 'blossom', `grown, it flowers (${ph})`);
+  check(ph === 'blossom', `grown in spring, it flowers (${ph})`);
   p = await promptFor(/in flower/);
   check(/Look at the Fruit Tree: in flower/.test(p), `the prompt: "${p}"`);
-  await snap('02-grown-in-flower');
-  await days(0.72);
-  const ripeAt = await game((g, s, id) => ({ ripe: s.farmExtras.fruitReady(s.machine(id)), age: s.farmExtras.st(id).age }), tree.id);
-  check(ripeAt.ripe && ripeAt.age <= 1.05, `ripe within a game day of planting (${ripeAt.age.toFixed(2)} days)`);
+  await snap('02-grown-in-flower-spring');
+  await days(1.02, 'summer');
+  const ripeAt = await game((g, s, id) => ({ ripe: s.farmExtras.fruitReady(s.machine(id)), kind: s.farmExtras.fruitOf(s.machine(id)) }), tree.id);
+  check(ripeAt.ripe, `a game day into summer its fruit is ripe (${ripeAt.kind})`);
 
   // ── the row: every stage of a day side by side ──
   const looks = [
     ['young', { age: 0.06, growing: 0.06 }],
     ['bare', { age: 2, growing: 0.02, crops: 2 }],
-    ['blossom', { age: 2, growing: 0.22, crops: 2 }],
     ['green', { age: 2, growing: 0.5, crops: 2 }],
     ['nearly', { age: 2, growing: 0.86, crops: 2 }],
     ['ripe', { age: 2, ready: 1, crops: 2 }],
     ['ripe overgrown', { age: 6, sincePrune: 5, ready: 1, crops: 5, overgrownCrop: true }],
   ];
+  await season('summer');
   const trees = [];
   for (const [i, [name, st]] of looks.entries()) {
     const t = await plant(row.x0 + i, row.z0);
@@ -161,7 +168,7 @@ try {
     trees.push({ ...t, name });
   }
   const phases = await game((g, s, ids) => ids.map((id) => s.farmExtras.fruitPhase(s.machine(id))), trees.map((t) => t.id));
-  check(phases.join(',') === 'young,bare,blossom,green,nearly,ripe,ripe', `each tree shows its stage (${phases.join(', ')})`);
+  check(phases.join(',') === 'young,bare,green,nearly,ripe,ripe', `each tree shows its stage of a summer day (${phases.join(', ')})`);
   await game((g, s, { x, z }) => {
     g.bot.teleport('g', x, z);
     Object.assign(g.bot.pose, { roofId: 'g', x, z, facing: Math.PI });
@@ -169,7 +176,7 @@ try {
     g.zoomStep = 1;
   }, { x: row.x0 + 3.5, z: row.z0 + 2.5 });
   await wait(4000);
-  await snap('03-a-day-of-fruit-row');
+  await snap('03-a-summer-day-of-fruit-row');
   for (const t of trees) {
     await face(t, 0);
     await wait(2500);
@@ -178,9 +185,11 @@ try {
 
   // ── a ripe tree: the prompt, the hover tip, then holding Interact picks it ──
   const ripe = trees.find((t) => t.name === 'ripe');
+  const kind = await game((g, s, id) => s.farmExtras.fruitOf(s.machine(id)), ripe.id);
+  const plural = { apple: 'apples', pear: 'pears', peach: 'peaches', lemon: 'lemons' }[kind];
   await face(ripe);
-  p = await promptFor(/Pick the ripe fruit/);
-  check(/Hold Pick the ripe fruit/.test(p) && !/\{/.test(p), `at a ripe tree the prompt asks for a hold: "${p}"`);
+  p = await promptFor(new RegExp(`Pick the ripe ${plural}`));
+  check(new RegExp(`Hold Pick the ripe ${plural}`).test(p) && !/\{/.test(p), `at a ripe tree the prompt asks for a hold: "${p}"`);
   // the hover tip: in Bloombot's play the pointer has a tip over the world in the map's overview (M), so open it
   // and rest the pointer on the tree
   await game((g) => g.toggleOverview());
@@ -192,16 +201,17 @@ try {
     await wait(500);
     tip = await page.evaluate(() => (getComputedStyle(document.getElementById('tip')).display !== 'none' ? document.getElementById('tip').innerText.replace(/\s+/g, ' ').trim() : ''));
   }
-  check(/Ripe fruit/.test(tip) && /Hold .+ to pick it/.test(tip) && !/\{/.test(tip), `the hover tip says it's ripe and to hold the key: "${tip}"`);
+  check(new RegExp(`Ripe ${plural} hang`).test(tip) && /Hold .+ to pick them/.test(tip) && !/\{/.test(tip), `the hover tip says they're ripe and to hold the key: "${tip}"`);
   await snap('05-ripe-hover-tip');
   await page.mouse.move(5, 5);
   await game((g) => g.toggleOverview());
   await wait(1500);
   await face(ripe);
-  await promptFor(/Pick the ripe fruit/);
+  await promptFor(new RegExp(`Pick the ripe ${plural}`));
   await snap('06-ripe-prompt');
   const key = (await page.evaluate(() => window.solarbloom.bindings.keys.interact[0])).replace(/^Key/, '');
-  const before = await game((g, s) => s.inventory.count('fruit') + s.inventory.stored('fruit'));
+  const count = () => game((g, s, kind) => s.inventory.count(kind) + s.inventory.stored(kind), kind);
+  const before = await count();
   await page.keyboard.down(key);
   await wait(450);
   const acting = await game((g) => g.bot.visuals.acting ?? '');
@@ -209,10 +219,10 @@ try {
   let after = before;
   for (let k = 0; k < 30 && after === before; k++) {
     await wait(300);
-    after = await game((g, s) => s.inventory.count('fruit') + s.inventory.stored('fruit'));
+    after = await count();
   }
   await page.keyboard.up(key);
-  check(after - before === 4, `holding Interact picks the fruit into the backpack (+${after - before} Fruit)`);
+  check(after - before === 4, `holding Interact picks the fruit into the backpack (+${after - before} ${plural})`);
   check(/harvest/.test(acting), `Bloombot acts out the picking while it lasts (${acting})`);
   await wait(600);
   await snap('08-picked-fly-up');
@@ -222,6 +232,56 @@ try {
   check(/Look at the Fruit Tree: picked clean/.test(p), `the prompt says so: "${p}"`);
   await wait(1500);
   await snap('09-picked-bare');
+
+  // ── one tree through the year: in flower in spring, ripe in summer and autumn, bare in winter ──
+  const year = trees.find((t) => t.name === 'ripe overgrown');
+  for (const [name, st] of [['spring', { age: 9, sincePrune: 1, crops: 6 }], ['summer', { age: 9, sincePrune: 1, crops: 6, ready: 1 }], ['autumn', { age: 9, sincePrune: 1, crops: 6, ready: 1 }], ['winter', { age: 9, sincePrune: 1, crops: 6 }]]) {
+    await season(name);
+    await game((g, s, { id, st }) => {
+      s.state.salvage.extras[id] = st;
+      s.bus.emit('farm.machine', { machineId: id });
+    }, { id: year.id, st });
+    await face(year, 0);
+    await wait(3000);
+    const got = await game((g, s, id) => ({ phase: s.farmExtras.fruitPhase(s.machine(id)), season: s.seasons.season() }), year.id);
+    const want = { spring: 'blossom', summer: 'ripe', autumn: 'ripe', winter: 'bare' }[name];
+    check(got.season === name && got.phase === want, `${name}: the tree shows ${want} (${got.phase})`);
+    p = await framePrompt();
+    await snap(`10-season-${name}`);
+    console.log(`  ${name} prompt: "${p}"`);
+  }
+  await season('summer');
+
+  // ── each kind of fruit on its tree. A tree bears its region's kind; here four trees side by side are shown as
+  //    each kind in turn (the look only: the unit tests check which region grows which) ──
+  const shown = trees.filter((t) => ['bare', 'green', 'nearly', 'ripe'].includes(t.name));
+  await game((g, s, ids) => {
+    const kinds = ['apple', 'pear', 'peach', 'lemon'];
+    const fx = s.farmExtras;
+    const own = fx.fruitOf.bind(fx);
+    fx.fruitOf = (m) => (ids.includes(m.id) ? kinds[ids.indexOf(m.id)] : own(m));
+    for (const id of ids) {
+      s.state.salvage.extras[id] = { age: 3, sincePrune: 1, crops: 3, ready: 1 };
+      g.crops.refresh(id);
+    }
+  }, shown.map((t) => t.id));
+  await game((g, s, { x, z }) => {
+    g.bot.teleport('g', x, z);
+    Object.assign(g.bot.pose, { roofId: 'g', x, z, facing: Math.PI });
+    g.camera.turnTo(20, true);
+    g.zoomStep = 0;
+  }, { x: shown[0].x + 2, z: row.z0 + 2.2 });
+  await wait(4000);
+  await snap('11-kinds-apple-pear-peach-lemon');
+  const prompts = [];
+  for (const t of shown) {
+    await face(t, 0);
+    prompts.push(await promptFor(/Pick the ripe/));
+  }
+  check(['apples', 'pears', 'peaches', 'lemons'].every((w, i) => prompts[i].includes(`Pick the ripe ${w}`)), `each kind names its fruit: ${prompts.join(' | ')}`);
+  await game((g, s) => {
+    delete s.farmExtras.fruitOf; // back to the prototype's (by region)
+  });
 
   // ── saves: the fruit's progress survives a reload, and it ripens on from there ──
   await days(0.5);
@@ -236,12 +296,12 @@ try {
   check(Math.abs((loaded.st.growing ?? 0) - (saved.st.growing ?? 0)) < 0.01 && loaded.phase === saved.phase, `after a reload the fruit is where it was (${saved.phase}, ${(saved.st.growing ?? 0).toFixed(2)} → ${loaded.phase}, ${(loaded.st.growing ?? 0).toFixed(2)})`);
   await face(ripe);
   await wait(2500);
-  await snap('10-after-reload');
+  await snap('12-after-reload');
   await days(0.52);
   const again = await game((g, s, id) => s.farmExtras.fruitReady(s.machine(id)), ripe.id);
   check(again, 'and it ripens again a day after it was picked');
   await wait(2500);
-  await snap('11-ripe-again');
+  await snap('13-ripe-again');
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 } catch (e) {
   console.error(e);

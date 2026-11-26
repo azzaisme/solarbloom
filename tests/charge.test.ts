@@ -4,6 +4,7 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { FARM_USES } from '../src/data/farm';
+import { FRUIT_IDS, isFruit, type FruitId } from '../src/data/fruit';
 import { CHARGE } from '../src/data/charge';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker } from '../src/gameplay/Walker';
@@ -87,8 +88,10 @@ describe('E23.2.1: bloombot\'s charge', () => {
     const food = FARM_USES.food.charge * CHARGE.max;
     const biomass = FARM_USES.biomass.charge * CHARGE.max;
     const honey = FARM_USES.honey.charge * CHARGE.max; // E23.5.4.1: beehives' strong snack, best first
-    const fruit = FARM_USES.fruit.charge * CHARGE.max; // #785: fruit trees' sweet snack, between honey and food
-    expect(CHARGE.edibles.map((e) => [e.id, e.charge])).toEqual([['honey', honey], ['fruit', fruit], ['food', food], ['biomass', biomass]]);
+    // #785: fruit from fruit trees, sweet snacks between honey and food, the sweetest first
+    const fruits = CHARGE.edibles.filter((e) => isFruit(e.id)).map((e) => [e.id, FARM_USES[e.id as FruitId].charge * CHARGE.max]);
+    expect(fruits.length).toBe(FRUIT_IDS.length);
+    expect(CHARGE.edibles.map((e) => [e.id, e.charge])).toEqual([['honey', honey], ...fruits, ['food', food], ['biomass', biomass]]);
     // food first, from the backpack
     pack.food = 1;
     pack.biomass = 3;

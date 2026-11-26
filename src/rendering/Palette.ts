@@ -890,7 +890,10 @@ export const PALETTE = {
     unripeDark: '#5f8f34',
     /** half way: the green warms to a golden blush before the ripe colour comes in (never a muddy brown) */
     turning: '#e6c443',
-    ripe: ['#e2433a', '#f28a2b', '#d23c66'] as string[],
+    /** each fruit's ripe colour (data/fruit), all far from the leaves */
+    ripe: { apple: '#e2433a', pear: '#d6b33a', peach: '#f2814a', lemon: '#f7dd2e' } as Record<string, string>,
+    /** a ripe pear's russet blush and a peach's red cheek, on the sunny side */
+    blush: { apple: '#c9302f', pear: '#c98a3a', peach: '#e0513f', lemon: '#f2c21e' } as Record<string, string>,
     ripeLight: '#ffd0a8',
     blossom: ['#fdf1f4', '#f9cddb', '#e7a9bf'] as string[],
     blossomHeart: '#f6d36b',
