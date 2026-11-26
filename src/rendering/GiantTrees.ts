@@ -13,7 +13,7 @@ import { GIANT, TREE_GROWTH, ageStage, giantCells, giantsWithin, treeWorldOf } f
 /** A planted giant's size by its growth stage (sapling … grown): it grows from a young tree, unlike a world giant. */
 export const PLANTED_SCALE = [0.22, 0.45, 0.75, 1] as const;
 /** A giant this small (canopy underside below this, world units) is a tree the camera goes over, like any other. */
-const CEILING_FROM = 3.5;
+const CEILING_FROM = 1.9;
 /** Past its leaves' reach, the ceiling rises this steeply (so it has no edge to pop over). */
 const CEILING_SLOPE = 1.2;
 /** Giants drawn within this distance of the view's focus; full detail within `NEAR`. */

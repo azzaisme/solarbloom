@@ -187,9 +187,9 @@ describe('the shape of a giant tree', () => {
   it('has a canopy well above the follow camera, a big reach and a budget', () => {
     for (let v = 0; v < 6; v++) {
       const b = giantBounds(v);
-      // the chase camera sits about 2.2 up (pivot 1.05): the leaves start clear of it but not towering
-      expect(b.underside, `variant ${v}`).toBeGreaterThan(3);
-      expect(b.top).toBeLessThan(11);
+      // the chase camera sits about 2.2 up (pivot 1.05): it dips under leaves this low, so they only need to clear its pivot
+      expect(b.underside, `variant ${v}`).toBeGreaterThan(2);
+      expect(b.top).toBeLessThan(7.5);
       expect(b.reach).toBeGreaterThan(4.5);
       expect(b.reach).toBeLessThan(7.5);
       expect(buildGiant(3, v, 1).tris).toBeLessThan(12_000);

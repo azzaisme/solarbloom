@@ -142,7 +142,7 @@ export function buildGiant(stage: GiantStage, variant: number, lod: Lod = 1): Gi
     });
     if (stage === 4 && lod > 0) radiantGiant(B, R, crown);
   }
-  const geo = B.done() as GiantGeo;
+  const geo = squash(B.done() as GiantGeo, TALL);
   geo.bounds = measure(geo);
   return geo;
 }
@@ -172,6 +172,22 @@ function radiantGiant(B: Buf, R: () => number, cr: Crown) {
   }
 }
 const barkOf = () => hex(PALETTE.wood.deep);
+
+/** The whole giant is drawn at this share of its built height (the owner found the full height too tall). */
+const TALL = 2 / 3;
+
+/** Squash a tree vertically by `k`, keeping normals true to the new shape. */
+function squash<T extends TreeGeo>(g: T, k: number): T {
+  for (let i = 1; i < g.pos.length; i += 4) g.pos[i] *= k;
+  for (let i = 0; i < g.nrm.length; i += 3) {
+    const x = g.nrm[i], y = g.nrm[i + 1] / k, z = g.nrm[i + 2];
+    const l = Math.hypot(x, y, z) || 1;
+    g.nrm[i] = x / l; g.nrm[i + 1] = y / l; g.nrm[i + 2] = z / l;
+  }
+  g.height *= k;
+  for (const a of g.attachments ?? []) (a.at as number[])[1] *= k;
+  return g;
+}
 
 /** Leaf extent: the lowest leaf, the top, and the reach (from the leaf flag in each vertex's flex). */
 function measure(g: TreeGeo): GiantBounds {
