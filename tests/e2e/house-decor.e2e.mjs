@@ -133,30 +133,31 @@ try {
   const placeKey = await keyOf(page, 'pulse');
   const spots = [];
   for (const [sx, sz] of [[2.5, 7.5], [5.5, 7.5]]) {
+    // the ground all round the spot green, so wherever the hologram settles is good ground
     await page.evaluate(([x, z]) => {
       const g = window.solarbloom;
+      for (let j = -4; j <= 4; j++)
+        for (let i = -4; i <= 4; i++) {
+          const t = g.sim.grid.get('g', Math.floor(x) + i, Math.floor(z) + j);
+          if (!t || t.blocked || t.occupantId || t.feature === 'water') continue;
+          t.ground = 'restored';
+          t.pollution = 0;
+          g.sim.grid.touch(t);
+          g.chunks.markTile(t);
+        }
       g.bot.teleport('g', x, z);
       g.bot.following = true;
       g.bot.lastInput = 'keys';
       g.pointer.inside = false;
       g.camera.recentre?.();
     }, [sx, sz]);
-    await wait(2500);
-    const aim = await page.evaluate(() => {
-      const g = window.solarbloom;
-      const t = g.buildAim?.()?.p?.tile;
-      if (!t || t.blocked || t.occupantId) return null;
-      t.ground = 'restored';
-      t.pollution = 0;
-      g.sim.grid.touch(t);
-      g.chunks.markTile(t);
-      return [t.x, t.z];
-    });
-    if (!aim) continue;
-    await wait(1000);
+    await wait(4000);
+    const before = await page.evaluate(() => window.solarbloom.cozy.decorations().map((d) => d.key));
     await press(page, placeKey);
-    await page.waitForFunction(([x, z]) => !!window.solarbloom.cozy.decorAt('g', x, z), aim, { timeout: 60_000, polling: 300 }).catch(() => {});
-    spots.push(aim);
+    await page.waitForFunction((n) => window.solarbloom.cozy.decorCount() > n, before.length, { timeout: 60_000, polling: 300 }).catch(() => {});
+    const added = await page.evaluate((before) => window.solarbloom.cozy.decorations().filter((d) => !before.includes(d.key)).map((d) => [d.x, d.z])[0] ?? null, before);
+    if (added) spots.push(added);
+    else console.log('  no pot at', sx, sz, await page.evaluate(() => document.querySelector('.fail, #fail, .tip')?.textContent ?? ''));
   }
   const placed = await page.evaluate((spots) => spots.map(([x, z]) => window.solarbloom.cozy.decorAt('g', x, z)?.kind ?? null), spots);
   if (!placed.every((k) => k === 'pot') || spots.length < 2)
