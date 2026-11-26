@@ -392,4 +392,19 @@ export const TUNING = {
     knock: { share: 0.15, max: 3, gap: 0.4 },
     seedBloom: 2, // Seed Mix: restored tiles start at this bloom
   },
+
+  /**
+   * #787: a region's works (data/works). A power works is a grid load of this many watts (a Solar Panel gives 4 in full
+   * sun, 3.2 under cloud; data/power; ×1.5 where its region is sunny: the Terraces and Observatory Hill,
+   * core/RegionStrengths): it runs once the power reaching it covers the load. Ramped with the map, in panels at the
+   * piece (sun / cloud): Mast Row 1 / 1, Saltwind 2 / 2, Cistern 2 / 3, the Terraces 3 / 4, the Observatory 5 / 6.
+   * Water: a Water Condenser within `condenserReach` tiles of the piece, or a pipe carrying water within `pipeReach`.
+   * Drones: a hub whose reach covers it. The works are checked every `checkSeconds`.
+   */
+  works: {
+    power: { mastRow: 2, saltwind: 6, cistern: 8, terraces: 18, observatory: 28 } as Record<string, number>,
+    condenserReach: 4,
+    pipeReach: 1,
+    checkSeconds: 0.5,
+  },
 } as const;

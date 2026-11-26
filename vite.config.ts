@@ -77,6 +77,8 @@ const QUICK = [
   // P7-E29 (#715): tree placement by zone, and the tree shapes' budgets and silhouettes
   'tree-placement',
   'p7-terrain', 'tile-markers',
+  // #787: the regions' works (power, water, drones) and the unlock-order walk
+  'region-works',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

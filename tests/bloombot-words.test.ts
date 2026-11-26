@@ -8,7 +8,7 @@ import { FIRST_STEPS, oldCityHint } from '../src/ui/OldCityGuide';
  * E20.2 (#285): the game speaks bloombot. Player-facing text never asks to tap or click a tile: bloombot walks up
  * and presses a key (or a pad button). Mouse words on HUD buttons and dev-only tools are not player instructions.
  */
-const FILES = ['src/ui/Hud.ts', 'src/ui/AreaPanel.ts', 'src/gameplay/Advisor.ts', 'src/gameplay/ProgressionSystem.ts', 'src/gameplay/Milestones.ts', 'src/app/Game.ts', 'src/ui/OldCityGuide.ts', 'src/ui/OldCityPanel.ts', 'src/app/OldCity.ts', 'src/data/oldcity.ts', 'src/gameplay/KeeperSystem.ts', 'src/gameplay/LandmarkSystem.ts', 'src/gameplay/GateSystem.ts', 'src/gameplay/SalvageSystem.ts'];
+const FILES = ['src/ui/Hud.ts', 'src/ui/AreaPanel.ts', 'src/gameplay/Advisor.ts', 'src/gameplay/ProgressionSystem.ts', 'src/gameplay/Milestones.ts', 'src/app/Game.ts', 'src/ui/OldCityGuide.ts', 'src/ui/OldCityPanel.ts', 'src/app/OldCity.ts', 'src/data/oldcity.ts', 'src/gameplay/KeeperSystem.ts', 'src/gameplay/LandmarkSystem.ts', 'src/gameplay/GateSystem.ts', 'src/gameplay/SalvageSystem.ts', 'src/data/works.ts', 'src/gameplay/RegionWorks.ts', 'src/ui/RegionProgress.ts'];
 /** E21.12: the first fifteen minutes never speak of rates or upgrades either. */
 const OLD_CITY_WORD = /\b(tap|taps|click|clicks|rate|rates|upgrade|upgrades|per second|\/s)\b/i;
 const WORD = /\b(tap|taps|tapped|tapping|click|clicks|clicked|clicking)\b/i;

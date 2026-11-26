@@ -59,6 +59,11 @@ describe('Phase 5 E12: no specialty stall', () => {
     // E21.9: and once its Keeper asks for the landmark (no material or specialty stall on top)
     expect(sim.areas.ready(id)).toBe(false);
     sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
+    // #787: a gated region's landmark also waits on its works (power, water or drones) until they run
+    if (sim.works.gated(id)) {
+      expect(sim.areas.ready(id)).toBe(false);
+      sim.works.start(id);
+    }
     expect(sim.areas.ready(id)).toBe(true);
     void GROUND;
   });
