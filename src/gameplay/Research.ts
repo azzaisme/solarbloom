@@ -12,8 +12,8 @@ interface PowerLike {
   isPowered(m: { id: string; type: string; roofId: string; x: number; z: number; size: number }): boolean;
 }
 
-/** The research station stands in the house; to the grid it is a small consumer there. */
-export const STATION = { id: 'research-station', type: 'researchStation', roofId: GROUND, x: PARK_SET.shed.x, z: PARK_SET.shed.z, size: PARK_SET.shed.size };
+/** The research station is the workbench's Research tab (#783: outside beside the house); to the grid, a small consumer there. */
+export const STATION = { id: 'research-station', type: 'researchStation', roofId: GROUND, x: PARK_SET.bench.x, z: PARK_SET.bench.z, size: 1 };
 
 /** A find's key in the save. */
 export function findKey(f: Find): string {
@@ -64,7 +64,7 @@ export class Research {
     return this.sv?.research?.levels[id] ?? 0;
   }
 
-  /** Stations in the house: one, two once researched. */
+  /** Stations at the workbench: one, two once researched. */
   stations(): number {
     return Math.min(RESEARCH.maxStations, RESEARCH.stations + PROJECTS.filter((p) => 'station' in p.gives && this.done(p.id)).length);
   }

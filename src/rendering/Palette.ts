@@ -639,6 +639,8 @@ export const PALETTE = {
   works: { cabinet: '#5d6770', cabinetLit: '#6f8a8f', door: '#4c545b', lampOff: '#4a4640', lampOn: '#ffd56a', statusOff: '#7a3f36', statusOn: '#7cf7c8', cable: '#3f4246', rust: '#8a5a40', dust: '#a89f92', brass: '#c9a14a', steelClean: '#9aa4ad', bedDry: '#9a8a70', crack: '#6b5d4c', water: '#4cc3ea', waterHi: '#9fe3f5', moss: '#7fb35a', crystalOff: '#6e7a80', crystalOn: '#7cf7c8' },
   /** E23.7.2.2: the house's radio (the forecast) */
   radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
+  /** #783: the workbench beside the house, drawn by hand when its model isn't loaded (as the model: a warm top, cream legs) */
+  workbench: { top: '#b4703f', edge: '#8e5530', leg: '#e2d6bc', foot: '#6b4a2c', rack: '#9a6238', iron: '#4b4741', handle: '#c9a14a' },
   /** #628: the little tools and things Bloombot holds while it works (BotProps) */
   botProps: { metal: '#8d949b', metalDark: '#5d646b', wood: '#9a6b3f', cloth: '#b89c72', basket: '#c99a55', can: '#5fa8a0', brass: '#c9a14a', paper: '#f3ead2', stem: '#5c9a4c', petal: '#f39ab4', core: '#ffd25a', shell: '#f2c6b0', fruit: '#e0573f', glow: '#94ff6e' },
   /** #627: Sun soak's solar panel on Bloombot's pack: dark blue glass */

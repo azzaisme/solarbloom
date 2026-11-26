@@ -22,7 +22,7 @@ const PAD = driver + '\ninstallVirtualPad(); window.padDriver = padDriver; windo
 const port = Number(process.env.PORT ?? 4241);
 const server = process.env.BASE_URL ? undefined : await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
 const base = process.env.BASE_URL ?? `http://localhost:${port}`;
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const innerHeightThird = (size) => Math.round(size.frame[1] / 4); // "about a third": at least a quarter of the height
 const check = (ok, what) => {
@@ -264,11 +264,11 @@ try {
     // ── crafting by hand: 12 Wire at the table (Make 5, Make 5, Make 1, Make 1) ──
     await page.evaluate(() => {
       const g = window.solarbloom;
-      g.bot.teleport('g', 3.5, 5.5);
-      g.bot.pose.facing = Math.PI;
+      g.bot.teleport('g', 6.5, 3.5);
+      g.bot.pose.facing = -Math.PI / 2;
     });
     await page.waitForTimeout(400);
-    check((await page.evaluate(() => window.solarbloom.interactTarget()?.id)) === 'craft:table', T('at the shed: the crafting table'));
+    check((await page.evaluate(() => window.solarbloom.interactTarget()?.id)) === 'craft:bench', T('at the workbench beside the house'));
     await interact(page, dev);
     await page.waitForSelector('#craftScreen.open');
     check(await moveTo(page, '#crc-wire', dev), T('the table: reach Wire'));
