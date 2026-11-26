@@ -1,0 +1,38 @@
+{
+  "ruined-day-lock": {
+    "clipPct": 0.01,
+    "meanLum": 195.9,
+    "meanSat": 0.174,
+    "drawCalls": 1048,
+    "triangles": 0,
+    "foliageTris": 25702,
+    "look": null
+  },
+  "ruined-day-third": {
+    "clipPct": 0.01,
+    "meanLum": 175.6,
+    "meanSat": 0.254,
+    "drawCalls": 1096,
+    "triangles": 0,
+    "foliageTris": 20670,
+    "look": null
+  },
+  "thriving-day-lock": {
+    "clipPct": 0.05,
+    "meanLum": 181.8,
+    "meanSat": 0.368,
+    "drawCalls": 1113,
+    "triangles": 0,
+    "foliageTris": 1003787,
+    "look": null
+  },
+  "thriving-day-third": {
+    "clipPct": 0.07,
+    "meanLum": 163.5,
+    "meanSat": 0.434,
+    "drawCalls": 822,
+    "triangles": 0,
+    "foliageTris": 998535,
+    "look": null
+  }
+}

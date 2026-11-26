@@ -1,0 +1,236 @@
+{
+  "ruined-day-lock": {
+    "clipPct": 0,
+    "meanLum": 191.1,
+    "meanSat": 0.184,
+    "drawCalls": 1166,
+    "triangles": 0,
+    "foliageTris": 27396,
+    "look": {
+      "stage": "ruined",
+      "k": 0,
+      "ready": false
+    }
+  },
+  "ruined-day-third": {
+    "clipPct": 0.01,
+    "meanLum": 174.3,
+    "meanSat": 0.258,
+    "drawCalls": 843,
+    "triangles": 0,
+    "foliageTris": 21726,
+    "look": {
+      "stage": "ruined",
+      "k": 0,
+      "ready": false
+    }
+  },
+  "ruined-day-iso": {
+    "clipPct": 0,
+    "meanLum": 193.6,
+    "meanSat": 0.119,
+    "drawCalls": 1097,
+    "triangles": 0,
+    "foliageTris": 14866,
+    "look": {
+      "stage": "ruined",
+      "k": 0,
+      "ready": false
+    }
+  },
+  "ruined-night-lock": {
+    "clipPct": 1.12,
+    "meanLum": 101.4,
+    "meanSat": 0.416,
+    "drawCalls": 850,
+    "triangles": 0,
+    "foliageTris": 27396,
+    "look": {
+      "stage": "ruined",
+      "k": 0,
+      "ready": false
+    }
+  },
+  "ruined-night-third": {
+    "clipPct": 1.37,
+    "meanLum": 100.7,
+    "meanSat": 0.359,
+    "drawCalls": 1253,
+    "triangles": 0,
+    "foliageTris": 27412,
+    "look": {
+      "stage": "ruined",
+      "k": 0,
+      "ready": false
+    }
+  },
+  "ruined-night-iso": {
+    "clipPct": 0.01,
+    "meanLum": 46.6,
+    "meanSat": 0.717,
+    "drawCalls": 1226,
+    "triangles": 0,
+    "foliageTris": 14866,
+    "look": {
+      "stage": "ruined",
+      "k": 0,
+      "ready": false
+    }
+  },
+  "restoring-day-lock": {
+    "clipPct": 0.05,
+    "meanLum": 181.9,
+    "meanSat": 0.333,
+    "drawCalls": 1238,
+    "triangles": 0,
+    "foliageTris": 739517,
+    "look": {
+      "stage": "restoring",
+      "k": 0.7,
+      "ready": false
+    }
+  },
+  "restoring-day-third": {
+    "clipPct": 0.1,
+    "meanLum": 166,
+    "meanSat": 0.424,
+    "drawCalls": 893,
+    "triangles": 0,
+    "foliageTris": 734309,
+    "look": {
+      "stage": "restoring",
+      "k": 0.7,
+      "ready": false
+    }
+  },
+  "restoring-day-iso": {
+    "clipPct": 0,
+    "meanLum": 193,
+    "meanSat": 0.159,
+    "drawCalls": 1256,
+    "triangles": 0,
+    "foliageTris": 354451,
+    "look": {
+      "stage": "restoring",
+      "k": 0.7,
+      "ready": false
+    }
+  },
+  "restoring-night-lock": {
+    "clipPct": 1.26,
+    "meanLum": 96,
+    "meanSat": 0.479,
+    "drawCalls": 1115,
+    "triangles": 0,
+    "foliageTris": 508202,
+    "look": {
+      "stage": "restoring",
+      "k": 0.7,
+      "ready": false
+    }
+  },
+  "restoring-night-third": {
+    "clipPct": 1.56,
+    "meanLum": 96.8,
+    "meanSat": 0.455,
+    "drawCalls": 904,
+    "triangles": 0,
+    "foliageTris": 739687,
+    "look": {
+      "stage": "restoring",
+      "k": 0.7,
+      "ready": false
+    }
+  },
+  "restoring-night-iso": {
+    "clipPct": 0.01,
+    "meanLum": 42.1,
+    "meanSat": 0.829,
+    "drawCalls": 1342,
+    "triangles": 0,
+    "foliageTris": 354451,
+    "look": {
+      "stage": "restoring",
+      "k": 0.7,
+      "ready": false
+    }
+  },
+  "thriving-day-lock": {
+    "clipPct": 0.2,
+    "meanLum": 180.7,
+    "meanSat": 0.367,
+    "drawCalls": 1300,
+    "triangles": 0,
+    "foliageTris": 1003781,
+    "look": {
+      "stage": "thriving",
+      "k": 1,
+      "ready": false
+    }
+  },
+  "thriving-day-third": {
+    "clipPct": 0.07,
+    "meanLum": 162.8,
+    "meanSat": 0.44,
+    "drawCalls": 902,
+    "triangles": 0,
+    "foliageTris": 999299,
+    "look": {
+      "stage": "thriving",
+      "k": 1,
+      "ready": false
+    }
+  },
+  "thriving-day-iso": {
+    "clipPct": 0,
+    "meanLum": 198.2,
+    "meanSat": 0.138,
+    "drawCalls": 1203,
+    "triangles": 0,
+    "foliageTris": 485060,
+    "look": {
+      "stage": "thriving",
+      "k": 1,
+      "ready": false
+    }
+  },
+  "thriving-night-lock": {
+    "clipPct": 1.37,
+    "meanLum": 95.3,
+    "meanSat": 0.467,
+    "drawCalls": 909,
+    "triangles": 0,
+    "foliageTris": 791483,
+    "look": {
+      "stage": "thriving",
+      "k": 1,
+      "ready": false
+    }
+  },
+  "thriving-night-third": {
+    "clipPct": 1.56,
+    "meanLum": 97.5,
+    "meanSat": 0.463,
+    "drawCalls": 1340,
+    "triangles": 0,
+    "foliageTris": 1003819,
+    "look": {
+      "stage": "thriving",
+      "k": 1,
+      "ready": false
+    }
+  },
+  "thriving-night-iso": {
+    "clipPct": 0.01,
+    "meanLum": 41.7,
+    "meanSat": 0.832,
+    "drawCalls": 1340,
+    "triangles": 0,
+    "foliageTris": 480828,
+    "look": {
+      "stage": "thriving",
+      "k": 1,
+      "ready": false
+    }
+  }
+}
