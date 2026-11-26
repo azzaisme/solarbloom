@@ -28,7 +28,8 @@ import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
 import { isExtra } from '../gameplay/FarmExtras';
-import { ORCHARD, ORCHARD_ITEM } from '../data/farmExtras';
+import { ORCHARD } from '../data/farmExtras';
+import { FRUITS, isFruit } from '../data/fruit';
 import { FRUIT_SHORT, fruitTip } from '../ui/FruitWords';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
@@ -711,11 +712,11 @@ export class Game {
       // #785: picking a fruit tree shakes it: a little burst in its fruit's colour, and a few leaves drift down
       this.sim.bus.on('farm.harvested', (e) => {
         const m = this.sim.machine(e.machineId);
-        if (m?.type !== 'orchard' || e.item !== ORCHARD_ITEM) return;
+        if (m?.type !== 'orchard' || !isFruit(e.item)) return;
         const [x, y, z] = this.machines.worldOf(m);
         const variant = orchardVariant(m);
-        this.vfx.burst(new pc.Vec3(x, y + 0.85, z), this.settings.reducedMotion ? 3 : 9, { up: 1.2, speed: 0.7, size: 0.05, life: 0.9, gravity: 2.4, hex: PALETTE.orchard.ripe[variant % PALETTE.orchard.ripe.length] });
-        const g = orchardGeo({ variant, fruit: 0, overgrown: false, bareUntil: ORCHARD.bareUntil, blossomUntil: ORCHARD.blossomUntil });
+        this.vfx.burst(new pc.Vec3(x, y + 0.85, z), this.settings.reducedMotion ? 3 : 9, { up: 1.2, speed: 0.7, size: 0.05, life: 0.9, gravity: 2.4, hex: PALETTE.orchard.ripe[e.item] });
+        const g = orchardGeo({ variant, kind: e.item, fruit: 0, overgrown: false, blossom: true, bareUntil: ORCHARD.bareUntil, blossomUntil: ORCHARD.blossomUntil });
         const leaves = g.leafStarts ?? [];
         for (let i = 0; i < 5 && leaves.length; i++) {
           const v = leaves[Math.floor(Math.random() * leaves.length)];
@@ -2605,7 +2606,7 @@ export class Game {
     // #785: a fruit tree with ripe fruit is picked straight off the branches by holding Interact (its panel, for
     // pruning, opens while there's nothing ripe; the prompt says how the fruit is coming along)
     if (occ?.type === 'orchard' && s.farmExtras.fruitReady(occ))
-      out.push({ kind: 'machine', id: `fruit:${occ.id}`, verb: 'Pick', name: 'the ripe fruit', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, ocHold: ORCHARD.holdSeconds, run: () => oc.fruitHold(occ) });
+      out.push({ kind: 'machine', id: `fruit:${occ.id}`, verb: 'Pick', name: `the ripe ${FRUITS[s.farmExtras.fruitOf(occ)].plural}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, ocHold: ORCHARD.holdSeconds, run: () => oc.fruitHold(occ) });
     else if (occ && isExtra(occ.type)) {
       const x = s.farmExtras;
       const verb = (occ.type === 'beehive' && (x.st(occ).ready ?? 0) >= 1) || (occ.type === 'mushroomLog' && (x.st(occ).ready ?? 0) >= 1) ? 'Harvest' : 'Look at';
@@ -3597,7 +3598,8 @@ export class Game {
       const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : undefined;
       const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Your pulse gave it a boost: the next flowers to spread from here go a little further</span>' : '';
       // #785: a fruit tree's tip says how its fruit is coming along (and that ripe fruit is picked by holding Interact)
-      const fruit = occ.type === 'orchard' ? fruitTip(this.sim.farmExtras.fruitPhase(occ), this.sim.farmExtras.overgrown(occ)) : undefined;
+      const fx = this.sim.farmExtras;
+      const fruit = occ.type === 'orchard' ? fruitTip(fx.fruitOf(occ), fx.fruitPhase(occ), fx.overgrown(occ), this.sim.decay.cozyMode) : undefined;
       this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? `<span class="ok">Ready! Press ${this.press('Q')} to wake it.</span>` : (fruit ?? `Press ${this.press('Q')} to see what it does`)}${boost}`);
       return;
     }

@@ -1,4 +1,5 @@
-import type { BinState, MachineData } from '../core/types';
+import { FRUIT_IDS } from '../data/fruit';
+import type { BinState, ItemId, MachineData } from '../core/types';
 import { COMPOST, DIGESTER } from '../data/compost';
 import { DAY_SECONDS } from '../data/time';
 import { machineStrengthAt } from '../core/RegionStrengths';
@@ -54,12 +55,20 @@ export class CompostSystem {
   /** Puts biomass or food from the backpack into a bin, as much as fits (food counts richer). Returns items put in. */
   fill(m: MachineData, item: 'biomass' | 'food' | 'fruit'): number {
     const worth = item === 'biomass' ? 1 : COMPOST.foodWorth; // #785: fruit rots down as richly as food
-    const n = Math.min(this.sim.inventory.count(item), Math.floor(this.room(m) / worth + 1e-9));
+    // #785: 'fruit' is every kind of fruit carried (apples, pears…), the most plentiful first
+    const kinds: ItemId[] = item === 'fruit' ? [...FRUIT_IDS].sort((a, b) => this.sim.inventory.count(b) - this.sim.inventory.count(a)) : [item];
+    const have = kinds.reduce((a, k) => a + this.sim.inventory.count(k), 0);
+    const n = Math.min(have, Math.floor(this.room(m) / worth + 1e-9));
     if (n <= 0) {
-      this.sim.bus.emit('action.failed', { reason: this.room(m) < worth ? 'The bin is full' : `No ${item === 'food' ? 'Food' : item === 'fruit' ? 'Fruit' : 'Greens'} to put in` });
+      this.sim.bus.emit('action.failed', { reason: this.room(m) < worth ? 'The bin is full' : `No ${item === 'food' ? 'Food' : item === 'fruit' ? 'fruit' : 'Greens'} to put in` });
       return 0;
     }
-    this.sim.inventory.take(item, n);
+    let left = n;
+    for (const k of kinds) {
+      const t = Math.min(left, this.sim.inventory.count(k));
+      if (t > 0) this.sim.inventory.take(k, t);
+      left -= t;
+    }
     const st = this.bin(m);
     this.writeBin(m, { ...st, feed: (st.feed ?? 0) + n * worth });
     this.sim.bus.emit('farm.machine', { machineId: m.id });

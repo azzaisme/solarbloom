@@ -1,7 +1,6 @@
 // E23.5.4 (#389, #429–#434): beyond planters. Each thing to tend plugs into a system that already exists, and every
 // creature is wild and attracted, never kept. All data, no rules; starting values for tuning.
 
-import type { MaterialId } from '../core/types';
 import type { CropId } from './crops';
 
 /** E23.5.4.1 (#429): beehives. */
@@ -55,10 +54,24 @@ export const ORCHARD = {
   bareUntil: 1 / 12,
   blossomUntil: 4 / 12,
   nearlyRipe: 9 / 12,
+  /** #785 → #830: what a fruit tree does without seasons: every day, bare after picking, flowers, then fruit */
+  daily: { ripens: true, blossom: true } as OrchardSeasonRule,
+  /** and by season, once seasons arrive (#830): flowers in spring, fruit in summer and autumn, resting in winter */
+  seasons: {
+    spring: { ripens: false, blossom: true },
+    summer: { ripens: true, blossom: false },
+    autumn: { ripens: true, blossom: false },
+    winter: { ripens: false, blossom: false },
+  } as Record<string, OrchardSeasonRule>,
+  /** how far a tree in its spring flowers shows (a look step: fully open) */
+  seasonBloom: 3 / 12,
 };
 
-/** What picking a tree gives. */
-export const ORCHARD_ITEM: MaterialId = 'fruit';
+/** #785 → #830: what a season lets a fruit tree do: ripen fruit, and flower (in its daily cycle, or all season). */
+export interface OrchardSeasonRule {
+  ripens: boolean;
+  blossom: boolean;
+}
 
 /** What a fruit tree shows: still growing up, bare (just picked), in flower, green fruit, nearly ripe, or ripe. */
 export type FruitPhase = 'young' | 'bare' | 'blossom' | 'green' | 'nearly' | 'ripe';

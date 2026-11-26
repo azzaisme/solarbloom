@@ -4,7 +4,8 @@ import type { ExtraState, MachineData, MachineType } from '../core/types';
 import { CROP_IDS, CROPS, type CropId } from '../data/crops';
 import { DAY_SECONDS } from '../data/time';
 import { WATER_NET } from '../data/water';
-import { BEEHIVE, ORCHARD_ITEM, type FruitPhase, DIVERSITY, FISH_POND, FLOWERING, GARDEN_REQUESTS, HOME, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type GardenRequest, type GardenReward, type Habitat, type HomeKind } from '../data/farmExtras';
+import { FRUIT_IDS, fruitOfArea, type FruitId } from '../data/fruit';
+import { BEEHIVE, type OrchardSeasonRule, type FruitPhase, DIVERSITY, FISH_POND, FLOWERING, GARDEN_REQUESTS, HOME, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type GardenRequest, type GardenReward, type Habitat, type HomeKind } from '../data/farmExtras';
 import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
 import type { PipeNet } from './WaterPipes';
@@ -183,7 +184,23 @@ export class FarmExtras {
     if (this.fruitReady(m)) return 'ripe';
     if (this.treeGrowth(m) < 1) return 'young';
     const r = this.fruitShown(m)!;
-    return r < ORCHARD.bareUntil ? 'bare' : r < ORCHARD.blossomUntil ? 'blossom' : r < ORCHARD.nearlyRipe ? 'green' : 'nearly';
+    if (r < ORCHARD.blossomUntil) return r >= ORCHARD.bareUntil && this.seasonRule().blossom ? 'blossom' : 'bare';
+    return r < ORCHARD.nearlyRipe ? 'green' : 'nearly';
+  }
+
+  /** #785: the fruit this tree bears, by where it grows (data/fruit: apples in the park, pears in the market…). */
+  fruitOf(m: MachineData): FruitId {
+    return fruitOfArea(this.sim.areas?.areaOf(m));
+  }
+
+  /**
+   * #785 → #830: what the season lets a fruit tree do. Until seasons arrive (`sim.seasons`), every day is its own
+   * little year: bare after picking, then flowers, then fruit. With seasons, ORCHARD.seasons says (flowers in spring,
+   * fruit in summer and autumn, resting in winter).
+   */
+  seasonRule(): OrchardSeasonRule {
+    const season = (this.sim as unknown as { seasons?: { season(): string } }).seasons?.season();
+    return (season !== undefined && ORCHARD.seasons[season]) || ORCHARD.daily;
   }
 
   /** Game days until the fruit is ripe (0 when it is), at the tree's own pace (fertile soil is quicker). */
@@ -201,13 +218,17 @@ export class FarmExtras {
   /** What picking this tree would give right now (0: nothing ripe). */
   fruitYield(m: MachineData): number {
     if (!this.fruitReady(m)) return 0;
-    return Math.max(1, Math.round(ORCHARD.fruit * (this.st(m).overgrownCrop ? ORCHARD.overgrownFruit : 1)));
+    // an overgrown tree gives less, except in Cozy Mode (there it only looks shaggy)
+    const less = this.st(m).overgrownCrop && !this.sim.decay.cozyMode;
+    return Math.max(1, Math.round(ORCHARD.fruit * (less ? ORCHARD.overgrownFruit : 1)));
   }
 
   /** Why a tree can't be picked now, in words (undefined: it can). */
   pickProblem(m: MachineData): string | undefined {
     if (this.fruitReady(m)) return undefined;
-    return this.fruitPhase(m) === 'young' ? 'The tree is still growing' : 'The fruit isn’t ripe yet';
+    if (this.fruitPhase(m) === 'young') return 'The tree is still growing';
+    const rule = this.seasonRule();
+    return rule.ripens ? 'The fruit isn’t ripe yet' : rule.blossom ? 'It’s flowering: fruit comes in summer' : 'It’s resting until spring';
   }
 
   /** Picks the ripe fruit into the backpack (the store takes what doesn't fit); the tree starts the next day's fruit. */
@@ -219,9 +240,10 @@ export class FarmExtras {
       return 0;
     }
     const inv = this.sim.inventory;
-    inv.addToStore(ORCHARD_ITEM, inv.add(ORCHARD_ITEM, n));
+    const item = this.fruitOf(m);
+    inv.addToStore(item, inv.add(item, n));
     this.write(m, { ...st, ready: 0, growing: 0, overgrownCrop: false });
-    this.sim.bus.emit('farm.harvested', { machineId: m.id, item: ORCHARD_ITEM, n });
+    this.sim.bus.emit('farm.harvested', { machineId: m.id, item, n });
     this.changed(m);
     return n;
   }
@@ -250,7 +272,8 @@ export class FarmExtras {
     const was = { look: this.fruitLook(m), over: this.overgrown(m) };
     st.age = (st.age ?? 0) + days;
     st.sincePrune = (st.sincePrune ?? 0) + days;
-    if ((st.ready ?? 0) < 1) {
+    if ((st.ready ?? 0) < 1 && !this.seasonRule().ripens) st.growing = 0; // out of season: unripe fruit drops, nothing sets
+    else if ((st.ready ?? 0) < 1) {
       st.growing = (st.growing ?? 0) + days * machineStrengthAt('orchard', m.x, m.z); // E23.8.1: fertile soil
       if (st.growing >= ORCHARD.fruitDays) {
         st.ready = 1;
@@ -270,12 +293,14 @@ export class FarmExtras {
   fruitShown(m: MachineData): number | undefined {
     if (this.fruitReady(m)) return 1;
     if (this.treeGrowth(m) < 1) return undefined;
+    const rule = this.seasonRule();
+    if (!rule.ripens) return rule.blossom ? ORCHARD.seasonBloom : 0; // spring's flowers, or winter's bare branches
     return fruitStep(this.ripeness(m), ORCHARD.looks) / ORCHARD.looks;
   }
 
   /** The tree's look: how far its fruit has come, in steps (a dozen changes a day), or '-' while it grows up. */
   fruitLook(m: MachineData): string {
-    return `${this.fruitShown(m) ?? '-'}`;
+    return `${this.fruitShown(m) ?? '-'}|${this.seasonRule().blossom ? 1 : 0}`;
   }
 
   // ───────────── E23.5.4.4 mushroom logs and worm bins ─────────────
@@ -345,7 +370,9 @@ export class FarmExtras {
       return false;
     }
     const inv = this.sim.inventory;
-    const item = inv.count('food') >= WORM_BIN.feedCost ? 'food' : 'biomass';
+    // scraps: Food, then fruit (#785, the most plentiful kind), then Greens
+    const fruit = [...FRUIT_IDS].sort((a, b) => inv.count(b) - inv.count(a))[0];
+    const item = inv.count('food') >= WORM_BIN.feedCost ? 'food' : inv.count(fruit) >= WORM_BIN.feedCost ? fruit : 'biomass';
     if (!inv.pay({ [item]: WORM_BIN.feedCost })) {
       this.sim.bus.emit('action.failed', { reason: 'Needs Food or Greens' });
       return false;

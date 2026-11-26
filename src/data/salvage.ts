@@ -40,7 +40,11 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   biomass: { id: 'biomass', name: 'Greens', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
   food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
   compost: { id: 'compost', name: 'Compost', icon: '🟫', models: [], home: [], colour: '#8a6a4a', from: 'Made in a compost bin' },
-  fruit: { id: 'fruit', name: 'Fruit', icon: '🍎', models: [], home: [], colour: '#e2433a', from: 'Picked ripe from fruit trees' },
+  // #785: fruit, picked from fruit trees (which kind depends on where the tree grows: data/fruit)
+  apple: { id: 'apple', name: 'Apple', icon: '🍎', models: [], home: [], colour: '#e2433a', from: 'Picked from fruit trees in the park, Elder Grove, Mast Row or Clock Plaza' },
+  pear: { id: 'pear', name: 'Pear', icon: '🍐', models: [], home: [], colour: '#d9c64a', from: 'Picked from fruit trees in the Old Market, the Cistern or Spire Heights' },
+  peach: { id: 'peach', name: 'Peach', icon: '🍑', models: [], home: [], colour: '#f29a5c', from: 'Picked from fruit trees on the Terraces or by the Observatory' },
+  lemon: { id: 'lemon', name: 'Lemon', icon: '🍋', models: [], home: [], colour: '#f2d43a', from: 'Picked from fruit trees in Saltwind or the Glasshouse' },
   honey: { id: 'honey', name: 'Honey', icon: '🍯', models: [], home: [], colour: '#f2b632', from: 'From beehives settled near flowers' },
   fertiliser: { id: 'fertiliser', name: 'Fertiliser', icon: '🧪', models: [], home: [], colour: '#c9b06a', from: 'Compost left to mature in a compost bin' },
 };

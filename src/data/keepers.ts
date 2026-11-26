@@ -92,7 +92,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
       tender: ['I\'ve opened a new column in my ledger: what we give back. It\'s filling up nicely.'],
       friend: ['No charge, ever, for a friend. Write that down. Actually, I already have.', 'Take the market scales. They never weighed anything fairly. You will.'],
     },
-    likes: ['radish', 'glass'],
+    likes: ['radish', 'glass', 'pear'], // #785: its region's fruit
     thanks: 'A gift? I\'ll need a new column for this.',
     giftBack: { copper: 5 },
     chatter: ['A sparrow took a crumb off my counter today. I let it.', 'Three bees, two butterflies, one beetle. Business is good.', 'The ledger balances. First time in years.'],
@@ -105,7 +105,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
       tender: ['This time the lock lets the water come and go. In, and out. As it likes.'],
       friend: ['Sit with me a while. The sea does the talking.', 'Friends don\'t need much more than that. Take the bell.'],
     },
-    likes: ['seaKale', 'timber'],
+    likes: ['seaKale', 'timber', 'lemon'], // #785: its region's fruit
     thanks: 'Oh. Thank you. That is kind.',
     giftBack: { glass: 5 },
     chatter: ['Low tide. Good for crabs.', 'The gulls came back. Loud. I don\'t mind.', 'Rain upriver. It will reach us.'],
@@ -118,7 +118,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
       tender: ['I will not cut anything any more. I will water, and talk to the tree, and wait.'],
       friend: ['You are like the tree. Patient. Come and sit in the shade whenever you like.', 'Take this lamp. It is shaped like an acorn. Mm.'],
     },
-    likes: ['potato', 'seeds', 'fruit'], // #785: the fruit trees Moss hands over
+    likes: ['potato', 'seeds', 'apple'], // #785: Elder Grove's fruit trees bear apples
     thanks: 'Mm. For me? Thank you, little one.',
     giftBack: { timber: 5 },
     chatter: ['A hedgehog sleeps under the roots. Shh.', 'The tree said good morning. In its way.', 'Mm. Mushrooms after the rain.'],
@@ -157,7 +157,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
       tender: ['Half the roofs for beans, half left wild for the birds. The sun does the heating.'],
       friend: ['Best view in the city, and the best company. Come up any time, friend.', 'Take the weathercock. It always knows where the wind is going.'],
     },
-    likes: ['beans', 'sunstone'],
+    likes: ['beans', 'sunstone', 'peach'], // #785: its region's fruit
     thanks: 'Ha! Lovely. Thank you!',
     giftBack: { seeds: 5 },
     chatter: ['Twelve swallow nests and counting!', 'The north roofs went wild. I love them.', 'You can see the sea from every roof. Did you know?'],
