@@ -22,6 +22,8 @@ import { cultivatorDock } from './CultivatorVisuals';
 import { batBoxBody, beehiveBody, birdBoxBody, butterflyGardenBody, compostBinBody, digesterBody, fishPondBody, hedgehogHouseBody, mushroomLogBody, orchardBody, wormBinBody } from './FarmBodies';
 import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
+import { LandmarkDressing } from './LandmarkDressing';
+import { landmarkDress, type LandmarkStage } from '../data/landmarks';
 
 /** The views that turn machines into holograms (one colour each). */
 export type HoloView = 'power' | 'water';
@@ -54,6 +56,8 @@ interface MachineView {
   coreKind?: 'crystal' | 'cistern' | 'elder' | 'fountain';
   /** The fountain's dry / flowing parts (see `fountain`). */
   fountain?: FountainFx;
+  /** P7-E31: a region landmark's dressing and its ruined / restoring / thriving look */
+  dress?: LandmarkDressing;
   level: number;
   /** the upgrade levels its extras were built for (Phase 4 E09.6) */
   vkey?: string;
@@ -506,6 +510,8 @@ export class MachineVisuals {
   streaming = false;
   /** The look a landmark should have when its model streams in (the area's state lives in the simulation). */
   landmarkState?: (m: MachineData) => 'dormant' | 'ready' | 'awake';
+  /** P7-E31: how far a landmark's region has come back (its dressing's stage), from the simulation's own counts. */
+  landmarkProgress?: (m: MachineData) => { stage: LandmarkStage; k: number };
   /** Tiles beyond the view where models are built, and the wider band where existing ones are kept. */
   static readonly STREAM_MARGIN = 20;
   static readonly STREAM_KEEP = 44;
@@ -1310,9 +1316,12 @@ export class MachineVisuals {
   private applyModel(v: MachineView) {
     if (!MODELS) return;
     if (v.m.type === 'motherTree') return this.motherCollar(v);
-    const pick = v.m.type === 'core' ? LANDMARK_MODELS[this.landmarkKind(v.m)] : MACHINE_MODELS[v.m.type];
+    const lk = v.m.type === 'core' ? this.landmarkKind(v.m) : '';
+    const pick = v.m.type === 'core' ? LANDMARK_MODELS[lk] : MACHINE_MODELS[v.m.type];
     if (!pick) return;
-    const e = MODELS.instantiateMerged(oldCityModel(pick[0]) ?? pick[0]); // E21: a new model, or its stand-in
+    const name = oldCityModel(pick[0]) ?? pick[0]; // E21: a new model, or its stand-in
+    // P7-E31: a landmark with moving parts (the Sea Lock's leaves and gear) keeps its hierarchy
+    const e = !v.fountain && lk && landmarkDress(lk).lock ? (MODELS.instantiate(name) ?? MODELS.instantiateMerged(name)) : MODELS.instantiateMerged(name);
     if (!e) return;
     if (v.fountain) {
       // The park fountain: the hand-built model is its dry look; the flowing three-tier fountain replaces it on waking.
@@ -1343,6 +1352,24 @@ export class MachineVisuals {
     e.setLocalScale(pick[1], pick[1], pick[1]);
     v.body.addChild(e);
     v.model = e;
+    if (v.m.type === 'core' && lk && v.coreKind !== 'elder') this.dressLandmark(v, lk, e);
+  }
+
+  /**
+   * P7-E31 (#749–#753): a region landmark's dressing. It starts at the look its region has earned so far (a model
+   * streaming back in takes its stage at once).
+   */
+  private dressLandmark(v: MachineView, kind: string, model: pc.Entity) {
+    v.dress = new LandmarkDressing(v.root, kind, model, this.tweens);
+    const p = this.landmarkProgress?.(v.m);
+    if (p && p.stage !== 'thriving') v.dress.set(p.stage, p.k, true);
+  }
+
+  /** P7-E31: a landmark's region came further back (or was woken): its dressing eases to the new look. */
+  setLandmarkProgress(machineId: string, stage: LandmarkStage, k: number, instant = false) {
+    const d = this.views.get(machineId)?.dress;
+    if (!d || (d.stage === stage && Math.abs(d.k - k) < 0.02)) return;
+    d.set(stage, k, instant);
   }
 
   /**
@@ -2180,6 +2207,10 @@ export class MachineVisuals {
     if (v.root.tags.has('awake') && state !== 'awake') return;
     v.root.tags.remove('ready', 'awake', 'dormant');
     v.root.tags.add(state);
+    if (v.dress) {
+      v.dress.ready = state === 'ready';
+      if (state === 'awake') v.dress.set('thriving', 1, instant);
+    }
     if (state === 'awake' && v.fountain) {
       // Stone washes clean to cream, the rims turn gold, water rises and spills, the sprout lifts and glows, beds bloom.
       const f = v.fountain;
@@ -2498,6 +2529,7 @@ export class MachineVisuals {
           break;
         }
         case 'core': {
+          v.dress?.update(dt, t, rm);
           if (v.coreKind !== 'crystal') {
             this.updateRoofCore(v, t, rm);
             break;

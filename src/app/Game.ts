@@ -30,6 +30,7 @@ import { CROPS } from '../data/crops';
 import { isExtra } from '../gameplay/FarmExtras';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
+import { landmarkStage, type LandmarkStage } from '../data/landmarks';
 import { allPiles, seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
@@ -483,6 +484,9 @@ export class Game {
       if (s.areas.fog(id) === 'cleared') return 'awake';
       return s.areas.ready(id) ? 'ready' : 'dormant';
     };
+    // P7-E31 (#751, #753): a region landmark's look follows the goals the game already has: its region's restored
+    // tiles toward the landmark's need, then the wake.
+    this.machines.landmarkProgress = (m) => this.landmarkProgress(m);
     this.machines.buildAll();
     this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens, this.app);
     this.drones.onTrail = (p) => this.vfx.trail(p);
@@ -3020,6 +3024,30 @@ export class Game {
 
   private moodT = 0;
   private moodSet = false;
+  /** P7-E31: regions whose landmark's look may have moved on (a tile there restored), refreshed twice a second */
+  private landmarkDirty = new Set<string>();
+  private landmarkT = 0;
+
+  private landmarkProgress(m: MachineData): { stage: LandmarkStage; k: number } {
+    const s = this.sim;
+    const id = s.areas.areaOf({ roofId: m.roofId, x: m.x, z: m.z });
+    if (!id || id === PARK) return { stage: 'ruined', k: 0 };
+    const fog = s.areas.fog(id);
+    return landmarkStage(fog === 'cleared', fog === 'hidden' ? 0 : s.areas.counts(id).restored, s.areas.need(id));
+  }
+
+  private updateLandmarks(dt: number) {
+    this.landmarkT -= dt;
+    if (this.landmarkT > 0 || !this.landmarkDirty.size) return;
+    this.landmarkT = 0.5;
+    for (const id of this.landmarkDirty) {
+      const lm = this.sim.areas.landmark(id);
+      if (!lm || id === PARK) continue;
+      const p = this.landmarkProgress(lm);
+      if (p.stage !== 'thriving') this.machines.setLandmarkProgress(lm.id, p.stage, p.k);
+    }
+    this.landmarkDirty.clear();
+  }
 
   /**
    * Look 1.7: the grade follows the restoration of the area under the camera (a cleared area is fully warm; a
@@ -4451,6 +4479,10 @@ export class Game {
     b.on('landmark.woken', () => this.waymark.done(['landmark']));
     for (const ev of ['keeper.step', 'keeper.gift', 'keeper.friend'] as const) b.on(ev, () => this.waymark.done(['keeper']));
     b.on('tile.restored', ({ tile }) => this.waymark.done(['park', 'spot'], tile));
+    b.on('tile.restored', ({ tile }) => {
+      const id = s.areas.areaOf(tile);
+      if (id) this.landmarkDirty.add(id);
+    });
     b.on('machine.built', ({ machine }) => this.waymark.done(['machine', 'spot'], machine));
     b.on('machine.built', ({ machine }) => {
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
@@ -5639,6 +5671,7 @@ export class Game {
       this.clouds.update(wdt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);
+    this.updateLandmarks(dt);
     this.look.update(dt);
     this.updateTreeCursor(dt);
     this.hud.update(dt);

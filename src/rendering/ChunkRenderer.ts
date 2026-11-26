@@ -1385,9 +1385,22 @@ export class ChunkRenderer {
       // taller than Bloombot, so it shows over its head from the follow camera
       const W = 0.98;
       const H = 1.4;
-      b.add('box', PALETTE.stone.dark, [x, y + H / 2, z], [W, H, W]);
-      b.add('box', PALETTE.stone.shadow, [x, y + H + 0.05, z], [W + 0.08, 0.1, W + 0.08]);
+      // P7-E31 (#749, #750): in the landmarks' stone (it read as a black monolith from the start): weathered
+      // sandstone courses under a pale cap; forced open, it becomes a little garden outpost (an ivory cap on a gold
+      // band, turf and a shrub on its roof, ivy down its front corners)
+      b.add('box', PALETTE.stone.mid, [x, y + H / 2, z], [W, H, W]);
+      b.add('box', open ? PALETTE.stone.cream : PALETTE.stone.light, [x, y + H + 0.05, z], [W + 0.08, 0.1, W + 0.08]);
       for (let c = 0; c < 5; c++) b.add('box', PALETTE.stone.grey, [x, y + 0.16 + c * 0.26, z], [W + 0.01, 0.03, W + 0.01]);
+      if (open) {
+        b.add('box', PALETTE.trim.brass, [x, y + H - 0.01, z], [W + 0.03, 0.04, W + 0.03]);
+        b.add('box', PALETTE.grass[2], [x, y + H + 0.12, z], [W - 0.04, 0.05, W - 0.04]);
+        b.add('sphere', PALETTE.shrub[1], [x - 0.18, y + H + 0.26, z - 0.12], [0.42, 0.3, 0.4]);
+        b.add('sphere', PALETTE.shrub[0], [x + 0.2, y + H + 0.22, z + 0.15], [0.3, 0.22, 0.28]);
+        const [cx, cz] = along(W / 2 - 0.04);
+        for (const k of [-1, 1])
+          for (let i = 0; i < 3; i++)
+            b.add('sphere', PALETTE.shrub[(i + (k > 0 ? 1 : 0)) % 3], [x + dx * (W / 2) + cx * k, y + H - 0.12 - i * 0.28, z + dz * (W / 2) + cz * k], [0.16 - i * 0.03, 0.22, 0.16 - i * 0.03]);
+      }
       const fx = x + dx * (W / 2 + 0.01);
       const fz = z + dz * (W / 2 + 0.01);
       const dw = 0.62;

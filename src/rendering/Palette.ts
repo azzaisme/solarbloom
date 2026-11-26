@@ -627,6 +627,11 @@ const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, 
 
 export const PALETTE = {
   ...families,
+  /**
+   * P7-E31 (#750): the landmark dressing's shared language: ivy dry and living, a pot bed's two colours (thriving),
+   * the lantern posts' timber, their stone footings, the beacon's rock, the beacon lamp.
+   */
+  landmark: { ivyDry: '#8a7a5c', ivyLive: '#5f8f3a', potFlowers: ['#f2f0e6', '#e8a33c'], pot: '#b8734e', post: '#9a6438', footing: '#ede6d6', apron: '#e4dccb', apronSeam: '#c9bfa9', rock: '#9c978d', lamp: '#fff1c9', lampGlow: '#ffd98a' },
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
   /** E23.7.2.2: the house's radio (the forecast) */
   radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
