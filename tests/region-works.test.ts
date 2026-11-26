@@ -19,6 +19,7 @@ import { Walker } from '../src/gameplay/Walker';
 import { bannedIn } from '../src/ui/words';
 import { regionProgress, regionProgressHtml } from '../src/ui/RegionProgress';
 import { objectiveSentence } from '../src/ui/ObjectiveCard';
+import { IDEAS } from '../src/ui/GuideLines';
 
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
@@ -323,6 +324,26 @@ describe('#787: the landmark waits on its works', () => {
     hub.role = 'gardener';
     settle(sim);
     expect(sim.works.running('spireHeights')).toBe(true);
+  });
+
+  it('the guide says it once, after the fountain first wakes, when a Keeper in a gated region is awake; the Advisor leads to the piece', () => {
+    const sim = city(0, ['saltwind']);
+    const idea = IDEAS.find((i) => i.id === 'works')!;
+    expect(idea.comes(sim)).toBe(false); // the opening minutes stay about the park
+    sim.state.salvage!.tier = 1;
+    expect(idea.comes(sim)).toBe(true);
+    expect(idea.known(sim)).toBe(false);
+    expect(bannedIn(idea.text(() => 'E', sim))).toEqual([]);
+    // Tide asks for the landmark: the Advisor's step is the winch, and Show me where goes there
+    sim.state.salvage!.keepers.tide = { step: 'landmark' };
+    const w = def('saltwind');
+    const step = sim.advisor.keeperStep()!;
+    expect(step.text).toBe(`${w.dark} ${w.how}`);
+    expect(step.action).toEqual({ kind: 'focus', x: w.x, z: w.z });
+    expect(step.place).toEqual({ kind: 'machine', name: w.name });
+    sim.works.start('saltwind');
+    expect(idea.known(sim)).toBe(true);
+    expect(sim.advisor.keeperStep()!.action).toEqual({ kind: 'focus', x: keeperOf('saltwind').x, z: keeperOf('saltwind').z });
   });
 
   it('a works far off under the fog does nothing, and its power load is on no power lines', () => {

@@ -123,7 +123,8 @@ export const IDEAS: readonly Idea[] = [
     // #787: the first time a region's landmark waits on its works (its Keeper is awake there): building is needed now
     id: 'works',
     text: (k) => `Some landmarks need building first. Press ${k('interact')} beside the dark machine or dry channel near one to see what it needs.`,
-    comes: (sim) => WORKS.some((w) => !sim.works.running(w.region) && sim.areas.fog(w.region) !== 'hidden' && (sv(sim)?.keepers[regionKeeper(w.region)]?.step ?? 'asleep') !== 'asleep'),
+    // (after the fountain's first step, so the opening minutes stay about the park)
+    comes: (sim) => (sv(sim)?.tier ?? 0) >= 1 && WORKS.some((w) => !sim.works.running(w.region) && sim.areas.fog(w.region) !== 'hidden' && (sv(sim)?.keepers[regionKeeper(w.region)]?.step ?? 'asleep') !== 'asleep'),
     known: (sim) => (sv(sim)?.works?.length ?? 0) > 0,
   },
 ];
