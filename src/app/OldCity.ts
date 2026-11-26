@@ -33,7 +33,8 @@ export interface OldCityHost {
   openStorage?(title: string): void;
   /** E23.9.1: opens the backpack's journal at a page */
   openPage?(id: string): void;
-  talkToTide?(panel: OldCityPanel, talk: () => void): void;
+  talkToTide?(talk: () => void): void;
+  onTideWake?(): void;
   /** plays a sound by name, if the game has it */
   sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
   /** redraws the ground tile at a cell */
@@ -226,9 +227,10 @@ export class OldCityController {
         const r = this.sim.keepers.interact(keeper.id);
         if (r === 'gave' || r === 'done' || r === 'woke') this.host.sound('deliver');
         this.host.bot.visuals.play('interact');
+        if (keeper.id === 'tide' && r === 'woke') this.host.onTideWake?.();
       };
       if (keeper.id === 'tide' && this.sim.keepers.step(keeper.id) !== 'asleep' && this.host.talkToTide) {
-        this.host.talkToTide(this.panel, talk);
+        this.host.talkToTide(talk);
       } else talk();
       return true;
     }

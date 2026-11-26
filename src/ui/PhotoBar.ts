@@ -1,6 +1,7 @@
 import type { Action } from '../app/Bindings';
 import type { PhotoState } from '../app/PhotoMode';
 import { PHOTO_FILTERS, PHOTO_WEATHER_NAMES } from '../data/photo';
+import { escHtml } from './OldCityPanel';
 import { fillGlyphs, glyph, icon } from './PanelShell';
 
 /**
@@ -14,6 +15,8 @@ export class PhotoBar {
   readonly el: HTMLElement;
   private flash: HTMLElement;
   private shown?: string;
+  private notice = '';
+  private state?: PhotoState;
 
   constructor(
     private act: (a: Action) => void,
@@ -44,11 +47,18 @@ export class PhotoBar {
     });
   }
 
+  sketchNotice(notice: string) {
+    this.notice = notice;
+    this.render(this.state);
+  }
+
   render(s: PhotoState | undefined) {
+    this.state = s;
     this.el.classList.toggle('on', !!s);
     this.el.classList.toggle('clean', !!s?.clean);
     if (!s) {
       this.shown = undefined;
+      this.notice = '';
       return;
     }
     // the button's key or pad button, drawn for the device in hand (none when the action has no button)
@@ -73,6 +83,8 @@ export class PhotoBar {
       `</div><div class="pb-row">${this.sceneHtml(s, k)}</div>` +
       `<div class="pb-row"><button data-photo="backpack">Hide this bar${k('backpack')}</button>` +
       `<button data-photo="cancel">${icon('door', 's')}Leave${k('cancel')}</button></div>` +
+      (s.tutorial ? '<p class="pb-help pb-tide"><b>Tide</b> “Frame us by the water and take a picture. I’ll draw this one.”</p>' : '') +
+      (this.notice ? `<p class="pb-help" role="status">${escHtml(this.notice)}</p>` : '') +
       `<p class="pb-help">${help}</p>`;
     if (html !== this.shown) {
       const focused = document.activeElement?.closest?.('#photoBar') ? (document.activeElement as HTMLElement).dataset : undefined;
