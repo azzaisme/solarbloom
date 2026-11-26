@@ -241,9 +241,14 @@ try {
       const t = at(x, z);
       return !!t && !t.blocked && !t.occupantId && !t.prop && !t.ramp && t.feature !== 'water' && (t.level ?? 0) === lvl;
     };
-    // well away from every other machine, so it joins no line
-    const far = (t) => sim.state.machines.every((m) => Math.hypot(m.x - t.x, m.z - t.z) > 8);
-    const spot = sim.areas.tiles('park').find((t) => far(t) && [[0, 0], [-1, 0], [1, 0], [0, 1], [-1, 1], [1, 1], [0, 2]].every(([dx, dz]) => free(t.x + dx, t.z + dz, t.level ?? 0)));
+    // a few tiles clear of every other machine (only touching ones share a line here: no poles yet), as near the
+    // fountain as that allows, so the camera sees it in the park
+    const far = (t) => sim.state.machines.every((m) => Math.hypot(m.x + m.size / 2 - t.x - 0.5, m.z + m.size / 2 - t.z - 0.5) > 3.5);
+    const core = sim.state.machines.find((m) => m.type === 'core' && sim.areas.areaOf(m) === 'park');
+    const spot = sim.areas
+      .tiles('park')
+      .filter((t) => far(t) && [[0, 0], [-1, 0], [1, 0], [0, 1], [-1, 1], [1, 1], [0, 2]].every(([dx, dz]) => free(t.x + dx, t.z + dz, t.level ?? 0)))
+      .sort((a, b) => Math.hypot(a.x - core.x, a.z - core.z) - Math.hypot(b.x - core.x, b.z - core.z))[0];
     const check = sim.build.check.bind(sim.build);
     const pay = sim.inventory.pay.bind(sim.inventory);
     sim.build.check = () => ({ ok: true, cost: {}, spotOk: true });
@@ -265,6 +270,9 @@ try {
   check(await until(() => /needs a Solar Panel right beside it/.test(document.getElementById('tallyText')?.textContent ?? '')), 'the chip says the charger needs a Solar Panel beside it (not sunshine)');
   s = await look();
   check(!s.glow && !s.from, 'nothing charges Bloombot there');
+  check(await page.evaluate((id) => window.solarbloom.sim.power.networkOf(window.solarbloom.sim.machine(id))?.sources.length === 0, lone.id), 'no Solar Panel or other source shares its line');
+  await page.evaluate(() => window.solarbloom.camera.jumpZoom(6));
+  await wait(1500);
   await page.screenshot({ path: `${dir}/charger-no-panel.png` });
 
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
