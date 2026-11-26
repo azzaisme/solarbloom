@@ -635,6 +635,20 @@ export const PALETTE = {
   ...families,
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
   /**
+   * #830: the seasons (rendering/SeasonLook). `grass`: the colour green grass, lawns, shrubs and leaves drift toward in
+   * each season (summer is the world's own green). `autumn`: deciduous leaves turning gold, orange and russet. `blossom`:
+   * spring's soft pink and white blossom. `frost`: winter's frost and light snow; `snow`: falling snowflakes.
+   */
+  season: {
+    grass: { spring: '#9ccf5a', summer: '#6fa84a', autumn: '#b5a24c', winter: '#9fae96' },
+    autumn: ['#e0a93a', '#d9772e', '#b8452c'],
+    /** the last brown leaves hanging on in winter */
+    withered: '#8c6a45',
+    blossom: ['#f6b9cf', '#fbeef2'],
+    frost: '#e9f1f6',
+    snow: '#f4f8fb',
+  },
+  /**
    * #787: a region's works (ChunkRenderer `works`): a cabinet, winch, power feed or dome motor (power), a drinking
    * fountain, inlet or watering channel (water), clockwork or a lift's winding gear (drones). Dark: dull metal, an
    * unlit lamp, a dry bed, rust and dust. Running: a warm lamp, clear water, bright brass, a mint status light.

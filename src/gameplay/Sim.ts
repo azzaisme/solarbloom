@@ -60,6 +60,7 @@ import { FarmSystem } from './FarmSystem';
 import { CompostSystem } from './CompostSystem';
 import { FarmExtras } from './FarmExtras';
 import { Weather } from './Weather';
+import { Seasons } from './Seasons';
 import { DecaySystem } from './DecaySystem';
 
 /**
@@ -149,6 +150,8 @@ export class Sim {
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
+  /** #830: the seasons (spring, summer, autumn, winter) on the game clock. See gameplay/Seasons. */
+  readonly seasons: Seasons;
   /** E23.5.1: gathering biomass from restored ground. */
   readonly gather: GatherSystem;
   /** E27.2 (#680): gathering from and pruning the plant plots */
@@ -216,6 +219,7 @@ export class Sim {
     this.clock = new Clock(this);
     this.trees = new TreeGrowth(this);
     this.nightFinds = new NightFinds(this);
+    this.seasons = new Seasons(this);
     this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
@@ -362,6 +366,7 @@ export class Sim {
     this.parkGrowth.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
+    this.seasons.tick();
     this.weather.tick();
     this.farm.tick(dt);
     this.compost.tick(dt);

@@ -12,7 +12,7 @@
  * Green (PALETTE.leaf.young / grown) as they mature, and Radiant adds sun-berries and moss-jar lanterns under the canopy.
  */
 import { PALETTE } from './Palette';
-import { Buf, LEAVES, hex, hsl, limb, lerp, mix, norm, puff, rng, scaleC, spray, tube, type C, type Crown, type LimbOpts, type Lod, type Palette, type Tip, type TreeGeo, type V } from './TreeGen';
+import { Buf, LEAVES, markSeasonLeaves, hex, hsl, limb, lerp, mix, norm, puff, rng, scaleC, spray, tube, type C, type Crown, type LimbOpts, type Lod, type Palette, type Tip, type TreeGeo, type V } from './TreeGen';
 
 export type GiantStage = 0 | 1 | 2 | 3 | 4;
 export const GIANT_VARIANTS = 6;
@@ -142,7 +142,8 @@ export function buildGiant(stage: GiantStage, variant: number, lod: Lod = 1): Gi
     });
     if (stage === 4 && lod > 0) radiantGiant(B, R, crown);
   }
-  const geo = squash(B.done() as GiantGeo, TALL);
+  // #830: a giant is a broadleaf: it blossoms, turns gold and red, and stands bare in winter like the others
+  const geo = markSeasonLeaves(squash(B.done() as GiantGeo, TALL));
   geo.bounds = measure(geo);
   return geo;
 }

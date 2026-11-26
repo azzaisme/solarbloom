@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { SEASON_GLSL, seasonShading } from './SeasonLook';
 
 /**
  * Look 3.1 (#128): the texture and material pipeline.
@@ -178,6 +179,7 @@ void sbDetailSetup(vec3 col, vec3 n) {
 const DIFFUSE_PS = /* glsl */ `
 uniform vec3 material_diffuse;
 ${DETAIL_COMMON}
+${SEASON_GLSL}
 void getAlbedo() {
 	dAlbedo = material_diffuse.rgb;
 	#ifdef STD_DIFFUSE_VERTEX
@@ -193,6 +195,9 @@ void getAlbedo() {
 		float k = dot(t, sbW);
 		dAlbedo *= mix(1.0, k, uDetailParams.x * sbK);
 	}
+	// #830: lawns and green ground follow the seasons, and winter frosts the tops of things (the shared vertex-colour
+	// material, and anything drawn as grass; machines and materials forced to another layer keep their paint)
+	if (uDetailForce.w < 0.5 || uDetailForce.y > 0.5) dAlbedo = sbSeasonColour(dAlbedo, normalize(vNormalW), vPositionW);
 }
 `;
 
@@ -324,6 +329,7 @@ class DetailTextures {
     }
     m.setParameter('uDetailForce', force ? FORCE[force] : [0, 0, 0, 0]);
     m.setParameter('uDetailCam', this.cam);
+    seasonShading.register(m); // #830
     this.mats.add(m);
     if (this.device) this.bind(m);
     m.update();
