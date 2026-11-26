@@ -36,7 +36,7 @@ export const POWER = {
   fallbackWind: 0,
   /** Battery (E23.3.2.1): stores surplus and covers deficits, up to `rate` either way. */
   battery: { capacity: 6000, rate: 20 }, // a night (~0.4 day, 1150 s) of a pump and a lamp is ~4600 W·s
-  /** Charger (E23.3.3): bloombot's charge per second while it sits on a powered pad (CHARGE.meditatePerSecond is 6). */
+  /** Charger (E23.3.3): bloombot's charge per second while it sits on a powered pad (CHARGE.meditatePerSecond, 10). */
   // rate: E23.2.1's meditating rate (data/charge); reach: how close to the pad's edge bloombot sits (tiles)
   charger: { rate: CHARGE.meditatePerSecond, reach: 0.75 },
   /**

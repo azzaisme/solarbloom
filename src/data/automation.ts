@@ -14,7 +14,7 @@ export const HAND_JOBS: Record<HandJob, { name: string; times: number }> = {
   /** putting things in the store, or taking them out, at a way into it */
   carry: { name: 'Move things to and from the store', times: 8 },
   /** a component made at the crafting table */
-  craft: { name: 'Make components at the crafting table', times: 12 },
+  craft: { name: 'Make components at the workbench', times: 12 },
 };
 
 export const AUTOMATION = {

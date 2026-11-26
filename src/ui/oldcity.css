@@ -80,4 +80,6 @@ body.contrast .oc-tile, body.contrast .oc-need, body.contrast .oc-store tbody th
 
 /* E23.2.3: sitting on a bench or meditating: the HUD fades away, only the prompt (and toasts) stay */
 #hud > * { transition: opacity .8s; }
-body.resting #hud > :not(#prompt):not(#toasts):not(#cine) { opacity: 0 !important; pointer-events: none !important; }
+body.resting #hud > :not(#prompt):not(#toasts):not(#cine):not(#res):not(#tally) { opacity: 0 !important; pointer-events: none !important; }
+/* #784: sitting, the Charge meter stays (and the "Charging up" chip), so the player sees it fill; the rest goes */
+body.resting #res > :not(#chargeRow) { opacity: 0 !important; pointer-events: none !important; }

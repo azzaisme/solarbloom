@@ -440,7 +440,9 @@ export interface SalvageState {
   works?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
-  /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
+  /** #783: where the workbench stands, beside the house (set on a new game, or on the first load of an older save) */
+  bench?: { x: number; z: number };
+  /** E23.6.1: the workbench's queue (recipe id, crafts left, seconds left on the one in hand) */
   craft?: { id: string; n: number; left: number }[];
   /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
   decorMade?: string[];
