@@ -486,6 +486,9 @@ const signal = {
   /** the Bloom Pulse's ring racing out over the ground, and its sparks */
   bloomPulse: '#ffe27a',
   bloomPulseGreen: '#8dffb4',
+  /** #784: Bloombot charging (a bench, the fountain, a Charger, a snack): warm gold motes and mint ones rising off it */
+  chargeSpark: '#ffd968',
+  chargeSparkMint: '#9dffc8',
   /** the Solarbloom lotus (Emblem.ts), drawn in outline. In the world: its light (the halo, the glow along its lines
    * and the bright thread in them, leaves greener), its painted line under the light by day (gold, the leaves green),
    * and the goal's symbol in the centre petal, painted and glowing (rest in blue and cyan, so low charge stands apart).

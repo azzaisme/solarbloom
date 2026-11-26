@@ -28,6 +28,8 @@ export class ChargeSystem {
   /** where bloombot stood last tick, and how long it has stood still (for resting at home) */
   private lastAt?: { x: number; z: number };
   private still = 0;
+  /** #784: the last source that gave charge, and how long it still counts as charging (never saved) */
+  private flow?: { source: ChargeSource; left: number };
 
   constructor(private sim: Sim) {}
 
@@ -94,6 +96,8 @@ export class ChargeSystem {
     const before = this.value();
     this.set(before + amount);
     const got = this.value() - before;
+    // #784: the player sees it charging (sleep fills at once, behind the night's fade: nothing to show)
+    if (got > 0 && source !== 'sleep') this.flow = { source, left: CHARGE.feedback.holdSeconds };
     if (got > 0 && this.value() >= this.max - 1e-6 && before < this.max - 1e-6) this.sim.bus.emit('charge.full', { source });
     return got;
   }
@@ -159,18 +163,31 @@ export class ChargeSystem {
     return !!f && distToFootprint(x, z, f.x, f.z, f.size) <= R;
   }
 
-  /** Resting at home: standing still there (not just passing through) for a moment. */
+  /**
+   * Resting at home: standing still there (not just passing through) for a moment. #784: not while sitting on a bench
+   * or at a Charger by it: the seat charges Bloombot then, at its own speed, and the trickle never piles on top.
+   */
   get resting(): boolean {
-    return this.still >= CHARGE.home.stillSeconds && this.atHome();
+    return !this.sim.rest?.sitting && this.still >= CHARGE.home.stillSeconds && this.atHome();
+  }
+
+  /**
+   * #784: where charge is coming from right now (a bench, the fountain, a Charger, a snack, the sun...), or
+   * undefined when nothing is charging Bloombot. The game shows it: the meter glows, sparkles rise from Bloombot.
+   */
+  get chargingFrom(): ChargeSource | undefined {
+    return this.flow?.source;
   }
 
   tick(dt: number) {
+    if (this.flow && (this.flow.left -= dt) <= 0) this.flow = undefined;
     const m = this.meal;
     if (m) {
       const bite = Math.min(m.left, m.perSecond * dt);
-      m.left -= bite;
-      this.recharge(bite, 'eat');
-      if (m.left <= 1e-6) this.meal = undefined;
+      // what truly arrived (the charge is kept to 3 decimals): the meal gives all of its charge, never a hair less
+      const got = this.recharge(bite, 'eat');
+      m.left -= got;
+      if (m.left <= 5e-4 || this.value() >= this.max - 1e-6) this.meal = undefined;
     }
     // home: a trickle back while bloombot stands still by the fountain or the house
     const at = this.sim.bot;
@@ -187,9 +204,9 @@ export class ChargeSystem {
     return per > 0 ? per * (this.sim.clock?.solarFactor() ?? 0) : 0;
   }
 
-  /** #624 Sun soak: standing still in the sun, charging (never at home, whose rest is quicker already). */
+  /** #624 Sun soak: standing still in the sun, charging (never at home, whose rest is quicker already, nor sitting: the seat charges then). */
   get soaking(): boolean {
-    return !!this.sim.bot && this.still >= CHARGE.home.stillSeconds && !this.resting && this.sunSoakRate() > 1e-6 && this.value() < this.max - 1e-6;
+    return !!this.sim.bot && !this.sim.rest?.sitting && this.still >= CHARGE.home.stillSeconds && !this.resting && this.sunSoakRate() > 1e-6 && this.value() < this.max - 1e-6;
   }
 
   /** Bloombot can always walk (at zero, the low-power walk). For the gentle-failure suite (E23.10). */

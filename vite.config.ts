@@ -47,7 +47,7 @@ const QUICK = [
   // Phase 8: audio (the dead-to-living soundscape, mix, music, manifest)
   'audio',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
-  'clear-path', 'goal-reachable', 'bloombot-levels', 'bloombot-page', 'park-growth', 'knacks', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
+  'clear-path', 'goal-reachable', 'bloombot-levels', 'bloombot-page', 'park-growth', 'knacks', 'charging-order', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
   'first-time-text',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
