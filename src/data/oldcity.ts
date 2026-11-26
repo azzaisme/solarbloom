@@ -1158,8 +1158,8 @@ export interface HouseFurniture {
  */
 export const HOUSE_INSIDE = {
   layer: 'house',
-  /** world position of the room's north-west cell: high over the park, out of sight from outside */
-  origin: [0, 60, 0] as [number, number, number],
+  /** world position of the room's north-west cell: high over the park, above where birds and clouds go, out of sight */
+  origin: [0, 400, 0] as [number, number, number],
   /** the floor's thickness under the cells (the slab tops sit at origin + height + SLAB_TOP) */
   height: 0,
   /** the walls' height (metres): Bloombot is 0.85 m */

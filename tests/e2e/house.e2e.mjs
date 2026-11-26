@@ -194,7 +194,11 @@ try {
 
   // the Home: Go home from far away, in the menu
   await stand(page, 'g', 9.5, 12.5, 0, 1500);
-  await page.keyboard.press('Escape');
+  // Esc puts the tool in hand back first (the game's own order), then opens the menu
+  for (let i = 0; i < 4 && !(await page.evaluate(() => document.querySelector('#menu')?.classList.contains('open'))); i++) {
+    await page.keyboard.press('Escape');
+    await wait(800);
+  }
   await page.waitForFunction(() => document.querySelector('#menu')?.classList.contains('open'), null, { timeout: 30_000 });
   const homeBtn = await page.evaluate(() => !document.querySelector('#menu-home')?.hidden);
   check(homeBtn, 'the menu offers "Go home" once the house is a Home');

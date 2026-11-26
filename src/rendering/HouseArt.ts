@@ -344,8 +344,8 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
   // a rug in the middle of the room
   b.add('box', H.rugEdge, [ox + R / 2, y + 0.004, oz + R / 2 + 0.3], [Math.min(3.2, R - 3), 0.008, Math.min(2.2, R - 3.5)]);
   b.add('box', H.rug, [ox + R / 2, y + 0.008, oz + R / 2 + 0.3], [Math.min(3.0, R - 3.2), 0.01, Math.min(2.0, R - 3.7)]);
-  // a lamp hanging from a beam over the rug, warm
-  b.add('cylinder', H.beam, [ox + R / 2, y + tall - 0.1, oz + R / 2], [0.02, 0.2, 0.02]);
-  b.add('sphere', H.lamp, [ox + R / 2, y + tall - 0.28, oz + R / 2], 0.14, 1);
+  // a lamp on the back wall, warm (the room's light, HouseInterior, hangs unseen over the rug)
+  b.add('box', H.beam, [ox + 0.6, y + 1.75, oz + 0.05], [0.12, 0.2, 0.08]);
+  b.add('sphere', H.lamp, [ox + 0.6, y + 1.9, oz + 0.12], 0.1, 1);
   for (const f of p.furniture) furniture(b, f, [ox, y, oz], y, p.keepsakes);
 }
