@@ -130,12 +130,17 @@ try {
   });
   check(home, 'Bloombot stands beside the fountain');
   check(await until(() => window.solarbloom.sim.charge.chargingFrom === 'home'), 'standing still a moment, the fountain charges it');
-  await wait(800);
+  // the teleport settles for a moment (a nudge restarts the stand-still wait): measure once it has stood a while
+  await until(() => window.solarbloom.sim.charge.still > 3);
+  await wait(300);
   s = await look();
   check(s.meter && s.glow, 'the meter glows by the fountain');
   check(/Charging up/.test(s.chip), `the chip reads "${s.chip}"`);
   check(await sawSparkles(), 'sparkles rise from Bloombot by the fountain');
+  const still0 = await page.evaluate(() => window.solarbloom.sim.charge.still);
   const fountain = await rate(4);
+  const still1 = await page.evaluate(() => window.solarbloom.sim.charge.still);
+  check(still1 > still0, `Bloombot stood still the whole time it was measured (${still0.toFixed(1)} s → ${still1.toFixed(1)} s)`);
   check(fountain > 0.85 && fountain < 1.15 && fountain < bench, `the fountain gives 1 a second, slower than the bench (${fountain.toFixed(2)} vs ${bench.toFixed(2)})`);
   await page.evaluate(() => (window.solarbloom.zoomStep = 0));
   await wait(1500);
