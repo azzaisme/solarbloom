@@ -22,7 +22,7 @@ const PAD = driver + '\ninstallVirtualPad(); window.padDriver = padDriver; windo
 const port = Number(process.env.PORT ?? 4241);
 const server = process.env.BASE_URL ? undefined : await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
 const base = process.env.BASE_URL ?? `http://localhost:${port}`;
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const innerHeightThird = (size) => Math.round(size.frame[1] / 4); // "about a third": at least a quarter of the height
 const check = (ok, what) => {

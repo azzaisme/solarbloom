@@ -17,7 +17,7 @@ const driver = readFileSync(new URL('./gamepad-driver.js', import.meta.url), 'ut
 const PAD = driver + '\ninstallVirtualPad(); window.padDriver = padDriver; window.installVirtualPad = installVirtualPad;';
 const server = process.env.BASE_URL ? undefined : await preview({ preview: { port: 4236, strictPort: true }, logLevel: 'silent' });
 const base = process.env.BASE_URL ?? 'http://localhost:4236';
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const check = (ok, what) => {
   console.log(`${ok ? '✓' : '✗'} ${what}`);
