@@ -1,6 +1,6 @@
-// E23.6.1 (#435) and E23.6.2 (#391): the workshop in the house (crafting table, upgrades, research station) with
+// E23.6.1 (#435) and E23.6.2 (#391): the workshop (#783: the workbench beside the house: upgrades, research station) with
 // the keyboard alone and with the pad alone, at 1280 × 800.
-// - Craft: open it at the shed, make Wire, see it in the backpack count; the game pauses while it is open.
+// - Craft: open it at the workbench, make Wire, see it in the backpack count; the game pauses while it is open.
 // - Research: look closely at a find, start a project, see it on the bench.
 // - Upgrade: buy a level of an upgrade research has opened.
 // Screenshots go to SHOTS_DIR (default docs/review/ui-workshop-*.png). Run after `vite build` (npm run test:workshop),
@@ -166,8 +166,9 @@ async function open(dev) {
     sv.tier = 1;
     sv.keepers.pylon = { step: 'request1' };
     sv.research = { analysed: [], done: ['rb-backpack'], running: [], levels: {} };
-    g.bot.teleport('g', 3.5, 5.5);
-    g.bot.pose.facing = Math.PI;
+    // #783: the workbench stands outside beside the house: Bloombot in front of it, facing it
+    g.bot.teleport('g', 6.5, 3.5);
+    g.bot.pose.facing = -Math.PI / 2;
   });
   await page.waitForTimeout(600);
   return { page, errors };
@@ -178,7 +179,16 @@ try {
     const { page, errors } = await open(dev);
     const T = (s) => `E23.6 ${dev}: ${s}`;
     const prompt = await page.evaluate(() => window.solarbloom.interactTarget()?.id);
-    check(prompt === 'craft:table', T(`the shed offers the crafting table (${prompt})`));
+    check(prompt === 'craft:bench', T(`the workbench beside the house offers crafting (${prompt})`));
+    // #783: the house is a home now: its walls no longer open crafting
+    const wall = await page.evaluate(async () => {
+      const g = window.solarbloom;
+      g.bot.teleport('g', 3.5, 5.5);
+      g.bot.pose.facing = Math.PI;
+      await new Promise((r) => setTimeout(r, 300));
+      return g.interactTarget()?.id;
+    });
+    check(wall !== 'craft:table' && wall !== 'craft:bench', T(`the house's wall doesn't open crafting (${wall})`));
     // the door in front of the shed keeps the house's own things: the radio by day (E23.7.2), the bed from dusk
     const door = await page.evaluate(async () => {
       const g = window.solarbloom;
@@ -186,13 +196,13 @@ try {
       g.bot.pose.facing = Math.PI;
       await new Promise((r) => setTimeout(r, 300));
       const id = g.interactTarget()?.id;
-      g.bot.teleport('g', 3.5, 5.5);
-      g.bot.pose.facing = Math.PI;
+      g.bot.teleport('g', 6.5, 3.5);
+      g.bot.pose.facing = -Math.PI / 2;
       await new Promise((r) => setTimeout(r, 300));
       return id;
     });
     check(door === 'house:radio' || door === 'house:sleep', T(`the door offers the radio or the bed (${door})`));
-    check((await page.evaluate(() => window.solarbloom.interactTarget()?.id)) === 'craft:table', T('back at the shed: the crafting table again'));
+    check((await page.evaluate(() => window.solarbloom.interactTarget()?.id)) === 'craft:bench', T('back at the workbench: crafting again'));
     await interact(page, dev);
     await page.waitForSelector('#craftScreen.open');
     check(await page.evaluate(() => window.solarbloom.paused), T('the workshop opens and the game pauses'));
@@ -262,8 +272,8 @@ try {
           s.grid.touch(t);
           g.chunks.markTile(t);
         }
-      g.bot.teleport('g', 3.5, 5.5);
-      g.bot.pose.facing = Math.PI;
+      g.bot.teleport('g', 6.5, 3.5);
+      g.bot.pose.facing = -Math.PI / 2;
     });
     await page.waitForTimeout(300);
     await interact(page, dev);

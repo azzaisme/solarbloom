@@ -135,7 +135,7 @@ export class BuildSystem {
     if (!m) return undefined;
     if (m === 'biomass') return 'Needs more Greens 🌿: hold {interact} on flowering ground to gather them';
     // E23.6.1: a component is made at the crafting table (no region to name)
-    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon}: make it at the crafting table in the house`;
+    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon}: make it at the workbench beside the house`;
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 

@@ -264,11 +264,11 @@ try {
     // ── crafting by hand: 12 Wire at the table (Make 5, Make 5, Make 1, Make 1) ──
     await page.evaluate(() => {
       const g = window.solarbloom;
-      g.bot.teleport('g', 3.5, 5.5);
-      g.bot.pose.facing = Math.PI;
+      g.bot.teleport('g', 6.5, 3.5);
+      g.bot.pose.facing = -Math.PI / 2;
     });
     await page.waitForTimeout(400);
-    check((await page.evaluate(() => window.solarbloom.interactTarget()?.id)) === 'craft:table', T('at the shed: the crafting table'));
+    check((await page.evaluate(() => window.solarbloom.interactTarget()?.id)) === 'craft:bench', T('at the workbench beside the house'));
     await interact(page, dev);
     await page.waitForSelector('#craftScreen.open');
     check(await moveTo(page, '#crc-wire', dev), T('the table: reach Wire'));

@@ -104,7 +104,7 @@ function componentCells(sim: Sim, limit: number): ItemCell[] {
       limit,
       stored,
       label: `${name}, ${count} of ${limit} in backpack, ${stored} in store`,
-      from: 'Made at the crafting table',
+      from: 'Made at the workbench',
       next: uses ? `A ${uses.name} takes ${uses.cost[id]}` : 'Nothing needs it yet',
     };
   });
