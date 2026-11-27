@@ -191,14 +191,13 @@ vec3 sbSeasonColour(vec3 c, vec3 n, vec3 p) {
 		c = mix(c, t, g * uSeasonA.x);
 	}
 	if (uSeasonB.x > 0.001 || uSeasonB.z > 0.001) {
-		float up = smoothstep(0.35, 0.9, n.y);
+		float snow = uSeasonB.z;
+		// frost sits on upward faces; deep snow also settles on gentle slopes, kerbs and the bevels between slabs
+		float up = smoothstep(0.35 - 0.3 * snow, 0.9 - 0.45 * snow, n.y);
 		float nz = sbsNoise(p.xz * 2.1);
 		if (uSeasonB.y > 0.5) nz = 0.65 * nz + 0.35 * sbsNoise(p.xz * 6.7 + 3.1);
-		// lying snow widens the frost's patches until they join (past 1 every upward face is covered), and thickens it
+		// lying snow widens the frost's patches until they join (past 1 every upward face is covered)
 		float cover = uSeasonB.x + uSeasonB.z * 1.3;
-		// lying snow is lumpy: its edge follows the drifts (rounded banks, not flat patches), the lumps catch the
-		// light on their sunny side and sit in soft blue hollows, and they tilt the surface's normal (sbSnowBend)
-		float snow = uSeasonB.z;
 		float h = 0.5;
 		vec2 grad = vec2(0.0);
 		if (snow > 0.001) {
@@ -207,18 +206,32 @@ vec3 sbSeasonColour(vec3 c, vec3 n, vec3 p) {
 			grad = vec2(sbsLumps(p.xz + vec2(e, 0.0)) - h, sbsLumps(p.xz + vec2(0.0, e)) - h) / e;
 			nz += (h - 0.5) * 0.55 * snow;
 		}
-		float f = up * smoothstep(1.0 - cover, 1.0 - cover + 0.22, nz);
-		vec3 sc = uSeasonFrost * mix(0.7, 0.88 + 0.07 * snow, up);
+		// a thin frost edge is soft; lying snow has a firmer edge, like a layer with some depth to it
+		float edge = mix(0.22, 0.08, snow);
+		float f = up * smoothstep(1.0 - cover, 1.0 - cover + edge, nz);
+		// frost: a pale glaze over what is under it
+		vec3 sc = uSeasonFrost * mix(0.7, 0.88, up);
+		float k = f * 0.7;
 		if (snow > 0.001) {
 			float lumpK = snow * f;
-			// light from the sun's side (the same direction the leaves are lit from), darker in the hollows
+			// lying snow: near white and matte, hiding what is under it; the lumps are lit on the sun's side and
+			// only faintly blue in their hollows; a soft blue lip runs just inside the edge (the layer's thickness)
 			float lit = clamp(0.5 - 0.6 * dot(grad, normalize(vec2(0.45, 0.3))), 0.0, 1.0);
-			float hollow = 1.0 - smoothstep(0.25, 0.6, h);
-			sc = mix(sc, uSeasonSnowShade * (0.8 + 0.2 * up), clamp(hollow * 0.75 + (0.5 - lit) * 1.4, 0.0, 0.9) * lumpK);
-			sc *= mix(1.0, 0.86 + 0.26 * lit, lumpK);
-			sbSnowBend = vec3(-grad.x, 0.0, -grad.y) * 0.45 * lumpK;
+			float hollow = 1.0 - smoothstep(0.2, 0.55, h);
+			vec3 snowC = uSeasonFrost * (1.0 + 0.08 * lit);
+			snowC = mix(snowC, uSeasonSnowShade, clamp(hollow * 0.3 + (0.5 - lit) * 0.35, 0.0, 0.4));
+			float lip = smoothstep(0.0, 0.45, f) * (1.0 - smoothstep(0.45, 1.0, f));
+			snowC = mix(snowC, uSeasonSnowShade * 0.9, lip * 0.45);
+			// glints: the odd crystal catching the light, only where they are bigger than a pixel (no shimmer)
+			vec2 gq = p.xz * 38.0;
+			float gs = 1.0 - smoothstep(0.4, 0.9, length(fwidth(gq)));
+			float glint = step(0.985, fract(sin(dot(floor(gq), vec2(12.9898, 78.233))) * 43758.5453)) * gs;
+			snowC *= 1.0 + 0.35 * glint;
+			sc = mix(sc, snowC, snow);
+			k = mix(k, f, snow);
+			sbSnowBend = vec3(-grad.x, 0.0, -grad.y) * 0.3 * lumpK;
 		}
-		c = mix(c, sc, f * (0.7 + 0.25 * snow));
+		c = mix(c, sc, k);
 	}
 	return c;
 }
