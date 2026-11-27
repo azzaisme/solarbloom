@@ -645,6 +645,7 @@ export const PALETTE = {
     door: '#5f8a6a', doorHome: '#3f6f8f', shutter: '#7aa287', trim: '#f6f0e2', glass: '#bfe0e8', glassGlow: '#ffd98a',
     step: '#b9b0a2', lamp: '#ffe2a0', fence: '#f2ede2', fencePost: '#d9d1c0', gardenSoil: '#6a5440',
     floor: ['#c79a6b', '#bd8f61', '#cfa476'], floorGap: '#8d6a4b', wallIn: '#f1e7d2', wallInShade: '#e2d5bb', skirting: '#a0784f',
+    iron: '#4b4741', ironDark: '#33302d', copper: '#c9824a', fire: '#ffae5a', tileWhite: '#ece6da',
     rug: '#c86f5a', rugEdge: '#efd9a8', rugBlue: '#6f8fb0', rugGreen: '#8fae7a', doormat: '#b98a52', doormatDark: '#8a6238', blanket: '#7fa7c9', pillow: '#f6f1e6', bedWood: '#9c6d45', chestBand: '#6d6457',
     shelf: '#a7774c', desk: '#9a6a40', book: ['#c8574a', '#4f86a8', '#e1b54a', '#6f9a5a'], paper: '#f3ead2',
     apron: '#5e8f4a', apronEdge: '#4d7a3c', rail: '#e8dcc4',

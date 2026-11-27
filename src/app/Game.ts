@@ -1386,10 +1386,11 @@ export class Game {
     const add = (t: Omit<InteractTarget, 'distance' | 'at' | 'frame'>) => out.push({ ...t, distance: fd, at: front, frame });
     if (piece.id === 'bed')
       add({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', refused: s.clock.canSleep() ? undefined : 'The bed is for the night: come back at dusk', run: () => this.sleep() });
-    else if (piece.id === 'radio') add({ kind: 'door', id: 'house:radio', verb: piece.verb, name: piece.name, run: () => this.listenToRadio() });
-    else if (piece.id === 'chest') add({ kind: 'storage', id: 'house:chest', verb: piece.verb, name: piece.name, run: () => this.oc?.openStorage('The chest in the house') });
-    else if (piece.id === 'shelf') add({ kind: 'door', id: 'house:shelf', verb: piece.verb, name: piece.name, run: () => this.lookAtShelf() });
-    else add({ kind: 'door', id: 'house:desk', verb: piece.verb, name: 'your journal', run: () => this.readAtDesk() });
+    else if (piece.id === 'radio') add({ kind: 'door', id: 'house:radio', verb: piece.verb!, name: piece.name, run: () => this.listenToRadio() });
+    else if (piece.id === 'chest') add({ kind: 'storage', id: 'house:chest', verb: piece.verb!, name: piece.name, run: () => this.oc?.openStorage('The chest in the house') });
+    else if (piece.id === 'shelf') add({ kind: 'door', id: 'house:shelf', verb: piece.verb!, name: piece.name, run: () => this.lookAtShelf() });
+    else if (piece.id === 'desk') add({ kind: 'door', id: 'house:desk', verb: piece.verb!, name: 'your journal', run: () => this.readAtDesk() });
+    // #858: the kitchen counter and the table are there to look at (the stove's cooking: #874)
     return out;
   }
 

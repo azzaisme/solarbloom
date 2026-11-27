@@ -283,6 +283,55 @@ function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes:
     }
     return;
   }
+  if (f.id === 'stove') {
+    // #858: an iron range against the back wall: an oven with a glowing fire window, two hobs and a kettle, its flue
+    const bz = z0 + 0.36;
+    b.add('box', H.tileWhite, [cx, y + 0.9, z0 + 0.03], [0.96, 0.9, 0.04]); // tiles behind it
+    b.add('box', H.iron, [cx, y + 0.4, bz], [0.8, 0.8, 0.6]);
+    b.add('box', H.ironDark, [cx, y + 0.81, bz], [0.84, 0.04, 0.64]);
+    b.add('box', H.ironDark, [cx - 0.16, y + 0.35, bz + 0.305], [0.36, 0.4, 0.02]); // the oven door
+    b.add('box', PALETTE.trim.gold, [cx - 0.16, y + 0.58, bz + 0.33], [0.26, 0.025, 0.03]);
+    b.add('box', H.fire, [cx + 0.2, y + 0.3, bz + 0.31], [0.2, 0.14, 0.02], 0.9); // the fire's window
+    for (const s of [-1, 1]) b.add('cylinder', H.ironDark, [cx + s * 0.2, y + 0.84, bz + 0.05], [0.24, 0.02, 0.24]);
+    b.add('sphere', H.copper, [cx - 0.2, y + 0.95, bz + 0.05], [0.2, 0.16, 0.2]); // the kettle
+    b.add('box', H.copper, [cx - 0.2, y + 1.05, bz + 0.05], [0.04, 0.06, 0.04]);
+    b.add('cylinder', H.ironDark, [cx + 0.25, y + 1.45, z0 + 0.12], [0.12, 1.2, 0.12]); // the flue
+    return;
+  }
+  if (f.id === 'counter') {
+    // #858: cupboards along the back wall, a wooden top with a board, jars and a bowl of vegetables
+    const bz = z0 + 0.33;
+    b.add('box', H.tileWhite, [cx, y + 1.0, z0 + 0.03], [f.w - 0.04, 0.45, 0.04]); // tiles behind it
+    b.add('box', H.plank, [cx, y + 0.38, bz], [f.w - 0.08, 0.76, 0.56]);
+    b.add('box', H.plankLight, [cx, y + 0.79, bz + 0.02], [f.w - 0.02, 0.06, 0.64]);
+    for (let i = 0; i < 2 * f.w; i++) {
+      const dx = x0 + 0.04 + ((f.w - 0.08) * (i + 0.5)) / (2 * f.w);
+      b.add('box', H.plankDark, [dx, y + 0.4, bz + 0.285], [(f.w - 0.08) / (2 * f.w) - 0.05, 0.62, 0.02]); // the doors
+      b.add('sphere', PALETTE.trim.gold, [dx + 0.12 * (i % 2 ? -1 : 1), y + 0.62, bz + 0.31], 0.025);
+    }
+    b.add('box', H.desk, [x0 + 0.45, y + 0.83, bz + 0.05], [0.42, 0.03, 0.3]); // the chopping board
+    for (let i = 0; i < 3; i++) b.add('cylinder', [H.glass, H.copper, H.paper][i], [x0 + f.w - 0.25 - i * 0.16, y + 0.9, z0 + 0.15], [0.11, 0.18, 0.11]);
+    b.add('cylinder', H.plaster, [cx + 0.15, y + 0.86, bz + 0.08], [0.32, 0.08, 0.32]); // the bowl
+    for (const [k, c] of [[-0.06, H.brick], [0.06, PALETTE.leaf.mid], [0, '#e8a13a']] as [number, string][]) b.add('sphere', c, [cx + 0.15 + k, y + 0.92, bz + 0.08 + (k ? 0 : 0.06)], 0.06);
+    return;
+  }
+  if (f.id === 'table') {
+    // #858: a table for two squares by two, a chair at each corner, a jug of flowers and two plates
+    b.add('box', H.bedWood, [cx, y + 0.62, cz], [1.3, 0.06, 0.8]);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.add('box', H.bedWood, [cx + sx * 0.58, y + 0.3, cz + sz * 0.32], [0.06, 0.6, 0.06]);
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        const chx = cx + sx * 0.35;
+        const chz = cz + sz * 0.62;
+        b.add('box', H.desk, [chx, y + 0.36, chz], [0.36, 0.05, 0.34]);
+        for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.add('box', H.desk, [chx + lx * 0.15, y + 0.17, chz + lz * 0.14], [0.04, 0.34, 0.04]);
+        b.add('box', H.desk, [chx, y + 0.6, chz + sz * 0.16], [0.36, 0.44, 0.04]); // the back, away from the table
+      }
+    b.add('cylinder', H.glass, [cx, y + 0.72, cz], [0.12, 0.16, 0.12]);
+    for (let i = 0; i < 3; i++) b.add('sphere', FLOWERS[i % FLOWERS.length], [cx + (i - 1) * 0.05, y + 0.84, cz + (i % 2) * 0.04], 0.05);
+    for (const s of [-1, 1]) b.add('cylinder', H.pillow, [cx + s * 0.35, y + 0.655, cz + s * 0.2], [0.24, 0.015, 0.24]);
+    return;
+  }
   // the journal desk: a table, an open book, a pen and a lamp
   b.add('box', H.desk, [cx, y + 0.42, cz], [0.62, 0.06, 0.8]);
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.add('box', H.desk, [cx + sx * 0.26, y + 0.2, cz + sz * 0.34], [0.05, 0.4, 0.05]);
