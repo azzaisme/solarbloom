@@ -656,6 +656,10 @@ export const PALETTE = {
   furnish: {
     fabric: '#c7795e', fabricDark: '#a35f48', cushion: '#f3e6cc', seat: '#d9a35f', coat: '#6f9a7c', hat: '#5b4a3a',
     brass: '#c9a14a', cloth: '#efe4cc', clothEdge: '#c86f5a', plate: '#f6f1e6', iron: '#4b4741',
+    // #851: rugs (a few colours), lamp shades, pots, cushions, the clock
+    rugGreen: '#8fae7a', rugGreenEdge: '#e9dfc3', rugBlue: '#5f86a8', rugBlueEdge: '#e8d3a0', rugRed: '#b4533f', rugCream: '#efdfbd',
+    rugGold: '#d9a648', rugTeal: '#3f8a86', shade: '#efe2c2', pot: '#c06b45', potRim: '#d98a5c', potWhite: '#e9e3d6', soil: '#5f4733',
+    cushions: ['#c86f5a', '#7fa7c9', '#e1b54a', '#8fae7a'] as string[], clockWood: '#7d5a3e', clockFace: '#f6f0e2',
   },
   /**
    * #830: the seasons (rendering/SeasonLook). `grass`: the colour green grass, lawns, shrubs and leaves drift toward in

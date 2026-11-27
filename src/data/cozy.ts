@@ -1,4 +1,4 @@
-import { LIGHTS } from './lights';
+import { LIGHTS, ROOM_LIGHTS } from './lights';
 // E19 (#245): the cozy city. Plot options and when they unlock. All data, no rules: cosmetic only, so nothing
 // here may ever feed production, chains, milestones, pacing or the biodiversity score. The one exception is E27.2's
 // PLOT_WORK (end of file): Bloombot gathering from or pruning a plant plot, on the existing clipping economy.
@@ -134,6 +134,16 @@ export const DECOR_OPTIONS: DecorOption[] = [
   { id: 'sidetable', name: 'Side table', icon: '🫖', blurb: 'A small round table for a teapot or a book.', solid: true, unlock: { start: true }, indoor: true },
   { id: 'bookshelf', name: 'Bookshelf', icon: '📚', blurb: 'A tall shelf of well-read books.', solid: true, unlock: { start: true }, indoor: true },
   { id: 'coatstand', name: 'Coat stand', icon: '🧥', blurb: 'Somewhere by the door for a coat and a hat.', solid: true, unlock: { start: true }, indoor: true },
+  // #851: soft furnishings. Rugs are flat: they lie under Bloombot's feet. Lamps are lights (data/lights ROOM_LIGHTS).
+  { id: 'roundrug', name: 'Round rug', icon: '🔘', blurb: 'A small round rug in soft green. Walk right over it.', solid: false, unlock: { start: true }, indoor: true },
+  { id: 'hallrunner', name: 'Hall runner', icon: '🎞️', blurb: 'A long, narrow blue rug for a hallway. Walk right over it.', solid: false, unlock: { start: true }, indoor: true, size: [1, 3] },
+  { id: 'bigrug', name: 'Big rug', icon: '🟥', blurb: 'A wide red rug with a cream border. Walk right over it.', solid: false, unlock: { start: true }, indoor: true, size: [2, 3] },
+  { id: 'patternrug', name: 'Patterned rug', icon: '🔶', blurb: 'A square rug of gold and teal checks. Walk right over it.', solid: false, unlock: { start: true }, indoor: true, size: [2, 2] },
+  ...ROOM_LIGHTS.map((l) => ({ id: l.id, name: l.name, icon: l.icon, blurb: l.blurb, solid: l.solid, unlock: l.unlock, indoor: true })),
+  { id: 'houseplant', name: 'Houseplant', icon: '🌵', blurb: 'A leafy plant in a pot. No two grow quite the same.', solid: true, unlock: { start: true }, indoor: true },
+  { id: 'pottedtree', name: 'Little potted tree', icon: '🌴', blurb: 'A small tree in a big pot, for a sunny corner.', solid: true, unlock: { start: true }, indoor: true },
+  { id: 'cushions', name: 'Cushion pile', icon: '🧸', blurb: 'A heap of soft cushions on the floor. Walk right over it.', solid: false, unlock: { start: true }, indoor: true },
+  { id: 'clock', name: 'Clock', icon: '🕰️', blurb: 'A tall clock with a brass pendulum.', solid: true, unlock: { start: true }, indoor: true },
 ];
 
 export const DECOR_OPTION: Record<string, DecorOption> = Object.fromEntries(DECOR_OPTIONS.map((o) => [o.id, o]));

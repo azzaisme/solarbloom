@@ -82,7 +82,7 @@ const QUICK = [
   // #787: the regions' works (power, water, drones) and the unlock-order walk
   'region-works', 'seasons',
   // #842: furnishing the house (#849 pieces bigger than one square, #847 the tray's order)
-  'decor-footprint', 'decor-tray', 'decor-furniture',
+  'decor-footprint', 'decor-tray', 'decor-furniture', 'decor-soft',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
