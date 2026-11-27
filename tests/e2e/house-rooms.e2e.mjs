@@ -28,7 +28,7 @@ const keyOf = (page, action) => page.evaluate((a) => window.solarbloom.bindings.
 const press = async (page, code) => page.keyboard.press(code.replace(/^Key/, '').replace(/^Digit/, ''));
 const prompt = (page) => page.evaluate(() => document.getElementById('prompt')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
 const shot = async (page, file) => {
-  const css = await page.addStyleTag({ content: QUIET_CSS });
+  const css = await page.addStyleTag({ content: `${QUIET_CSS} #obj, #res { display: none !important; }` });
   await wait(400);
   await page.screenshot({ path: `${dir}/${file}` });
   await css.evaluate((e) => e.remove());
@@ -79,11 +79,15 @@ const where = (page) =>
 const grow = async (page, level) => {
   await page.evaluate(() => window.solarbloom.exitHouse());
   await wait(800);
-  await page.evaluate((l) => {
+  await page.evaluate(() => window.solarbloom.bot.teleport('g', 4.5, 6.5)); // at the door, in reach of the chests
+  await wait(1500);
+  const why = await page.evaluate((l) => {
     const g = window.solarbloom;
-    g.bot.teleport('g', 4.5, 6.5); // at the door, in reach of the chests
+    g.sim.bot = { roofId: 'g', x: 4.5, z: 6.5 }; // where the sim reads Bloombot (it follows the pose each frame)
     for (let i = 0; i < 4 && g.sim.house.level < l; i++) g.sim.house.giveAll();
+    return g.sim.house.level < l ? `${g.sim.house.problem()} (pose ${JSON.stringify(g.bot.pose)}, paused ${JSON.stringify(g.pause?.reasons ?? null)})` : '';
   }, level);
+  if (why) console.log('  the house did not grow:', why);
   await page.waitForFunction((l) => window.solarbloom.sim.house.level === l, level, { timeout: 60_000 });
   await wait(1500);
   await page.evaluate(() => {
@@ -91,9 +95,11 @@ const grow = async (page, level) => {
     g.bot.teleport('g', 4.5, 6.5);
     g.bot.turnTo(Math.PI);
   });
-  await wait(1200);
+  // through the front door with the real key, once the prompt offers it
+  await page.waitForFunction(() => /Go inside/.test(document.getElementById('prompt')?.innerText ?? ''), null, { timeout: 60_000, polling: 300 }).catch(() => {});
   await press(page, await keyOf(page, 'interact'));
-  await wait(3000);
+  await page.waitForFunction(() => window.solarbloom.bot.pose.roofId === 'house', null, { timeout: 60_000, polling: 300 });
+  await wait(5000); // the indoor camera settles
 };
 
 const PROMPTS = { bed: /Sleep|bed is for the night/, radio: /Listen to the radio/, chest: /Open the chest/, shelf: /Look at the keepsake shelf/, desk: /Read your journal/ };
