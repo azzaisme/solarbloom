@@ -82,7 +82,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         { kind: 'select', key: 'uiScale', label: 'Text and interface size', options: [['100', '100%'], ['125', '125%'], ['150', '150%']], fallback: '100', numeric: true },
         { kind: 'check', key: 'highContrast', label: 'High contrast', hint: 'Stronger colours and clearer edges on the menus and cards' },
         { kind: 'check', key: 'reducedMotion', label: 'Reduced motion and effects', hint: 'Less shaking, flashing and bouncing on screen' },
-        { kind: 'check', key: 'holdToAct', label: 'Hold the button to dig and pry', hint: 'Turn this off to dig out piles and pry rubble open with a single press', defaultOn: true },
+        { kind: 'check', key: 'holdToAct', label: 'Hold the button to dig and prune', hint: 'Turn this off to dig out piles and prune through hedges with a single press', defaultOn: true },
         { kind: 'heading', label: 'Camera' },
         { kind: 'select', key: 'camSensitivity', label: 'Camera speed', options: [['50', 'Slow'], ['75', 'Gentle'], ['100', 'Normal'], ['150', 'Quick'], ['200', 'Fast']], fallback: '100', numeric: true },
         {

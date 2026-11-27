@@ -32,7 +32,7 @@ const KNOBS: Knob[] = [
   { label: 'haze start (far)', min: 0, max: 40, step: 1, get: (g) => g.look.haze.start[0], set: (g, v) => (g.look.haze.start[0] = v) },
   { label: 'haze end (far)', min: 30, max: 160, step: 1, get: (g) => g.look.haze.end[0], set: (g, v) => (g.look.haze.end[0] = v) },
   { label: 'horizon haze', min: 0, max: 1, step: 0.01, get: (g) => L(g).horizon.strength, set: (g, v) => (L(g).horizon.strength = v) },
-  { label: 'cloud ring size', min: 1, max: 2.5, step: 0.05, get: (g) => L(g).cloudRing.size, set: (g, v) => (L(g).cloudRing.size = v) },
+  { label: 'hedge height', min: 0.6, max: 1.6, step: 0.05, get: (g) => L(g).hedgeLine.height, set: (g, v) => (L(g).hedgeLine.height = v) },
 ];
 
 /** Jumps the clock to a preset's moment (the same way the fixed-camera shots do) with the weather held sunny. */
@@ -79,7 +79,7 @@ export function toggleLightPanel(game: Game): string {
       k.set(game, +input.value);
       show();
       game.look.apply();
-      if (k.label.startsWith('cloud ring')) game.cloudWall.sync();
+      if (k.label.startsWith('hedge')) game.hedgeLine.sync();
     };
     label.append(text, input);
     p.appendChild(label);

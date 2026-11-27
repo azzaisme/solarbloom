@@ -59,7 +59,7 @@ describe('#624: five new Bloombot upgrades in data', () => {
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     for (const m of ['scrap', 'seeds', 'copper', 'gears', 'wire', 'glassPane', 'batteryCell', 'motor', 'sunCell', 'sunstone'] as const) sim.inventory.addToStore(m, 200);
     const u = sim.upgrades;
-    const read = (id: string) => ({ quickHands: -u.pryHold, keenEye: u.rippleRadius, sunSoak: u.sunSoak, lantern: u.lanternReach, luckyPulse: u.luckyChance })[id]!;
+    const read = (id: string) => ({ quickHands: -u.pruneHold, keenEye: u.rippleRadius, sunSoak: u.sunSoak, lantern: u.lanternReach, luckyPulse: u.luckyChance })[id]!;
     for (const id of NEW) {
       const max = RESEARCH_UPGRADES.find((q) => q.id === id)!.levels.length;
       for (let l = 1; l <= max; l++) {
@@ -76,7 +76,7 @@ describe('#624: what each does', () => {
   it('none does anything before it is bought', () => {
     const u = fresh().upgrades;
     expect(u.salvageHold).toBe(SALVAGE.holdSeconds);
-    expect(u.pryHold).toBe(SALVAGE.pryHoldSeconds);
+    expect(u.pruneHold).toBe(SALVAGE.pruneHoldSeconds);
     expect(u.rippleRadius).toBe(RIPPLE.radius);
     expect(u.glintExtra).toBe(0);
     expect(u.findsOnMap).toBe(false);
@@ -86,7 +86,7 @@ describe('#624: what each does', () => {
   });
 
   it('Quick hands: prying rubble and vault doors take a fifth less a level, so each level is felt', () => {
-    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.pryHold.toFixed(3))).toEqual([2, 1.6, 1.2, 0.8]);
+    expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.pruneHold.toFixed(3))).toEqual([2, 1.6, 1.2, 0.8]);
     expect([0, 1, 2, 3].map((l) => +at({ quickHands: l }).upgrades.vaultHold.toFixed(3))).toEqual([3, 2.4, 1.8, 1.2]);
   });
 
@@ -101,7 +101,7 @@ describe('#624: what each does', () => {
     // the floor holds whatever the numbers: even with the levels pushed far past what can be bought
     expect(RESEARCH.minHold).toBeCloseTo(1 / 3, 1);
     const silly = at({ quickHands: 20 });
-    expect(silly.upgrades.pryHold).toBe(RESEARCH.minHold);
+    expect(silly.upgrades.pruneHold).toBe(RESEARCH.minHold);
     expect(silly.upgrades.vaultHold).toBe(RESEARCH.minHold);
   });
 
@@ -111,15 +111,15 @@ describe('#624: what each does', () => {
     const rows = bloombotRows(sim);
     const quick = rows.find((r) => r.id === 'quickHands')!;
     const nimble = rows.find((r) => r.id === 'quick')!;
-    expect(quick.now).toBe('Right now prying rubble open takes 0.8 seconds.');
+    expect(quick.now).toBe('Right now pruning through a hedge takes 0.8 seconds.');
     expect(nimble.now).toBe('Right now digging out a pile takes 0.45 seconds.');
-    expect(quick.does).toBe('Bloombot pries rubble and old vault doors open faster.');
+    expect(quick.does).toBe('Bloombot prunes through hedges and pries old vault doors open faster.');
     for (const t of [quick.now!, nimble.now!, quick.does]) expect(bannedIn(t)).toEqual([]);
     // once Bloombot can pry a vault door open (Pry II), the row says how long that takes too
-    sim.state.salvage!.abilities = ['pry'];
-    sim.state.salvage!.research!.done.push(sim.research.moveProject('pry')!.id);
-    expect(bloombotRows(sim).find((r) => r.id === 'quickHands')!.now).toBe('Right now prying rubble open takes 0.8 seconds, and an old vault door 1.2 seconds.');
-    expect(bloombotRows(at({})).find((r) => r.id === 'quickHands')!.now).toBe('Right now prying rubble open takes 2 seconds.');
+    sim.state.salvage!.abilities = ['prune'];
+    sim.state.salvage!.research!.done.push(sim.research.moveProject('prune')!.id);
+    expect(bloombotRows(sim).find((r) => r.id === 'quickHands')!.now).toBe('Right now pruning through a hedge takes 0.8 seconds, and prying an old vault door 1.2 seconds.');
+    expect(bloombotRows(at({})).find((r) => r.id === 'quickHands')!.now).toBe('Right now pruning through a hedge takes 2 seconds.');
   });
 
   it('Keen eye: the pulse lights up piles from 4 tiles further a level; at level 3 they show on the map', () => {

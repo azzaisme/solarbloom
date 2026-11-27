@@ -200,7 +200,7 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     // through Mast Row's barricade the way bloombot opens it (Pry), then its landmark woken
-    if (!s.state.salvage.abilities.includes('pry')) s.state.salvage.abilities.push('pry');
+    if (!s.state.salvage.abilities.includes('prune')) s.state.salvage.abilities.push('prune');
     s.gates.open('g-mastRow');
     s.areas.clear('mastRow', true);
     for (let z = -26; z <= -16; z++)

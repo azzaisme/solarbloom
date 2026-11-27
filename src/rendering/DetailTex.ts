@@ -217,6 +217,8 @@ void getNormal() {
 		vec2 d = nm.xy * sbW.x + nm.zw * sbW.y;
 		dNormalW = normalize(dNormalW + (sbT * d.x + sbB * d.y) * uDetailParams.y * sbK);
 	}
+	// #830: lumps in lying snow (SeasonLook) tilt the surface
+	dNormalW = normalize(dNormalW + sbSnowBend);
 #endif
 }
 `;

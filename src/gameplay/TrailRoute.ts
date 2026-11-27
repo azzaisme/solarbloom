@@ -71,7 +71,7 @@ function besideGoal(sim: Sim, walker: Walker, roofId: string, goal: GoalSpot): n
 
 /**
  * What stands between where the way stops and the goal, in plain words. Looks along the straight line from the stop
- * to the goal: a shut way in anywhere on it says what it needs (its own words, as the rubble's prompt does);
+ * to the goal: a shut way in anywhere on it says what it needs (its own words, as the hedge's prompt does);
  * otherwise the first thing in the way. Every line tells a first-time player what to do next.
  */
 export function whyStops(sim: Sim, walker: Walker, roofId: string, end: TrailPoint, goal: GoalSpot): string {
@@ -92,7 +92,7 @@ export function whyStops(sim: Sim, walker: Walker, roofId: string, end: TrailPoi
     const cz = Math.floor(end.z + (dz * i) / n);
     if (cx === sx && cz === sz) continue;
     if (roofId === GROUND) {
-      // a shut way in: what blocks it, and how it opens (its own words, as at the rubble itself)
+      // a shut way in: what blocks it, and how it opens (its own words, as at the hedge itself)
       const gate = sim.gates.gateAt(cx, cz);
       if (gate) return gateWhy(sim, gate);
     }
@@ -105,7 +105,7 @@ export function whyStops(sim: Sim, walker: Walker, roofId: string, end: TrailPoi
   return first ?? WORDS.trail.blocked;
 }
 
-/** A shut way in: what blocks it and how it opens, or that bloombot can open it now (its own words, as at the rubble). */
+/** A shut way in: what blocks it and how it opens, or that bloombot can open it now (its own words, as at the hedge). */
 function gateWhy(sim: Sim, gate: GateDef): string {
   const p = sim.gates.problem(gate);
   if (!p) return `${gate.blocked} ${WORDS.trail.openNow}`;

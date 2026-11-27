@@ -53,7 +53,7 @@ describe('#610: lines for a first-time player', () => {
   });
 
   it('a way out is named by what blocks it, not by where it leads', () => {
-    expect(gateThing(REGIONS.find((r) => r.gate.kind === 'barricade')!.gate)).toBe('the rubble');
+    expect(gateThing(REGIONS.find((r) => r.gate.kind === 'hedge')!.gate)).toBe('the hedge');
     for (const r of REGIONS) expect(gateThing(r.gate), r.id).toMatch(/^the /);
     for (const r of REGIONS) for (const p of places) expect(r.gate.how, r.id).not.toContain(p);
   });

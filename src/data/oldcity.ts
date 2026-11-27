@@ -33,39 +33,63 @@ export const OLD_CITY = {
 
 export type RegionId = 'mastRow' | 'oldMarket' | 'saltwind' | 'elderGrove' | 'cistern' | 'clockPlaza' | 'terraces' | 'glasshouse' | 'observatory' | 'spireHeights';
 
-export type GateKind = 'barricade' | 'water' | 'lockBridge' | 'bridge' | 'climb' | 'cliff';
+export type GateKind = 'hedge' | 'water' | 'lockBridge' | 'bridge' | 'climb' | 'cliff';
 
 export interface GateDef {
   id: string;
   kind: GateKind;
-  /** cells the gate covers (a barricade's rubble, the deep water, the bridge deck) */
+  /** cells the gate covers (a hedge's way in, the deep water, the bridge deck) */
   cells: [number, number][];
   /** what opens it: an ability, a region's landmark waking, or a repair delivery */
-  needs: { ability?: AbilityId; landmark?: RegionId; repair?: MaterialCost };
+  /**
+   * `alive` (#hedge-line, owner 27 Nov 2026): the share of the area on Bloombot's side of it that has to be no longer
+   * dead first (a hedge's lock: a third of the park, say). GateSystem.aliveArea says which area that is.
+   */
+  needs: { ability?: AbilityId; landmark?: RegionId; repair?: MaterialCost; alive?: number };
   /** what the prompt says while it is shut: what is in the way, in a few words */
   blocked: string;
   /**
    * #606: what the player does about it, in plain words (no "tier": the fountain's steps by their place, the way the
-   * fountain's panel counts them). The prompt says `blocked` then `how` (gateText); the clouds over the region say
+   * fountain's panel counts them). The prompt says `blocked` then `how` (gateText); the hedge round the region says
    * where it is, then `how` (AreaSystem.sealText).
    */
   how: string;
   /**
    * Opening it opens its region (the default). False when the region is open from the start and the gate only
-   * shuts off part of it (Saltwind Beach: the boat lands there; the barricade blocks the boardwalk to the Sea Lock).
+   * shuts off part of it (Saltwind Beach: the boat lands there; a dead hedge blocks the boardwalk to the Sea Lock).
    */
   opensRegion?: boolean;
+  /**
+   * #hedge-line: a hedge gate inside open ground (not on a sealed region's edge, so no hedge line runs past it): a
+   * short stretch of hedge across its way, running along `along`, with its forcefield on the `front` side (+1 or -1 on
+   * the other axis), the side Bloombot comes from.
+   */
+  plug?: { along: 'x' | 'z'; front: 1 | -1 };
 }
 
 /** #606: what a shut gate's prompt says: what is in the way, then what to do about it. */
-/** #610: what stands in a way, as the player sees it ("the rubble", "the canal"), never the place's name. */
+/** #610: what stands in a way, as the player sees it ("the hedge", "the canal"), never the place's name. */
 export function gateThing(g: GateDef): string {
-  return { barricade: 'the rubble', water: 'the deep water', lockBridge: 'the canal', bridge: 'the broken bridge', climb: 'the climb up to the roofs', cliff: 'the cliff' }[g.kind];
+  return { hedge: 'the hedge', water: 'the deep water', lockBridge: 'the canal', bridge: 'the broken bridge', climb: 'the climb up to the roofs', cliff: 'the cliff' }[g.kind];
 }
 
 export function gateText(g: GateDef): string {
   return `${g.blocked} ${g.how}`;
 }
+
+/** #hedge-line: a share the way people say it ("a third"), for the hedge's lock. */
+export function shareWords(k: number): string {
+  const named: [number, string][] = [[1 / 4, 'a quarter'], [1 / 3, 'a third'], [1 / 2, 'half'], [2 / 3, 'two thirds'], [3 / 4, 'three quarters']];
+  return named.find(([v]) => Math.abs(v - k) < 0.01)?.[1] ?? `${Math.round(k * 100)}%`;
+}
+
+/** #hedge-line: what a hedge's lock says while the ground on Bloombot's side is still too dead. */
+export function aliveText(need: number, have: number, place: string): string {
+  return `The hedge won't give yet. Bring ${shareWords(need)} of ${place} back to life first (${Math.round(have * 100)}% so far).`;
+}
+
+/** #hedge-line (owner, 27 Nov 2026): a hedge's lock opens once this share of the ground on Bloombot's side is alive. */
+export const HEDGE_ALIVE = 1 / 3;
 
 /** A rectangle of cells (x, z, width, depth). */
 export interface CellRect {
@@ -169,7 +193,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 9, z: -8, w: 2, d: 3 }],
     seam: { name: 'the Pipeworks', x: 23, z: -8 },
-    gate: { id: 'g-mastRow', kind: 'barricade', cells: [[7, -1], [8, -1]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
+    gate: { id: 'g-mastRow', kind: 'hedge', cells: [[7, -1], [8, -1]], needs: { ability: 'prune', alive: HEDGE_ALIVE }, blocked: 'A dead hedge blocks the way.', how: 'Wake the fountain and Bloombot will learn to prune a way through.' },
     patch: { name: 'The tram stop', x: 10, z: -20, w: 5, d: 3 },
     caches: [
       { id: 'c-mastRow-1', x: 2, z: -30 },
@@ -223,7 +247,7 @@ export const REGIONS: RegionDef[] = [
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
     ponds: [{ x: 21, z: 9, w: 2, d: 3 }],
     seam: { name: 'the Glassworks', x: 40, z: 24 },
-    gate: { id: 'g-oldMarket', kind: 'barricade', cells: [[16, 7], [16, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
+    gate: { id: 'g-oldMarket', kind: 'hedge', cells: [[16, 7], [16, 8]], needs: { ability: 'prune', alive: HEDGE_ALIVE }, blocked: 'A dead hedge blocks the way.', how: 'Wake the fountain and Bloombot will learn to prune a way through.' },
     patch: { name: 'The market square', x: 26, z: 18, w: 6, d: 4 },
     caches: [
       { id: 'c-oldMarket-1', x: 45, z: 2 },
@@ -240,7 +264,7 @@ export const REGIONS: RegionDef[] = [
     ladders: [],
     perches: [],
     // E23.1.4 (#536): the market's glass, used in glass panes and in the Market Hall delivery: two
-    // just past the barricade, two along the market road, two by the Glassworks. They refill like every pile (E23.7.4).
+    // just past the hedge, two along the market road, two by the Glassworks. They refill like every pile (E23.7.4).
     piles: [
       P('om-g1', 22, 5, 'glass', 'medium', 'salvage-glass'),
       P('om-g2', 27, 11, 'glass', 'small', 'salvage-glass'),
@@ -277,8 +301,8 @@ export const REGIONS: RegionDef[] = [
     ponds: [{ x: 12, z: 18, w: 2, d: 3 }],
     seam: { name: 'the Driftline', x: -12, z: 28 },
     // The boat lands here, so the beach is open from the start. The Sea Lock stands across the canal that runs down
-    // to the bay; the barricade blocks the boardwalk bridge over it.
-    gate: { id: 'g-saltwind', kind: 'barricade', cells: [[-3, 36], [-2, 36], [-3, 37], [-2, 37]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the boardwalk to the Sea Lock.', how: 'Wake the fountain and Bloombot will learn to pry it open.', opensRegion: false },
+    // to the bay; a dead hedge blocks the boardwalk bridge over it.
+    gate: { id: 'g-saltwind', kind: 'hedge', cells: [[-3, 36], [-2, 36], [-3, 37], [-2, 37]], needs: { ability: 'prune', alive: HEDGE_ALIVE }, blocked: 'A dead hedge blocks the boardwalk to the Sea Lock.', how: 'Wake the fountain and Bloombot will learn to prune a way through.', opensRegion: false, plug: { along: 'z', front: 1 } },
     patch: { name: 'The boardwalk', x: 0, z: 36, w: 10, d: 2 },
     caches: [
       { id: 'c-saltwind-1', x: -15, z: 18 },
@@ -376,7 +400,7 @@ export const REGIONS: RegionDef[] = [
     landmark: { kind: 'elder', name: 'Elder Tree', x: -20, z: -4 },
     keeper: 'moss',
     seam: { name: 'the Seedbank', x: -28, z: 8 },
-    gate: { id: 'g-elderGrove', kind: 'barricade', cells: [[-1, 7], [-1, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way.', how: 'Wake the fountain and Bloombot will learn to pry it open.' },
+    gate: { id: 'g-elderGrove', kind: 'hedge', cells: [[-1, 7], [-1, 8]], needs: { ability: 'prune', alive: HEDGE_ALIVE }, blocked: 'A dead hedge blocks the way.', how: 'Wake the fountain and Bloombot will learn to prune a way through.' },
     patch: { name: 'The ring of stumps', x: -14, z: 2, w: 4, d: 4 },
     caches: [
       { id: 'c-elderGrove-1', x: -31, z: -15 },
@@ -1448,6 +1472,7 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
 };
 
 /** The model each gate kind is drawn with (names from MODEL_NAMES). */
-export const GATE_MODELS: Record<GateKind, string> = { barricade: 'barricade', water: 'lift-bridge', lockBridge: 'lift-bridge', bridge: 'bridge-broken', climb: 'skybridge-collapsed', cliff: 'glide-perch' };
+/** (a hedge has none: HedgeLine draws it, with its forcefield) */
+export const GATE_MODELS: Record<GateKind, string> = { hedge: '', water: 'lift-bridge', lockBridge: 'lift-bridge', bridge: 'bridge-broken', climb: 'skybridge-collapsed', cliff: 'glide-perch' };
 /** The model each new landmark kind is drawn with. */
 export const OLD_LANDMARK_MODELS: Record<string, string> = { greenhouse: 'great-greenhouse', observatory: 'sky-observatory', spire: 'solar-spire' };

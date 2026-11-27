@@ -9,7 +9,7 @@ import { MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
 import type { ItemId, MaterialId } from '../core/types';
 import { earlyPowerHint, oldCityHint } from './OldCityGuide';
-import { ITEMS, REGIONS, type RegionDef } from '../data/oldcity';
+import { ITEMS, REGIONS, shareWords, type RegionDef } from '../data/oldcity';
 
 /**
  * E22.10 (#348) / E22.5 (#342): the objective card (top left). #605 (E24): the goal stays on top for as long as the
@@ -20,7 +20,7 @@ import { ITEMS, REGIONS, type RegionDef } from '../data/oldcity';
 export interface Objective {
   /** the goal, one plain line */
   text: string;
-  /** #605: what the goal brings ("Bloombot learns to pry open rubble") */
+  /** #605: what the goal brings ("Bloombot learns to prune through the dead hedges") */
   why?: string;
   /** #620: a few words before `why` that the card drops first when room is short ("The fountain's next step.") */
   lead?: string;
@@ -92,18 +92,18 @@ export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim
   const t = f.next();
   // after the last step: the advisor's step is the goal (nothing is left to wait under)
   if (!t) return { text: advice?.text ?? W.explore, topic: advice?.topic, where: advice?.action, place: advice?.place };
-  // after the fountain wakes, until the first pry: the rubble is the goal (the step after can wait)
-  const rubble = firstRubble(sim);
-  if (rubble) {
-    const [x, z] = rubble.gate.cells[0];
+  // after the fountain wakes, until the first prune: the hedge is the goal (the step after can wait)
+  const hedge = firstHedge(sim);
+  if (hedge) {
+    const [x, z] = hedge.gate.cells[0];
     const urgent = advice && URGENT.has(advice.topic) ? next : undefined;
     return {
-      text: W.pry,
-      why: W.pryWhy,
-      next: urgent?.next ?? W.pryNext,
+      text: W.prune,
+      why: W.pruneWhy,
+      next: urgent?.next ?? hedgeNext(sim, hedge),
       topic: urgent?.topic ?? 'keeper',
       where: urgent?.where ?? { kind: 'focus', x, z },
-      place: urgent ? urgent.place : { kind: 'gate', name: `the rubble into ${rubble.name}` },
+      place: urgent ? urgent.place : { kind: 'gate', name: `the hedge into ${hedge.name}` },
     };
   }
   const parts = fountainParts(sim);
@@ -121,17 +121,24 @@ export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim
 }
 
 /**
- * #605: bloombot can pry and hasn't yet: the shut rubble nearest it that pry opens (the first Keeper's way in), so
- * the card leads there before the fountain's next step. Undefined once any rubble is pried.
+ * #605: bloombot can prune and hasn't yet: the shut hedge nearest it that pruning opens (the first Keeper's way in), so
+ * the card leads there before the fountain's next step. Undefined once any hedge is pruned through.
  */
-export function firstRubble(sim: Sim): RegionDef | undefined {
+/** #hedge-line: the hedge card's step: bring the ground on this side back first, while the lock still waits on it. */
+function hedgeNext(sim: Sim, r: RegionDef): string {
+  const need = r.gate.needs.alive;
+  if (!need || sim.gates.aliveShare(r.gate) >= need) return WORDS.objective.pruneNext;
+  return WORDS.objective.pruneGreen(shareWords(need), sim.gates.placeName(sim.gates.aliveArea(r.gate)));
+}
+
+export function firstHedge(sim: Sim): RegionDef | undefined {
   const sv = sim.state.salvage;
-  if (!sv?.abilities.includes('pry')) return undefined;
-  const pry = REGIONS.filter((r) => r.gate.needs.ability === 'pry');
-  if (pry.some((r) => sim.gates.isOpen(r.gate.id))) return undefined;
-  // #644: the rubble bloombot can walk up to soonest (one it can't reach only if it can reach none)
-  // (a pry gate's only other bar is charge: running low never changes the goal, it shows under it)
-  return nearestByFoot(sim, pry, (r) => ({ x: r.gate.cells[0][0], z: r.gate.cells[0][1] }));
+  if (!sv?.abilities.includes('prune')) return undefined;
+  const prune = REGIONS.filter((r) => r.gate.needs.ability === 'prune');
+  if (prune.some((r) => sim.gates.isOpen(r.gate.id))) return undefined;
+  // #644: the hedge bloombot can walk up to soonest (one it can't reach only if it can reach none)
+  // (a hedge gate's only other bar is charge: running low never changes the goal, it shows under it)
+  return nearestByFoot(sim, prune, (r) => ({ x: r.gate.cells[0][0], z: r.gate.cells[0][1] }));
 }
 
 /**

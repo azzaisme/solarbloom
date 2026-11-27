@@ -78,7 +78,7 @@ try {
         const s = g.sim;
         const sv = s.state.salvage;
         sv.tier = 1;
-        if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+        if (!sv.abilities.includes('prune')) sv.abilities.push('prune');
         s.areas.clear('park', true);
         s.gates.open('g-mastRow');
         for (let z = -12; z <= -1; z++)
@@ -219,7 +219,7 @@ try {
         const s = g.sim;
         const sv = s.state.salvage;
         sv.tier = 1;
-        if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+        if (!sv.abilities.includes('prune')) sv.abilities.push('prune');
         s.areas.clear('park', true);
         s.gates.open('g-mastRow');
         sv.keepers.pylon = { step: 'landmark' };
@@ -291,7 +291,7 @@ try {
         const s = g.sim;
         const sv = s.state.salvage;
         sv.tier = 4;
-        for (const a of ['pry', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
+        for (const a of ['prune', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
         s.areas.clear('park', true);
         for (const r of s.salvage.regionById ? ['mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory', 'spireHeights'] : []) {
           s.gates.openRegion(r);

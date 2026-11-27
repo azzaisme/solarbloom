@@ -109,10 +109,10 @@ export function fillKeys(text: string, keyFor: (a: string) => string, isAction: 
 export const WORDS = {
   /** #620: Bloombot grows (a short moment when it happens) */
   bloombot: {
-    learned: { pry: 'Bloombot can pry rubble out of the way now', hover: 'Bloombot can hover over deep water now', climb: 'Bloombot can climb onto the roofs now', glide: 'Bloombot can glide down from the roofs now' } as Record<string, string>,
+    learned: { prune: 'Bloombot can prune through the dead hedges now', hover: 'Bloombot can hover over deep water now', climb: 'Bloombot can climb onto the roofs now', glide: 'Bloombot can glide down from the roofs now' } as Record<string, string>,
     upgraded: (name: string, level: number, max: number) => `Bloombot got better: ${name}, level ${level} of ${max}`,
     /** E25 (#626): a move's second level, from the workshop */
-    levelTwo: { pry: 'Bloombot can pry open heavy vault doors now', hover: 'Bloombot can hover far out over the sea now', climb: 'Bloombot can climb low walls with no ladder now', glide: 'Bloombot can glide much further now' } as Record<string, string>,
+    levelTwo: { prune: 'Bloombot can pry open heavy vault doors now', hover: 'Bloombot can hover far out over the sea now', climb: 'Bloombot can climb low walls with no ladder now', glide: 'Bloombot can glide much further now' } as Record<string, string>,
     /** #622: the park reached a milestone */
     park: (name: string, does: string) => `The park helped Bloombot grow: ${name}<small>${does}</small>`,
     /** #625: a Keeper woke and taught Bloombot its knack */
@@ -141,17 +141,19 @@ export const WORDS = {
     /** #605: what the step brings, in a few plain words */
     /** #620: each step names the move it teaches (the verb the Bloombot page names it by) and what it's for */
     why: {
-      pry: 'Bloombot learns to pry open rubble',
+      prune: 'Bloombot learns to prune through the dead hedges',
       hover: 'Bloombot learns to hover over deep water',
       climb: 'Bloombot learns to climb onto the roofs',
       glide: 'Bloombot learns to glide off the roofs',
       bloom: 'The whole city comes back into flower',
     },
-    /** #605: after the fountain wakes, until the first pry: the goal is the rubble nearest bloombot */
-    /** the region's name isn't known yet: the rubble is what the player can see */
-    pry: 'Pry open the rubble',
-    pryWhy: 'Another robot like Bloombot is asleep on the other side',
-    pryNext: 'Hold {interact} beside the rubble to pry it open.',
+    /** #605: after the fountain wakes, until the first prune: the goal is the hedge nearest bloombot */
+    /** the region's name isn't known yet: the hedge is what the player can see */
+    prune: 'Prune through the hedge',
+    pruneWhy: 'Another robot like Bloombot is asleep on the other side',
+    pruneNext: 'Hold {interact} at the green glow in the hedge to prune a way through.',
+    /** #hedge-line: the hedge's lock waits on the ground on Bloombot's side ('a third', 'the park') */
+    pruneGreen: (share: string, place: string) => `Bring ${share} of ${place} back to life, then hold {interact} at the green glow in the hedge.`,
     /** #605 / #608: the park's part of a fountain step */
     park: 'Park',
     landmarks: 'Landmarks awake',
