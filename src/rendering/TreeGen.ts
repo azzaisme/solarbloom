@@ -360,6 +360,22 @@ function plate(B: Buf, c: V, r: number, nrm: V, col: C, flex: number, sides = 6)
   }
 }
 
+/**
+ * #785: one blossom flower: five flat, slightly cupped petals round a small golden heart, facing `nrm`. `r` is a
+ * petal's radius (the flower is about four of them across); `spin` turns the petals so neighbours differ.
+ */
+function flower(B: Buf, c: V, nrm: V, r: number, petal: C, tip: C, heart: C, spin: number) {
+  const ax = norm(Math.abs(nrm[1]) < 0.9 ? cross(nrm, [0, 1, 0]) : cross(nrm, [1, 0, 0]));
+  const ay = cross(nrm, ax);
+  for (let i = 0; i < 5; i++) {
+    const a = spin + (i / 5) * Math.PI * 2;
+    const d = add(mul(ax, Math.cos(a)), mul(ay, Math.sin(a)));
+    // each petal sits out from the heart, tipped up a little toward the flower's face (a shallow cup)
+    plate(B, add(add(c, mul(d, r * 1.05)), mul(nrm, r * 0.18)), r, norm(add(nrm, mul(d, -0.35))), i % 2 ? petal : mix(petal, tip, 0.5), 0.85, 5);
+  }
+  plate(B, add(c, mul(nrm, r * 0.3)), r * 0.45, nrm, heart, 0.85, 4);
+}
+
 /** A flat ring (torus-ish band) round the trunk: the brass irrigation collar. */
 function collar(B: Buf, y: number, rIn: number, rOut: number, h: number, col: C) {
   const sides = 10;
@@ -1034,6 +1050,8 @@ export interface OrchardLook {
 
 /** How many fruit a grown tree carries, and how big (radius, tiles) they are when they set and when ripe. */
 export const ORCHARD_FRUIT = { count: 18, setR: 0.016, ripeR: 0.05 };
+/** Blossom: how many twig ends flower, how many tiny flowers bunch at each, and one petal's radius (tiles). */
+export const ORCHARD_BLOSSOM = { clusters: 40, perCluster: 5, petalR: 0.0085 };
 
 const smooth = (a: number, b: number, k: number) => {
   const t = clamp((k - a) / (b - a), 0, 1);
@@ -1115,20 +1133,23 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
     const set = (look.fruit - look.blossomUntil) / (1 - look.blossomUntil);
     const turning = hex(PALETTE.orchard.turning);
     // a tree in flower is covered in it (every twig end); fruit sets on fewer of them
-    const many = flowering ? (look.blossom ? order.length : 0) : Math.min(ORCHARD_FRUIT.count, order.length);
+    const many = flowering ? (look.blossom ? Math.min(ORCHARD_BLOSSOM.clusters, order.length) : 0) : Math.min(ORCHARD_FRUIT.count, order.length);
     for (let j = 0; j < many; j++) {
       const t = order[j].t;
       const out = norm(sub(t.p, crown.heart));
       const jit: V = [(RF() - 0.5) * 0.08 * S, -0.03 * S - RF() * 0.04 * S, (RF() - 0.5) * 0.08 * S];
       const seed = j * 13 + variant;
       if (flowering) {
-        // a little cluster of blossom at the twig end, opening over the first part of the flowering
-        // (buds at the first step, wide open by the middle of the flowering)
+        // a little cluster of flowers at the twig end, opening over the first part of the flowering (buds at the first
+        // step, wide open by the middle of it): each five flat petals round a golden heart, facing out and up
         const open = 0.55 + 0.45 * smooth(look.bareUntil, (look.bareUntil + look.blossomUntil) / 2, look.fruit);
         const c = add(add(t.p, mul(out, 0.05 * S)), [jit[0], 0.01, jit[2]]);
-        const col = blossom[j % blossom.length];
-        puff(B, { c, r: [0.068 * open, 0.05 * open, 0.068 * open], base: col, light: hex(PALETTE.orchard.blossom[0]), dark: blossom[2], flex: 0.85, seed, detail: 1, lump: 0.25, leafy: false });
-        puff(B, { c: add(c, [0, 0.035 * open, 0]), r: [0.016 * open, 0.01 * open, 0.016 * open], base: hex(PALETTE.orchard.blossomHeart), light: hex(PALETTE.orchard.blossomHeart), dark: hex(PALETTE.orchard.blossomHeart), flex: 0.85, seed, detail: 0, lump: 0 });
+        // a tiny cluster: a handful of little five-petalled flowers bunched round the twig end
+        for (let f = 0; f < ORCHARD_BLOSSOM.perCluster; f++) {
+          const fc = f === 0 ? c : add(c, [(RF() - 0.5) * 0.06 * S, (RF() - 0.5) * 0.045 * S, (RF() - 0.5) * 0.06 * S]);
+          const face = norm(add(add(out, [0, 0.7, 0]), [(RF() - 0.5) * 0.8, 0, (RF() - 0.5) * 0.8]));
+          flower(B, fc, face, ORCHARD_BLOSSOM.petalR * S * open * (0.85 + RF() * 0.3), blossom[(j + f) % blossom.length], blossom[0], hex(PALETTE.orchard.blossomHeart), RF() * Math.PI);
+        }
         continue;
       }
       // the fruit: it swells from set to ripe, and its colour comes in over the second half

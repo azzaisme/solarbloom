@@ -16,7 +16,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || un
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = false;
 try {
-  const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })).newPage();
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 })).newPage();
   page.setDefaultTimeout(TIMEOUT);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -64,7 +64,9 @@ try {
     }, { season, states, trees });
     await wait(3500);
     await page.screenshot({ path: `${dir}/${name}.png`, timeout: TIMEOUT });
-    console.log(`  📷 ${dir}/${name}.png`);
+    // and a close crop of the middle tree's crown (at twice the pixels), to see the flowers and fruit themselves
+    await page.screenshot({ path: `${dir}/${name}-close.png`, clip: { x: 400, y: 280, width: 300, height: 190 }, timeout: TIMEOUT });
+    console.log(`  📷 ${dir}/${name}.png (+ close)`);
   };
   const ripe = { age: 3, sincePrune: 1, crops: 2, ready: 1 };
   const bare = { age: 3, sincePrune: 1, crops: 2 };
@@ -72,6 +74,19 @@ try {
   await shot('summer-bare-ripe-overgrown', 'summer', [bare, ripe, shaggy]);
   await shot('spring-in-flower', 'spring', [bare, bare, shaggy]);
   await shot('autumn-ripe', 'autumn', [ripe, ripe, shaggy]);
+  // a macro shot of a tree in flower: the camera let go of Bloombot and pulled right in to the crown
+  await game((g, s, { trees }) => {
+    s.seasons.jumpTo('spring');
+    const t = trees[1];
+    s.state.salvage.extras[t.id] = { age: 3, sincePrune: 1, crops: 2 };
+    g.crops.refresh(t.id);
+    g.bot.following = false;
+    g.camera.maxZoom = 14;
+    g.camera.setZoom(14);
+  }, { trees });
+  await wait(3500);
+  await page.screenshot({ path: `${dir}/spring-flowers-macro.png`, timeout: TIMEOUT });
+  console.log(`  📷 ${dir}/spring-flowers-macro.png`);
   if (errors.length) throw new Error(errors.join(' | '));
   console.log('done');
 } catch (e) {
