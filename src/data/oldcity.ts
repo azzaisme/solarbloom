@@ -1153,8 +1153,13 @@ export interface HouseFurniture {
   level: number;
   x: number;
   z: number;
+  /** its footprint, as it stands now (a quarter turn swaps them) */
   w: number;
   d: number;
+  /** #875: quarter turns from how it is drawn by default (0 at its level's own spot) */
+  rot: number;
+  /** #875: built into the house (the fireplace: its chimney is in the wall): it can't be moved */
+  fixed?: boolean;
 }
 
 /** #860: a room of the house: the main room is the whole floor less the others (cells from the north-west corner). */
@@ -1211,7 +1216,7 @@ export const HOUSE_GARDEN = { x: 0, z: 2, w: 2, d: 4, gate: 'e' as const, level:
  * Shed and the Cottage keep the spots they always had. From the House on, the kitchen fills the north-west corner, so
  * the bed, the radio and the desk move along; at the Home the bed and the chest go into the bedroom.
  */
-const FURNITURE: (Omit<HouseFurniture, 'x' | 'z'> & { at: ([number, number] | undefined)[] })[] = [
+const FURNITURE: (Omit<HouseFurniture, 'x' | 'z' | 'rot'> & { at: ([number, number] | undefined)[] })[] = [
   { id: 'bed', name: 'the bed', verb: 'Sleep', level: 1, w: 1, d: 2, at: [[0, 0], [0, 0], [5, 0], [11, 0]] },
   { id: 'radio', name: 'the radio', verb: 'Listen to', level: 1, w: 1, d: 1, at: [[2, 0], [3, 0], [7, 0], [5, 0]] },
   { id: 'chest', name: 'the chest', verb: 'Open', level: 1, w: 1, d: 1, at: [[5, 0], [7, 0], [9, 0], [8, 0]] },
@@ -1224,7 +1229,7 @@ const FURNITURE: (Omit<HouseFurniture, 'x' | 'z'> & { at: ([number, number] | un
   // #859: the Home's main room: a fireplace on the west wall to sit by (Charge comes back quicker there), between the
   // journal desk and a window, and a reading nook in the south-east corner (an armchair, a standing lamp and a low
   // bookcase under the window) for reading the journal's pages again
-  { id: 'fireplace', name: 'the fire', verb: 'Sit by', level: 4, w: 1, d: 2, at: [undefined, undefined, undefined, [0, 7]] },
+  { id: 'fireplace', name: 'the fire', verb: 'Sit by', level: 4, w: 1, d: 2, fixed: true, at: [undefined, undefined, undefined, [0, 7]] },
   { id: 'nook', name: 'the reading nook', verb: 'Read in', level: 4, w: 2, d: 2, at: [undefined, undefined, undefined, [10, 10]] },
 ];
 
@@ -1233,8 +1238,23 @@ export function houseFurniture(level: number): HouseFurniture[] {
   if (!HOUSE[level - 1]) return [];
   return FURNITURE.flatMap(({ at, ...f }) => {
     const p = f.level <= level ? at[level - 1] : undefined;
-    return p ? [{ ...f, x: p[0], z: p[1] }] : [];
+    return p ? [{ ...f, x: p[0], z: p[1], rot: 0 }] : [];
   });
+}
+
+/**
+ * #875: a piece of furniture moved to (`x`, `z`) and turned `rot` quarter turns: its footprint swaps on an odd turn.
+ */
+export function furnitureAt(f: HouseFurniture, x: number, z: number, rot: number): HouseFurniture {
+  const base = FURNITURE.find((p) => p.id === f.id)!;
+  const r = ((rot % 4) + 4) % 4;
+  return { ...f, x, z, rot: r, w: r % 2 ? base.d : base.w, d: r % 2 ? base.w : base.d };
+}
+
+/** #875: a piece's footprint as drawn by default (before any turn): `w` × `d` cells. */
+export function furnitureBase(id: HouseFurniture['id']): { w: number; d: number } {
+  const b = FURNITURE.find((p) => p.id === id)!;
+  return { w: b.w, d: b.d };
 }
 
 /**
@@ -1301,17 +1321,30 @@ export interface HouseRug {
  * the Cottage on a small one beside the bed; from the House on a runner along the kitchen's counter; at the Home one
  * at the reading nook's armchair's feet.
  */
-export function houseRugs(level: number): HouseRug[] {
+export function houseRugs(level: number, furniture: HouseFurniture[] = houseFurniture(level)): HouseRug[] {
   const R = HOUSE[level - 1]?.room ?? 0;
   if (!R) return [];
   const out: HouseRug[] = [{ x: R / 2, z: R / 2 + 0.3, w: Math.min(3.2, R - 3), d: Math.min(2.2, R - 3.5), colour: 'red' }];
-  const bed = houseFurniture(level).find((f) => f.id === 'bed');
-  if (level >= 2 && bed) out.push({ x: bed.x + (bed.x + 1 < R ? 1.5 : -0.5), z: bed.z + 1, w: 0.8, d: 1.4, colour: 'blue' });
+  const bed = furniture.find((f) => f.id === 'bed');
+  if (level >= 2 && bed) {
+    // beside the bed's long side (#875: wherever it stands, and however it is turned)
+    if (bed.d >= bed.w) out.push({ x: bed.x + (bed.x + bed.w < R ? bed.w + 0.5 : -0.5), z: bed.z + bed.d / 2, w: 0.8, d: 1.4, colour: 'blue' });
+    else out.push({ x: bed.x + bed.w / 2, z: bed.z + (bed.z + bed.d < R ? bed.d + 0.5 : -0.5), w: 1.4, d: 0.8, colour: 'blue' });
+  }
   if (level >= 3) out.push({ x: 2, z: 1.5, w: 3.3, d: 0.7, colour: 'green' });
   // #859: the reading nook's, at the armchair's feet (just west of the nook, clear of it)
-  const nook = houseFurniture(level).find((f) => f.id === 'nook');
-  if (nook) out.push({ x: nook.x - 0.5, z: nook.z + 1.05, w: 0.9, d: 1.5, colour: 'green' });
-  return out;
+  const nook = furniture.find((f) => f.id === 'nook');
+  if (nook) out.push({ x: nook.x - 0.5, z: nook.z + nook.d / 2 + 0.05, w: 0.9, d: 1.5, colour: 'green' });
+  // #875: with the furniture moved, a rug that would end up under a piece, outside the room or across a wall is left
+  // rolled up (today's layout keeps every one)
+  return out.filter((r) => {
+    const [x0, x1, z0, z1] = [r.x - r.w / 2, r.x + r.w / 2, r.z - r.d / 2, r.z + r.d / 2];
+    if (x0 < 0 || z0 < 0 || x1 > R || z1 > R) return false;
+    if (furniture.some((f) => x0 < f.x + f.w && x1 > f.x && z0 < f.z + f.d && z1 > f.z)) return false;
+    const cells: [number, number][] = [];
+    for (let x = Math.floor(x0); x < Math.ceil(x1); x++) for (let z = Math.floor(z0); z < Math.ceil(z1); z++) cells.push([x, z]);
+    return !cells.some(([ax, az]) => cells.some(([bx, bz]) => houseWallBetween(level, ax, az, bx, bz)));
+  });
 }
 
 /** #782: the room's door cell (inside, in the middle of the south wall) at a level. */

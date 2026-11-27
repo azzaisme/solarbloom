@@ -1,5 +1,5 @@
 import type { LayerData, MaterialId, TileData } from '../core/types';
-import { HOUSE, HOUSE_GROWTH, HOUSE_INSIDE, houseDoorInside, houseFurniture, houseRoomAt, houseRooms, houseWallBetween, houseWalls, type HouseFurniture, type HouseLevel, type HouseRoom, type HouseWall } from '../data/oldcity';
+import { furnitureAt as placed, HOUSE, HOUSE_GROWTH, HOUSE_INSIDE, houseDoorInside, houseFurniture, houseRoomAt, houseRooms, houseWallBetween, houseWalls, type HouseFurniture, type HouseLevel, type HouseRoom, type HouseWall } from '../data/oldcity';
 import type { Sim } from './Sim';
 import { Walker } from './Walker';
 
@@ -133,9 +133,167 @@ export class HouseSystem {
     return roofId === HOUSE_INSIDE.layer;
   }
 
-  /** The furniture standing in the room now. */
+  /** #875: the furniture now, kept until the level or the layout changes (it is asked for many times a frame) */
+  private memo?: { level: number; layout: unknown; version: number; list: HouseFurniture[] };
+  private version = 0;
+
+  /**
+   * The furniture standing in the room now: each piece where its level puts it, or (#875) where the player moved it
+   * (`salvage.houseLayout`).
+   */
   furniture(): HouseFurniture[] {
-    return houseFurniture(this.level);
+    const lay = this.sim.state.salvage?.houseLayout;
+    const m = this.memo;
+    if (m && m.level === this.level && m.layout === lay && m.version === this.version) return m.list;
+    const list = houseFurniture(this.level).map((f) => {
+      const o = lay?.[f.id];
+      return o && !f.fixed ? placed(f, o.x, o.z, o.rot) : f;
+    });
+    this.memo = { level: this.level, layout: lay, version: this.version, list };
+    return list;
+  }
+
+  /** #875: can this piece be moved (every one but those built into the house: the fireplace)? */
+  movable(f: HouseFurniture | undefined): boolean {
+    return !!f && !f.fixed;
+  }
+
+  /**
+   * #875: why a piece can't stand at (`x`, `z`) turned `rot` (its north-west square), or undefined. It stands on free
+   * floor inside one room (never across a wall, on another piece or a decoration, or on the door's square), and
+   * Bloombot can still walk from the door to every room and every piece, this one too. Its own squares now count as
+   * free (it is being moved off them). `keep`: a square that must stay in reach from the door (where Bloombot
+   * stands, so it is never shut in).
+   */
+  placeProblem(id: HouseFurniture['id'], x: number, z: number, rot: number, keep?: { x: number; z: number }): string | undefined {
+    const f = this.furniture().find((p) => p.id === id);
+    if (!f) return 'That isn’t in the house';
+    if (f.fixed) return `${cap(f.name)} is built into the house: it stays where it is`;
+    const to = placed(f, x, z, rot);
+    const R = this.room();
+    const cells: [number, number][] = [];
+    for (let cx = to.x; cx < to.x + to.w; cx++) for (let cz = to.z; cz < to.z + to.d; cz++) cells.push([cx, cz]);
+    if (cells.some(([cx, cz]) => cx < 0 || cz < 0 || cx >= R || cz >= R)) return 'It doesn’t fit here';
+    for (const [ax, az] of cells) for (const [bx, bz] of cells) if (this.wallBetween(ax, az, bx, bz)) return 'A wall is in the way';
+    const [dx, dz] = this.doorInside();
+    for (const [cx, cz] of cells) {
+      if (cx === dx && cz === dz) return 'Keep the door of the house clear';
+      const other = this.furnitureAt(cx, cz);
+      if (other && other.id !== id) return `${cap(other.name)} stands here`;
+      const t = this.sim.grid.peek(this.layerId, cx, cz);
+      if (t?.occupantId) return 'A decoration stands here: move it first';
+    }
+    // every room and every piece still in reach from the door, with it moved
+    if (keep && cells.some(([cx, cz]) => cx === Math.floor(keep.x) && cz === Math.floor(keep.z))) return 'Bloombot is standing there';
+    const before = this.cutOff();
+    const { lost, shut } = this.tryLayout(id, to, () => ({ lost: this.cutOff(), shut: !!keep && !this.reach().has(`${Math.floor(keep.x)},${Math.floor(keep.z)}`) }));
+    if (shut) return 'That would shut Bloombot in';
+    if (lost && lost.id !== before?.id) return 'rot' in lost ? `That would block the way to ${lost.name}` : `That would block the way into ${lost.name}`;
+    return undefined;
+  }
+
+  /** #875: moves a piece (see placeProblem). Undefined when it moved, else why not. */
+  move(id: HouseFurniture['id'], x: number, z: number, rot: number, keep?: { x: number; z: number }): string | undefined {
+    const why = this.placeProblem(id, x, z, rot, keep);
+    if (why) return why;
+    const sv = this.sim.state.salvage!;
+    (sv.houseLayout ??= {})[id] = { x, z, rot: ((rot % 4) + 4) % 4 };
+    this.version++;
+    this.sync();
+    this.sim.bus.emit('house.furnitureMoved', { id });
+    return undefined;
+  }
+
+  /** #875: runs `look` with a piece standing at `to` for a moment (the grid's squares blocked to match), then puts it back. */
+  private tryLayout<T>(id: string, to: HouseFurniture, look: () => T): T {
+    const sv = this.sim.state.salvage!;
+    const lay = (sv.houseLayout ??= {});
+    const had = lay[id];
+    lay[id] = { x: to.x, z: to.z, rot: to.rot };
+    this.version++;
+    this.block();
+    try {
+      return look();
+    } finally {
+      if (had) lay[id] = had;
+      else delete lay[id];
+      if (!Object.keys(lay).length) delete sv.houseLayout;
+      this.version++;
+      this.block();
+    }
+  }
+
+  /** #875: blocks the room's squares under the furniture (and frees the rest). Returns the squares furniture is on. */
+  private block(): TileData[] {
+    const taken: TileData[] = [];
+    if (!this.sim.grid.layer(HOUSE_INSIDE.layer)) return taken;
+    for (const t of this.sim.grid.tilesOf(HOUSE_INSIDE.layer)) {
+      const f = this.furnitureAt(t.x, t.z);
+      t.blocked = !!f;
+      if (f) taken.push(t);
+    }
+    return taken;
+  }
+
+  /**
+   * #875: keeps the moved pieces where the player put them as the house grows or a save loads, as far as each still
+   * fits: one that no longer does (a new room's wall across it, a new piece's spot under it, or outside the room)
+   * goes back to where its level puts it, or failing that to the nearest square where it does fit, turned as it was.
+   * A piece the level no longer has, or one built in, is dropped from the layout. If the moves would leave any room or
+   * piece out of reach from the door (decorations aside: they are moved after), the layout goes back to today's.
+   */
+  private settleLayout() {
+    const sv = this.sim.state.salvage;
+    const lay = sv?.houseLayout;
+    if (!sv || !lay) return;
+    const defaults = houseFurniture(this.level);
+    const R = this.room();
+    const [dx, dz] = this.doorInside();
+    const stand: HouseFurniture[] = defaults.filter((f) => f.fixed || !lay[f.id]);
+    const fits = (f: HouseFurniture) => {
+      for (let cx = f.x; cx < f.x + f.w; cx++)
+        for (let cz = f.z; cz < f.z + f.d; cz++) {
+          if (cx < 0 || cz < 0 || cx >= R || cz >= R || (cx === dx && cz === dz)) return false;
+          if (stand.some((o) => cx >= o.x && cx < o.x + o.w && cz >= o.z && cz < o.z + o.d)) return false;
+          if (cx + 1 < f.x + f.w && this.wallBetween(cx, cz, cx + 1, cz)) return false;
+          if (cz + 1 < f.z + f.d && this.wallBetween(cx, cz, cx, cz + 1)) return false;
+        }
+      return true;
+    };
+    let changed = false;
+    for (const id of Object.keys(lay)) {
+      const f = defaults.find((p) => p.id === id);
+      const o = lay[id];
+      if (!f || f.fixed) {
+        delete lay[id];
+        changed = true;
+        continue;
+      }
+      let at = placed(f, o.x, o.z, o.rot);
+      if (!fits(at)) {
+        changed = true;
+        const near: HouseFurniture[] = [f];
+        const sq: [number, number][] = [];
+        for (let x = 0; x < R; x++) for (let z = 0; z < R; z++) sq.push([x, z]);
+        sq.sort((a, b) => Math.hypot(a[0] - o.x, a[1] - o.z) - Math.hypot(b[0] - o.x, b[1] - o.z));
+        for (const [x, z] of sq) near.push(placed(f, x, z, o.rot));
+        at = near.find(fits) ?? f;
+        if (at === f) delete lay[id];
+        else lay[id] = { x: at.x, z: at.z, rot: at.rot };
+      }
+      stand.push(at);
+    }
+    if (!Object.keys(lay).length) delete sv.houseLayout;
+    if (changed) this.version++;
+    if (!sv.houseLayout) return;
+    // never at the cost of a room or a piece out of reach (decorations aside: Cozy moves them out of the way after)
+    this.block();
+    const deco = new Set<string>();
+    for (const t of this.sim.grid.tilesOf(HOUSE_INSIDE.layer)) if (t.occupantId) deco.add(`${t.x},${t.z}`);
+    if (this.cutOff(undefined, deco)) {
+      delete sv.houseLayout;
+      this.version++;
+    }
   }
 
   /** The piece of furniture on a cell of the room, if any. */
@@ -211,9 +369,9 @@ export class HouseSystem {
    * #860: what Bloombot couldn't get to from the door if `also` were blocked too: a piece of furniture with no square
    * beside it to stand on (not through a wall), or a room with no square to walk into. Undefined when all is in reach.
    */
-  cutOff(also?: Set<string>): HouseFurniture | HouseRoom | undefined {
+  cutOff(also?: Set<string>, clear?: Set<string>): HouseFurniture | HouseRoom | undefined {
     if (!this.hasInside()) return undefined;
-    const r = this.reach(also);
+    const r = this.reach(also, clear);
     for (const f of this.furniture()) {
       let near = false;
       for (let x = f.x; x < f.x + f.w && !near; x++)
@@ -261,12 +419,10 @@ export class HouseSystem {
     if (l.width !== room) this.sim.grid.resized(l.id);
     l.width = l.depth = room;
     this.sim.grid.addLayer(l);
-    const taken: TileData[] = [];
-    for (const t of this.sim.grid.tilesOf(l.id)) {
-      const f = this.furnitureAt(t.x, t.z);
-      t.blocked = !!f;
-      if (f) taken.push(t);
-    }
-    return taken;
+    this.settleLayout(); // #875: the moved pieces, as far as each still fits at this level
+    return this.block();
   }
 }
+
+/** "the bed" to "The bed" */
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);

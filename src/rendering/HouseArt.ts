@@ -1,4 +1,4 @@
-import { HOUSE_INSIDE, houseRugs, type HouseFurniture, type HouseRoom, type HouseWall } from '../data/oldcity';
+import { furnitureBase, HOUSE_INSIDE, houseRugs, houseWallBetween, type HouseFurniture, type HouseRoom, type HouseWall } from '../data/oldcity';
 import { PALETTE } from './Palette';
 import type { HouseTexName } from './HouseTex';
 import type { VPrim } from './Shapes';
@@ -298,7 +298,7 @@ export const NOOK_LAMP: V3 = [1.25, 1.36, 0.3];
 export const NOOK_SHELF = 0.84;
 
 /** A piece of furniture's look, cells from the room's corner `o` (world), standing on the floor at `y`. */
-function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes: number) {
+function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes: number, backWall = true) {
   const x0 = o[0] + f.x;
   const z0 = o[2] + f.z;
   const cx = x0 + f.w / 2;
@@ -343,7 +343,7 @@ function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes:
   if (f.id === 'stove') {
     // #858: an iron range against the back wall: an oven with a glowing fire window, two hobs and a kettle, its flue
     const bz = z0 + 0.36;
-    tbox(b, 'tiles', H.tileWhite, [cx, y + 0.9, z0 + 0.03], [0.96, 0.9, 0.04]); // tiles behind it
+    if (backWall) tbox(b, 'tiles', H.tileWhite, [cx, y + 0.9, z0 + 0.03], [0.96, 0.9, 0.04]); // tiles behind it (#875: on a wall)
     b.add('box', H.iron, [cx, y + 0.4, bz], [0.8, 0.8, 0.6]);
     b.add('box', H.ironDark, [cx, y + 0.81, bz], [0.84, 0.04, 0.64]);
     b.add('box', H.ironDark, [cx - 0.16, y + 0.35, bz + 0.305], [0.36, 0.4, 0.02]); // the oven door
@@ -358,7 +358,7 @@ function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes:
   if (f.id === 'counter') {
     // #858: cupboards along the back wall, a wooden top with a board, jars and a bowl of vegetables
     const bz = z0 + 0.33;
-    tbox(b, 'tiles', H.tileWhite, [cx, y + 1.0, z0 + 0.03], [f.w - 0.04, 0.45, 0.04]); // tiles behind it
+    if (backWall) tbox(b, 'tiles', H.tileWhite, [cx, y + 1.0, z0 + 0.03], [f.w - 0.04, 0.45, 0.04]); // tiles behind it (#875: on a wall)
     tbox(b, 'wood', H.plank, [cx, y + 0.38, bz], [f.w - 0.08, 0.76, 0.56]);
     tbox(b, 'wood', H.plankLight, [cx, y + 0.79, bz + 0.02], [f.w - 0.02, 0.06, 0.64]);
     for (let i = 0; i < 2 * f.w; i++) {
@@ -542,7 +542,7 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
   }
   // #861: the room's rugs, more as it grows (data/oldcity houseRugs; all below DecorArt's RUG.base)
   const RUGS = { red: H.rug, blue: H.rugBlue, green: H.rugGreen };
-  for (const r of houseRugs(p.level)) {
+  for (const r of houseRugs(p.level, p.furniture)) {
     tbox(b, 'weave', H.rugEdge, [ox + r.x, y + 0.004, oz + r.z], [r.w, 0.008, r.d]);
     tbox(b, 'weave', RUGS[r.colour], [ox + r.x, y + 0.008, oz + r.z], [r.w - 0.2, 0.01, r.d - 0.2]);
   }
@@ -565,7 +565,63 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
         else tbox(b, 'wood', H.skirting, [ox + x0 + off, y + 0.06, oz + (z0 + z1) / 2], [0.03, 0.12, z1 - z0]);
       }
     }
-  for (const f of p.furniture) furniture(b, f, [ox, y, oz], y, p.keepsakes);
+  for (const f of p.furniture) drawFurniture(b, f, [ox, y, oz], y, p.keepsakes, backAgainstWall(f, p.room, p.level));
+}
+
+/**
+ * #875: a piece of furniture where it stands now, turned: drawn as at its own spot (its default turn) about its middle,
+ * then each part turned `f.rot` quarter turns about that middle (a box's sides swap on an odd turn). `o` is the
+ * room's north-west corner (world), `y` the floor. `backWall`: its back is against a wall (the stove's and the
+ * counter's tiles are only put up on one).
+ */
+export function drawFurniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes: number, backWall = true) {
+  const r = ((f.rot ?? 0) % 4 + 4) % 4;
+  if (!r) return furniture(b, f, o, y, keepsakes, backWall);
+  const base = furnitureBase(f.id);
+  const cx = o[0] + f.x + f.w / 2;
+  const cz = o[2] + f.z + f.d / 2;
+  const turn = (p: V3): V3 => {
+    let dx = p[0] - cx;
+    let dz = p[2] - cz;
+    for (let i = 0; i < r; i++) [dx, dz] = [-dz, dx];
+    return [cx + dx, p[1], cz + dz];
+  };
+  const size = <S extends V3 | number>(s: S): S => (typeof s === 'number' || r % 2 === 0 ? s : ([s[2], s[1], s[0]] as S));
+  const sink: HouseSink = {
+    add: (type, hex, p, s, glow) => b.add(type, hex, turn(p), size(s), glow),
+    tex: b.tex ? (name, hex, p, s) => b.tex!(name, hex, turn(p), size(s)) : undefined,
+  };
+  // as it would stand unturned, about the same middle
+  furniture(sink, { ...f, w: base.w, d: base.d, x: cx - o[0] - base.w / 2, z: cz - o[2] - base.d / 2 }, o, y, keepsakes, backWall);
+}
+
+/**
+ * #875: is a piece's back (its north side as drawn unturned, turned with it) right against a wall: the room's own, or
+ * an inner one?
+ */
+export function backAgainstWall(f: HouseFurniture, room: number, level: number): boolean {
+  const r = ((f.rot ?? 0) % 4 + 4) % 4;
+  // the unturned back faces -z; each quarter turn takes (dx, dz) to (-dz, dx)
+  let [bx, bz] = [0, -1];
+  for (let i = 0; i < r; i++) [bx, bz] = [-bz, bx];
+  const cells: [number, number][] = [];
+  if (bz) for (let x = f.x; x < f.x + f.w; x++) cells.push([x, bz < 0 ? f.z : f.z + f.d - 1]);
+  else for (let z = f.z; z < f.z + f.d; z++) cells.push([bx < 0 ? f.x : f.x + f.w - 1, z]);
+  return cells.every(([x, z]) => {
+    const nx = x + bx;
+    const nz = z + bz;
+    return nx < 0 || nz < 0 || nx >= room || nz >= room || houseWallBetween(level, x, z, nx, nz);
+  });
+}
+
+/** #875: a point given in a piece's own unturned frame (metres from its north-west corner) where it stands now (cells). */
+export function pieceSpot(f: HouseFurniture, lx: number, lz: number): [number, number] {
+  const r = ((f.rot ?? 0) % 4 + 4) % 4;
+  const base = furnitureBase(f.id);
+  let dx = lx - base.w / 2;
+  let dz = lz - base.d / 2;
+  for (let i = 0; i < r; i++) [dx, dz] = [-dz, dx];
+  return [f.x + f.w / 2 + dx, f.z + f.d / 2 + dz];
 }
 
 /** #861: the pieces too tall for a window above them (a window there is left out). */
