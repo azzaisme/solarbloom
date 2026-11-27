@@ -37,7 +37,14 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
     expect(sim.restoration.megaReady()).toBe(true);
     expect(released).toBe(0);
     sim.advance(3);
-    const { origin, targets } = deadTiles(sim).map(origin => ({ origin, targets: sim.restoration.megaTargets(origin) })).sort((a, b) => b.targets.length - a.targets.length)[0];
+    // where the Mega Pulse has the most to heal; on a tie (every spot can fill the budget) the one nearest the middle
+    // of the dead ground, so there is ground on every side of it (the park's corner would have none to the north)
+    const dead = deadTiles(sim);
+    const mx = dead.reduce((a, t) => a + t.x, 0) / dead.length, mz = dead.reduce((a, t) => a + t.z, 0) / dead.length;
+    const mid = (t: { x: number; z: number }) => Math.hypot(t.x - mx, t.z - mz);
+    const { origin, targets } = dead
+      .map((origin) => ({ origin, targets: sim.restoration.megaTargets(origin) }))
+      .sort((a, b) => b.targets.length - a.targets.length || mid(a.origin) - mid(b.origin))[0];
     // VFX 1: a circle round where Bloombot stands, nearest first, its depth the distance in whole tiles
     const dist = ({ tile }: { tile: { x: number; z: number } }) => Math.hypot(tile.x - origin.x, tile.z - origin.z);
     for (let i = 1; i < targets.length; i++) expect(dist(targets[i])).toBeGreaterThanOrEqual(dist(targets[i - 1]));
