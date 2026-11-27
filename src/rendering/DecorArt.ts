@@ -11,6 +11,7 @@
 import type { PlotHost } from './PlotArt';
 import { PALETTE } from './Palette';
 import type { VPrim } from './Shapes';
+import { houseplantGeo } from './TreeGen';
 
 type V3 = [number, number, number];
 const C = PALETTE.cozy;
@@ -329,6 +330,102 @@ const ART: Record<string, (a: At) => void> = {
     put(a, 'cylinder', F.hat, -0.06, 1.24, 0, [0.22, 0.03, 0.22]); // a hat on another
     put(a, 'cylinder', F.hat, -0.06, 1.3, 0, [0.13, 0.1, 0.13]);
     put(a, 'sphere', F.brass, 0, 1.27, 0, 0.05);
+  },
+  // ───── #851: soft furnishings. Rugs lie flat (Bloombot walks over them); lamps glow by LightVisuals at night. ─────
+  roundrug: (a) => {
+    put(a, 'cylinder', F.rugGreenEdge, 0, 0.008, 0, [0.88, 0.016, 0.88]);
+    put(a, 'cylinder', F.rugGreen, 0, 0.012, 0, [0.78, 0.016, 0.78]);
+    if (a.far) return;
+    put(a, 'cylinder', F.rugGreenEdge, 0, 0.016, 0, [0.44, 0.012, 0.44]);
+    put(a, 'cylinder', F.rugGreen, 0, 0.02, 0, [0.34, 0.012, 0.34]);
+  },
+  hallrunner: (a) => {
+    // 1 × 3 squares, long along z
+    put(a, 'box', F.rugBlue, 0, 0.01, 0, [0.7, 0.02, 2.78]);
+    if (a.far) return;
+    for (const s of [-1, 1]) {
+      put(a, 'box', F.rugBlueEdge, s * 0.29, 0.016, 0, [0.05, 0.014, 2.66]); // a pale stripe down each side
+      put(a, 'box', F.rugBlueEdge, 0, 0.016, s * 1.12, [0.58, 0.014, 0.05]);
+      put(a, 'box', F.rugBlueEdge, 0, 0.012, s * 1.42, [0.62, 0.01, 0.06]); // the fringe at each end
+    }
+    for (const z of [-0.6, 0, 0.6]) put(a, 'box', F.rugBlueEdge, 0, 0.018, z, [0.16, 0.014, 0.16]);
+  },
+  bigrug: (a) => {
+    // 2 × 3 squares
+    put(a, 'box', F.rugCream, 0, 0.008, 0, [1.84, 0.016, 2.84]);
+    put(a, 'box', F.rugRed, 0, 0.013, 0, [1.6, 0.016, 2.6]);
+    if (a.far) return;
+    put(a, 'box', F.rugCream, 0, 0.018, 0, [1.2, 0.012, 2.2]);
+    put(a, 'box', F.rugRed, 0, 0.022, 0, [1.08, 0.012, 2.08]);
+    put(a, 'cylinder', F.rugCream, 0, 0.026, 0, [0.6, 0.01, 0.9]); // a medallion in the middle
+    put(a, 'cylinder', F.rugRed, 0, 0.029, 0, [0.4, 0.01, 0.66]);
+  },
+  patternrug: (a) => {
+    // 2 × 2 squares: a field of checks round a big middle square
+    put(a, 'box', F.rugTeal, 0, 0.01, 0, [1.84, 0.02, 1.84]);
+    if (a.far) return put(a, 'box', F.rugGold, 0, 0.016, 0, [1.1, 0.012, 1.1]);
+    put(a, 'box', F.rugGold, 0, 0.014, 0, [1.7, 0.012, 1.7]);
+    put(a, 'box', F.rugTeal, 0, 0.017, 0, [1.56, 0.012, 1.56]);
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++) {
+        const big = i === 0 && j === 0;
+        put(a, 'box', (i + j) % 2 ? F.rugCream : F.rugGold, i * 0.5, 0.021, j * 0.5, big ? [0.44, 0.012, 0.44] : [0.26, 0.012, 0.26]);
+      }
+  },
+  floorlamp: (a) => {
+    put(a, 'cylinder', F.iron, 0, 0.02, 0, [0.32, 0.04, 0.32]);
+    put(a, 'cylinder', F.brass, 0, 0.5, 0, [0.04, 0.96, 0.04]);
+    put(a, 'cylinder', F.shade, 0, 1.08, 0, [0.34, 0.24, 0.34]); // its shade: LightVisuals glows it at night
+    if (a.far) return;
+    put(a, 'cylinder', F.brass, 0, 0.94, 0, [0.08, 0.04, 0.08]);
+    put(a, 'cylinder', F.brass, 0, 1.21, 0, [0.06, 0.03, 0.06]);
+  },
+  tablelamp: (a) => {
+    put(a, 'cylinder', H.desk, 0, 0.36, 0, [0.42, 0.05, 0.42]);
+    put(a, 'cylinder', H.desk, 0, 0.18, 0, [0.06, 0.34, 0.06]);
+    put(a, 'cylinder', F.shade, 0.06, 0.66, -0.04, [0.22, 0.16, 0.22]); // its shade: LightVisuals glows it at night
+    if (a.far) return;
+    put(a, 'cylinder', H.desk, 0, 0.02, 0, [0.26, 0.04, 0.26]);
+    put(a, 'sphere', F.potWhite, 0.06, 0.45, -0.04, [0.12, 0.12, 0.12]); // the lamp's round base
+    put(a, 'cylinder', F.brass, 0.06, 0.54, -0.04, [0.02, 0.12, 0.02]);
+    put(a, 'box', H.book[2], -0.1, 0.4, 0.08, [0.16, 0.04, 0.12]); // a book beside it
+  },
+  houseplant: (a) => {
+    put(a, 'cylinder', F.pot, 0, 0.12, 0, [0.3, 0.24, 0.3]);
+    put(a, 'cylinder', F.potRim, 0, 0.24, 0, [0.34, 0.04, 0.34]);
+    if (a.far) return put(a, 'sphere', P.leaf.mid, 0, 0.42, 0, [0.42, 0.34, 0.42]);
+    put(a, 'cylinder', F.soil, 0, 0.255, 0, [0.28, 0.01, 0.28]);
+    // grown by the tree and shrub code, its own shape from its square (TreeGen buildHouseplant)
+    a.h.foliage(houseplantGeo(a.seed, a.h.lod), a.x, a.y + 0.26, a.z, (a.seed % 12) * 0.52, 1.6);
+  },
+  pottedtree: (a) => {
+    put(a, 'cylinder', F.potWhite, 0, 0.16, 0, [0.4, 0.32, 0.4]);
+    put(a, 'cylinder', F.potWhite, 0, 0.32, 0, [0.44, 0.04, 0.44]);
+    if (a.far) return put(a, 'sphere', P.leaf.mid, 0, 0.85, 0, [0.6, 0.6, 0.6]);
+    put(a, 'cylinder', F.soil, 0, 0.335, 0, [0.38, 0.01, 0.38]);
+    a.h.foliage(houseplantGeo(a.seed, a.h.lod, true), a.x, a.y + 0.34, a.z, (a.seed % 12) * 0.52, 1.35);
+  },
+  cushions: (a) => {
+    const c = F.cushions;
+    put(a, 'box', c[0], -0.08, 0.07, 0.06, [0.5, 0.14, 0.44]);
+    put(a, 'box', c[1], 0.14, 0.07, -0.14, [0.42, 0.14, 0.38]);
+    if (a.far) return;
+    put(a, 'box', c[2], 0.02, 0.19, -0.02, [0.36, 0.12, 0.32]);
+    put(a, 'sphere', c[3], -0.2, 0.06, -0.2, [0.26, 0.12, 0.26]);
+    for (const [x, z] of [[-0.28, 0.24], [0.16, 0.24], [-0.28, -0.12]]) put(a, 'sphere', c[0], x, 0.08, z, 0.04); // tassels
+  },
+  clock: (a) => {
+    // a tall case clock, its face to the front
+    put(a, 'box', F.clockWood, 0, 0.62, -0.1, [0.4, 1.24, 0.26]);
+    put(a, 'sphere', F.clockFace, 0, 1.0, 0.035, [0.26, 0.26, 0.02]);
+    if (a.far) return;
+    put(a, 'box', F.clockWood, 0, 1.3, -0.1, [0.46, 0.1, 0.3]);
+    put(a, 'box', F.clockWood, 0, 0.04, -0.1, [0.46, 0.08, 0.3]);
+    put(a, 'box', F.iron, 0, 1.03, 0.05, [0.015, 0.09, 0.01]); // the hands
+    put(a, 'box', F.iron, 0.025, 0.99, 0.05, [0.06, 0.012, 0.01]);
+    put(a, 'box', H.glass, 0, 0.55, 0.035, [0.24, 0.5, 0.01]); // the glass door…
+    put(a, 'cylinder', F.brass, 0, 0.6, 0.02, [0.012, 0.32, 0.012]); // …and the pendulum behind it
+    put(a, 'sphere', F.brass, 0, 0.42, 0.025, [0.1, 0.1, 0.02]);
   },
 };
 

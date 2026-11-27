@@ -191,6 +191,17 @@ const BODIES = {
   sideTable: E(12, 10, 7.5, 2.4, 'wood') + L('M12 12.4V20M8.5 20.5h7', '#3a2a1a', 2) + P('M9.5 8.6c0-2.6 1.1-4 2.5-4s2.5 1.4 2.5 4z', 'teal'),
   bookshelf: R(4, 2.5, 16, 19, 1.4, 'wood') + L('M4 9h16M4 15.2h16', '#3a2a1a', 1.6) + R(6, 4.2, 2, 4.4, 0.4, 'red') + R(8.4, 4.2, 2, 4.4, 0.4, 'water') + R(10.8, 4.6, 2, 4, 0.4, 'sun') + R(6.5, 10.4, 2, 4.4, 0.4, 'leaf') + R(9, 10.4, 2.4, 4.4, 0.4, 'pink') + R(14, 16.6, 4, 4.2, 0.4, 'teal'),
   coatStand: L('M12 4v15.5M7.5 21h9M12 6l-3.5-2M12 6l3.5-2', '#3a2a1a', 1.8) + P('M9 7.5h6l1.5 8h-9z', 'teal') + E(12, 3.8, 2.6, 1.2, 'dark'),
+  // #851: soft furnishings
+  rugRound: E(12, 13, 9.5, 6, 'leaf') + E(12, 13, 6, 3.6, 'cream'),
+  rugRunner: P('M8 2.5h8l1 19H7z', 'water') + L('M9.5 5.5h5M9.2 18.5h5.6', '#fff', 1.4) + L('M7.5 21.5v1.5M10 21.5v1.5M12 21.5v1.5M14 21.5v1.5M16.5 21.5v1.5', '#fff', 1.2),
+  rugBig: R(2.5, 5, 19, 14, 1.2, 'red') + R(5, 7.5, 14, 9, 0.8, 'cream') + E(12, 12, 3.4, 2.2, 'red'),
+  rugPattern: R(3, 3, 18, 18, 1.2, 'teal') + R(5.5, 5.5, 4, 4, 0.4, 'gold') + R(14.5, 5.5, 4, 4, 0.4, 'gold') + R(5.5, 14.5, 4, 4, 0.4, 'gold') + R(14.5, 14.5, 4, 4, 0.4, 'gold') + R(9.5, 9.5, 5, 5, 0.6, 'gold'),
+  floorLamp: P('M7.5 3h9l2 6.5h-13z', 'sun') + L('M12 9.5v10.5M8.5 21h7', '#3a2a1a', 1.8),
+  tableLamp: P('M8.5 4h7l1.6 5h-10.2z', 'sun') + L('M12 9v4', '#3a2a1a', 1.6) + E(12, 14.2, 7, 1.8, 'wood') + L('M12 16v4.5M8.5 21h7', '#3a2a1a', 1.8),
+  houseplant: P('M7.5 14h9l-1.4 7H8.9z', 'orange') + P('M12 14c-.5-4-3.5-6.5-7.5-6 .4 3.8 3.4 6 7.5 6z', 'leaf') + P('M12 14c.3-4.6 3.4-7.6 7.6-7.2-.2 4.2-3.4 7-7.6 7.2z', 'leaf') + P('M12 13.5c-1-3.6-.4-7.6 1.6-10 1.4 3 1 7-1.6 10z', 'leaf'),
+  pottedTree: P('M7 15.5h10l-1.6 6H8.6z', 'orange') + L('M12 15.5v-4', '#3a2a1a', 1.8) + C(12, 8, 5.6, 'leaf'),
+  cushions: E(12, 17.5, 8, 3, 'red') + E(10, 13.5, 6, 2.6, 'water') + E(13.5, 10, 5, 2.3, 'sun'),
+  clock: R(7, 2.5, 10, 19, 1.4, 'wood') + C(12, 8, 3.4, 'cream') + L('M12 8V6M12 8l1.5 1', '#3a2a1a', 1.4) + L('M12 13v4', '#3a2a1a', 1.4) + C(12, 17.6, 1.4, 'gold'),
   bulb: P('M12 2.5a6.5 6.5 0 0 0-3.8 11.8c.8.6 1.3 1.6 1.3 2.6h5c0-1 .5-2 1.3-2.6A6.5 6.5 0 0 0 12 2.5z', 'sun') + R(9.4, 17, 5.2, 4.2, 1.4, 'steel') + HI('M9.4 6.8a3.6 3.6 0 0 1 2.4-1.6'),
   coins: P('M8 6.5h8l-1.4-3h-5.2zM12 6.5c5 0 8 4.2 8 8.2 0 3.6-3 5.8-8 5.8s-8-2.2-8-5.8c0-4 3-8.2 8-8.2z', 'gold') + L('M12 10v7.4M10 11.6h3.2a1.4 1.4 0 0 1 0 2.8h-2.4a1.4 1.4 0 0 0 0 2.8H14', '#9a5f08', 1.4),
   puzzle: P('M4 8h4a2.2 2.2 0 1 1 4 0h4v4a2.2 2.2 0 1 1 0 4v4H4z', 'leaf'),
@@ -341,6 +352,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🍄': 'sprout', '🪱': 'sprout', '🦇': 'moon',
   // #850: furniture for the house
   '🛋': 'armchair', '🥁': 'stool', '🍽': 'diningTable', '🫖': 'sideTable', '📚': 'bookshelf', '🧥': 'coatStand',
+  // #851: soft furnishings
+  '🔘': 'rugRound', '🎞': 'rugRunner', '🟥': 'rugBig', '🔶': 'rugPattern', '🪔': 'floorLamp', '🕯': 'tableLamp', '🌵': 'houseplant', '🌴': 'pottedTree', '🧸': 'cushions', '🕰': 'clock',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

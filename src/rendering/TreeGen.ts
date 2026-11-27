@@ -1040,6 +1040,76 @@ export function buildShrub(variant: number, lod: Lod = 1, flowering?: boolean, b
   return B.done();
 }
 
+/**
+ * #851: a houseplant, grown by the same code as the shrubs and trees (`limb`, `spray`) with the trunk shrunk right down
+ * and far more leaves. `seed` (its square in the room) sets everything about it: how many stems and how they splay,
+ * the green, leaf shape and size, upright or arching, and whether it trails over the pot's rim like the vines do, so
+ * no two in a room look alike. `tree`: a little potted tree instead, one short trunk forking into a dense round head.
+ * Units are tiles; the base sits at y = 0 (the soil's top). A plant is about 0.3 tall, a tree about 0.6.
+ */
+export function buildHouseplant(seed: number, lod: Lod = 1, tree = false): TreeGeo {
+  const B = new Buf();
+  const R = rng(seed * 7703 + (tree ? 911 : 17) + 5);
+  const [h0, h1] = PALETTE.leaf.hue.shrub;
+  const hue = h0 - 10 + R() * (h1 - h0 + 30);
+  const sat = 44 + R() * 22;
+  const lit = 26 + R() * 12;
+  const pal = { base: hsl(hue, sat, lit), light: hsl(hue - 8, sat + 6, lit + 18), dark: hsl(hue + 14, sat - 8, lit - 13) };
+  const [n, k] = LEAVES[lod];
+  const tips: Tip[] = [];
+  if (tree) {
+    const crown: Crown = { heart: [0, 0.42, 0], r: 0.2, pal };
+    const bark = BARK[(['oak', 'cherry', 'birch', 'willow'] as Species[])[Math.floor(R() * 4)]];
+    const o: LimbOpts = { upturn: 0.7, kids: [lod === 0 ? 2 : 3, lod === 0 ? 0 : 2], fork: 0.7 + R() * 0.25, shrink: 0.6, bark, sides: 4 };
+    limb(B, R, [0, 0, 0], norm([(R() - 0.5) * 0.25, 1, (R() - 0.5) * 0.25]), 0.2 + R() * 0.08, 0.02, 0, lod === 0 ? 1 : 2, 0.02, o, tips);
+    const per = Math.max(5, Math.round(n * (1 + R() * 0.3)));
+    for (const t of tips) spray(B, R, t, per, 0.14, (0.065 + R() * 0.025) * k, crown, 0.22, 0.5 + R() * 0.2, 0.1);
+    return B.done();
+  }
+  const crown: Crown = { heart: [0, 0.14, 0], r: 0.2, pal };
+  const stems = lod === 0 ? 4 : 6 + Math.floor(R() * 5);
+  const arch = R(); // 0 upright and spiky … 1 arching and spilling
+  const o: LimbOpts = { upturn: 0.7 - arch * 1.1, kids: [lod === 0 ? 0 : 1], fork: 0.5 + R() * 0.4, shrink: 0.7, bark: hex(PALETTE.twig[0]), sides: 3 };
+  for (let i = 0; i < stems; i++) {
+    const a = (i / stems) * Math.PI * 2 + R() * 0.8;
+    const splay = 0.3 + arch * 0.9 + R() * 0.3;
+    limb(B, R, [Math.cos(a) * 0.015, 0, Math.sin(a) * 0.015], norm([Math.cos(a) * splay, 1, Math.sin(a) * splay]), 0.09 + R() * 0.1, 0.008, 0, lod === 0 ? 0 : 1, 0.12, o, tips);
+  }
+  const narrow = 0.3 + R() * 0.5; // strappy to broad
+  const per = Math.max(3, Math.round(n * (0.55 + R() * 0.25)));
+  const size = 0.045 + R() * 0.035;
+  for (const t of tips) spray(B, R, t, per, 0.07, size * k, crown, 0.3, narrow, arch * 0.6);
+  // some trail over the pot's rim, as the ivy does: a strand down the side with leaves along it
+  if (lod > 0 && R() < 0.55) {
+    const strands = 2 + Math.floor(R() * 3);
+    for (let i = 0; i < strands; i++) {
+      const a = R() * Math.PI * 2;
+      const out: V = [Math.cos(a), 0, Math.sin(a)];
+      const L = 0.12 + R() * 0.14;
+      const pts: V[] = [mul(out, 0.11), add(mul(out, 0.16), [0, -L * 0.4, 0]), add(mul(out, 0.17), [0, -L, 0])];
+      tube(B, pts, [0.005, 0.004, 0.003], 3, [o.bark, o.bark, o.bark], [0.1, 0.35, 0.6], false);
+      const leaves = lod >= 2 ? 6 : 4;
+      for (let j = 0; j < leaves; j++) {
+        const t = (j + 0.5) / leaves;
+        const p = add(mul(out, 0.12 + t * 0.05), [0, -L * t, 0]);
+        const dir = norm(add(out, [(R() - 0.5) * 0.8, -0.2 + R() * 0.4, (R() - 0.5) * 0.8]));
+        const col = scaleC(pal.base, 0.85 + R() * 0.35);
+        card(B, p, dir, [0, 1, 0], size * 0.9, size * 0.75, col, pal.light, 0.15 + t * 0.4, 0.3 + t * 0.5, 0.4, 0.12);
+      }
+    }
+  }
+  return B.done();
+}
+
+const plantCache = new Map<string, TreeGeo>();
+/** #851: a houseplant's geometry, kept once per seed and detail (a room has at most a few hundred squares). */
+export function houseplantGeo(seed: number, lod: Lod = 1, tree = false): TreeGeo {
+  const key = `${tree ? 't' : 'p'}|${seed}|${lod}`;
+  let g = plantCache.get(key);
+  if (!g) plantCache.set(key, (g = buildHouseplant(seed, lod, tree)));
+  return g;
+}
+
 /** Template cache: one geometry per species / stage / variant / detail. */
 /**
  * #785: a planted fruit tree's look. `fruit` is how far today's fruit has come (0 just picked … 1 ripe; undefined for
