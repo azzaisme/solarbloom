@@ -18,7 +18,7 @@ import { Sim } from '../src/gameplay/Sim';
 import { bannedIn } from '../src/ui/words';
 import { fruitSay, fruitShort, fruitTip } from '../src/ui/FruitWords';
 import { extraHtml } from '../src/ui/ExtrasPanel';
-import { buildOrchardTree, LEAF_FLAG, ORCHARD_BLOSSOM, ORCHARD_FRUIT, SEASON_FLAG, type OrchardLook } from '../src/rendering/TreeGen';
+import { buildOrchardTree, LEAF_FLAG, ORCHARD_BLOSSOM, ORCHARD_FRUIT, SEASON_FLAG, SPRING_GREEN_FLAG, type OrchardLook } from '../src/rendering/TreeGen';
 import { PALETTE } from '../src/rendering/Palette';
 import { orchardScale } from '../src/rendering/CropVisuals';
 import { MACHINES } from '../src/data/machines';
@@ -622,22 +622,36 @@ describe('#785 fruit trees: the model', () => {
     expect(near(buildOrchardTree(look(1, false, 0, 'lemon')), lin(PALETTE.orchard.ripe.apple), 40)).toBe(0);
   });
 
-  it('blossom is tiny clusters of five-petalled flowers (flat petals round a golden heart), not blobs', () => {
+  it('blossom: clusters of pink five-petalled flowers with golden hearts and pink buds, on the outside of the crown', () => {
     const bare = buildOrchardTree(look(0));
     const flower = buildOrchardTree(look(3 / 12));
-    // one flower: five petals and a heart, each a two-sided flat plate (petals 5 sides, the heart 4)
-    const perFlower = 5 * (2 + 2 * 5) + (2 + 2 * 4);
-    const flowers = (flower.pos.length - bare.pos.length) / 4 / perFlower;
-    // a whole cluster at each flowering twig end (every twig end, up to ORCHARD_BLOSSOM.clusters)
-    expect(flowers % ORCHARD_BLOSSOM.perCluster).toBe(0);
-    expect(flowers / ORCHARD_BLOSSOM.perCluster).toBeGreaterThanOrEqual(24);
-    expect(flowers / ORCHARD_BLOSSOM.perCluster).toBeLessThanOrEqual(ORCHARD_BLOSSOM.clusters);
-    expect(ORCHARD_BLOSSOM.perCluster).toBeGreaterThanOrEqual(3);
-    // tiny: a whole flower (about four petals across) is smaller than a ripe fruit
-    expect(ORCHARD_BLOSSOM.petalR * 4).toBeLessThan(ORCHARD_FRUIT.ripeR * 2);
-    // the golden hearts are there
-    expect(near(flower, lin(PALETTE.orchard.blossomHeart), 30)).toBeGreaterThan(near(bare, lin(PALETTE.orchard.blossomHeart), 30) + flowers);
+    // each flower's golden heart is one flat plate: 1 + 6 vertices on its sunny face, in exactly the heart's colour
+    const heart = lin(PALETTE.orchard.blossomHeart);
+    let hearts = 0;
+    for (let i = bare.col.length; i < flower.col.length; i += 4) if (flower.col[i] === heart[0] && flower.col[i + 1] === heart[1] && flower.col[i + 2] === heart[2]) hearts++;
+    const flowers = hearts / 7;
+    expect(Number.isInteger(flowers)).toBe(true);
+    expect(flowers).toBeGreaterThanOrEqual(ORCHARD_BLOSSOM.clusters * (ORCHARD_BLOSSOM.perCluster - 1));
+    expect(flowers).toBeLessThanOrEqual(ORCHARD_BLOSSOM.clusters * ORCHARD_BLOSSOM.perCluster);
+    // pink petals and pink buds
+    expect(near(flower, lin(PALETTE.orchard.blossom[0]), 30)).toBeGreaterThan(flowers * 5);
+    expect(near(flower, lin(PALETTE.orchard.bud), 60)).toBeGreaterThan(0);
+    // a flower is about a leaf across (four petals' width against a leaf's length)
+    expect(ORCHARD_BLOSSOM.petalR * 4).toBeGreaterThan(0.06);
+    expect(ORCHARD_BLOSSOM.petalR * 4).toBeLessThan(0.15);
+    // they sit on the top and outside of the crown: the flowers' average height is above the leaves'
+    let fy = 0, fn = 0, ly = 0;
+    for (let i = bare.pos.length; i < flower.pos.length; i += 4) { fy += flower.pos[i + 1]; fn++; }
+    for (const st of bare.leafStarts!) ly += bare.pos[st * 4 + 1];
+    expect(fy / fn).toBeGreaterThan(ly / bare.leafStarts!.length);
     expect(flower.tris).toBeLessThan(40000);
+  });
+
+  it('#785: its leaves stay green in spring (its own flowers are the blossom), but still turn in autumn and fall in winter', () => {
+    const g = buildOrchardTree(look(0));
+    for (const st of g.leafStarts!) expect(g.pos[st * 4 + 3]).toBeGreaterThanOrEqual(SEASON_FLAG + SPRING_GREEN_FLAG);
+    // the flags come off cleanly: what's left is the leaf's own flex (and its leaf flag at most)
+    for (const st of g.leafStarts!) expect(g.pos[st * 4 + 3] - SEASON_FLAG - SPRING_GREEN_FLAG).toBeLessThan(LEAF_FLAG + 2);
   });
 
   it('an overgrown tree is shaggier and taller than a pruned one', () => {
