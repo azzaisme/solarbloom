@@ -111,7 +111,7 @@ describe('E19.2.1 decorations occupy their tile like a machine', () => {
     const { sim, cozy } = padScene();
     const t = sim.grid.get(PAD, 5, 5)!;
     t.ground = 'polluted';
-    expect(cozy.canDecorate('bench', PAD, 5, 5)).toMatch(/Restore/);
+    expect(cozy.canDecorate('bench', PAD, 5, 5)).toMatch(/turn the ground here green/);
     expect(cozy.canDecorate('nope', PAD, 4, 2)).toBeDefined();
     // not earned yet: E23.6.1, a decoration not yet made at the crafting table
     const sv = sim.state.salvage!;

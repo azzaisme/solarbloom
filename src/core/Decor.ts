@@ -4,10 +4,14 @@
  * the tile as they treat a machine's (tests/decor.test.ts). The record lives in `GameState.cozy.decor`, written by
  * the game only (gameplay/Cozy.ts); the sim only reads it to stamp that occupancy when a chunk loads.
  *
+ * #849: a piece may cover more than one square (data/cozy `size`). It is still saved once, under its north-west
+ * square, and every square it covers carries the same `d:<key>` occupant.
+ *
  * Saved sparsely: `key → value`, the key `<layer>|<x>|<z>`, the value the decoration's id with `@<quarter turns>`
  * when it is turned (`bench`, `bench@1`). Keys are kept sorted, so save → load → save is byte-identical.
  */
 import { CHUNK } from './Hash';
+import { decorCells } from '../data/cozy';
 
 export const DECOR_PREFIX = 'd:';
 
@@ -59,4 +63,24 @@ export const decorKeyOf = (occupantId: string | undefined) => (isDecorOccupant(o
 export function decorChunkKey(key: string): string | undefined {
   const at = parseDecorKey(key);
   return at ? `${at.roofId}|${Math.floor(at.x / CHUNK)}|${Math.floor(at.z / CHUNK)}` : undefined;
+}
+
+/** #849: every square a saved decoration covers (its key names the north-west one). */
+export function decorCellsOf(key: string, value: string): DecorAt[] {
+  const at = parseDecorKey(key);
+  if (!at) return [];
+  const { kind, rot } = parseDecorValue(value);
+  return decorCells(kind, rot, at.x, at.z).map((c) => ({ roofId: at.roofId, x: c.x, z: c.z }));
+}
+
+/** #849: the chunk keys a saved decoration's squares fall in (its own chunk first). */
+export function decorChunkKeys(key: string, value: string): string[] {
+  const out: string[] = [];
+  const own = decorChunkKey(key);
+  if (own) out.push(own);
+  for (const c of decorCellsOf(key, value)) {
+    const ck = `${c.roofId}|${Math.floor(c.x / CHUNK)}|${Math.floor(c.z / CHUNK)}`;
+    if (!out.includes(ck)) out.push(ck);
+  }
+  return out;
 }
