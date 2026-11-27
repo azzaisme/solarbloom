@@ -192,7 +192,12 @@ vec3 sbSeasonColour(vec3 c, vec3 n, vec3 p) {
 	return c;
 }
 // a deciduous leaf: one hashed cell per leaf, each with its own colour and the moment it turns
+vec3 sbSeasonLeafB(vec3 c, vec3 p, float blossom);
 vec3 sbSeasonLeaf(vec3 c, vec3 p) {
+	return sbSeasonLeafB(c, p, 1.0);
+}
+// #785: as sbSeasonLeaf; blossom 0 keeps a leaf green in spring (a fruit tree flowers with flowers of its own)
+vec3 sbSeasonLeafB(vec3 c, vec3 p, float blossom) {
 	vec4 h = sbsHash4(floor(p * 7.0));
 	float l = sbsLum(c);
 	if (uSeasonA.y > 0.001) {
@@ -204,7 +209,7 @@ vec3 sbSeasonLeaf(vec3 c, vec3 p) {
 		vec3 t = ac * clamp(l / max(sbsLum(ac), 0.001) * 1.7, 0.35, 1.25);
 		c = mix(c, t, turn);
 	}
-	if (uSeasonA.w > 0.001) {
+	if (uSeasonA.w > 0.001 && blossom > 0.5) {
 		float b = 1.0 - smoothstep(uSeasonA.w - 0.06, uSeasonA.w, h.z);
 		vec3 bc = h.y < 0.62 ? uSeasonBlos0 : uSeasonBlos1;
 		c = mix(c, bc * clamp(0.55 + l * 5.0, 0.6, 1.05), b);

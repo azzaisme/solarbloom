@@ -910,10 +910,17 @@ export const PALETTE = {
     /** a ripe pear's russet blush and a peach's red cheek, on the sunny side */
     blush: { apple: '#c9302f', pear: '#c98a3a', peach: '#e0513f', lemon: '#f2c21e' } as Record<string, string>,
     ripeLight: '#ffd0a8',
-    blossom: ['#fdf1f4', '#f9cddb', '#e7a9bf'] as string[],
-    blossomHeart: '#f6d36b',
+    /** spring blossom: pink petals (a few shades), paler where they meet the golden heart, and pink buds */
+    blossom: ['#ffbfcf', '#ffcfdb', '#fbaec3'] as string[],
+    blossomCentre: '#fff1f4',
+    blossomHeart: '#f5bd3a',
+    bud: '#f59fb8',
+    /** the bright fresh green its leaves are lifted toward */
+    leafLight: '#a8d95a',
     stalk: '#6b5a33',
-    mulch: '#6b4a32',
+    mulch: '#5a3e2b',
+    /** the river stones round its bed: warm grey and beige */
+    stone: ['#dcc9a6', '#cbb692', '#e5d6b8', '#c1ab88'] as string[],
   },
   /** Tide sketches: the pencil's graphite */
   sketchPencil: '#352f29',

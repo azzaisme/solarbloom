@@ -211,6 +211,11 @@ export const LEAF_FLAG = 2;
  * carry it. `plainFlex` takes both flags off.
  */
 export const SEASON_FLAG = 4;
+/**
+ * #785: added on top of SEASON_FLAG to a seasonal leaf that stays green in spring (a fruit tree's: it flowers with
+ * flowers of its own); it still turns in autumn and falls in winter. The foliage shader takes it off.
+ */
+export const SPRING_GREEN_FLAG = 8;
 /** A vertex's own flex, without LEAF_FLAG or SEASON_FLAG (flex itself is always below 2). */
 export const plainFlex = (w: number) => w % LEAF_FLAG;
 /** #830: species that lose their leaves in winter (everything but the Spire Pine). */
@@ -340,24 +345,46 @@ function rotateAxis(v: V, k: V, a: number): V {
 }
 
 /** A flat n-gon plate facing `nrm` (two-sided). */
-function plate(B: Buf, c: V, r: number, nrm: V, col: C, flex: number, sides = 6) {
+function plate(B: Buf, c: V, r: number, nrm: V, col: C, flex: number, sides = 6, backShade = 0.7, litBack = false) {
   const ax = norm(Math.abs(nrm[1]) < 0.9 ? cross(nrm, [0, 1, 0]) : cross(nrm, [1, 0, 0]));
   const ay = cross(nrm, ax);
-  const back = mul(nrm, -1);
+  // `litBack`: a thin thing the light shows through (a petal): its back is lit as its face is
+  const back = litBack ? nrm : mul(nrm, -1);
   const c0 = B.v(c, nrm, col, flex);
-  const c1 = B.v(c, back, scaleC(col, 0.7), flex);
+  const c1 = B.v(c, back, scaleC(col, backShade), flex);
   const ring: number[] = [];
   const ringB: number[] = [];
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * Math.PI * 2;
     const p = add(c, add(mul(ax, Math.cos(a) * r), mul(ay, Math.sin(a) * r)));
     ring.push(B.v(p, nrm, col, flex));
-    ringB.push(B.v(p, back, scaleC(col, 0.7), flex));
+    ringB.push(B.v(p, back, scaleC(col, backShade), flex));
   }
   for (let i = 0; i < sides; i++) {
     B.tri(c0, ring[i], ring[(i + 1) % sides]);
     B.tri(c1, ringB[(i + 1) % sides], ringB[i]);
   }
+}
+
+/**
+ * #785: one blossom flower: five flat, slightly cupped petals round a small golden heart, facing `nrm`. `r` is a
+ * petal's radius (the flower is about four of them across); `spin` turns the petals so neighbours differ.
+ */
+function flower(B: Buf, c: V, nrm: V, r: number, petal: C, centre: C, heart: C, spin: number) {
+  const ax = norm(Math.abs(nrm[1]) < 0.9 ? cross(nrm, [0, 1, 0]) : cross(nrm, [1, 0, 0]));
+  const ay = cross(nrm, ax);
+  for (let i = 0; i < 5; i++) {
+    const a = spin + (i / 5) * Math.PI * 2;
+    const d = add(mul(ax, Math.cos(a)), mul(ay, Math.sin(a)));
+    // each round petal sits out from the heart, tipped up a little toward the flower's face (a shallow cup); a paler
+    // patch where it meets the heart
+    const pc = add(add(c, mul(d, r * 0.95)), mul(nrm, r * 0.16));
+    const pn = norm(add(nrm, mul(d, -0.3)));
+    // (petals are thin: the light shows through, so their backs are nearly as bright as their faces)
+    plate(B, pc, r, pn, i % 2 ? petal : mix(petal, centre, 0.15), 0.85, 7, 0.95, true);
+    plate(B, add(add(c, mul(d, r * 0.45)), mul(nrm, r * 0.22)), r * 0.45, pn, mix(petal, centre, 0.6), 0.85, 5, 0.95, true);
+  }
+  plate(B, add(c, mul(nrm, r * 0.32)), r * 0.42, nrm, heart, 0.85, 6, 0.9, true);
 }
 
 /** A flat ring (torus-ish band) round the trunk: the brass irrigation collar. */
@@ -1034,6 +1061,8 @@ export interface OrchardLook {
 
 /** How many fruit a grown tree carries, and how big (radius, tiles) they are when they set and when ripe. */
 export const ORCHARD_FRUIT = { count: 18, setR: 0.016, ripeR: 0.05 };
+/** Blossom: how many twig ends flower, how many tiny flowers bunch at each, and one petal's radius (tiles). */
+export const ORCHARD_BLOSSOM = { clusters: 26, perCluster: 4, petalR: 0.025, buds: 2, budR: 0.013 };
 
 const smooth = (a: number, b: number, k: number) => {
   const t = clamp((k - a) / (b - a), 0, 1);
@@ -1043,7 +1072,7 @@ const smooth = (a: number, b: number, k: number) => {
 /**
  * #785: a fruit tree in the Phase 7 leafy style (P7-E29's fruit form, grown up): a short, flared trunk that opens
  * into four scaffold limbs (an orchard tree's open centre), forking twigs, and a full, round crown of leaf sprays
- * over a soft leafy heart. Its fruit sits on the twigs on short stalks, round the outside of the crown where it can
+ * filling it in. Its fruit sits on the twigs on short stalks, round the outside of the crown where it can
  * be seen: small and green when it sets, swelling and colouring up until ripe (each tree its own ripe colour, far
  * from the leaves). Before that the twig ends flower; just after picking the branches are bare. An overgrown tree
  * grows long upright shoots and a shaggier, wider crown; a pruned one is tidy. The canopy never changes with the
@@ -1058,7 +1087,9 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
   const S = 1.12;
   const bark = BARK.cherry;
   const barkDark = scaleC(bark, 0.68);
-  const pal = leafPalette('oak', R, sh);
+  // a fresh, bright green (the oak's greens lifted toward their sunlit tone)
+  const oak = leafPalette('oak', R, sh);
+  const pal: Palette = { base: mix(oak.base, oak.light, 0.35), light: mix(oak.light, hex(PALETTE.orchard.leafLight), 0.3), dark: mix(oak.dark, oak.base, 0.35) };
   const [n, k] = LEAVES[lod];
   // the trunk, flared at the foot, opening into the scaffold limbs
   const top = trunk(B, R, 0.34 * S, 0.078 * S, bark, barkDark, 4, 7);
@@ -1075,9 +1106,14 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
     scaffold.push({ from, dir });
     limb(B, R, from, dir, 0.4 * S * (0.9 + R() * 0.2), 0.078 * S * TRUNK_RADIUS_SCALE * 0.62, 0, 2, 0.1, o, tips, i);
   }
-  // a soft leafy heart so the crown reads full, not see-through between the sprays
-  puff(B, { c: [crown.heart[0], crown.heart[1] - 0.02 * S, crown.heart[2]], r: [0.36 * S, 0.27 * S, 0.36 * S], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.45, seed: variant + 3, detail: 2, clusters: 7, crown: crown.heart, crownR: crown.r });
-  for (const t of tips) spray(B, R, t, Math.round(n * 1.15), 0.2 * S, 0.11 * S * k, crown, 0.7, 0.62, 0.2);
+  // leaves only: a spray at every twig end, and another part way in along it, so the crown reads full without a
+  // solid clump in the middle
+  // broad, rounded leaves
+  for (const t of tips) spray(B, R, t, Math.round(n * 1.0), 0.2 * S, 0.13 * S * k, crown, 0.7, 0.78, 0.2);
+  for (const t of tips) {
+    const inner: V = add(crown.heart, mul(sub(t.p, crown.heart), 0.55));
+    spray(B, R, { p: inner, dir: norm(sub(t.p, crown.heart)), order: t.order, branch: t.branch }, Math.round(n * 0.7), 0.22 * S, 0.13 * S * k, crown, 0.6, 0.78, 0.15);
+  }
   // the brass irrigation collar every grown tree wears, with its little status light
   const tr = 0.078 * S * TRUNK_RADIUS_SCALE;
   collar(B, 0.0, tr * 0.9, tr * 1.9, 0.045, BRASS);
@@ -1094,7 +1130,7 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
       limb(B, RO, from, norm([(RO() - 0.5) * 0.3, 1, (RO() - 0.5) * 0.3]), (0.42 + RO() * 0.16) * S, 0.012 * S, 0, 0, 0.3, { ...o, upturn: 0.6, sides: 4 }, shoots, i);
     }
     for (const t of shoots) spray(B, RO, t, Math.round(n * 0.7), 0.16 * S, 0.1 * S * k, wild, 0.8, 0.55, 0.05);
-    for (let i = 0; i < tips.length; i += 2) spray(B, RO, tips[i], Math.round(n * 0.5), 0.3 * S, 0.12 * S * k, wild, 0.75, 0.6, 0.35);
+    for (const t of tips) spray(B, RO, t, Math.round(n * 0.5), 0.3 * S, 0.12 * S * k, wild, 0.75, 0.6, 0.35);
   }
 
   // flowers, then fruit, on the twig ends round the outside of the crown (their own random stream)
@@ -1110,21 +1146,35 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
     const flowering = look.fruit < look.blossomUntil;
     const set = (look.fruit - look.blossomUntil) / (1 - look.blossomUntil);
     const turning = hex(PALETTE.orchard.turning);
-    // a tree in flower is covered in it (every twig end); fruit sets on fewer of them
-    const many = flowering ? (look.blossom ? order.length : 0) : Math.min(ORCHARD_FRUIT.count, order.length);
+    // flowers open on the twig ends round the top and outside of the crown, where they show; fruit sets anywhere
+    const bloomAt = (t: Tip) => t.p[1] + 0.6 * len(sub(t.p, crown.heart));
+    const list = flowering ? [...order].sort((a, b) => bloomAt(b.t) + a.w * 0.12 - (bloomAt(a.t) + b.w * 0.12)) : order;
+    const many = flowering ? (look.blossom ? Math.min(ORCHARD_BLOSSOM.clusters, list.length) : 0) : Math.min(ORCHARD_FRUIT.count, list.length);
     for (let j = 0; j < many; j++) {
-      const t = order[j].t;
+      const t = list[j].t;
       const out = norm(sub(t.p, crown.heart));
       const jit: V = [(RF() - 0.5) * 0.08 * S, -0.03 * S - RF() * 0.04 * S, (RF() - 0.5) * 0.08 * S];
       const seed = j * 13 + variant;
       if (flowering) {
-        // a little cluster of blossom at the twig end, opening over the first part of the flowering
-        // (buds at the first step, wide open by the middle of the flowering)
+        // a cluster of blossom on the outside of the crown, opening over the first part of the flowering (buds at the
+        // first step, wide open by the middle of it): three or four pink five-petalled flowers with golden hearts, and
+        // a few closed buds beside them
         const open = 0.55 + 0.45 * smooth(look.bareUntil, (look.bareUntil + look.blossomUntil) / 2, look.fruit);
-        const c = add(add(t.p, mul(out, 0.05 * S)), [jit[0], 0.01, jit[2]]);
-        const col = blossom[j % blossom.length];
-        puff(B, { c, r: [0.068 * open, 0.05 * open, 0.068 * open], base: col, light: hex(PALETTE.orchard.blossom[0]), dark: blossom[2], flex: 0.85, seed, detail: 1, lump: 0.25, leafy: false });
-        puff(B, { c: add(c, [0, 0.035 * open, 0]), r: [0.016 * open, 0.01 * open, 0.016 * open], base: hex(PALETTE.orchard.blossomHeart), light: hex(PALETTE.orchard.blossomHeart), dark: hex(PALETTE.orchard.blossomHeart), flex: 0.85, seed, detail: 0, lump: 0 });
+        // out on the crown's surface, above the leaves round it
+        const c = add(add(t.p, mul(out, 0.13 * S)), [0, 0.04 * S, 0]);
+        const flowers = ORCHARD_BLOSSOM.perCluster - (RF() < 0.4 ? 1 : 0);
+        for (let f = 0; f < flowers; f++) {
+          const a = (f / flowers) * Math.PI * 2 + RF();
+          const fc = f === 0 ? c : add(c, [Math.cos(a) * 0.05 * S, (RF() - 0.4) * 0.03 * S, Math.sin(a) * 0.05 * S]);
+          const face = norm(add(add(out, [0, 0.45, 0]), [(RF() - 0.5) * 0.6, 0, (RF() - 0.5) * 0.6]));
+          flower(B, fc, face, ORCHARD_BLOSSOM.petalR * S * open * (0.85 + RF() * 0.3), blossom[(j + f) % blossom.length], hex(PALETTE.orchard.blossomCentre), hex(PALETTE.orchard.blossomHeart), RF() * Math.PI);
+        }
+        for (let b = 0; b < ORCHARD_BLOSSOM.buds; b++) {
+          const a = RF() * Math.PI * 2;
+          const bc = add(c, [Math.cos(a) * 0.065 * S, 0.01 * S + RF() * 0.02 * S, Math.sin(a) * 0.065 * S]);
+          const br = ORCHARD_BLOSSOM.budR * S;
+          puff(B, { c: bc, r: [br * 0.8, br, br * 0.8], base: hex(PALETTE.orchard.bud), light: blossom[1], dark: scaleC(hex(PALETTE.orchard.bud), 0.9), flex: 0.85, seed: seed + b, detail: 1, lump: 0 });
+        }
         continue;
       }
       // the fruit: it swells from set to ripe, and its colour comes in over the second half
@@ -1143,8 +1193,11 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
       if (look.kind === 'pear') puff(B, { c: add(c, [0, r * sh2 * 0.75, 0]), r: [r * 0.55, r * 0.6, r * 0.55], base, light, dark: base, flex: 0.85, seed: seed + 1, detail: 1, lump: 0 });
     }
   }
-  // #830: its leaves follow the seasons (autumn colour, bare in winter); fruit and blossom never carry the flag
-  return markSeasonLeaves(proportion(B, sh, variant, 3).done());
+  // #830: its leaves follow the seasons (autumn colour, bare in winter), but stay green in spring: the tree flowers
+  // with flowers of its own (#785). Fruit and blossom never carry the flags
+  const g = markSeasonLeaves(proportion(B, sh, variant, 3).done());
+  for (let i = 3; i < g.pos.length; i += 4) if (g.pos[i] >= SEASON_FLAG) g.pos[i] += SPRING_GREEN_FLAG;
+  return g;
 }
 
 const orchardCache = new Map<string, TreeGeo>();
