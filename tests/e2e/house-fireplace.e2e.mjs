@@ -105,6 +105,15 @@ try {
   await page.waitForFunction(() => window.solarbloom.sim.rest.sitting?.kind === 'fire', null, { timeout: 60_000, polling: 250 }).catch(() => {});
   await wait(3500);
   await shot(page, '4-by-the-fire-night.png');
+  // the flames: one tongue each, flickering out of step (heights now and a moment later)
+  const f1 = await page.evaluate(() => window.solarbloom.houseInside.flames());
+  await wait(400);
+  const f2 = await page.evaluate(() => window.solarbloom.houseInside.flames());
+  check(f1.length === 5 && f1.some((h, i) => Math.abs(h - f2[i]) > 0.005) && new Set(f1.map((h) => h.toFixed(3))).size > 3, `the flames flicker, each tongue its own height (${f1.map((h) => h.toFixed(2)).join(', ')} → ${f2.map((h) => h.toFixed(2)).join(', ')})`);
+  // a close look from the follow camera, Bloombot sitting by the fire
+  await page.evaluate(() => window.solarbloom.camera.zoomTo(window.solarbloom.camera.maxZoom));
+  await wait(3000);
+  await shot(page, '4-fire-night-close.png');
   await press(page, await keyOf(page, 'interact'));
   await page.waitForFunction(() => !window.solarbloom.sim.rest.sitting, null, { timeout: 30_000, polling: 250 }).catch(() => {});
   await timeOfDay(page, 0.4);

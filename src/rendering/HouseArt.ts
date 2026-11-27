@@ -246,6 +246,52 @@ export function drawGardenFence(b: HouseSink, g: GardenSpot, y: number) {
  * hearth stone `hearth` out from the wall. The fire burns at `glow` (its light, HouseInterior).
  */
 export const FIREPLACE = { depth: 0.5, wide: 1.7, mouth: 0.8, mouthTop: 0.8, back: 0.18, hearth: 0.95, glow: [0.38, 0.42] as [number, number] };
+/** #859: how strongly the fire's parts glow (0-1): enough to stand out at night, low enough that they keep their hue */
+export const FIRE_GLOW = { outer: 0.45, core: 0.6, coals: 0.55, candle: 0.6 };
+
+/**
+ * #859: the flames: tongues rising off the logs, each `h` tall and `w` wide (m), `dz` along the grate from its middle
+ * and `dx` toward the room, leaning `lean` degrees, flickering at their own `rate` and `phase` (HouseInterior).
+ */
+export const FIRE_TONGUES: { dx: number; dz: number; h: number; w: number; lean: number; rate: number; phase: number }[] = [
+  { dx: 0, dz: -0.19, h: 0.24, w: 0.11, lean: -9, rate: 5.3, phase: 0 },
+  { dx: 0, dz: -0.07, h: 0.36, w: 0.14, lean: -4, rate: 6.7, phase: 1.9 },
+  { dx: 0, dz: 0.06, h: 0.42, w: 0.15, lean: 3, rate: 5.9, phase: 3.7 },
+  { dx: 0, dz: 0.18, h: 0.27, w: 0.11, lean: 8, rate: 7.4, phase: 5.1 },
+  { dx: 0.05, dz: 0.0, h: 0.21, w: 0.1, lean: -1, rate: 8.1, phase: 2.6 },
+];
+
+/** #859: where the flames' bases stand over the logs: x (cells, for a fireplace at cell `fx` on the west wall), and height (m). */
+export function fireX(fx: number): number {
+  return fx + FIREPLACE.back + (FIREPLACE.depth - FIREPLACE.back) / 2;
+}
+export const FIRE_BASE = 0.15;
+
+/**
+ * #859: one tongue of flame, a unit tall and wide, its base at the origin: a deep orange-red teardrop (a rounded foot
+ * narrowing up to a point) round a smaller gold one set a little toward the room, so the core shows in front. Each
+ * tongue is drawn once and scaled (its height flickering) by HouseInterior, self-lit: in its own colours whatever
+ * light falls on it (the `glow`s mark it as lit for anything drawing it in the shared material).
+ */
+export function drawFlameTongue(b: HouseSink) {
+  const H = PALETTE.house;
+  b.add('sphere', H.flameOuter, [0, 0.2, 0], [1, 0.42, 1], FIRE_GLOW.outer);
+  b.add('cone', H.flameOuter, [0, 0.6, 0], [0.94, 0.82, 0.94], FIRE_GLOW.outer);
+  b.add('sphere', H.flameCore, [0.2, 0.17, 0], [0.62, 0.3, 0.62], FIRE_GLOW.core);
+  b.add('cone', H.flameCore, [0.22, 0.44, 0], [0.56, 0.56, 0.56], FIRE_GLOW.core);
+}
+
+/**
+ * #859: the coals glowing deep red-orange under the logs, and the logs' undersides catching, for a fireplace whose grate
+ * is centred on (`x`, `z`) with its floor at `y` (world). Drawn apart from the room, self-lit (HouseInterior).
+ */
+export function drawCoals(b: HouseSink, x: number, y: number, z: number) {
+  const H = PALETTE.house;
+  for (const [k, w, c] of [[-0.2, 0.16, H.ember], [-0.07, 0.14, H.emberHot], [0.06, 0.17, H.ember], [0.19, 0.13, H.emberHot]] as [number, number, string][])
+    b.add('sphere', c, [x + (k > 0 ? 0.02 : -0.02), y + 0.06, z + k], [w, 0.07, w], FIRE_GLOW.coals);
+  for (const s of [-1, 1]) b.add('box', H.ember, [x + 0.056, y + 0.09 + (s > 0 ? 0.07 : 0), z + s * 0.06], [0.004, 0.025, FIREPLACE.mouth - 0.3], FIRE_GLOW.coals);
+}
+
 /** #859: the reading nook's standing lamp, in metres from the nook's corner (x, height of its bulb, z) */
 export const NOOK_LAMP: V3 = [1.25, 1.36, 0.3];
 /** #859: the reading nook's bookcase is this tall (m): low, under the east wall's window (its sill is at 0.91) */
@@ -360,16 +406,14 @@ function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes:
     b.add('box', H.soot, [bx + F.back / 2, y + F.mouthTop - 0.01, cz], [F.depth - F.back, 0.02, F.mouth]);
     tbox(b, 'hearth', H.hearth, [x0 + F.hearth / 2, y + 0.03, cz], [F.hearth, 0.06, F.wide + 0.2]); // the hearth stone
     tbox(b, 'wood', H.beam, [x0 + F.depth + 0.06, y + F.mouthTop + 0.12, cz], [0.2, 0.08, F.wide + 0.16]); // the mantel
-    // the fire: two logs across, embers under them, flames rising
-    const fx = x0 + F.back + (F.depth - F.back) / 2;
+    // the fire: two logs across the grate (the coals glowing under them and the flames rising off them are drawn in
+    // their own light, so the room's moonlight never greys them: HouseInterior, drawCoals and drawFlameTongue)
+    const fx = fireX(x0);
     for (const s of [-1, 1]) b.add('box', H.beam, [fx, y + 0.12 + (s > 0 ? 0.07 : 0), cz + s * 0.06], [0.11, 0.09, F.mouth - 0.2]);
-    for (const k of [-0.18, 0, 0.18]) b.add('sphere', H.ember, [fx, y + 0.08, cz + k], [0.14, 0.05, 0.14], 1);
-    for (const [k, h, c] of [[-0.12, 0.2, H.ember], [0.1, 0.24, H.ember], [0, 0.32, H.flame], [-0.05, 0.22, H.flame], [0.13, 0.17, H.flame]] as [number, number, string][])
-      b.add('sphere', c, [fx, y + 0.18 + h / 2, cz + k], [0.1, h, 0.1], 1);
     // on the mantel: two candles and a jar
     for (const s of [-1, 1]) {
       b.add('cylinder', H.pillow, [x0 + F.depth + 0.06, y + F.mouthTop + 0.24, cz + s * 0.6], [0.05, 0.16, 0.05]);
-      b.add('sphere', H.flame, [x0 + F.depth + 0.06, y + F.mouthTop + 0.35, cz + s * 0.6], [0.03, 0.05, 0.03], 1);
+      b.add('cone', H.flame, [x0 + F.depth + 0.06, y + F.mouthTop + 0.35, cz + s * 0.6], [0.03, 0.06, 0.03], FIRE_GLOW.candle);
     }
     b.add('cylinder', H.copper, [x0 + F.depth + 0.06, y + F.mouthTop + 0.24, cz - 0.15], [0.12, 0.16, 0.12]);
     return;

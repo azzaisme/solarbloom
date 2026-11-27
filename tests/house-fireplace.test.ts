@@ -7,7 +7,7 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { DECOR_RECIPES } from '../src/data/crafting';
 import { HOUSE, HOUSE_GROWTH, HOUSE_INSIDE, houseDoorInside, houseFurniture, houseRooms, houseWalls } from '../src/data/oldcity';
-import { drawRoom, FIREPLACE, NOOK_SHELF, windowSpots, type HouseSink } from '../src/rendering/HouseArt';
+import { drawCoals, drawFlameTongue, drawRoom, FIRE_GLOW, FIRE_TONGUES, FIREPLACE, NOOK_SHELF, windowSpots, type HouseSink } from '../src/rendering/HouseArt';
 import { PALETTE } from '../src/rendering/Palette';
 import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
@@ -15,6 +15,19 @@ import { houseHtml } from '../src/ui/OldCityPanel';
 import { bannedIn } from '../src/ui/words';
 
 const ID = HOUSE_INSIDE.layer;
+
+/** A hex colour's hue (degrees), saturation and lightness (0-1). */
+function hsl(hex: string) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = 0;
+  if (d) h = max === r ? 60 * (((g - b) / d) % 6) : max === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+  return { h: (h + 360) % 360, s, l };
+}
 const HOME = ['fireplace', 'nook'];
 
 function scene(level: number, seed = 7) {
@@ -33,16 +46,18 @@ function scene(level: number, seed = 7) {
 function drawn(level: number) {
   const tex: Record<string, string[]> = { wood: [], weave: [], coir: [], cloth: [], tiles: [], brick: [], hearth: [] };
   const glow: string[] = [];
+  const lit: string[] = [];
   const plain: string[] = [];
   const sink: HouseSink = {
     add: (type, hex, _p, _s, g) => {
       if (g && g >= 0.9) glow.push(hex);
+      if (g) lit.push(hex);
       if (type === 'box') plain.push(hex);
     },
     tex: (name, hex) => tex[name].push(hex),
   };
   drawRoom(sink, { origin: [0, 0, 0], room: HOUSE[level - 1].room, wall: HOUSE_INSIDE.wall, level, door: houseDoorInside(level), furniture: houseFurniture(level), walls: houseWalls(level), rooms: houseRooms(level), keepsakes: 0, variant: (x, z) => x * 7 + z });
-  return { tex, glow, plain };
+  return { tex, glow, lit, plain };
 }
 
 describe('#859: the Home brings a fireplace and a reading nook', () => {
@@ -99,19 +114,55 @@ describe('#859: the Home brings a fireplace and a reading nook', () => {
     expect(sim.rest.sitting).toBeUndefined();
   });
 
-  it('the fire is drawn in painted brick on a stone hearth, with a wooden mantel, and its flames and embers glow', () => {
+  it('the fire is drawn in painted brick on a stone hearth, with a wooden mantel, and coals glowing deep red under the logs', () => {
     const H = PALETTE.house;
-    const { tex, glow } = drawn(4);
+    const { tex } = drawn(4);
+    const lit: string[] = [];
+    drawCoals({ add: (_t, hex, _p, _s, g) => g && lit.push(hex) }, 0.34, 0, 8);
     expect(tex.brick.length, 'the jambs and the breast').toBe(3);
     expect(tex.brick.every((h) => h === H.brick)).toBe(true);
     expect(tex.hearth).toEqual([H.hearth]);
-    expect(glow).toContain(H.flame);
-    expect(glow).toContain(H.ember);
-    // the House (no fireplace) has no brick or hearth inside
+    expect(lit).toContain(H.ember);
+    expect(lit).toContain(H.emberHot);
+    for (const hex of [H.ember, H.emberHot]) {
+      const { h, s, l } = hsl(hex);
+      expect(h, `${hex}: red-orange`).toBeLessThan(25);
+      expect(s, `${hex}: saturated`).toBeGreaterThan(0.6);
+      expect(l, `${hex}: a coal, not white`).toBeLessThan(0.55);
+    }
+    // the House (no fireplace) has no brick, hearth or coals inside
     const before = drawn(3);
     expect(before.tex.brick).toEqual([]);
     expect(before.tex.hearth).toEqual([]);
-    expect(before.glow).not.toContain(H.ember);
+    expect(before.lit).not.toContain(H.ember);
+  });
+
+  it('the flames are tapered tongues of a few heights, leaning, a deep orange-red round a gold core that keeps its hue', () => {
+    const H = PALETTE.house;
+    const parts: { type: string; hex: string; glow: number }[] = [];
+    drawFlameTongue({ add: (type, hex, _p, _s, glow) => parts.push({ type, hex, glow: glow ?? 0 }) });
+    expect(parts.filter((p) => p.type === 'cone').map((p) => p.hex), 'each layer narrows to a point').toEqual([H.flameOuter, H.flameCore]);
+    for (const p of parts) {
+      expect(p.glow, `${p.hex} glows`).toBeGreaterThan(0.3);
+      expect(p.glow, `${p.hex}: not so bright it clips to white`).toBeLessThanOrEqual(0.7);
+    }
+    const outer = hsl(H.flameOuter);
+    const core = hsl(H.flameCore);
+    expect(outer.h).toBeLessThan(25); // orange-red
+    expect(core.h).toBeGreaterThan(30); // gold
+    expect(core.h).toBeLessThan(50);
+    for (const c of [outer, core]) {
+      expect(c.s).toBeGreaterThan(0.75);
+      expect(c.l).toBeLessThan(0.62);
+    }
+    expect(FIRE_GLOW.outer).toBeLessThan(FIRE_GLOW.core);
+    const heights = new Set(FIRE_TONGUES.map((t) => t.h));
+    expect(heights.size, 'a few heights').toBeGreaterThanOrEqual(4);
+    expect(FIRE_TONGUES.some((t) => t.lean < 0) && FIRE_TONGUES.some((t) => t.lean > 0), 'leaning both ways').toBe(true);
+    expect(new Set(FIRE_TONGUES.map((t) => t.phase)).size, 'each flickers out of step').toBe(FIRE_TONGUES.length);
+    // they fit in the firebox's mouth, even at the top of a flicker
+    for (const t of FIRE_TONGUES) expect(0.15 + t.h * 1.35).toBeLessThan(FIREPLACE.mouthTop);
+    for (const t of FIRE_TONGUES) expect(Math.abs(t.dz) + t.w / 2).toBeLessThan(FIREPLACE.mouth / 2);
   });
 
   it('the nook: a bookcase full of books, an armchair, a lit lamp; no window behind the fireplace; the bookcase sits under one', () => {

@@ -7,7 +7,7 @@ import { MeshBuilder } from './ChunkRenderer';
 import { drawDecor } from './DecorArt';
 import { decorSize } from '../data/cozy';
 import { FoliageBuilder, foliageMaterial } from './Foliage';
-import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawRoom, FIREPLACE, INNER_WALL, innerWallPieces, NOOK_LAMP, wallSinks, type HouseSink, type InnerWallPiece } from './HouseArt';
+import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawCoals, drawFlameTongue, drawRoom, FIRE_BASE, FIRE_TONGUES, fireX, FIREPLACE, INNER_WALL, innerWallPieces, NOOK_LAMP, wallSinks, type HouseSink, type InnerWallPiece } from './HouseArt';
 import { HouseTexBuilder, houseTexMaterial } from './HouseTex';
 import { color, PALETTE } from './Materials';
 import { MODELS, ModelBatch } from './Models';
@@ -29,6 +29,11 @@ export class HouseInterior {
   private roomLamps: pc.Entity[] = [];
   /** #859: the Home's fire, a warm flickering light in its corner (brighter as the day goes), and the reading nook's lamp */
   private fire: pc.Entity;
+  /** #859: the flames, a tongue each (FIRE_TONGUES), sharing one mesh; shown at the Home */
+  private tongues: pc.Entity[] = [];
+  private tongueMesh?: pc.Mesh;
+  /** #859: the coals under the logs (rebuilt with the room), self-lit like the flames */
+  private coals?: pc.Entity;
   private nookLamp: pc.Entity;
   private flicker = 0;
   private key = '';
@@ -90,6 +95,54 @@ export class HouseInterior {
     const t = performance.now() / 1000;
     this.flicker = 0.5 * Math.sin(t * 7.3) + 0.3 * Math.sin(t * 12.9 + 1.7) + 0.2 * Math.sin(t * 3.1 + 0.4);
     this.fire.light!.intensity = this.fireIntensity() * (1 + FIRE_LIGHT.flicker * this.flicker);
+    // each tongue rises and falls on its own wave, out of step with the others, and all leap with the light
+    FIRE_TONGUES.forEach((g, i) => {
+      const e = this.tongues[i];
+      if (!e) return;
+      const wave = Math.sin(t * g.rate + g.phase);
+      const k = 1 + FIRE_LIGHT.tongue * wave + FIRE_LIGHT.tongue * 0.8 * this.flicker;
+      e.setLocalScale(g.w * (1 - 0.08 * Math.sin(t * g.rate * 0.7 + g.phase)), g.h * k, g.w);
+      e.setLocalEulerAngles(g.lean + 3 * Math.sin(t * g.rate * 0.5 + g.phase * 2), 0, 0);
+    });
+  }
+
+  /** #859: each tongue of flame now: its height (m), for tests and the review. */
+  flames(): number[] {
+    return this.tongues.filter((e) => e.enabled).map((e) => e.getLocalScale().y);
+  }
+
+  /** #859: the flames over the fireplace's logs (made once, then moved with the room; hidden with no fireplace). */
+  private placeFlames(fp: { x: number; z: number; d: number } | undefined, ox: number, y: number, oz: number) {
+    if (fp) {
+      const cb = new MeshBuilder();
+      drawCoals({ add: (type, hex, p, s, glow) => cb.add(type, hex, p, s, glow) }, ox + fireX(fp.x), y, oz + fp.z + fp.d / 2);
+      const m = cb.build(this.device);
+      if (m) {
+        this.coals = new pc.Entity('house-coals');
+        this.coals.addComponent('render', { meshInstances: [new pc.MeshInstance(m, fireMaterial())], castShadows: false, receiveShadows: false });
+        this.root.addChild(this.coals);
+        this.parts.push(this.coals);
+      }
+    }
+    if (fp && !this.tongueMesh) {
+      const mb = new MeshBuilder();
+      drawFlameTongue({ add: (type, hex, p, s, glow) => mb.add(type, hex, p, s, glow) });
+      this.tongueMesh = mb.build(this.device);
+      for (const g of FIRE_TONGUES) {
+        const e = new pc.Entity('house-flame');
+        e.addComponent('render', { meshInstances: [new pc.MeshInstance(this.tongueMesh!, fireMaterial())], castShadows: false, receiveShadows: false });
+        e.setLocalScale(g.w, g.h, g.w);
+        e.setLocalEulerAngles(g.lean, 0, 0);
+        this.root.addChild(e);
+        this.tongues.push(e);
+      }
+    }
+    FIRE_TONGUES.forEach((g, i) => {
+      const e = this.tongues[i];
+      if (!e) return;
+      e.enabled = !!fp;
+      if (fp) e.setPosition(ox + fireX(fp.x) + g.dx, y + FIRE_BASE, oz + fp.z + fp.d / 2 + g.dz);
+    });
   }
 
   /** #859: the fire's light now, before its flicker: from FIRE_LIGHT.day by day to FIRE_LIGHT.night in the dark. */
@@ -254,6 +307,7 @@ export class HouseInterior {
     const fp = h.furniture().find((f) => f.id === 'fireplace');
     this.fire.enabled = !!fp;
     if (fp) this.fire.setPosition(ox + fp.x + FIREPLACE.glow[0] + 0.25, y + FIREPLACE.glow[1], oz + fp.z + fp.d / 2);
+    this.placeFlames(fp, ox, y, oz);
     const nook = h.furniture().find((f) => f.id === 'nook');
     this.nookLamp.enabled = !!nook;
     if (nook) this.nookLamp.setPosition(ox + nook.x + NOOK_LAMP[0], y + NOOK_LAMP[1] - 0.1, oz + nook.z + NOOK_LAMP[2]);
@@ -261,8 +315,28 @@ export class HouseInterior {
   }
 }
 
-/** #859: the fire's light: by day and by night (before the flicker, a share either way), and how far it reaches (m). */
-export const FIRE_LIGHT = { day: 1.2, night: 2.6, flicker: 0.12, range: 5 };
+/**
+ * #859: the fire's light: by day and by night (before the flicker, a share either way), and how far it reaches (m);
+ * `tongue`: how far each flame's height swings on its own wave (a share of its height).
+ */
+export const FIRE_LIGHT = { day: 1.2, night: 2.6, flicker: 0.12, range: 5, tongue: 0.16 };
+
+/**
+ * #859: the fire's own material: unlit, each vertex in its own colour (the flames' orange-red and gold, the coals' red),
+ * so the night's blue light never turns them pink or grey and no glow washes them out to white.
+ */
+let fireMat: pc.StandardMaterial | undefined;
+export function fireMaterial(): pc.StandardMaterial {
+  if (fireMat) return fireMat;
+  const m = new pc.StandardMaterial();
+  m.useLighting = false;
+  m.diffuse = new pc.Color(0, 0, 0);
+  m.emissive = new pc.Color(1, 1, 1);
+  m.emissiveVertexColor = true;
+  m.emissiveVertexColorChannel = 'rgb';
+  m.update();
+  return (fireMat = m);
+}
 
 /** #861: a sink drawing plain pieces into the vertex-coloured mesh and painted ones (wood, weave, coir) apart. */
 function sinkOf(b: MeshBuilder, t: HouseTexBuilder): HouseSink {
