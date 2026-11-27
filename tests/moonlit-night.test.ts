@@ -2,7 +2,7 @@
 import * as pc from 'playcanvas';
 import { describe, expect, it } from 'vitest';
 import { LOOK } from '../src/data/look';
-import { DAY_LIGHT, NIGHT_SKY, NIGHT_SKY_LIGHTS } from '../src/data/sky';
+import { DAY_LIGHT, NIGHT_SKY, NIGHT_SKY_LIGHTS, SUN_MOON } from '../src/data/sky';
 import { DAY, DAY_SECONDS } from '../src/data/time';
 import { DayNight } from '../src/rendering/DayNight';
 import { Bindings } from '../src/app/Bindings';
@@ -99,7 +99,7 @@ describe('E23.7.5 moonlit nights', () => {
     // never black: the horizon haze (the scene fog's colour at night) keeps some light
     expect(lum(rgb(NIGHT_SKY.night.haze))).toBeGreaterThan(0.2);
     expect(lum(rgb(NIGHT_SKY.night.zenith))).toBeLessThan(lum(rgb(NIGHT_SKY.night.haze)));
-    expect(lum(rgb(NIGHT_SKY_LIGHTS.moon))).toBeGreaterThan(0.9);
+    expect(lum(rgb(SUN_MOON.moon.colour))).toBeGreaterThan(0.9);
     expect(NIGHT_SKY_LIGHTS.stars.count).toBeGreaterThan(100);
     expect(NIGHT_SKY_LIGHTS.stars.above).toBeGreaterThanOrEqual(15);
   });

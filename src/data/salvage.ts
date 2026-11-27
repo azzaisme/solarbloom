@@ -81,8 +81,8 @@ export const SALVAGE = {
   perTake: 3,
   /** seconds Interact is held to salvage once */
   holdSeconds: 0.6,
-  /** seconds Interact is held at a barricade to Pry it */
-  pryHoldSeconds: 2,
+  /** seconds Interact is held at a dead hedge to prune a way through */
+  pruneHoldSeconds: 2,
   /** E23.7.4: game days of play for an emptied pile to fill again (one unit at a time); storms fill them at once */
   refillDays: 3,
   /** E23.7.4: how often (sim seconds) piles are checked for a returning unit */
@@ -136,7 +136,7 @@ export interface TierDef {
 }
 
 export const TIERS: TierDef[] = [
-  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Water Condenser', 'The house plot'], look: 'trickle' },
+  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'prune', gives: ['Prune', 'Water Condenser', 'The house plot'], look: 'trickle' },
   { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Carry 60 of each thing'], look: 'flowing' },
   { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Carry 80 of each thing'], look: 'lit' },
   { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Cultivator', 'Carry 120 of each thing'], look: 'lit' },
@@ -144,7 +144,7 @@ export const TIERS: TierDef[] = [
 ];
 
 export const ABILITIES: Record<AbilityId, { name: string; blurb: string }> = {
-  pry: { name: 'Pry', blurb: 'Pries rubble out of the way' },
+  prune: { name: 'Prune', blurb: 'Prunes a way through the dead hedges' },
   hover: { name: 'Hover', blurb: 'Crosses deep water' },
   climb: { name: 'Climb', blurb: 'Climbs ladders to the roofs' },
   glide: { name: 'Glide', blurb: 'Glides across gaps from the edge of a roof' },

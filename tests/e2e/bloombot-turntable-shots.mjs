@@ -114,7 +114,7 @@ for (const S of SIZES) {
       g.hud.setUiScale(ui);
       const sv = g.sim.state.salvage;
       sv.tier = Math.max(sv.tier, 1);
-      sv.abilities = ['pry', 'hover'];
+      sv.abilities = ['prune', 'hover'];
       sv.keepers.pylon = { step: 'request1' };
       sv.research ??= { analysed: [], done: [], running: [], levels: {} };
       sv.research.done.push('rb-cells', 'rb-backpack', 'rb-pulse', 'rb-efficiency', 'rb-sprint', 'rb-lantern', 'rb-eye');
@@ -220,7 +220,7 @@ for (const S of SIZES) {
     await page.focus('#bb-quickHands');
     await page.waitForTimeout(900);
     await page.screenshot({ path: `${out}/10-quick-hands-top-${L}.png` });
-    for (const [id, what] of [['pry', 'learned'], ['glide', 'later'], ['climb', 'next']]) {
+    for (const [id, what] of [['prune', 'learned'], ['glide', 'later'], ['climb', 'next']]) {
       await page.focus(`#bb-${id}`);
       await page.waitForTimeout(900);
       await page.screenshot({ path: `${out}/9-row-${what}-${L}.png` });

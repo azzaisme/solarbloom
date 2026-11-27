@@ -47,7 +47,7 @@ import { BirdHeart } from '../rendering/BirdHeart';
 import { bloomGetsHeart, heartBox, type Rect } from '../rendering/HeartFlight';
 import { BIRD_HEART } from '../data/birdHeart';
 import { Clouds } from '../rendering/Clouds';
-import { CloudWall } from '../rendering/CloudWall';
+import { HedgeLine } from '../rendering/HedgeLine';
 import { Ruins } from '../rendering/Ruins';
 import { Fauna } from '../rendering/Fauna';
 import { createModels } from '../rendering/Models';
@@ -89,7 +89,7 @@ import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { fogMatchingSky } from '../rendering/LookShaders';
-import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
+import { CLOSE_VIEW_REACH, DAY_LIGHT, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { heightAt, levelY } from '../core/Height';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
@@ -198,7 +198,7 @@ type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 /** E22.2: an Interact target with what it does, where it is, and the outline to draw round it. */
 interface InteractTarget extends Candidate {
   run: () => void;
-  /** E21: a hold the Old City controller runs itself (salvage 0.6 s, pry 2 s) */
+  /** E21: a hold the Old City controller runs itself (salvage 0.6 s, prune 2 s) */
   ocHold?: number;
   at?: TileData;
   frame?: { roofId: string; x: number; z: number; size: number };
@@ -298,7 +298,7 @@ export class Game {
   private clouds: Clouds;
   /** region unlocks: the wall of clouds around sealed areas */
   /** P7-E27: public for the dev lighting panel (it re-syncs the ring when its size changes) */
-  readonly cloudWall: CloudWall;
+  readonly hedgeLine: HedgeLine;
   /** P7-E32 (#756): the distant ruined city round the island */
   readonly ruins: Ruins;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
@@ -517,7 +517,7 @@ export class Game {
     this.birds = new Birds(this.scene.world);
     this.birdHeart = new BirdHeart(this.scene.world, this.app.graphicsDevice);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
-    this.cloudWall = new CloudWall(this.sim, this.scene.world, this.app.graphicsDevice, this.scene.sun.up, this.app.batcher ?? undefined);
+    this.hedgeLine = new HedgeLine(this.sim, this.scene.world, this.app.graphicsDevice);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
@@ -624,7 +624,7 @@ export class Game {
     this.applyFountainLook(true); // E21.6
 
     this.wireEvents();
-    this.cloudWall.sync();
+    this.hedgeLine.sync();
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
@@ -2438,12 +2438,12 @@ export class Game {
     const front = this.sim.grid.get(b.pose.roofId, f.x, f.z);
     const fd = Math.hypot(f.x + 0.5 - b.pose.x, f.z + 0.5 - b.pose.z);
     if (this.oc) out.push(...this.oldCityCandidates(f, front, fd));
-    // Facing a sealed area's fog: nothing is bought (E23.1.5). Its gate opens by prying, repairing or waking, and
+    // Facing a sealed area's fog: nothing is bought (E23.1.5). Its gate opens by pruning, repairing or waking, and
     // the prompt says what is in the way.
     const sealed = this.sealedAhead();
     if (sealed) {
       if (!out.some((c) => c.kind === 'gate'))
-        out.push({ kind: 'gate', id: `seal:${sealed}`, verb: 'Look at', name: 'the clouds', distance: fd, at: front, refused: this.sim.areas.sealText(sealed).replace(/<[^>]*>/g, ''), run: () => {} });
+        out.push({ kind: 'gate', id: `seal:${sealed}`, verb: 'Look at', name: 'the hedge', distance: fd, at: front, refused: this.sim.areas.sealText(sealed).replace(/<[^>]*>/g, ''), run: () => {} });
     }
     const lift = this.liftAhead();
     if (lift) {
@@ -2562,8 +2562,8 @@ export class Game {
       out.push({ kind: 'gate', id: `works:${w.region}`, verb: 'Look at', name: w.name, distance: fd, at: front, refused: why, run: () => this.hud.toast(`${w.running}<small>${w.then}</small>`, '', 4) });
     }
     const gate = s.gates.gateAt(f.x, f.z);
-    if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? s.upgrades.pryHold : undefined, refused: s.gates.problem(gate), run });
-    // E25 (#626): a sealed vault (Pry II), a stash, and the trips the level II moves take (over the sea, up a wall)
+    if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'hedge' ? 'Prune' : 'Repair', name: gate.kind === 'hedge' ? 'the hedge' : '', distance: fd, at: front, ocHold: gate.kind === 'hedge' ? s.upgrades.pruneHold : undefined, refused: s.gates.problem(gate), run });
+    // E25 (#626): a sealed vault (the pry bar), a stash, and the trips the level II moves take (over the sea, up a wall)
     const vault = s.moves.vaultAt(f.x, f.z);
     if (vault) out.push({ kind: 'gate', id: `vault:${vault.id}`, verb: 'Pry open', name: 'the vault door', distance: fd, at: front, ocHold: s.upgrades.vaultHold, refused: s.moves.vaultProblem(vault), run });
     const stash = s.moves.stashAt(f.x, f.z);
@@ -2722,7 +2722,7 @@ export class Game {
       sound: (name: string, material?: string) => {
         if (name === 'tier' || name === 'wake') this.sfx.fanfare();
         else if (name === 'deliver') this.sfx.coin();
-        else if (name === 'pry') this.sfx.stage('crack');
+        else if (name === 'pry' || name === 'prune') this.sfx.stage('crack');
         // a sound per material
         else if (name === 'salvage') this.sfx.stage(({ biomass: 'rustle', scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
         else this.sfx.click();
@@ -3098,6 +3098,9 @@ export class Game {
    * is known) mirrors the camera as it is now, and the water's material gets its clock, the camera, the night and the
    * sky's colours.
    */
+  /** #sunsets: scratch for the sea's path of light (DayNight.pathOnWater) */
+  private waterPathDir = new pc.Vec3();
+
   private waterFrame() {
     if (!this.camera || !this.dayNight) return;
     const seaY = this.chunks?.seaY;
@@ -3112,10 +3115,12 @@ export class Game {
       trTime: this.transitions?.time ?? 0,
       cam: this.camera.entity.getPosition(),
       focus: this.camera.target,
-      night: 1 - this.dayNight.daylight,
+      // #sunsets: the sea keeps some of the day's colour while the sun sets over it
+      night: (1 - this.dayNight.daylight) * (1 - DAY_LIGHT.seaWarm * Math.max(this.dayNight.sunset, this.dayNight.twilight)),
       skyLow: low,
       skyHigh: high,
       light: { toLight: this.scene.sun.up, color: this.scene.sun.light!.color, share: this.scene.sun.light!.intensity / LOOK.sun.intensity },
+      path: this.dayNight.pathOnWater(this.waterPathDir),
       lamps: this.lightVisuals?.shining,
       reflect: tex && seaY !== undefined ? { tex, viewProj: this.waterReflection!.drawnViewProj, planeY: seaY } : undefined,
     });
@@ -4460,6 +4465,7 @@ export class Game {
     // a pile stays the goal until it is dug out: only its last dig blooms
     b.on('pile.salvaged', ({ x, z, left }) => left === 0 && this.waymark.done(['pile'], { x, z }));
     b.on('gate.opened', () => this.waymark.done(['gate']));
+    b.on('gate.opened', () => this.hedgeLine.sync()); // #hedge-line: its forcefield and hedge wither away (a plug too)
     b.on('fountain.delivered', () => this.waymark.done(['fountain']));
     b.on('landmark.woken', () => this.waymark.done(['landmark']));
     for (const ev of ['keeper.step', 'keeper.gift', 'keeper.friend'] as const) b.on(ev, () => this.waymark.done(['keeper']));
@@ -4480,8 +4486,8 @@ export class Game {
     });
     b.on('area.fogChanged', ({ areaId }) => this.chunks.markArea(areaId));
     b.on('area.unlocked', ({ areaId }) => {
-      this.cloudWall.reducedMotion = !!this.settings.reducedMotion;
-      this.cloudWall.sync(); // its wall rises and melts away
+      this.hedgeLine.reducedMotion = !!this.settings.reducedMotion;
+      this.hedgeLine.sync(); // its hedge withers back
       this.chunks.markArea(areaId);
       for (const nb of s.areas.info(areaId).neighbours) this.chunks.markArea(nb); // soft fog edges
       const info = s.areas.info(areaId);
@@ -4503,7 +4509,7 @@ export class Game {
     });
     b.on('area.cleared', ({ areaId }) => {
       this.onAreaCleared(areaId);
-      this.cloudWall.sync(); // the newly sealed neighbours get their walls
+      this.hedgeLine.sync(); // the newly sealed neighbours get their hedges
     });
     b.on('fauna.unlocked', ({ id }) => {
       // Phase 5 E16 (cosmetic; pays nothing): a creature kind arrives
@@ -5179,7 +5185,7 @@ export class Game {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      this.hud.toast('⛲ Water returns!<small>Rubble still blocks the streets leading away from the fountain. Walk up to a pile and hold {interact} to pry it out of the way.</small>', 'gold', 7);
+      this.hud.toast('⛲ Water returns!<small>Dead hedges still wall in the park. Walk up to the green glow in one and hold {interact} to prune a way through.</small>', 'gold', 7);
       // E21.12: a 4 s vista turning past the beacons around the park (skippable; a still with reduced motion)
       if (!this.settings.noVistas) setTimeout(() => this.vista(8, 8, 4, (seen) => seen.forEach((r) => this.sim.salvage.see(`beacon:${r}`)), 300), 200);
       this.save();
@@ -5652,6 +5658,7 @@ export class Game {
     }
     this.dayNight.apply(this.lightMoment());
     this.look.rimShare = this.dayNight.rim;
+    this.look.twilight = this.dayNight.twilight;
     this.look.night = 1 - this.dayNight.light;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
@@ -5666,7 +5673,7 @@ export class Game {
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-      this.cloudWall.update(wdt, this.camera.target);
+      this.hedgeLine.update(wdt);
       this.clouds.update(wdt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);

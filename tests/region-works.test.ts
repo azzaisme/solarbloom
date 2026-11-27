@@ -108,7 +108,7 @@ describe('#787: which regions need building', () => {
 
   it('each piece stands on its own cell inside its region, blocked, with open ground round it to build on, and Bloombot can walk up to it', () => {
     const sim = new Sim(createInitialState(7));
-    sim.state.salvage!.abilities = ['pry', 'hover', 'climb', 'glide'];
+    sim.state.salvage!.abilities = ['prune', 'hover', 'climb', 'glide'];
     for (const r of REGIONS) sim.state.areas[r.id] = { fog: 'thinning', revealedAt: 0 };
     for (const r of REGIONS)
       for (const [x, z] of r.gate.cells) {

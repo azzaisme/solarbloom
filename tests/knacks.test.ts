@@ -1,3 +1,4 @@
+import { hedgeReady } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { KNACK_TUNING as T, KNACKS } from '../src/data/bloombot';
@@ -47,7 +48,8 @@ describe('#625: each Keeper teaches Bloombot a knack', () => {
   it('waking a Keeper teaches its knack: said in its own words, before its first request, with a moment', () => {
     const sim = fresh();
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.areas.clear('park', true);
     sim.gates.open('g-mastRow');
     sim.bot = { roofId: GROUND, x: 10.5, z: -2.5 };
@@ -207,7 +209,8 @@ describe('#625: each Keeper teaches Bloombot a knack', () => {
     expect(rows[0].how).toBe('Pylon, a robot asleep in Mast Row, teaches this when it wakes. Find the way into Mast Row first.');
     // Mast Row open: Pylon is next, and Show me where goes to it
     sim.areas.clear('park', true);
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.gates.open('g-mastRow');
     rows = knackRows(sim);
     expect(rows[0]).toMatchObject({ state: 'next', where: { name: 'Pylon' } });

@@ -152,7 +152,7 @@ try {
   const grav = await run(() => {
     const g = window.solarbloom;
     const s = g.sim;
-    if (!s.state.salvage.abilities.includes('pry')) s.state.salvage.abilities.push('pry');
+    if (!s.state.salvage.abilities.includes('prune')) s.state.salvage.abilities.push('prune');
     s.gates.open('g-mastRow');
     s.areas.clear('mastRow', true);
     for (let z = -26; z <= -16; z++)

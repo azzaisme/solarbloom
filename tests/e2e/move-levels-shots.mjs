@@ -38,7 +38,7 @@ try {
     g.pause.clear('blur');
     s.pulseLoad.introduced(); // the load wheel's first-time introduction was seen long ago
     sv.tier = 4;
-    for (const a of ['pry', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
+    for (const a of ['prune', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
     for (const r of ['mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory', 'spireHeights']) s.gates.openRegion(r);
     // and the backstreets these places stand in or beside (the cliff east of the beach)
     for (const [x, z] of [[22, 47], [29, 21], [24, -10], [8, 48], [8, 55], [22, 54], [-8, 27]]) {
@@ -189,7 +189,7 @@ try {
   p = await prompt();
   check(/Hold\s*Pry open the vault door/.test(p) && /too heavy to pry open yet/.test(p), `vault: before Pry II ("${p}")`);
   await shot('vault-1-before');
-  await level2('pry');
+  await level2('prune');
   await page.waitForTimeout(400);
   p = await prompt();
   check(/Hold\s*Pry open the vault door/.test(p) && !/too heavy/.test(p), `vault: with Pry II ("${p}")`);
@@ -243,7 +243,7 @@ try {
   await page.evaluate(() => {
     const s = window.solarbloom.sim;
     s.state.salvage.research.done = s.state.salvage.research.done.filter((id) => !/^rb-\w+2$/.test(id));
-    s.state.salvage.abilities = ['pry', 'hover'];
+    s.state.salvage.abilities = ['prune', 'hover'];
     s.state.salvage.keepers.k = { step: 'request1' };
     window.solarbloom.hud.backpack.show('bloombot', true);
   });
@@ -251,7 +251,7 @@ try {
   await page.focus('#bb-pry2');
   await page.waitForTimeout(300);
   const d2 = await page.evaluate(() => document.querySelector('#bpScreen .bb-detail')?.textContent?.replace(/\s+/g, ' ').trim() ?? '');
-  check(/start “Pry II” in its Research tab\. Then Bloombot learns it\./.test(d2), `page: Pry II open at the workshop says where to start it ("${d2}")`);
+  check(/start “Pry bar” in its Research tab\. Then Bloombot learns it\./.test(d2), `page: Pry II open at the workshop says where to start it ("${d2}")`);
   await shot('page-open-at-workshop');
 
   check(!errors.length, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);

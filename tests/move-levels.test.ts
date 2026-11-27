@@ -23,7 +23,7 @@ function open() {
   return { sim, walk: new Walker(sim) };
 }
 
-const MOVES: AbilityId[] = ['pry', 'hover', 'climb', 'glide'];
+const MOVES: AbilityId[] = ['prune', 'hover', 'climb', 'glide'];
 const learn = (sim: Sim, ...as: AbilityId[]) => sim.state.salvage!.abilities.push(...as);
 const research = (sim: Sim) => (sim.state.salvage!.research ??= { analysed: [], done: [], running: [], levels: {} });
 /** The research station is in the house once a Keeper wakes. */
@@ -45,7 +45,7 @@ describe('#626: earning the second levels at the workshop', () => {
     station(sim);
     const isOpen = (id: string) => sim.research.isOpen(sim.research.project(id)!);
     expect(['rb-pry2', 'rb-hover2', 'rb-climb2', 'rb-glide2'].map(isOpen)).toEqual([false, false, false, false]);
-    learn(sim, 'pry');
+    learn(sim, 'prune');
     expect(isOpen('rb-pry2')).toBe(false);
     expect(sim.research.problem('rb-pry2')).toBe('Learn Hover at the fountain first');
     learn(sim, 'hover');
@@ -74,10 +74,10 @@ describe('#626: earning the second levels at the workshop', () => {
     expect(sim.research.moveLevel('hover')).toBe(0);
     learn(sim, 'hover');
     expect(sim.research.moveLevel('hover')).toBe(2);
-    expect(sim.research.moveLevel('pry')).toBe(0);
-    learn(sim, 'pry');
-    expect(sim.research.moveLevel('pry')).toBe(1);
-    expect(sim.moves.level('pry')).toBe(1);
+    expect(sim.research.moveLevel('prune')).toBe(0);
+    learn(sim, 'prune');
+    expect(sim.research.moveLevel('prune')).toBe(1);
+    expect(sim.moves.level('prune')).toBe(1);
   });
 
   it('the workshop finishing one says so in a plain line', () => {
@@ -138,7 +138,7 @@ describe('#626: the new places in the city', () => {
   it('nowhere strands Bloombot: from every new place a way back leads home, needing nothing', () => {
     const { sim, walk } = open();
     const free = (x: number, z: number) => walk.walkable(GROUND, x, z);
-    sim.charge.use('pry', 9999); // even out of charge
+    sim.charge.use('prune', 9999); // even out of charge
     // the sandbar: hover back to the jetty
     const fromSandbar = sim.moves.tripFrom([8, 54], [8, 53], free)!;
     expect(fromSandbar).toMatchObject({ id: 'sandbar-jetty', back: true });
@@ -161,11 +161,11 @@ describe('#626: Pry II and the sealed vaults', () => {
     const { sim } = open();
     const v = VAULTS[0];
     expect(sim.moves.vaultAt(v.x, v.z)).toBe(v);
-    expect(sim.moves.vaultProblem(v)).toBe('A heavy iron door, shut tight. Bloombot has to learn to pry at the fountain first.');
-    learn(sim, 'pry');
-    expect(sim.moves.vaultProblem(v)).toBe('This door is too heavy to pry open yet. The crafting table in the house can work out Pry II.');
+    expect(sim.moves.vaultProblem(v)).toBe('A heavy iron door, shut tight. Bloombot needs a pry bar for this, and the fountain comes first.');
+    learn(sim, 'prune');
+    expect(sim.moves.vaultProblem(v)).toBe('This door is too heavy to open by hand. The crafting table in the house can work out a pry bar.');
     expect(sim.moves.openVault(v.id)).toBeUndefined();
-    levelTwo(sim, 'pry');
+    levelTwo(sim, 'prune');
     expect(sim.moves.vaultProblem(v)).toBeUndefined();
     const before = sim.charge.value();
     const opened: string[] = [];
@@ -183,10 +183,10 @@ describe('#626: Pry II and the sealed vaults', () => {
 
   it('out of charge, Pry II waits', () => {
     const { sim } = open();
-    learn(sim, 'pry');
-    levelTwo(sim, 'pry');
-    sim.charge.use('pry', 9999);
-    if (sim.charge.canUse('pry')) return; // charge isn't spent by this build: nothing to check
+    learn(sim, 'prune');
+    levelTwo(sim, 'prune');
+    sim.charge.use('prune', 9999);
+    if (sim.charge.canUse('prune')) return; // charge isn't spent by this build: nothing to check
     expect(sim.moves.vaultProblem(VAULTS[0])).toBe('Out of Charge: press {eat} for a snack, or sit on a bench to rest.');
   });
 });
@@ -251,7 +251,8 @@ describe('#626: the trips', () => {
       expect(v in VERB_ACTS, v).toBe(true);
       expect(VERB_ACTS[v], v).toBeUndefined();
     }
-    expect(VERB_ACTS.Pry).toBe('pry');
+    expect(VERB_ACTS['Pry open']).toBe('pry');
+    expect(VERB_ACTS.Prune).toBe('prune'); // #hedge-line: pruning through a dead hedge
     expect(VERB_ACTS.Open).toBe('reach');
   });
 
@@ -267,7 +268,7 @@ describe('#626: the trips', () => {
   it('every trip prompt and refusal is a plain line', () => {
     const { sim } = open();
     const lines: string[] = [];
-    for (const step of [[], ['hover', 'climb', 'glide', 'pry']] as AbilityId[][]) {
+    for (const step of [[], ['hover', 'climb', 'glide', 'prune']] as AbilityId[][]) {
       learn(sim, ...step);
       for (const t of MOVE_TRIPS) lines.push(`${t.verb} ${t.name}`, sim.moves.tripProblem(t) ?? '');
       for (const v of VAULTS) lines.push(sim.moves.vaultProblem(v) ?? '');
@@ -280,9 +281,9 @@ describe('#626: the Bloombot page shows the second levels', () => {
   it('a group of four after the moves, each later until its move is learned', () => {
     const { sim } = open();
     const rows = moveTwoRows(sim);
-    expect(rows.map((r) => r.name)).toEqual(['Pry II', 'Hover II', 'Climb II', 'Glide II']);
+    expect(rows.map((r) => r.name)).toEqual(['Pry bar', 'Hover II', 'Climb II', 'Glide II']);
     expect(rows.every((r) => r.kind === 'move2' && r.state === 'later')).toBe(true);
-    expect(rows[0].how).toBe('Bloombot has to learn Hover at the fountain first. Then the crafting table in the house can work out “Pry II”.');
+    expect(rows[0].how).toBe('Bloombot has to learn Hover at the fountain first. Then the crafting table in the house can work out “Pry bar”.');
     expect(rows[0].where?.name).toBe('the fountain');
     // #663: Glide II waits on Climb II as well as Glide, and says so
     expect(rows[3].how).toBe('Bloombot has to learn Glide at the fountain first, and the crafting table in the house has to work out “Climb II”. Then it can work out “Glide II”.');
@@ -293,12 +294,12 @@ describe('#626: the Bloombot page shows the second levels', () => {
   it('open at the workshop, it says where to start it; done, it says where it is used and leads there', () => {
     const { sim } = open();
     station(sim);
-    learn(sim, 'pry', 'hover');
+    learn(sim, 'prune', 'hover');
     let pry = moveTwoRows(sim)[0];
     expect(pry.state).toBe('next');
-    expect(pry.how).toBe('Go to the crafting table in the house and start “Pry II” in its Research tab. Then Bloombot learns it.');
+    expect(pry.how).toBe('Go to the crafting table in the house and start “Pry bar” in its Research tab. Then Bloombot learns it.');
     expect(pry.where?.name).toBe('the house');
-    levelTwo(sim, 'pry');
+    levelTwo(sim, 'prune');
     pry = moveTwoRows(sim)[0];
     expect(pry).toMatchObject({ state: 'have', how: 'There are old vaults to open in Mast Row, the Old Market and Saltwind.' });
     expect(howHeading(pry)).toBe('Where to use it');

@@ -94,7 +94,7 @@ try {
     await page.waitForFunction(() => !!window.solarbloom.hud.guide.lastText, null, { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(800);
     const c1 = await page.evaluate(cardNow);
-    check(c1.title === 'Wake the fountain' && c1.why === 'Bloombot learns to pry open rubble', `${L}: the goal and what it brings ("${c1.title}" · "${c1.why}")`);
+    check(c1.title === 'Wake the fountain' && c1.why === 'Bloombot learns to prune through the dead hedges', `${L}: the goal and what it brings ("${c1.title}" · "${c1.why}")`);
     check(c1.parts.length === 3 && /Scrap.*0 of 20/.test(c1.parts[0]) && /Seeds.*0 of 6/.test(c1.parts[1]) && /Park.*of 60/.test(c1.parts[2]), `${L}: every part counted from the start (${c1.parts.join(' | ')})`);
     check(!!c1.next && /Show me where/.test(c1.where), `${L}: the next step under it, with Show me where ("${c1.next}" · "${c1.where}")`);
     // the owner's test: the card says what to press, with the player's own key (never a {placeholder})
@@ -145,7 +145,7 @@ try {
       for (let z = -2; z < 30; z++)
         for (let x = -4; x < 30; x++) {
           const gd = r.gateAt(x, z);
-          if (!gd || gd.kind !== 'barricade') continue;
+          if (!gd || gd.kind !== 'hedge') continue;
           for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
             if (!g.bot.walker.walkable('g', x + dx, z + dz) || r.gateAt(x + dx, z + dz)) continue;
             g.bot.teleport('g', x + dx + 0.5, z + dz + 0.5);
@@ -158,7 +158,7 @@ try {
     await page.waitForFunction(() => !!document.querySelector('#prompt .pr-why'), null, { timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(500);
     const why = await page.evaluate(() => document.querySelector('#prompt .pr-why')?.textContent ?? '');
-    check(why === 'Rubble blocks the way. Wake the fountain and Bloombot will learn to pry it open.' && why === gate, `${L}: the barricade says what to do ("${why}")`);
+    check(why === 'A dead hedge blocks the way. Wake the fountain and Bloombot will learn to prune a way through.' && why === gate, `${L}: the barricade says what to do ("${why}")`);
     bad = await page.evaluate(layout);
     check(!bad.length, `${L}: the refusal sits clear of everything ${bad.join(', ')}`);
     await shot('3-blocked');
@@ -230,12 +230,12 @@ try {
     await page.evaluate(() => {
       const s = window.solarbloom.sim;
       s.state.salvage.tier = 1;
-      if (!s.state.salvage.abilities.includes('pry')) s.state.salvage.abilities.push('pry');
+      if (!s.state.salvage.abilities.includes('prune')) s.state.salvage.abilities.push('prune');
       window.solarbloom.hud.objective.adviceAt = -Infinity;
     });
-    await page.waitForFunction(() => /^Pry open the rubble/.test(document.querySelector('#objTitle')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
+    await page.waitForFunction(() => /^Prune through the hedge/.test(document.querySelector('#objTitle')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
     const c5 = await page.evaluate(cardNow);
-    check(c5.title === 'Pry open the rubble' && c5.why === 'Another robot like Bloombot is asleep on the other side' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
+    check(c5.title === 'Prune through the hedge' && c5.why === 'Another robot like Bloombot is asleep on the other side' && /Show me where/.test(c5.where), `${L}: once the fountain wakes, the rubble is the goal ("${c5.title}" · "${c5.next}")`);
     await page.keyboard.press('KeyH');
     await page.waitForTimeout(1600);
     const r5 = await page.evaluate(() => {
@@ -253,7 +253,7 @@ try {
       const g = window.solarbloom;
       const s = g.sim;
       s.state.salvage.tier = 1;
-      if (!s.state.salvage.abilities.includes('pry')) s.state.salvage.abilities.push('pry');
+      if (!s.state.salvage.abilities.includes('prune')) s.state.salvage.abilities.push('prune');
       const gateId = 'g-mastRow';
       if (!s.state.salvage.opened.includes(gateId)) s.state.salvage.opened.push(gateId);
       // the Mast Row's Keeper, found where it stands (the page can't import the data)
@@ -310,7 +310,7 @@ try {
             const g = window.solarbloom;
             const sv = g.sim.state.salvage;
             sv.tier = tier;
-            sv.abilities = ['pry', 'hover', 'climb', 'glide'].slice(0, tier);
+            sv.abilities = ['prune', 'hover', 'climb', 'glide'].slice(0, tier);
             if (low) g.sim.charge.drainForTest();
             else g.sim.charge.refillForTest();
             g.hud.objective.adviceAt = -Infinity;

@@ -219,7 +219,7 @@ export function actForVerb(verb: string): ActId | undefined {
 export const VERB_ACTS: Record<string, ActId | undefined> = {
   Salvage: 'rummage',
   Pry: 'pry',
-  'Pry open': 'pry', // #626: a vault door (Pry II)
+  'Pry open': 'pry', // #626: a vault door (the pry bar)
   Gather: 'gather',
   Prune: 'prune', // E27.2 (#680): an orchard, the roses, a parklet's planters
   'Dig up': 'dig',

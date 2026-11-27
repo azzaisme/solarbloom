@@ -75,7 +75,7 @@ describe('E21.6: the fountain', () => {
     const tiers: number[] = [];
     sim.bus.on('fountain.tier', (e) => tiers.push(e.tier));
     restorePark(sim, 60);
-    const abilities = ['pry', 'hover', 'climb', 'glide'];
+    const abilities = ['prune', 'hover', 'climb', 'glide'];
     for (let tier = 1; tier <= 5; tier++) {
       wakeLandmarks(sim, TIERS[tier - 1].needs.landmarks ?? 0);
       stock(sim, tier);

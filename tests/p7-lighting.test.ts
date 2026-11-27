@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { laidHedge } from '../src/rendering/HedgeGen';
 import { LOOK } from '../src/data/look';
 import { readFileSync } from 'node:fs';
 import { DAY_LIGHT, HAZE, LIGHT_PRESETS, SKY } from '../src/data/sky';
@@ -72,24 +73,32 @@ describe('P7-E27.4 grounding (#722)', () => {
   });
 });
 
-describe('P7-E27 cloud ring (owner, 23 Nov 2026)', () => {
-  const R = LOOK.cloudRing;
-  it('rings the revealed ground in at least the gate walls\' two rows, bigger and so taller', () => {
-    expect(R.on).toBe(true);
-    expect(R.rows).toBeGreaterThanOrEqual(2);
-    expect(R.size).toBeGreaterThanOrEqual(1);
+describe('#hedge-line: sealed and hidden ground is walled in by a dead laid hedge (owner, 27 Nov 2026)', () => {
+  const H = LOOK.hedgeLine;
+  it('walls in the revealed ground, in front of the fog curtain rather than buried in it', () => {
+    expect(H.ring).toBe(true);
+    expect(H.height).toBeGreaterThanOrEqual(0.8);
+    expect(H.inset).toBeLessThanOrEqual(0.15);
   });
 
-  it('the walls breathe: a few small wisps rise and melt away over a few seconds, one dynamic batch', () => {
-    const W = R.wisps;
-    expect(W.count).toBeGreaterThan(0);
-    expect(W.count).toBeLessThanOrEqual(24);
-    expect(W.parts).toBeGreaterThanOrEqual(1);
-    expect(W.size).toBeLessThan(1); // smaller than the cloud they leave
-    expect(W.rise).toBeGreaterThan(0);
-    expect(W.life[0]).toBeGreaterThan(1);
-    expect(W.life[1]).toBeGreaterThan(W.life[0]);
-    expect(W.reach).toBeGreaterThan(0);
+  it('is bare dead wood, twisting and never the same twice: no leaves, nothing round it has been revived', () => {
+    const a = laidHedge(0);
+    const b = laidHedge(5);
+    expect(a.leafStarts).toBeUndefined();
+    expect(a.tris).not.toBe(b.tris);
+    // tall enough to read as a wall (the binding at about 1.3, dead whips above it)
+    expect(a.height).toBeGreaterThan(1.2);
+    expect(a.tris).toBeLessThan(2500); // a metre of it, many metres round an area
+  });
+
+  it('runs on across the entrance, a locked forcefield in front of it between two big dead trees, and withers back in a couple of seconds', () => {
+    expect(H.gap).toBeGreaterThan(0);
+    expect(H.field.front).toBeGreaterThan(0.2); // clear of the hedge's stems
+    expect(H.field.height).toBeGreaterThan(1);
+    expect(H.field.opacity).toBeGreaterThan(0);
+    expect(H.tree.scale).toBeGreaterThan(0.3);
+    expect(H.leave).toBeGreaterThan(1);
+    expect(H.leave).toBeLessThan(5);
   });
 });
 

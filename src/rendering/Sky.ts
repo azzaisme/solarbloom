@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
-import { NIGHT_SKY, NIGHT_SKY_LIGHTS, SKY, SKY_BANDS, SKY_BANDS_NIGHT } from '../data/sky';
+import { CLOUDS, DAY_LIGHT, NIGHT_SKY, NIGHT_SKY_LIGHTS, SKY, SKY_BANDS, SKY_BANDS_NIGHT, SUN_MOON, TWILIGHT } from '../data/sky';
+import { type CloudFrame, setCloudFrame, skyCloudMaterial } from './PaintedClouds';
 
 /** sRGB hex → 0–1 components. */
 function rgb(hex: string): [number, number, number] {
@@ -15,6 +16,16 @@ export function skyColour(pair: readonly [string, string] | string, k: number): 
   const a = rgb(pair[0]);
   const b = rgb(pair[1]);
   return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+}
+
+/**
+ * #twilight: a colour as it should look on screen, made ready for the sky's materials. Their vertex colours are
+ * encoded to sRGB once more on output (see SKY), which pales and greys them, so a colour meant to land as written is
+ * decoded first.
+ */
+function seen(hex: string): [number, number, number] {
+  const [r, g, b] = rgb(hex);
+  return [r ** 2.2, g ** 2.2, b ** 2.2];
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -44,13 +55,21 @@ export function skyMaterial(blend: boolean): pc.StandardMaterial {
   return m;
 }
 
+/** #sunsets: a blended sky material whose colours are lit past 1 (the sun's and moon's discs), so the bloom catches them. */
+function discMaterial(bright: number): pc.StandardMaterial {
+  const m = skyMaterial(true);
+  m.emissiveIntensity = bright;
+  m.update();
+  return m;
+}
+
 /** Elevation rings (degrees) of the dome; dense near the horizon where the colour changes fastest. */
 const RINGS = [-40, -6, 0, 1.5, 3, 5, 8, 12, 16, 22, 32, 45, 60, 75, 90];
 const SEGS = 36;
 
 /**
  * Look 4.7: the sky. A vertex-coloured dome (zenith blue down to a warm band and the haze colour at the
- * horizon), a soft sun disc and glow placed along the key light, and a ring of soft clouds drifting slowly.
+ * horizon), a soft sun disc and glow placed along the key light, and painted clouds drifting slowly (#painted-clouds).
  * It follows the camera position (never its rotation) and sits just inside the far clip plane. It doesn't
  * write depth, so everything in the world draws over it. One opaque and one blended draw call.
  *
@@ -78,7 +97,26 @@ export class Sky {
   overcast = 0;
   /** E23.7.2: wind, 0 … 1 (the clouds drift faster) */
   wind = 0;
-  private drift = 0;
+  /** #sunsets: toward the sun's and the moon's discs (DayNight); until set, the sun's sits along the key light */
+  sunAt?: pc.Vec3;
+  moonAt?: pc.Vec3;
+  /** #sunsets: the sun disc's elevation (degrees), how much of a sunset there is, and how much of the moon shows */
+  sunEl = 50;
+  sunset = 0;
+  moonShow = 0;
+  /** #twilight: how much afterglow there is (DayNight), 0 … 1 */
+  twilight = 0;
+  private builtTwilight = -1;
+  private moonDir = new pc.Vec3(0, -1, 0);
+  private builtMoon = new pc.Vec3();
+  private builtSunset = -1;
+  private builtMoonShow = -1;
+  private sunMesh: pc.Mesh;
+  private sunBase: { core: boolean; a: number }[] = [];
+  private moonMesh: pc.Mesh;
+  private moonBase: { col: 'face' | 'maria' | 'halo'; a: number }[] = [];
+  private sunDisc: pc.Entity;
+  private moonDisc: pc.Entity;
   private builtNight = -1;
   private builtDusk = -1;
   private builtOvercast = -1;
@@ -127,14 +165,22 @@ export class Sky {
     // The soft layer: sun glow + disc and clouds, as camera-facing fans on the unit sphere. Their geometry
     // (with vertex colours) must exist before the mesh instances, or the shader compiles without them.
     this.softMesh = new pc.Mesh(device);
+    this.sunMesh = new pc.Mesh(device);
+    this.moonMesh = new pc.Mesh(device);
     this.cloudMesh = new pc.Mesh(device);
+    this.device = device;
     this.readSun();
     this.builtSun.copy(this.sunDir);
     this.buildSoft();
-    this.buildClouds();
+    this.buildMoon();
+    this.buildCloudDome();
     this.soft = new pc.Entity('sky-soft');
     this.soft.addComponent('render', { meshInstances: [new pc.MeshInstance(this.softMesh, skyMaterial(true))], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
     this.root.addChild(this.soft);
+    // #sunsets: the sun's disc over its glow, lit past 1 so it blooms
+    this.sunDisc = new pc.Entity('sky-sun');
+    this.sunDisc.addComponent('render', { meshInstances: [new pc.MeshInstance(this.sunMesh, discMaterial(SUN_MOON.sun.bright))], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
+    this.root.addChild(this.sunDisc);
     // E23.7.5: the stars, under the clouds; hidden (no draw call) until night
     this.starMesh = new pc.Mesh(device);
     this.buildStars();
@@ -143,10 +189,21 @@ export class Sky {
     this.stars.render!.meshInstances[0].cull = false;
     this.stars.enabled = false;
     this.root.addChild(this.stars);
+    // #sunsets: the moon, over the stars and under the clouds; hidden until night
+    this.moonDisc = new pc.Entity('sky-moon');
+    this.moonDisc.addComponent('render', { meshInstances: [new pc.MeshInstance(this.moonMesh, discMaterial(SUN_MOON.moon.bright))], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
+    this.moonDisc.enabled = false;
+    this.root.addChild(this.moonDisc);
     this.clouds = new pc.Entity('sky-clouds');
     this.root.addChild(this.clouds);
-    this.clouds.addComponent('render', { meshInstances: [new pc.MeshInstance(this.cloudMesh, skyMaterial(true))], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
-    for (const mi of [...this.dome.render!.meshInstances, ...this.soft.render!.meshInstances, ...this.clouds.render!.meshInstances]) mi.cull = false; // the dome surrounds the camera
+    this.clouds.addComponent('render', { meshInstances: [new pc.MeshInstance(this.cloudMesh, skyCloudMaterial(device))], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
+    for (const mi of [...this.dome.render!.meshInstances, ...this.soft.render!.meshInstances, ...this.sunDisc.render!.meshInstances, ...this.moonDisc.render!.meshInstances, ...this.clouds.render!.meshInstances]) mi.cull = false; // the dome surrounds the camera
+    // #sunsets: everything blended here sits round the camera at the same distance, so the order is set by hand:
+    // the sun's glow, its disc over that, the stars, the moon over them, the clouds in front of it all
+    this.layer.transparentSortMode = pc.SORTMODE_MANUAL;
+    [this.soft, this.sunDisc, this.stars, this.moonDisc, this.clouds].forEach((e, i) => {
+      for (const mi of e.render!.meshInstances) mi.drawOrder = i + 1;
+    });
   }
 
   private stars: pc.Entity;
@@ -154,11 +211,26 @@ export class Sky {
   private starCols: { c: [number, number, number]; a: number }[] = [];
   private clouds: pc.Entity;
   private cloudMesh: pc.Mesh;
-  private cloudCols: { lit: boolean; a: number }[] = [];
+  private device: pc.GraphicsDevice;
+  /** #painted-clouds: this frame's clouds (their colours are rebuilt with the sky's; the sun, eye and drift every frame) */
+  private cloudFrame: CloudFrame = {
+    lit: [1, 1, 1],
+    shade: [0.7, 0.75, 0.85],
+    glow: [1, 0.6, 0.3],
+    glowFar: [0.9, 0.4, 0.5],
+    top: [0.5, 0.45, 0.6],
+    horizon: [0.8, 0.85, 0.9],
+    sun: new pc.Vec3(0, 1, 0),
+    under: 0,
+    overcast: 0,
+    drift: [0, 0],
+    eye: new pc.Vec3(),
+  };
 
-  /** Direction toward the sun: opposite the key light's travel (a directional light shines down its −Y). */
+  /** Direction toward the sun (DayNight's disc, else opposite the key light's travel: a directional light shines down its −Y). */
   private readSun() {
-    this.sunDir.copy(this.sun.up).normalize();
+    this.sunDir.copy(this.sunAt ?? this.sun.up).normalize();
+    if (this.moonAt) this.moonDir.copy(this.moonAt).normalize();
   }
 
   /** A soft disc (fan) facing the centre at direction `d`, angular radius `r` (radians), stretched by `sx`. */
@@ -181,37 +253,27 @@ export class Sky {
   }
 
   /**
-   * Clouds: clusters of soft puffs low over the horizon all around (seeded, so every load looks the same).
-   * P7-E32.6 (#760): each cluster is a cumulus bank, not a row of balls: a long shaded base cut off flat underneath,
-   * lobes along it that are biggest in the middle (a domed profile) and all sit on that same flat floor, each with a
-   * shaded lower half and a lit crown.
+   * #painted-clouds: the dome the clouds are painted on (PaintedClouds): just the sky above the horizon, a little
+   * inside the sky's own dome. The shader works out each pixel's direction from its position, so it can be coarse.
    */
-  private buildClouds() {
+  private buildCloudDome() {
     const pos: number[] = [];
     const idx: number[] = [];
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const N = 11;
-    for (let c = 0; c < N; c++) {
-      const az = (c / N) * Math.PI * 2 + rnd() * 0.35;
-      const el = (3 + rnd() * 11) * (Math.PI / 180);
-      const lobes = 5 + Math.floor(rnd() * 4);
-      const w = 0.045 + rnd() * 0.035;
-      const half = ((lobes - 1) / 2) * w * 0.85;
-      const at = (da: number, de: number) => new pc.Vec3(Math.cos(el + de) * Math.sin(az + da), Math.sin(el + de), Math.cos(el + de) * Math.cos(az + da));
-      // the base: one long, low, shaded strip with a flat underside
-      this.fan(pos, idx, at(0, w * 0.15), half + w, 1, 0.22, 16, () => this.cloudCols.push({ lit: false, a: 0.8 }), () => this.cloudCols.push({ lit: false, a: 0 }), w * 0.12);
-      for (let p = 0; p < lobes; p++) {
-        const x = (p - (lobes - 1) / 2) / Math.max(1, (lobes - 1) / 2); // −1 … 1 along the bank
-        const r = w * (0.55 + 0.6 * (1 - x * x) + rnd() * 0.25);
-        const da = x * half + (rnd() - 0.5) * w * 0.3;
-        const lift = r * 0.5; // the lobe's centre sits this far above the bank's floor
-        this.fan(pos, idx, at(da, lift), r, 1.15, 0.75, 14, () => this.cloudCols.push({ lit: false, a: 0.85 }), () => this.cloudCols.push({ lit: false, a: 0 }), lift);
-        this.fan(pos, idx, at(da, lift + r * 0.28), r * 0.78, 1.1, 0.7, 14, () => this.cloudCols.push({ lit: true, a: 0.95 }), () => this.cloudCols.push({ lit: true, a: 0 }), lift);
+    const rings = [-1, 1, 2.5, 4, 6, 9, 13, 18, 25, 35, 50, 70, 90];
+    const segs = 32;
+    for (const e of rings) {
+      const el = (e * Math.PI) / 180;
+      for (let s = 0; s <= segs; s++) {
+        const az = (s / segs) * Math.PI * 2;
+        pos.push(Math.cos(el) * Math.sin(az) * 0.99, Math.sin(el) * 0.99, Math.cos(el) * Math.cos(az) * 0.99);
       }
     }
+    for (let r = 0; r < rings.length - 1; r++)
+      for (let s = 0; s < segs; s++) {
+        const i = r * (segs + 1) + s;
+        idx.push(i, i + 1, i + segs + 1, i + 1, i + segs + 2, i + segs + 1);
+      }
     this.cloudMesh.setPositions(pos);
-    this.cloudMesh.setColors32(new Array((pos.length / 3) * 4).fill(255));
     this.cloudMesh.setIndices(idx);
     this.cloudMesh.update(pc.PRIMITIVE_TRIANGLES);
   }
@@ -246,13 +308,7 @@ export class Sky {
     return smooth((this.night - from) / (1 - from)) * (1 - this.overcast);
   }
 
-  /** How much of the moon's disc shows: deep night only (by then the key light is on the moon's side). */
-  private moonShow(): number {
-    const from = NIGHT_SKY_LIGHTS.moonFrom;
-    return smooth((this.night - from) / (1 - from)) * (1 - this.overcast * 0.9);
-  }
-
-  /** The sun's glow and disc (rebuilt when the key light turns). */
+  /** The sun's glow and its disc (rebuilt as the sun moves). The disc is cut flat by the horizon as it sets. */
   private buildSoft() {
     const pos: number[] = [];
     const idx: number[] = [];
@@ -260,16 +316,66 @@ export class Sky {
     const d = this.sunDir;
     this.fan(pos, idx, d, 0.32, 1, 1, 24, () => this.softBase.push({ col: 'glow', a: 0.55 }), () => this.softBase.push({ col: 'glow', a: 0 }));
     this.fan(pos, idx, d, 0.09, 1, 1, 20, () => this.softBase.push({ col: 'glow', a: 0.85 }), () => this.softBase.push({ col: 'glow', a: 0 }));
-    this.fan(pos, idx, d, 0.028, 1, 1, 20, () => this.softBase.push({ col: 'sun', a: 1 }), () => this.softBase.push({ col: 'sun', a: 0.9 }));
     this.softMesh.setPositions(pos);
     this.softMesh.setColors32(new Array((pos.length / 3) * 4).fill(255));
     this.softMesh.setIndices(idx);
     this.softMesh.update(pc.PRIMITIVE_TRIANGLES);
+    const sp: number[] = [];
+    const si: number[] = [];
+    this.sunBase = [];
+    const R = SUN_MOON.sun.radius;
+    this.fan(sp, si, d, R * 1.6, 1, 1, 28, () => this.sunBase.push({ core: false, a: 0.9 }), () => this.sunBase.push({ core: false, a: 0 }));
+    this.fan(sp, si, d, R, 1, 1, 28, () => this.sunBase.push({ core: true, a: 1 }), () => this.sunBase.push({ core: true, a: 1 }));
+    for (let i = 1; i < sp.length; i += 3) sp[i] = Math.max(0, sp[i]); // the horizon cuts it off flat as it sinks
+    this.sunMesh.setPositions(sp);
+    this.sunMesh.setColors32(new Array((sp.length / 3) * 4).fill(255));
+    this.sunMesh.setIndices(si);
+    this.sunMesh.update(pc.PRIMITIVE_TRIANGLES);
   }
 
-  /** How much of the sun's disc and glow shows: none at night or under heavy cloud. */
+  /**
+   * #sunsets: the moon: a soft halo, a pale face and a few darker seas on it (fixed, so it is always the same moon),
+   * turned to face the centre at the moon's heading. Rebuilt as the moon moves.
+   */
+  private buildMoon() {
+    const pos: number[] = [];
+    const idx: number[] = [];
+    this.moonBase = [];
+    const d = this.moonDir;
+    const R = SUN_MOON.moon.radius;
+    this.fan(pos, idx, d, R * 3.2, 1, 1, 24, () => this.moonBase.push({ col: 'halo', a: 0.35 }), () => this.moonBase.push({ col: 'halo', a: 0 }));
+    this.fan(pos, idx, d, R, 1, 1, 32, () => this.moonBase.push({ col: 'face', a: 1 }), () => this.moonBase.push({ col: 'face', a: 1 }));
+    const up = Math.abs(d.y) > 0.98 ? new pc.Vec3(1, 0, 0) : new pc.Vec3(0, 1, 0);
+    const right = new pc.Vec3().cross(up, d).normalize();
+    const u = new pc.Vec3().cross(d, right).normalize();
+    // the seas: [across, up, size] in moon radii, a soft-edged blotch each
+    const seas: [number, number, number][] = [
+      [-0.3, 0.32, 0.36],
+      [0.12, 0.42, 0.26],
+      [0.34, 0.08, 0.3],
+      [-0.12, -0.06, 0.24],
+      [0.05, -0.45, 0.2],
+      [-0.42, -0.28, 0.16],
+    ];
+    for (const [x, y, r] of seas) {
+      const c = new pc.Vec3(d.x + (right.x * x + u.x * y) * R, d.y + (right.y * x + u.y * y) * R, d.z + (right.z * x + u.z * y) * R).normalize();
+      this.fan(pos, idx, c, r * R, 1, 1, 14, () => this.moonBase.push({ col: 'maria', a: 0.75 }), () => this.moonBase.push({ col: 'maria', a: 0.1 }));
+    }
+    this.moonMesh.setPositions(pos);
+    this.moonMesh.setColors32(new Array((pos.length / 3) * 4).fill(255));
+    this.moonMesh.setIndices(idx);
+    this.moonMesh.update(pc.PRIMITIVE_TRIANGLES);
+  }
+
+  /** How much of the sun's glow warms the day sky: none at night or under heavy cloud. */
   private sunShow(): number {
     return (1 - this.night) * (1 - this.overcast * 0.9);
+  }
+
+  /** #sunsets: how much of the sun's disc shows: all of it until it has sunk below the horizon, none under heavy cloud. */
+  private sunDiscShow(): number {
+    const r = (SUN_MOON.sun.radius * 180) / Math.PI;
+    return smooth((this.sunEl + r) / (2 * r)) * (1 - this.overcast * 0.9);
   }
 
   /** The haze colour now (scene fog and the horizon), as linear-ish 0–1 sRGB components. */
@@ -297,7 +403,20 @@ export class Sky {
     const glow = this.timeOfDay(skyColour(SKY.glow, k), 'glow');
     const upper = this.timeOfDay(skyColour(SKY.upper, k), 'upper');
     const zen = this.timeOfDay(skyColour(SKY.zenith, k), 'zenith');
-    return { low: mix(glow, upper, 0.35), high: mix(upper, zen, 0.6) };
+    let low = mix(glow, upper, 0.35);
+    let high = mix(upper, zen, 0.6);
+    // #sunsets: the sea mirrors the sunset's warm band (low) and a little of it higher up
+    if (this.sunset > 0) {
+      const S = SUN_MOON.sunset;
+      low = mix(low, mix(rgb(S.orange), rgb(S.gold), 0.4), this.sunset * DAY_LIGHT.seaWarm);
+      high = mix(high, rgb(S.rose), this.sunset * DAY_LIGHT.seaWarm * 0.4);
+    }
+    // #twilight: magenta low on the water, violet higher up
+    if (this.twilight > 0) {
+      low = mix(low, rgb(TWILIGHT.seaLow), this.twilight * 0.85);
+      high = mix(high, rgb(TWILIGHT.seaHigh), this.twilight * 0.85);
+    }
+    return { low, high };
   }
 
   /** E23.7.1 / E23.7.2: a day colour shifted for dusk, night and overcast. */
@@ -310,6 +429,8 @@ export class Sky {
     }
     if (this.dusk > 0 && band !== 'zenith') out = mix(out, rgb(NIGHT_SKY.dusk[band]), this.dusk * (band === 'upper' ? 0.35 : 0.7));
     if (this.night > 0) out = mix(out, rgb(NIGHT_SKY.night[band]), this.night);
+    // (decoded like the dome's colours: by night the fog is matched to the sky as it is seen, see horizonSeen)
+    if (this.twilight > 0 && band === 'haze') out = mix(out, seen(TWILIGHT.haze), this.twilight);
     return out;
   }
 
@@ -333,9 +454,49 @@ export class Sky {
     const cos = d[0] * s.x + d[1] * s.y + d[2] * s.z;
     const w = Math.pow(Math.max(0, cos), 6) * 0.55 + Math.pow(Math.max(0, cos), 2) * 0.15 * (1 - smooth(el / 40));
     c = mix(c, this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun'), Math.min(0.8, w) * this.sunShow());
+    // #sunsets: with the sun low, a warm band along the horizon on its side: gold close by, orange along the
+    // horizon, rose further round, fading up the sky. Laid over night's blue, so dusk keeps its deep sky overhead.
+    if (this.sunset > 0.002) {
+      const S = SUN_MOON.sunset;
+      const hl = Math.hypot(d[0], d[2]) * Math.hypot(s.x, s.z);
+      const flat = hl > 1e-6 ? (d[0] * s.x + d[2] * s.z) / hl : 0; // −1 opposite … 1 toward the sun, round the horizon
+      const toward = smooth((flat + 0.35) / 1.35);
+      const low = 1 - smooth(el / (S.height * (0.55 + 0.45 * toward)));
+      const band = mix(rgb(S.rose), rgb(S.orange), smooth((flat - 0.1) / 0.8));
+      const amt = this.sunset * S.strength * low * (0.25 + 0.75 * toward) * (0.55 + 0.45 * k);
+      c = mix(c, band, amt);
+      const near = Math.pow(Math.max(0, cos), 10);
+      c = mix(c, rgb(S.gold), Math.min(0.8, near * this.sunset * 1.1));
+    }
     // E27.1: the lowest few degrees ease into the colour the fogged distance lands on, so the far sea meets the sky softly
     const band = LOOK.horizon.skyBand;
-    return el < band ? mix(seen, c, smooth(el / band)) : c;
+    if (el < band) c = mix(seen, c, smooth(el / band));
+    // #twilight: the afterglow over it all, down to the horizon itself: a bright line where the dark sea meets the sky
+    if (this.twilight > 0.002) c = mix(c, this.afterglow(el, d), this.twilight * TWILIGHT.strength * (0.7 + 0.3 * k));
+    return c;
+  }
+
+  /**
+   * #twilight: the afterglow's colour in a direction at `el` degrees: orange on the horizon on the sun's side, hot
+   * magenta above it, purple higher, deep violet overhead; the far side of the sky a darker blue-violet.
+   */
+  private afterglow(el: number, d: [number, number, number]): [number, number, number] {
+    const T = TWILIGHT.sky;
+    const s = this.sunDir;
+    const hl = Math.hypot(d[0], d[2]) * Math.hypot(s.x, s.z);
+    const flat = hl > 1e-6 ? (d[0] * s.x + d[2] * s.z) / hl : 0;
+    const side = smooth((flat - (1 - 2 * T.spread)) / (2 * T.spread));
+    const hz = mix(seen(T.horizonFar), seen(T.horizon), side * side);
+    const bd = mix(seen(T.bandFar), seen(T.band), side);
+    const md = mix(seen(T.midFar), seen(T.mid), side * 0.8);
+    const top = seen(T.top);
+    if (el < T.bandAt) {
+      // the hot glow right where the sun went down
+      const near = Math.pow(Math.max(0, flat), 24) * (1 - smooth(el / T.bandAt));
+      return mix(mix(hz, bd, smooth(el / T.bandAt)), seen(T.glow), near);
+    }
+    if (el < T.midAt) return mix(bd, md, smooth((el - T.bandAt) / (T.midAt - T.bandAt)));
+    return mix(md, top, smooth((el - T.midAt) / (T.topAt - T.midAt)));
   }
 
   private recolour() {
@@ -348,13 +509,16 @@ export class Sky {
     }
     this.domeMesh.setColors32(dc);
     this.domeMesh.update(pc.PRIMITIVE_TRIANGLES);
-    // by deep night the disc is the moon: a pale core in a soft blue glow
-    const moon = this.moonShow();
-    const sun = mix(this.timeOfDay(skyColour(SKY.sunCore, k), 'sun'), rgb(NIGHT_SKY_LIGHTS.moon), moon);
-    const glow = this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun');
+    // #sunsets: the sun's glow and disc turn gold to deep orange as it nears the horizon
+    const U = SUN_MOON.sun;
+    const set = this.sunset;
+    const lowness = 1 - smooth(this.sunEl / SUN_MOON.sunset.from);
+    const glow = mix(this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun'), rgb(U.lowGlow), set);
+    const core = mix(rgb(U.core), rgb(U.low), lowness);
     const sc: number[] = [];
     // The sun fades behind the fog: weaker while the city is grey (and gone under cloud).
-    const sunA = (0.45 + 0.55 * k) * Math.max(this.sunShow(), moon);
+    const disc = this.sunDiscShow();
+    const sunA = (0.45 + 0.55 * k) * Math.max(this.sunShow(), set) * smooth((this.sunEl + 6) / 6) * (1 - this.overcast * 0.9);
     const starA = this.starShow();
     this.stars.enabled = starA > 0.01;
     if (this.stars.enabled) {
@@ -363,25 +527,73 @@ export class Sky {
       this.starMesh.setColors32(st);
       this.starMesh.update(pc.PRIMITIVE_TRIANGLES);
     }
-    for (const v of this.softBase) {
-      const c = v.col === 'sun' ? sun : glow;
-      sc.push(b(c[0]), b(c[1]), b(c[2]), b(v.a * sunA));
-    }
+    for (const v of this.softBase) sc.push(b(glow[0]), b(glow[1]), b(glow[2]), b(v.a * sunA));
     this.softMesh.setColors32(sc);
     this.softMesh.update(pc.PRIMITIVE_TRIANGLES);
-    const lit = this.timeOfDay(skyColour(SKY.cloudLit, k), 'cloud');
-    const shade = this.timeOfDay(skyColour(SKY.cloudShade, k), 'cloud');
-    const cc: number[] = [];
-    for (const v of this.cloudCols) {
-      const c = v.lit ? lit : shade;
-      cc.push(b(c[0]), b(c[1]), b(c[2]), b(Math.min(1, v.a * (0.85 + 0.15 * (1 - k)) * (1 + this.overcast * 0.6))));
+    const discA = (0.6 + 0.4 * k) * disc;
+    this.sunDisc.enabled = discA > 0.01;
+    if (this.sunDisc.enabled) {
+      const dc2: number[] = [];
+      for (const v of this.sunBase) {
+        const c = v.core ? core : glow;
+        dc2.push(b(c[0]), b(c[1]), b(c[2]), b(v.a * discA));
+      }
+      this.sunMesh.setColors32(dc2);
+      this.sunMesh.update(pc.PRIMITIVE_TRIANGLES);
     }
-    this.cloudMesh.setColors32(cc);
-    this.cloudMesh.update(pc.PRIMITIVE_TRIANGLES);
+    const M = SUN_MOON.moon;
+    const moonA = this.moonShow * smooth((this.moonDir.y + 0.02) / 0.06);
+    this.moonDisc.enabled = moonA > 0.01;
+    if (this.moonDisc.enabled) {
+      const face = rgb(M.colour);
+      const maria = rgb(M.maria);
+      const halo = rgb(M.halo);
+      const mc: number[] = [];
+      for (const v of this.moonBase) {
+        const c = v.col === 'face' ? face : v.col === 'maria' ? maria : halo;
+        mc.push(b(c[0]), b(c[1]), b(c[2]), b(v.a * moonA));
+      }
+      this.moonMesh.setColors32(mc);
+      this.moonMesh.update(pc.PRIMITIVE_TRIANGLES);
+    }
+    this.recolourClouds();
     this.builtClarity = k;
     this.builtNight = this.night;
     this.builtDusk = this.dusk;
     this.builtOvercast = this.overcast;
+    this.builtSunset = this.sunset;
+    this.builtMoonShow = this.moonShow;
+    this.builtTwilight = this.twilight;
+  }
+
+  /**
+   * #sky-clouds: how much the low sun lights the clouds from underneath (0 … 1): through sunset and on into the
+   * afterglow, muted by heavy cloud as the sunset itself is.
+   */
+  private underGlow(): number {
+    return Math.min(1, Math.max(this.sunset, this.twilight * (1 - this.overcast * 0.5)));
+  }
+
+  /**
+   * The clouds' colours for the time of day (PaintedClouds shades with them): ivory where they face the sun and a
+   * blue-grey body by day, greyer under heavy cloud, dim blue by night. With the sun low they are lit from below
+   * (gold toward it, rose further round; magenta in the afterglow) with dusky tops on their thick cores.
+   */
+  private recolourClouds() {
+    const k = this.clarity;
+    const f = this.cloudFrame;
+    f.lit = this.timeOfDay(skyColour(SKY.cloudLit, k), 'cloud');
+    f.shade = this.timeOfDay(skyColour(SKY.cloudShade, k), 'cloud');
+    const S = SUN_MOON.sunset;
+    const T = TWILIGHT;
+    // the afterglow's share of the light under the clouds (sunset's gold and rose, then the afterglow's magenta)
+    const late = this.twilight / Math.max(1e-6, this.twilight + this.sunset);
+    f.glow = mix(seen(S.cloudUnder), seen(T.cloudUnder), late);
+    f.glowFar = mix(seen(S.cloudUnderFar), seen(T.cloudUnderFar), late);
+    f.top = mix(seen(S.cloudTop), seen(T.cloudTop), late);
+    f.under = this.underGlow();
+    f.overcast = this.overcast;
+    f.horizon = this.horizonSeen();
   }
 
   /** P7-E27.7: rebuilds the dome's colours on the next update (live tuning of SKY via look.apply()). */
@@ -398,13 +610,24 @@ export class Sky {
       this.buildSoft();
       this.builtClarity = -1;
     }
-    if (Math.abs(this.builtClarity - this.clarity) > 0.004 || Math.abs(this.builtNight - this.night) > 0.004 || Math.abs(this.builtDusk - this.dusk) > 0.004 || Math.abs(this.builtOvercast - this.overcast) > 0.004) this.recolour();
+    if (this.builtMoon.distance(this.moonDir) > 1e-3) {
+      this.builtMoon.copy(this.moonDir);
+      this.buildMoon();
+      this.builtClarity = -1;
+    }
+    if (Math.abs(this.builtClarity - this.clarity) > 0.004 || Math.abs(this.builtNight - this.night) > 0.004 || Math.abs(this.builtDusk - this.dusk) > 0.004 || Math.abs(this.builtOvercast - this.overcast) > 0.004 || Math.abs(this.builtSunset - this.sunset) > 0.004 || Math.abs(this.builtMoonShow - this.moonShow) > 0.004 || Math.abs(this.builtTwilight - this.twilight) > 0.004) this.recolour();
     const R = farClip * 0.97;
     this.root.setPosition(cam.x, cam.y, cam.z);
     this.root.setLocalScale(R, R, R);
-    // Clouds drift slowly around the horizon (a full turn takes about 40 minutes).
-    // E23.7.2: wind hurries them along
-    this.drift += dt * 0.15 * (1 + this.wind * 5);
-    if (!this.reducedMotion) this.clouds.setLocalEulerAngles(0, this.drift % 360, 0);
+    // #painted-clouds: the clouds drift very slowly across the sky; E23.7.2: wind hurries them along
+    const f = this.cloudFrame;
+    if (!this.reducedMotion) {
+      const w = 1 + this.wind * CLOUDS.wind;
+      f.drift[0] += dt * CLOUDS.drift[0] * w;
+      f.drift[1] += dt * CLOUDS.drift[1] * w;
+    }
+    f.sun.copy(this.sunDir);
+    f.eye.copy(cam);
+    setCloudFrame(this.device, f);
   }
 }

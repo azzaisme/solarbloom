@@ -23,7 +23,7 @@ const check = (ok, what) => {
   console.log(`${ok ? '✓' : '✗'} ${what}`);
   if (!ok) failed++;
 };
-const LATE = { moves: ['pry', 'hover', 'climb', 'glide'], levels: { chargeCells: 5, chargeEfficiency: 5, sprint: 5, pulseRadius: 5, backpack: 5, quickHands: 3, keenEye: 3, sunSoak: 3, lantern: 2, luckyPulse: 3 }, park: 3 };
+const LATE = { moves: ['prune', 'hover', 'climb', 'glide'], levels: { chargeCells: 5, chargeEfficiency: 5, sprint: 5, pulseRadius: 5, backpack: 5, quickHands: 3, keenEye: 3, sunSoak: 3, lantern: 2, luckyPulse: 3 }, park: 3 };
 const strips = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });

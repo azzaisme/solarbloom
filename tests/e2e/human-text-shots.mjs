@@ -48,7 +48,7 @@ try {
   await page.evaluate(() => {
     const sv = window.solarbloom.sim.state.salvage;
     sv.tier = Math.max(sv.tier, 1);
-    if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+    if (!sv.abilities.includes('prune')) sv.abilities.push('prune');
   });
   await page.waitForTimeout(1200);
   await openBuildMenu(page);

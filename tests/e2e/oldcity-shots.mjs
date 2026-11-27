@@ -67,7 +67,7 @@ try {
       const g = window.solarbloom;
       const s = g.sim;
       s.state.salvage.tier = 4;
-      s.state.salvage.abilities = ['pry', 'hover', 'climb', 'glide'];
+      s.state.salvage.abilities = ['prune', 'hover', 'climb', 'glide'];
       s.state.progression.coreActivated = true;
       s.areas.clear('park', true);
       const ids = new Set();
@@ -80,7 +80,7 @@ try {
         if (info.region) byType[info.type] ??= [info.landmark[0] + 1, info.landmark[1] + 1, info.region];
       }
       g.chunks.markAll();
-      g.cloudWall?.sync?.();
+      g.hedgeLine?.sync?.();
       return byType;
     });
     await shot('oldcity-overview', 8, -8, 0.13, 0, 30000);

@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { type GfxTier, LOOK } from '../data/look';
-import { DAY_LIGHT, HAZE, NIGHT_SKY, SKY, SKY_BANDS } from '../data/sky';
+import { CLOUDS, DAY_LIGHT, HAZE, NIGHT_SKY, SKY, SKY_BANDS, TWILIGHT } from '../data/sky';
 import type { CameraController } from './CameraController';
 import { Atmosphere } from './Atmosphere';
 import { installLookShaders, setLookHorizon, setLookRim } from './LookShaders';
@@ -25,6 +25,8 @@ export class LookController {
   readonly skyNight = NIGHT_SKY;
   readonly haze = HAZE;
   readonly day = DAY_LIGHT;
+  /** #painted-clouds: the clouds' shape and drift (read every frame, so they tune live) */
+  readonly clouds = CLOUDS;
   /** Called at the end of apply(): Game hooks the day/night light and the sky dome here so they re-read the config. */
   readonly onApply: (() => void)[] = [];
   private toSun = new pc.Vec3();
@@ -38,6 +40,10 @@ export class LookController {
   mood = 0;
   /** E23.7.1: the rim's share by the time of day (DayNight sets it: weaker at night) */
   rimShare = 1;
+  /** #twilight: how much afterglow there is (DayNight): the rim turns pink with it */
+  twilight = 0;
+  private rimTwilight = color(TWILIGHT.rim);
+  private rimNow = new pc.Color();
   /** E23.7.5: how far into night it is, 0 … 1 (DayNight): bloom grows at night */
   night = 0;
   /** Settings: high contrast flattens the grade and drops the vignette so outlines and text stay readable. */
@@ -128,7 +134,8 @@ export class LookController {
     else this.post.grade(G.dead, G.warm, this.mood, LOOK.vignette.intensity);
     this.atmosphere.update(dt, g, Math.max(6, cam.viewHeight * 1.2), this.toSun, fwd);
     const R = LOOK.rim;
-    setLookRim(this.app.graphicsDevice, this.rimColour, LOOK.tiers[this.tier].rim ? R.intensity * this.rimShare : 0, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
+    this.rimNow.lerp(this.rimColour, this.rimTwilight, Math.min(1, Math.max(0, this.twilight)));
+    setLookRim(this.app.graphicsDevice, this.rimNow, LOOK.tiers[this.tier].rim ? R.intensity * this.rimShare : 0, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
     // E27.1: the haze thickens toward the horizon from where the depth fog starts to partway into it
     const H = LOOK.horizon;
     const fog = this.app.scene.fog;

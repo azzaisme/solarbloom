@@ -92,7 +92,7 @@ export interface GameEvents {
   'machine.removed': { machine: MachineData };
   /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
   'pile.refilled': { pileId: string; left: number; x: number; z: number; storm: boolean };
-  /** E21.5: a gate opened for good (a barricade pried, a bridge repaired, the lock bridge risen). */
+  /** E21.5: a gate opened for good (a hedge pruned through, a bridge repaired, the lock bridge risen). */
   'gate.opened': { gateId: string; region: string };
   /** E21.6: something was handed in at the fountain; the fountain reached a tier. */
   'fountain.delivered': { material: import('../core/types').MaterialId; n: number };

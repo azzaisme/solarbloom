@@ -1,3 +1,4 @@
+import { hedgeReady } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -57,7 +58,8 @@ describe('E23.9.2: Keepers as friends', () => {
   it('Pylon\'s arc plays from waking to friendship: taker, turning, tender, friend; saving at every step', () => {
     let sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.areas.clear('park', true);
     sim.gates.open('g-mastRow');
     sim.bot = { roofId: GROUND, x: 10.5, z: -2.5 };
@@ -130,7 +132,8 @@ describe('E23.9.2: Keepers as friends', () => {
   it('a Keeper dozes at night, and so does its tending (the E23.7 clock)', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.areas.clear('park', true);
     sim.gates.open('g-mastRow');
     for (let z = -8; z <= -5; z++) for (let x = 8; x <= 12; x++) { const t = sim.grid.get(GROUND, x, z)!; if (!t.blocked && t.ground !== 'restored') sim.restoration.complete(t, 'pulse'); }
@@ -157,7 +160,8 @@ describe('E23.9.2: Keepers as friends', () => {
   it('a Keeper is where it is drawn: Interact finds it on the tile it is tending, and that tile blooms there', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.areas.clear('park', true);
     sim.gates.open('g-mastRow');
     for (let z = -8; z <= -5; z++) for (let x = 8; x <= 12; x++) { const t = sim.grid.get(GROUND, x, z)!; if (!t.blocked && t.ground !== 'restored') sim.restoration.complete(t, 'pulse'); }
@@ -212,7 +216,8 @@ describe('E23.9.2: Keepers as friends', () => {
   it('a Keeper never walks off mid-conversation: its tending waits until bloombot steps away', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.areas.clear('park', true);
     sim.gates.open('g-mastRow');
     for (let z = -8; z <= -5; z++) for (let x = 8; x <= 12; x++) { const t = sim.grid.get(GROUND, x, z)!; if (!t.blocked && t.ground !== 'restored') sim.restoration.complete(t, 'pulse'); }
@@ -290,7 +295,8 @@ describe('E23.9.2: Keepers as friends', () => {
   it('settled Keepers help out: they tend their region a bloom step at a time, friends twice as often', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.areas.clear('park', true);
     sim.gates.open('g-mastRow');
     const p = REGIONS[0].patch;

@@ -147,7 +147,7 @@ const moments = () =>
 
 /**
  * Things a player can see from where bloombot stands: on screen (in the picture, not too far) or close by.
- * kind: 'pile' (with its material), 'fountain', 'barricade', 'dead' (dead ground to pulse).
+ * kind: 'pile' (with its material), 'fountain', 'hedge', 'dead' (dead ground to pulse).
  */
 const sights = (kind, what) =>
   page.evaluate(

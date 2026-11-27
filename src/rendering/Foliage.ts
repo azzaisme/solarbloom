@@ -363,6 +363,8 @@ export class FoliageBuilder {
   private idx = new Grow(new Uint32Array(1 << 14));
   /** 0 = full colour … 1 = grey (fog), as in the chunk builder */
   grey = 0;
+  /** 0 = as grown … 1 = dead: leaves turned straw-brown (each keeps its light and dark), e.g. the sealed-area hedge */
+  dry = 0;
   tris = 0;
 
   /**
@@ -384,6 +386,7 @@ export class FoliageBuilder {
     let p = this.pos.n, n = this.nrm.n, k = this.col.n, q4 = this.tree.n;
     const th = fade ? g.height * scale : 0;
     const grey = this.grey;
+    const dry = this.dry;
     for (let i = 0; i < nv; i++) {
       const px = g.pos[i * 4], py = g.pos[i * 4 + 1], pz = g.pos[i * 4 + 2];
       P[p++] = x + (px * c - pz * s) * scale;
@@ -395,6 +398,13 @@ export class FoliageBuilder {
       N[n++] = g.nrm[i * 3 + 1];
       N[n++] = nx * s + nz * c;
       let r = g.col[i * 4], gg = g.col[i * 4 + 1], b = g.col[i * 4 + 2];
+      if (dry > 0) {
+        const l = 0.3 * r + 0.59 * gg + 0.11 * b;
+        // a dead, darker brown (leaves are pale greens, so the brown sits well under their luminance)
+        r = r + (l * 0.82 - r) * dry;
+        gg = gg + (l * 0.6 - gg) * dry;
+        b = b + (l * 0.4 - b) * dry;
+      }
       if (grey > 0) {
         const l = 0.3 * r + 0.59 * gg + 0.11 * b;
         r = r + (l * 0.85 - r) * grey;
