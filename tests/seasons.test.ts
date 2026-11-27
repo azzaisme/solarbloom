@@ -287,6 +287,7 @@ describe('#830: the look', () => {
     expect(u.uSeasonFrost).toEqual(linear(PALETTE.season.frost));
     expect(u.uSeasonAut1).toEqual(linear(PALETTE.season.autumn[1]));
     expect(u.uSeasonBlos0).toEqual(linear(PALETTE.season.blossom[0]));
+    expect(u.uSeasonSnowShade).toEqual(linear(PALETTE.season.snowShade)); // the hollows between lumps of snow
     expect(u.uSeasonA[2]).toBeCloseTo(SEASON_LOOK.winter.bare, 5);
     const sh = new SeasonShading();
     const got: Record<string, unknown> = {};

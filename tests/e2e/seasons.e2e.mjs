@@ -183,6 +183,12 @@ try {
   check(deep.season === 'winter' && deep.day === 3 && lying.cover >= 0.88 && lying.shader >= 0.88, `snow builds up over snowy days, all the way to white (${JSON.stringify({ ...deep, ...lying })})`);
   await page.addStyleTag({ content: '#toasts, .toast { display: none !important; }' });
   await page.screenshot({ path: `${dir}/winter-deep-snow.png` });
+  // up close the lying snow is lumpy: soft drifts, sunlit tops and pale blue hollows
+  await page.evaluate(() => window.solarbloom.camera.glide(11, 0, 9, 2.6));
+  await wait(8000);
+  await page.screenshot({ path: `${dir}/winter-deep-snow-close.png` });
+  await page.evaluate(() => window.solarbloom.camera.glide(12, 0, 10, 1));
+  await wait(3000);
   await page.evaluate(() => document.querySelectorAll('style').forEach((st) => st.textContent.includes('#toasts, .toast') && st.remove()));
   await goTo(page, 'autumn', 2, 'wind', 2000);
   const leaves = await page.waitForFunction(

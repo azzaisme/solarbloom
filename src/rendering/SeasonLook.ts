@@ -84,6 +84,7 @@ export function seasonUniforms(look: SeasonLookNow): Record<string, number[]> {
     uSeasonBlos0: linear(S.blossom[0]),
     uSeasonBlos1: linear(S.blossom[1]),
     uSeasonFrost: linear(S.frost),
+    uSeasonSnowShade: linear(S.snowShade),
   };
 }
 
@@ -150,6 +151,9 @@ uniform vec3 uSeasonWither;
 uniform vec3 uSeasonBlos0;
 uniform vec3 uSeasonBlos1;
 uniform vec3 uSeasonFrost;
+uniform vec3 uSeasonSnowShade;
+// #830: lumpy snow: the tilt of the lumps under this point (getNormal adds it to the surface's normal)
+vec3 sbSnowBend = vec3(0.0);
 float sbsLum(vec3 c) {
 	return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
@@ -166,6 +170,12 @@ float sbsNoise(vec2 p) {
 	float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
 	float d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
 	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+// soft drifts and mounds, 0 … 1: broad lumps about a patch of ground across, with smaller ones on top (not on Low)
+float sbsLumps(vec2 q) {
+	float h = sbsNoise(q * 1.25 + 17.3);
+	if (uSeasonB.y > 0.5) h = 0.72 * h + 0.28 * sbsNoise(q * 3.6 + 5.7);
+	return h;
 }
 // how green a colour is (linear): 0 for stone, wood, flowers and machines, 1 for grass and leaves
 float sbsGreen(vec3 c) {
@@ -186,8 +196,29 @@ vec3 sbSeasonColour(vec3 c, vec3 n, vec3 p) {
 		if (uSeasonB.y > 0.5) nz = 0.65 * nz + 0.35 * sbsNoise(p.xz * 6.7 + 3.1);
 		// lying snow widens the frost's patches until they join (past 1 every upward face is covered), and thickens it
 		float cover = uSeasonB.x + uSeasonB.z * 1.3;
+		// lying snow is lumpy: its edge follows the drifts (rounded banks, not flat patches), the lumps catch the
+		// light on their sunny side and sit in soft blue hollows, and they tilt the surface's normal (sbSnowBend)
+		float snow = uSeasonB.z;
+		float h = 0.5;
+		vec2 grad = vec2(0.0);
+		if (snow > 0.001) {
+			h = sbsLumps(p.xz);
+			const float e = 0.12;
+			grad = vec2(sbsLumps(p.xz + vec2(e, 0.0)) - h, sbsLumps(p.xz + vec2(0.0, e)) - h) / e;
+			nz += (h - 0.5) * 0.55 * snow;
+		}
 		float f = up * smoothstep(1.0 - cover, 1.0 - cover + 0.22, nz);
-		c = mix(c, uSeasonFrost * mix(0.7, 0.88 + 0.07 * uSeasonB.z, up), f * (0.7 + 0.25 * uSeasonB.z));
+		vec3 sc = uSeasonFrost * mix(0.7, 0.88 + 0.07 * snow, up);
+		if (snow > 0.001) {
+			float lumpK = snow * f;
+			// light from the sun's side (the same direction the leaves are lit from), darker in the hollows
+			float lit = clamp(0.5 - 0.6 * dot(grad, normalize(vec2(0.45, 0.3))), 0.0, 1.0);
+			float hollow = 1.0 - smoothstep(0.25, 0.6, h);
+			sc = mix(sc, uSeasonSnowShade * (0.8 + 0.2 * up), clamp(hollow * 0.75 + (0.5 - lit) * 1.4, 0.0, 0.9) * lumpK);
+			sc *= mix(1.0, 0.86 + 0.26 * lit, lumpK);
+			sbSnowBend = vec3(-grad.x, 0.0, -grad.y) * 0.45 * lumpK;
+		}
+		c = mix(c, sc, f * (0.7 + 0.25 * snow));
 	}
 	return c;
 }
