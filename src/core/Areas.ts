@@ -401,8 +401,8 @@ export const SEA = 'sea';
 
 /**
  * E21.4 (generation 5): the Old City's fixed map. Chunks −6…6 hold the park (0, 0), the nine regions from
- * data/oldcity, the sea (z ≥ 3, x ≤ 1) and backstreets (every other land chunk, one area each). Beyond is the
- * cloud wall: one-chunk areas that stay hidden until the finale. The same for every seed.
+ * data/oldcity, the sea (z ≥ 3, x ≤ 1) and backstreets (every other land chunk, one area each). Beyond, behind the
+ * hedge line: one-chunk areas that stay hidden until the finale. The same for every seed.
  */
 export class OldCityMap extends AreaMap {
   private oc = new Map<string, AreaInfo>();

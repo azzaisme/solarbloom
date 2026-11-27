@@ -188,23 +188,22 @@ export const LOOK = {
     skyBand: 5,
   },
   /**
-   * P7-E27 (owner's idea, 23 Nov 2026): continue the region-gate cloud wall (CloudWall) along every edge where revealed
-   * ground meets the hidden city, so the open island is ringed by cloud instead of fading into grey haze. `rows` of
-   * clouds (the gate walls have 2), each row further in, larger and higher; `size` scales the rows behind the first
-   * two (those keep the gate walls' size, so the big banks stand back from the playable edge). Judged in the fixed
-   * shots (off / 3 × 1.3 / 4 × 1.7); the owner chose 4 rows, taller. On a fresh load 1.7 walled off half the
-   * third-person sky, so the back rows grow 1.3 and fade into the haze as distant banks. The clouds' shape is P7-E32's.
+   * #hedge-line (owner, 27 Nov 2026): the wall round ground Bloombot can't enter yet, in place of the cloud walls. A dead
+   * laid hedge (HedgeGen, a module a metre long, `height` its scale) along every edge a sealed area shares with open
+   * ground (and on across the gate), `inset` in from the edge (negative: out onto the open side, in front of the fog curtain). `ring` walls in
+   * still-hidden neighbours too. At a region's gate, `gap` wider than the gate each side,
+   * the forcefield stands `field.front` in front of the hedge (`field`: its height, the `wave` in its top, its `glow`, `opacity` and gentle `pulse`, and the `fill` glow that rises as its lock's ground comes back to life) between
+   * the two dead trees (`tree`: a bare giant at `scale`, `offset` past the forcefield's ends). `leave`: seconds it
+   * takes to wither back when the gate opens.
    */
-  cloudRing: {
-    on: true,
-    rows: 4,
-    size: 1.3,
-    /**
-     * The walls breathe (owner, 23 Nov 2026): `count` small puffs (`parts` of a wall cloud's puffs, `size` of the cloud
-     * they leave) lift off standing clouds within `reach` of the camera's focus, rise `rise` and drift `drift` over a
-     * `life` of seconds while they melt away, then start again elsewhere. One dynamic batch; none with reduced motion.
-     */
-    wisps: { count: 12, parts: 4, size: 0.55, rise: 2.4, drift: 0.8, life: [5, 9] as [number, number], reach: 36 },
+  hedgeLine: {
+    ring: true,
+    height: 1,
+    inset: -0.15,
+    gap: 0.6,
+    tree: { scale: 0.42, offset: 0.9 },
+    field: { front: 0.35, height: 1.45, wave: 0.1, glow: 1.1, opacity: 1, pulse: 0.12, fill: 1.4 },
+    leave: 2.2,
   },
   /**
    * Look 1.10: drifting light motes and soft light shafts over restored ground near the camera's focus. Counts per
@@ -369,6 +368,11 @@ export const LOOK = {
        */
       bands: { along: 1.6, across: 0.45, drift: 0.2, break: 0.75 },
     },
+    /**
+     * #sunsets: the low sun lays the same broken path (moonPath's width, glitter and bands) across the sea at sunset
+     * and sunrise, in this warm gold at `strength` times its colour, under the sun's disc (DayNight.pathOnWater).
+     */
+    sunPath: { colour: '#ffb15c', strength: 2.2 },
     specular: 0.18,
     /** Fresnel: reflectance looking straight down, how fast it rises toward grazing, and its cap */
     fresnel: { base: 0.04, power: 5, max: 0.6 },

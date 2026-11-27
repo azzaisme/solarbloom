@@ -57,7 +57,7 @@ import { BirdHeart } from '../rendering/BirdHeart';
 import { bloomGetsHeart, heartBox, type Rect } from '../rendering/HeartFlight';
 import { BIRD_HEART } from '../data/birdHeart';
 import { Clouds } from '../rendering/Clouds';
-import { CloudWall } from '../rendering/CloudWall';
+import { HedgeLine } from '../rendering/HedgeLine';
 import { Ruins } from '../rendering/Ruins';
 import { Fauna } from '../rendering/Fauna';
 import { createModels } from '../rendering/Models';
@@ -100,7 +100,7 @@ import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { pavingOverlayLift } from '../rendering/PavingSurface';
 import { Sky } from '../rendering/Sky';
 import { fogMatchingSky } from '../rendering/LookShaders';
-import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
+import { CLOSE_VIEW_REACH, DAY_LIGHT, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { heightAt, levelY } from '../core/Height';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
@@ -139,10 +139,10 @@ import type { OldCityPanel } from '../ui/OldCityPanel';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
-import { Cozy } from '../gameplay/Cozy';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS, PLOT_WORK_TUNING, type DecorOption } from '../data/cozy';
+import { Cozy, type DecorGift } from '../gameplay/Cozy';
+import { decorAnchor, DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, decorSize, PLOT_OPTIONS, PLOT_WORK_TUNING, type DecorOption } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
-import type { Decoration } from '../core/Decor';
+import { decorChunkKey, type Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
 import { type LoadResult, SaveService, type Slot } from './SaveService';
 import { Loading, type LoadSteps } from '../ui/Loading';
@@ -158,6 +158,7 @@ import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
 import { WEATHER, WEATHER_WORDS } from '../data/weather';
 import { SEASON_WORDS } from '../data/seasons';
+import { SnowSheets } from '../rendering/SnowSheet';
 import { fallingLeafColour, seasonLookAt, seasonShading, type SeasonLookNow } from '../rendering/SeasonLook';
 import { WeatherVisuals, type WeatherLook } from '../rendering/WeatherVisuals';
 import { buildRadio } from '../rendering/HouseRadio';
@@ -211,7 +212,7 @@ type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 /** E22.2: an Interact target with what it does, where it is, and the outline to draw round it. */
 interface InteractTarget extends Candidate {
   run: () => void;
-  /** E21: a hold the Old City controller runs itself (salvage 0.6 s, pry 2 s) */
+  /** E21: a hold the Old City controller runs itself (salvage 0.6 s, prune 2 s) */
   ocHold?: number;
   at?: TileData;
   frame?: { roofId: string; x: number; z: number; size: number };
@@ -311,7 +312,7 @@ export class Game {
   private clouds: Clouds;
   /** region unlocks: the wall of clouds around sealed areas */
   /** P7-E27: public for the dev lighting panel (it re-syncs the ring when its size changes) */
-  readonly cloudWall: CloudWall;
+  readonly hedgeLine: HedgeLine;
   /** P7-E32 (#756): the distant ruined city round the island */
   readonly ruins: Ruins;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
@@ -451,6 +452,16 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    // #830: lying snow as a real layer over the open ground (SnowSheet), rebuilt with its chunk
+    this.snowSheets = new SnowSheets(this.app.graphicsDevice, this.scene.world, {
+      levelAt: (x, z) => {
+        const t = this.sim.grid.peek(GROUND, x, z);
+        if (!t || t.blocked || t.occupantId || t.feature === 'water' || t.feature === 'building' || this.sunkAt(x, z)) return undefined;
+        return t.level ?? 0;
+      },
+      yAt: (px, pz) => this.groundY(px, pz),
+    }, CHUNK);
+    this.chunks.onChunkBuilt = (cx, cz) => this.snowSheets.dirty(`${cx},${cz}`);
     this.giants = new GiantTrees(this.sim, this.scene.world, this.app.graphicsDevice, (x, z) => this.groundY(x, z));
     this.farmland = new FarmlandView(this.scene.world, this.app.graphicsDevice);
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
@@ -541,7 +552,7 @@ export class Game {
     this.birds = new Birds(this.scene.world);
     this.birdHeart = new BirdHeart(this.scene.world, this.app.graphicsDevice);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
-    this.cloudWall = new CloudWall(this.sim, this.scene.world, this.app.graphicsDevice, this.scene.sun.up, this.app.batcher ?? undefined);
+    this.hedgeLine = new HedgeLine(this.sim, this.scene.world, this.app.graphicsDevice);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
@@ -650,7 +661,7 @@ export class Game {
     this.applyFountainLook(true); // E21.6
 
     this.wireEvents();
-    this.cloudWall.sync();
+    this.hedgeLine.sync();
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
@@ -2713,12 +2724,12 @@ export class Game {
     const front = this.sim.grid.get(b.pose.roofId, f.x, f.z);
     const fd = Math.hypot(f.x + 0.5 - b.pose.x, f.z + 0.5 - b.pose.z);
     if (this.oc) out.push(...this.oldCityCandidates(f, front, fd));
-    // Facing a sealed area's fog: nothing is bought (E23.1.5). Its gate opens by prying, repairing or waking, and
+    // Facing a sealed area's fog: nothing is bought (E23.1.5). Its gate opens by pruning, repairing or waking, and
     // the prompt says what is in the way.
     const sealed = this.sealedAhead();
     if (sealed) {
       if (!out.some((c) => c.kind === 'gate'))
-        out.push({ kind: 'gate', id: `seal:${sealed}`, verb: 'Look at', name: 'the clouds', distance: fd, at: front, refused: this.sim.areas.sealText(sealed).replace(/<[^>]*>/g, ''), run: () => {} });
+        out.push({ kind: 'gate', id: `seal:${sealed}`, verb: 'Look at', name: 'the hedge', distance: fd, at: front, refused: this.sim.areas.sealText(sealed).replace(/<[^>]*>/g, ''), run: () => {} });
     }
     const lift = this.liftAhead();
     if (lift) {
@@ -2848,8 +2859,8 @@ export class Game {
       out.push({ kind: 'gate', id: `works:${w.region}`, verb: 'Look at', name: w.name, distance: fd, at: front, refused: why, run: () => this.hud.toast(`${w.running}<small>${w.then}</small>`, '', 4) });
     }
     const gate = s.gates.gateAt(f.x, f.z);
-    if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? s.upgrades.pryHold : undefined, refused: s.gates.problem(gate), run });
-    // E25 (#626): a sealed vault (Pry II), a stash, and the trips the level II moves take (over the sea, up a wall)
+    if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'hedge' ? 'Prune' : 'Repair', name: gate.kind === 'hedge' ? 'the hedge' : '', distance: fd, at: front, ocHold: gate.kind === 'hedge' ? s.upgrades.pruneHold : undefined, refused: s.gates.problem(gate), run });
+    // E25 (#626): a sealed vault (the pry bar), a stash, and the trips the level II moves take (over the sea, up a wall)
     const vault = s.moves.vaultAt(f.x, f.z);
     if (vault) out.push({ kind: 'gate', id: `vault:${vault.id}`, verb: 'Pry open', name: 'the vault door', distance: fd, at: front, ocHold: s.upgrades.vaultHold, refused: s.moves.vaultProblem(vault), run });
     const stash = s.moves.stashAt(f.x, f.z);
@@ -3013,7 +3024,7 @@ export class Game {
       sound: (name: string, material?: string) => {
         if (name === 'tier' || name === 'wake') this.sfx.fanfare();
         else if (name === 'deliver') this.sfx.coin();
-        else if (name === 'pry') this.sfx.stage('crack');
+        else if (name === 'pry' || name === 'prune') this.sfx.stage('crack');
         // a sound per material
         else if (name === 'salvage') this.sfx.stage(({ biomass: 'rustle', scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
         else this.sfx.click();
@@ -3391,6 +3402,9 @@ export class Game {
    * is known) mirrors the camera as it is now, and the water's material gets its clock, the camera, the night and the
    * sky's colours.
    */
+  /** #sunsets: scratch for the sea's path of light (DayNight.pathOnWater) */
+  private waterPathDir = new pc.Vec3();
+
   private waterFrame() {
     if (!this.camera || !this.dayNight) return;
     const seaY = this.chunks?.seaY;
@@ -3405,10 +3419,12 @@ export class Game {
       trTime: this.transitions?.time ?? 0,
       cam: this.camera.entity.getPosition(),
       focus: this.camera.target,
-      night: 1 - this.dayNight.daylight,
+      // #sunsets: the sea keeps some of the day's colour while the sun sets over it
+      night: (1 - this.dayNight.daylight) * (1 - DAY_LIGHT.seaWarm * Math.max(this.dayNight.sunset, this.dayNight.twilight)),
       skyLow: low,
       skyHigh: high,
       light: { toLight: this.scene.sun.up, color: this.scene.sun.light!.color, share: this.scene.sun.light!.intensity / LOOK.sun.intensity },
+      path: this.dayNight.pathOnWater(this.waterPathDir),
       lamps: this.lightVisuals?.shining,
       reflect: tex && seaY !== undefined ? { tex, viewProj: this.waterReflection!.drawnViewProj, planeY: seaY } : undefined,
     });
@@ -3518,6 +3534,8 @@ export class Game {
   );
 
   private nextFallingLeaf = 0;
+  /** #830: lying snow as a real layer (SnowSheet) */
+  snowSheets!: SnowSheets;
   /** #830: the season shading every season material reads (the e2e and perf checks read and set it) */
   readonly seasonShading = seasonShading;
   /** #830: the season's look on screen now (SeasonLook), worked out once a frame */
@@ -3529,6 +3547,9 @@ export class Game {
     const sc = sceneNow(this.sim, this.photo);
     this.seasonNow = seasonLookAt(n.season, n.progress, sc.f, sc.weather === 'snow', this.sim.seasons.snowCover());
     seasonShading.set(this.seasonNow);
+    // #830: the snow layer builds up with the lying snow (none at all without it)
+    this.snowSheets.low = this.gfxTier === 'low';
+    this.snowSheets.update(this.seasonNow.snow, this.camera.target.x, this.camera.target.z);
   }
 
   private updateFallingLeaves(dt: number, wind: number, view: { x0: number; x1: number; z0: number; z1: number }) {
@@ -3870,7 +3891,7 @@ export class Game {
     if (dec) {
       // E19.2: a decoration: Q picks it up to move it (the remove tool removes it)
       const o = DECOR_OPTION[dec.kind];
-      this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'info');
+      this.overlays.showFrame(dec.roofId, dec.x, dec.z, decorSize(dec.kind, dec.rot), 'info'); // #849: its whole footprint
       this.overlays.hideRadius();
       this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? 'Decoration'}</b>${this.previewFromBot ? `<span class="ok">${this.press('Q')} to pick it up and move it</span>` : 'A decoration'}`);
       return;
@@ -3979,11 +4000,11 @@ export class Game {
   }
 
   /** Is a footprint within bloombot's reach, on its layer? (Always, without bloombot.) */
-  private inReach(roofId: string, x: number, z: number, size: number): boolean {
+  private inReach(roofId: string, x: number, z: number, size: number, depth = size): boolean {
     const b = this.bot;
     if (!b) return true;
     if (b.pose.roofId !== roofId) return false;
-    return Math.hypot(b.pose.x - (x + size / 2), b.pose.z - (z + size / 2)) <= DECOR_GEN.reach + (size - 1) / 2;
+    return Math.hypot(b.pose.x - (x + size / 2), b.pose.z - (z + depth / 2)) <= DECOR_GEN.reach + (Math.max(size, depth) - 1) / 2;
   }
 
   /** Words for turning what's in hand, for the input used last. */
@@ -4016,7 +4037,9 @@ export class Game {
   private previewDecor(p: Pick, x: number, y: number, kind: string) {
     const t = p.tile!;
     const o = DECOR_OPTION[kind];
-    const why = this.decorProblem(kind, p.roofId, t.x, t.z);
+    // #849: a big piece is centred on the square aimed at, its whole footprint framed
+    const [ax, az] = decorAnchor(kind, this.buildRot, t.x, t.z, this.botFrom(p.roofId));
+    const why = this.decorProblem(kind, p.roofId, ax, az, this.buildRot);
     this.overlays.hideRadius();
     const line = LIGHT[kind]?.line ? this.sim.lights.poleNear(p.roofId, t.x, t.z) : undefined;
     if (LIGHT[kind]?.line) {
@@ -4024,7 +4047,7 @@ export class Game {
       this.overlays.hideGhost();
       if (line) this.overlays.showFrame(line.roofId, line.x, line.z, line.size, why ? 'bad' : 'ok');
       else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'bad');
-    } else this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
+    } else this.overlays.showGhost(p.roofId, ax, az, decorSize(kind, this.buildRot), !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
     const how = line ? `${this.press('E')} to hang it on this pole` : `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
     const kindNote = LIGHT[kind]?.line ? 'On the pole’s lines' : o?.solid ? 'Bloombot walks around it' : 'Bloombot can walk over it';
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
@@ -4075,14 +4098,14 @@ export class Game {
     }
     const o = DECOR_OPTION[d.kind];
     const far = !this.inReach(p.roofId, t.x, t.z, 1);
-    // the decoration aimed at lights up red: removing it is free and instant
-    this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.4, this.bot ? { kind: 'decor', decor: d.kind, rot: d.rot } : undefined);
+    // the decoration aimed at lights up red (#849: its whole footprint): removing it is free and instant
+    this.overlays.showGhost(p.roofId, d.x, d.z, decorSize(d.kind, d.rot), false, 0.4, this.bot ? { kind: 'decor', decor: d.kind, rot: d.rot } : undefined);
     const how = far ? `<span class="bad">${TOO_FAR}</span>` : `<span class="ok">${this.press('E')} to remove${this.bot ? ` · ${this.press('Q')} to pick it up and move it` : ''}</span>`;
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? d.kind}</b>${how}`);
   }
 
   /** Why a decoration in hand can't go here (the tile's rules, reach, and not on top of bloombot if it's solid). */
-  private decorProblem(kind: string, roofId: string, x: number, z: number): string | undefined {
+  private decorProblem(kind: string, roofId: string, x: number, z: number, rot = 0): string | undefined {
     // E23.3.5: line lights hang on a power pole's lines (aim at the pole) instead of standing on a tile
     if (LIGHT[kind]?.line) {
       const o = DECOR_OPTION[kind];
@@ -4092,11 +4115,13 @@ export class Game {
       const pole = this.sim.lights.poleNear(roofId, x, z)!;
       return this.inReach(roofId, pole.x, pole.z, pole.size) ? undefined : TOO_FAR;
     }
-    const why = this.cozy.canDecorate(kind, roofId, x, z);
+    const why = this.cozy.canDecorate(kind, roofId, x, z, rot);
     if (why) return why;
-    if (!this.inReach(roofId, x, z, 1)) return TOO_FAR;
+    // #849: `x`, `z` is a big piece's north-west square; reach and Bloombot's feet are measured over all of it
+    const [w, d] = decorSize(kind, rot);
+    if (!this.inReach(roofId, x, z, w, d)) return TOO_FAR;
     const b = this.bot;
-    if (b && DECOR_OPTION[kind]?.solid && b.pose.roofId === roofId && Math.abs(b.pose.x - (x + 0.5)) < 0.5 + BOT.radius && Math.abs(b.pose.z - (z + 0.5)) < 0.5 + BOT.radius) return 'Bloombot is standing there';
+    if (b && DECOR_OPTION[kind]?.solid && b.pose.roofId === roofId && Math.abs(b.pose.x - (x + w / 2)) < w / 2 + BOT.radius && Math.abs(b.pose.z - (z + d / 2)) < d / 2 + BOT.radius) return 'Bloombot is standing there';
     return undefined;
   }
 
@@ -4104,7 +4129,8 @@ export class Game {
   private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
     const t = p.tile!;
     const line = !!LIGHT[kind]?.line;
-    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z));
+    const [ax, az] = line ? [t.x, t.z] : decorAnchor(kind, this.buildRot, t.x, t.z, this.botFrom(p.roofId));
+    const why = this.decorProblem(kind, p.roofId, ax, az, this.buildRot) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, ax, az));
     if (why) {
       this.hud.showFail(why, x, y);
       return 'none';
@@ -4115,7 +4141,7 @@ export class Game {
       this.buildKey = '';
       return 'select';
     }
-    this.chunks.markTile(t);
+    this.markDecor(p.roofId, ax, az);
     this.sfx.build();
     this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.2), 8, { up: 1.6, size: 0.04, life: 0.8 });
     this.buildKey = '';
@@ -4170,7 +4196,7 @@ export class Game {
       return 'none';
     }
     this.cozy.removeDecor(d.roofId, d.x, d.z);
-    this.chunks.markTile(t);
+    this.markDecor(d.roofId, d.x, d.z);
     this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.2), 6, { up: 1.2, size: 0.035, life: 0.6 });
     const o = DECOR_OPTION[d.kind];
     if (pickUp && o) {
@@ -4182,11 +4208,27 @@ export class Game {
     return 'select';
   }
 
-  /** The decorations of one ground chunk, for the chunk renderer. */
+  /** #849: where Bloombot stands, when it is on this layer (a big piece aimed from there runs on away from it). */
+  private botFrom(roofId: string): { x: number; z: number } | undefined {
+    const b = this.bot;
+    return b && b.pose.roofId === roofId ? { x: b.pose.x, z: b.pose.z } : undefined;
+  }
+
+  /** #849: redraws the chunk a decoration is drawn by (its north-west square's). */
+  private markDecor(roofId: string, x: number, z: number) {
+    const t = this.sim.grid.peek(roofId, x, z);
+    if (t) this.chunks.markTile(t);
+  }
+
+  /**
+   * The decorations of one ground chunk, for the chunk renderer. #849: a big piece is indexed by every chunk it
+   * covers (so each stamps its squares) but drawn once, by the chunk its north-west square is in.
+   */
   private decorInChunk(cx: number, cz: number): Decoration[] {
-    const keys = this.sim.grid.decorInChunk(chunkKey(GROUND, cx, cz));
+    const ck = chunkKey(GROUND, cx, cz);
+    const keys = this.sim.grid.decorInChunk(ck);
     if (!keys.length) return [];
-    return keys.flatMap((k) => this.cozy.decorByKey(k) ?? []);
+    return keys.flatMap((k) => (decorChunkKey(k) === ck ? (this.cozy.decorByKey(k) ?? []) : []));
   }
 
   /**
@@ -4396,6 +4438,9 @@ export class Game {
       this.decorGift(gift);
       this.houseHintAfter = this.clock + HOUSE_HINT_WAIT; // the gift's toast first, the house's after it
     }
+    // #852: a piece for the room with each level of the house, and a Keeper's piece as each wakes (a save past them, once)
+    const earned = this.onScreen ? this.cozy.giveEarnedDecor() : [];
+    if (earned.length) this.houseGifts(earned);
     // #782: once, when the house can first be mended: where to go and what to press
     const hs = this.sim.house;
     if (this.onScreen && this.clock >= this.houseHintAfter && hs.open() && hs.level === 0 && !this.sim.state.salvage?.seen?.includes(HOUSE_HINT)) {
@@ -4421,6 +4466,11 @@ export class Game {
   private decorGift(o: DecorOption) {
     const tool: Tool = `decor:${o.id}`;
     this.hud.toast(WORDS.decor.gift(o.icon, o.name), 'gold', 8);
+    this.offerDecor(tool);
+  }
+
+  /** A gift decoration: the build menu opens on it next time, and it goes on a free build bar button (if not there). */
+  private offerDecor(tool: Tool) {
     this.hud.buildMenu.showNext(tool);
     const slots = this.hud.buildBar.slots();
     const free = slots.indexOf('');
@@ -4430,6 +4480,24 @@ export class Game {
       this.hud.buildBar.render(this.hud.currentTool);
     }
     this.save();
+  }
+
+  /**
+   * #852: pieces for the room arrived made. One says what it is and who it's from; several (a save already past them)
+   * share one toast. Either way the build menu opens on the first next time and it goes on a free build bar button.
+   */
+  private houseGifts(gifts: DecorGift[]) {
+    const [g] = gifts;
+    const o = g.option;
+    const toast =
+      gifts.length > 1
+        ? WORDS.decor.gifts(gifts.map((x) => x.option.name))
+        : g.keeper
+          ? WORDS.decor.keeperGift(o.icon, o.name, g.keeper)
+          : WORDS.decor.houseGift(o.icon, o.name, (HOUSE[(g.level ?? 1) - 1]?.name ?? 'house').toLowerCase());
+    this.hud.toast(toast, 'gold', 8);
+    const tool: Tool = `decor:${o.id}`;
+    this.offerDecor(tool);
   }
 
   /** Look 6.10: the name of the stage a tile's transition is in (inspect panel). */
@@ -4809,6 +4877,7 @@ export class Game {
     // a pile stays the goal until it is dug out: only its last dig blooms
     b.on('pile.salvaged', ({ x, z, left }) => left === 0 && this.waymark.done(['pile'], { x, z }));
     b.on('gate.opened', () => this.waymark.done(['gate']));
+    b.on('gate.opened', () => this.hedgeLine.sync()); // #hedge-line: its forcefield and hedge wither away (a plug too)
     b.on('fountain.delivered', () => this.waymark.done(['fountain']));
     b.on('landmark.woken', () => this.waymark.done(['landmark']));
     for (const ev of ['keeper.step', 'keeper.gift', 'keeper.friend'] as const) b.on(ev, () => this.waymark.done(['keeper']));
@@ -4829,8 +4898,8 @@ export class Game {
     });
     b.on('area.fogChanged', ({ areaId }) => this.chunks.markArea(areaId));
     b.on('area.unlocked', ({ areaId }) => {
-      this.cloudWall.reducedMotion = !!this.settings.reducedMotion;
-      this.cloudWall.sync(); // its wall rises and melts away
+      this.hedgeLine.reducedMotion = !!this.settings.reducedMotion;
+      this.hedgeLine.sync(); // its hedge withers back
       this.chunks.markArea(areaId);
       for (const nb of s.areas.info(areaId).neighbours) this.chunks.markArea(nb); // soft fog edges
       const info = s.areas.info(areaId);
@@ -4852,7 +4921,7 @@ export class Game {
     });
     b.on('area.cleared', ({ areaId }) => {
       this.onAreaCleared(areaId);
-      this.cloudWall.sync(); // the newly sealed neighbours get their walls
+      this.hedgeLine.sync(); // the newly sealed neighbours get their hedges
     });
     b.on('fauna.unlocked', ({ id }) => {
       // Phase 5 E16 (cosmetic; pays nothing): a creature kind arrives
@@ -5568,7 +5637,7 @@ export class Game {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      this.hud.toast('⛲ Water returns!<small>Rubble still blocks the streets leading away from the fountain. Walk up to a pile and hold {interact} to pry it out of the way.</small>', 'gold', 7);
+      this.hud.toast('⛲ Water returns!<small>Dead hedges still wall in the park. Walk up to the green glow in one and hold {interact} to prune a way through.</small>', 'gold', 7);
       // E21.12: a 4 s vista turning past the beacons around the park (skippable; a still with reduced motion)
       if (!this.settings.noVistas) setTimeout(() => this.vista(8, 8, 4, (seen) => seen.forEach((r) => this.sim.salvage.see(`beacon:${r}`)), 300), 200);
       this.save();
@@ -6044,6 +6113,7 @@ export class Game {
     }
     this.dayNight.apply(this.lightMoment());
     this.look.rimShare = this.dayNight.rim;
+    this.look.twilight = this.dayNight.twilight;
     this.look.night = 1 - this.dayNight.light;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
@@ -6058,7 +6128,7 @@ export class Game {
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-      this.cloudWall.update(wdt, this.camera.target);
+      this.hedgeLine.update(wdt);
       this.clouds.update(wdt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);

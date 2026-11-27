@@ -1,3 +1,4 @@
+import { hedgeReady } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -18,7 +19,8 @@ const NEAR_PYLON = { roofId: GROUND, x: 10.5, z: -2.5 };
 function mastRowOpen(seed = 7) {
   const sim = new Sim(createInitialState(seed));
   sim.state.salvage!.tier = 1;
-  sim.state.salvage!.abilities.push('pry');
+  sim.state.salvage!.abilities.push('prune');
+  hedgeReady(sim);
   sim.areas.clear('park', true);
   sim.gates.open('g-mastRow');
   sim.bot = NEAR_PYLON;

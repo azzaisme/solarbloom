@@ -38,7 +38,7 @@ describe('E23.6.2: research in data', () => {
       const g = p.gives;
       if ('upgrade' in g) expect(RESEARCH_UPGRADES.some((u) => u.id === g.upgrade), p.id).toBe(true);
       else if ('recipes' in g) for (const id of g.recipes) expect(RECIPE_IDS.has(id), `${p.id}: ${id}`).toBe(true);
-      else if ('move' in g) expect(['pry', 'hover', 'climb', 'glide'], p.id).toContain(g.move); // E25 #626: a move's second level
+      else if ('move' in g) expect(['prune', 'hover', 'climb', 'glide'], p.id).toContain(g.move); // E25 #626: a move's second level
       else expect(g.station).toBe(2);
       for (const k of Object.keys(p.cost)) expect(realItem(k), `${p.id}: ${k}`).toBe(true);
       expect(p.days).toBeGreaterThan(0);
@@ -54,7 +54,7 @@ describe('E23.6.2: research in data', () => {
       else if ('tech' in f) expect(CACHES.has(f.tech), p.id).toBe(true);
       else if ('creature' in f) expect(['butterflies', 'birds', 'koi'], p.id).toContain(f.creature);
       else if ('crop' in f) expect(f.crop, p.id).toBe('radish'); // E23.5.2's first crop (data/crops once it lands)
-      else if ('move' in f) expect(['pry', 'hover', 'climb', 'glide'], p.id).toContain(f.move); // E25 #626: a move learned
+      else if ('move' in f) expect(['prune', 'hover', 'climb', 'glide'], p.id).toContain(f.move); // E25 #626: a move learned
       else expect(PROJECTS.some((q) => q.id === f.project), p.id).toBe(true);
       // follow the chain back to a find
       let q = p;
@@ -212,10 +212,10 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(sim.charge.max).toBe(max + 2 * CHARGE.cellCapacity);
     // Gentler on charge: every pulse and ability costs a little less
     const pulse = sim.charge.cost('pulse');
-    const pry = sim.charge.cost('pry');
+    const pry = sim.charge.cost('prune');
     expect(sim.research.upgrade('chargeEfficiency')).toBe(1);
     expect(sim.charge.cost('pulse')).toBeCloseTo(pulse * (1 - CHARGE.efficiencyStep), 6);
-    expect(sim.charge.cost('pry')).toBeCloseTo(pry * (1 - CHARGE.efficiencyStep), 6);
+    expect(sim.charge.cost('prune')).toBeCloseTo(pry * (1 - CHARGE.efficiencyStep), 6);
     // Longer stride: sprinting costs less (bloombot's sprint speed reads the same level, BotController)
     const sprint = sim.charge.cost('sprint');
     expect(sim.research.upgrade('sprint')).toBe(1);

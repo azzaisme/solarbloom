@@ -19,7 +19,7 @@ describe('Bloombot acts out every Interact verb (#628)', () => {
   const verbs = [...new Set([...verbsIn(read('src/app/Game.ts')), ...verbsIn(read('src/app/Resting.ts')), ...Object.values(NIGHT_FIND_GIVES).map((g) => g.verb)])];
 
   it('finds the verbs (the scan works)', () => {
-    for (const v of ['Salvage', 'Pry', 'Gather', 'Talk to', 'Harvest', 'Wake', 'Sit on', 'Mend', 'Pick up']) expect(verbs).toContain(v);
+    for (const v of ['Salvage', 'Prune', 'Pry open', 'Gather', 'Talk to', 'Harvest', 'Wake', 'Sit on', 'Mend', 'Pick up']) expect(verbs).toContain(v);
   });
 
   it('every verb on the prompt is in the table, with an act or a pose of its own', () => {
@@ -31,7 +31,7 @@ describe('Bloombot acts out every Interact verb (#628)', () => {
 
   it('every hold the Old City runs has a looping act', () => {
     const kinds = [...read('src/app/OldCity.ts').matchAll(/startHold\('(\w+)'/g)].map((m) => m[1]);
-    expect(new Set(kinds)).toEqual(new Set(['salvage', 'pry', 'gather', 'pick']));
+    expect(new Set(kinds)).toEqual(new Set(['salvage', 'prune', 'pry', 'gather', 'pick']));
     for (const k of kinds) expect(HOLD_ACTS[k]).toBeDefined();
     expect(HOLD_ACTS).toMatchObject({ salvage: 'rummage', pry: 'pry', gather: 'gather', pick: 'harvest' });
   });

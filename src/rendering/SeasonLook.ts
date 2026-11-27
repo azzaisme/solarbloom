@@ -84,6 +84,7 @@ export function seasonUniforms(look: SeasonLookNow): Record<string, number[]> {
     uSeasonBlos0: linear(S.blossom[0]),
     uSeasonBlos1: linear(S.blossom[1]),
     uSeasonFrost: linear(S.frost),
+    uSeasonSnowShade: linear(S.snowShade),
   };
 }
 
@@ -139,7 +140,11 @@ export const seasonShading = new SeasonShading();
  * - `sbSeasonLeaf(c, p)`: a deciduous leaf's blossom or autumn colour (foliage; `p` the leaf's rest position)
  * - `sbSeasonBare(p, big)`: true where a leaf has fallen (foliage opacity, both passes)
  */
-export const SEASON_GLSL = /* glsl */ `
+/**
+ * #830: the season's uniforms and the frost and snow field (noise, lumps, cover). Safe in a vertex shader: the snow
+ * sheet (SnowSheet) raises its drifts with it.
+ */
+export const SEASON_FIELD_GLSL = /* glsl */ `
 uniform vec4 uSeasonA; // grass shift, autumn, bare, blossom
 uniform vec4 uSeasonB; // frost, detail (0 on Low), snow lying (0 … 1, all white), unused
 uniform vec3 uSeasonGrass;
@@ -150,6 +155,7 @@ uniform vec3 uSeasonWither;
 uniform vec3 uSeasonBlos0;
 uniform vec3 uSeasonBlos1;
 uniform vec3 uSeasonFrost;
+uniform vec3 uSeasonSnowShade;
 float sbsLum(vec3 c) {
 	return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
@@ -167,6 +173,28 @@ float sbsNoise(vec2 p) {
 	float d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
 	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
+// soft drifts and mounds, 0 … 1: broad lumps about a patch of ground across, with smaller ones on top (not on Low)
+float sbsLumps(vec2 q) {
+	float h = sbsNoise(q * 1.25 + 17.3);
+	if (uSeasonB.y > 0.5) h = 0.72 * h + 0.28 * sbsNoise(q * 3.6 + 5.7);
+	return h;
+}
+// #830: how much of a spot lies under frost or snow, 0 … 1, before its slope: the patches widen with the frost and
+// the lying snow until they join, and their edges follow the lumps. The ground's tint and the snow sheet share it.
+float sbsCoverAt(vec2 xz) {
+	float snow = uSeasonB.z;
+	float nz = sbsNoise(xz * 2.1);
+	if (uSeasonB.y > 0.5) nz = 0.65 * nz + 0.35 * sbsNoise(xz * 6.7 + 3.1);
+	if (snow > 0.001) nz += (sbsLumps(xz) - 0.5) * 0.55 * snow;
+	float cover = uSeasonB.x + snow * 1.3;
+	return smoothstep(1.0 - cover, 1.0 - cover + mix(0.22, 0.08, snow), nz);
+}
+`;
+
+export const SEASON_GLSL = /* glsl */ `
+${SEASON_FIELD_GLSL}
+// #830: lumpy snow: the tilt of the lumps under this point (getNormal adds it to the surface's normal)
+vec3 sbSnowBend = vec3(0.0);
 // how green a colour is (linear): 0 for stone, wood, flowers and machines, 1 for grass and leaves
 float sbsGreen(vec3 c) {
 	float mx = max(c.r, max(c.g, c.b));
@@ -181,13 +209,40 @@ vec3 sbSeasonColour(vec3 c, vec3 n, vec3 p) {
 		c = mix(c, t, g * uSeasonA.x);
 	}
 	if (uSeasonB.x > 0.001 || uSeasonB.z > 0.001) {
-		float up = smoothstep(0.35, 0.9, n.y);
-		float nz = sbsNoise(p.xz * 2.1);
-		if (uSeasonB.y > 0.5) nz = 0.65 * nz + 0.35 * sbsNoise(p.xz * 6.7 + 3.1);
-		// lying snow widens the frost's patches until they join (past 1 every upward face is covered), and thickens it
-		float cover = uSeasonB.x + uSeasonB.z * 1.3;
-		float f = up * smoothstep(1.0 - cover, 1.0 - cover + 0.22, nz);
-		c = mix(c, uSeasonFrost * mix(0.7, 0.88 + 0.07 * uSeasonB.z, up), f * (0.7 + 0.25 * uSeasonB.z));
+		float snow = uSeasonB.z;
+		// frost sits on upward faces; deep snow also settles on gentle slopes, kerbs and the bevels between slabs
+		float up = smoothstep(0.35 - 0.3 * snow, 0.9 - 0.45 * snow, n.y);
+		float h = 0.5;
+		vec2 grad = vec2(0.0);
+		if (snow > 0.001) {
+			h = sbsLumps(p.xz);
+			const float e = 0.12;
+			grad = vec2(sbsLumps(p.xz + vec2(e, 0.0)) - h, sbsLumps(p.xz + vec2(0.0, e)) - h) / e;
+		}
+		float f = up * sbsCoverAt(p.xz);
+		// frost: a pale glaze over what is under it
+		vec3 sc = uSeasonFrost * mix(0.7, 0.88, up);
+		float k = f * 0.7;
+		if (snow > 0.001) {
+			float lumpK = snow * f;
+			// lying snow: near white and matte, hiding what is under it; the lumps are lit on the sun's side and
+			// only faintly blue in their hollows; a soft blue lip runs just inside the edge (the layer's thickness)
+			float lit = clamp(0.5 - 0.6 * dot(grad, normalize(vec2(0.45, 0.3))), 0.0, 1.0);
+			float hollow = 1.0 - smoothstep(0.2, 0.55, h);
+			vec3 snowC = uSeasonFrost * (1.0 + 0.08 * lit);
+			snowC = mix(snowC, uSeasonSnowShade, clamp(hollow * 0.3 + (0.5 - lit) * 0.35, 0.0, 0.4));
+			float lip = smoothstep(0.0, 0.45, f) * (1.0 - smoothstep(0.45, 1.0, f));
+			snowC = mix(snowC, uSeasonSnowShade * 0.9, lip * 0.45);
+			// glints: the odd crystal catching the light, only where they are bigger than a pixel (no shimmer)
+			vec2 gq = p.xz * 38.0;
+			float gs = 1.0 - smoothstep(0.4, 0.9, length(fwidth(gq)));
+			float glint = step(0.985, fract(sin(dot(floor(gq), vec2(12.9898, 78.233))) * 43758.5453)) * gs;
+			snowC *= 1.0 + 0.35 * glint;
+			sc = mix(sc, snowC, snow);
+			k = mix(k, f, snow);
+			sbSnowBend = vec3(-grad.x, 0.0, -grad.y) * 0.3 * lumpK;
+		}
+		c = mix(c, sc, k);
 	}
 	return c;
 }

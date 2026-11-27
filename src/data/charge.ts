@@ -32,7 +32,7 @@ export const CHARGE = {
   /** E23.6.7: sprinting on a laid path uses this share (until e23-craft's PATHS.sprintChargeShare is on sim.paths) */
   pathSprintShare: 0.6,
   /** charge each use of an ability costs */
-  ability: { pry: 3, hover: 0, climb: 2, glide: 2 } as Record<string, number>,
+  ability: { prune: 3, hover: 0, climb: 2, glide: 2 } as Record<string, number>,
   /** at zero: walking speed is this share of a normal walk (never stranded) */
   lowPowerWalk: 0.7,
   /** at or below this share of a full charge the meter shows it is running low */

@@ -26,7 +26,7 @@ const QUICK = [
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
-  'power-grid', 'power-helpers', 'power-lights', 'moonlit-night', 'sunlit-look',
+  'power-grid', 'power-helpers', 'power-lights', 'moonlit-night', 'sun-moon', 'twilight-sky', 'sunlit-look',
   // E23.8: regions and the mainland
   'region-strengths', 'region-unlocks-e23',
   // E23.8.3: the mainland
@@ -81,6 +81,8 @@ const QUICK = [
   'first-decor', 'house',
   // #787: the regions' works (power, water, drones) and the unlock-order walk
   'region-works', 'seasons',
+  // #842: furnishing the house (#849 pieces bigger than one square, #847 the tray's order)
+  'decor-footprint', 'decor-tray', 'decor-furniture', 'decor-soft', 'decor-unlocks',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

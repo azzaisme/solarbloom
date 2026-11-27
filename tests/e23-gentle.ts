@@ -1,3 +1,4 @@
+import { hedgeReady } from './helpers';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { GroundState, MachineData, TileData } from '../src/core/types';
@@ -234,8 +235,9 @@ export function homeScene(seed: number): Sim {
   const sim = new Sim(createInitialState(seed));
   const salvage = sim.state.salvage!;
   salvage.tier = 2;
-  salvage.abilities.push('pry', 'hover');
+  salvage.abilities.push('prune', 'hover');
   sim.areas.clear(PARK, true);
+  hedgeReady(sim); // #hedge-line: its lock wants a third of the park alive too
   sim.gates.open('g-mastRow');
   // Mast Row part-way: a strip prepared, a strip growing, a strip restored.
   const mast = sim.areas.tiles('mastRow').filter((t) => !t.blocked && !t.occupantId);

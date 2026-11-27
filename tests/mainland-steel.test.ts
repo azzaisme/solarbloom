@@ -29,7 +29,7 @@ const MACHS: BuildableType[] = ['gridBattery'];
 function bloomed() {
   const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = MAINLAND.opensAtTier;
-  sim.state.salvage!.abilities = ['pry', 'hover', 'climb', 'glide'];
+  sim.state.salvage!.abilities = ['prune', 'hover', 'climb', 'glide'];
   sim.mainland.open();
   sim.areas.clear(landingArea(), true);
   for (const m of ['steel', 'copper', 'gears', 'clay', 'scrap'] as MaterialId[]) sim.inventory.add(m, 40);

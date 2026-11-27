@@ -84,8 +84,8 @@ export class AreaSystem {
    */
   sealText(id: string): string {
     const r = regionById(id);
-    if (r) return `${r.name} is behind the clouds. ${r.gate.how}`;
-    return 'Clouds hide this street. Turn the ground green in the place next to it, and the clouds will lift.';
+    if (r) return `${r.name} is overgrown. ${r.gate.how}`;
+    return 'Brambles block this street. Turn the ground green in the place next to it, and they will die back.';
   }
 
   /** E21.5: after GateSystem lifts an Old City seal. */

@@ -1,4 +1,4 @@
-import { decorChunkKey } from './Decor';
+import { decorChunkKey, decorChunkKeys } from './Decor';
 import { CHUNK, generateTile, tileId } from './Generation';
 import type { LayerData, MachineData, TileData } from './types';
 import { levelY } from './Height';
@@ -292,21 +292,27 @@ export class Grid {
   /** Decoration keys (core/Decor) by chunk: a loading chunk stamps their occupancy as it does machines'. */
   private decorIndex = new Map<string, string[]>();
 
-  indexDecor(key: string) {
-    const ck = decorChunkKey(key);
-    if (!ck) return;
-    const list = this.decorIndex.get(ck);
-    if (!list) this.decorIndex.set(ck, [key]);
-    else if (!list.includes(key)) list.push(key);
+  /**
+   * Indexes a decoration under every chunk its squares fall in (#849: a big piece may cross into the next chunk), so
+   * whichever loads stamps its squares. `value` is its saved value (`bench@1`); without it, its own chunk only.
+   */
+  indexDecor(key: string, value?: string) {
+    for (const ck of value ? decorChunkKeys(key, value) : [decorChunkKey(key)]) {
+      if (!ck) continue;
+      const list = this.decorIndex.get(ck);
+      if (!list) this.decorIndex.set(ck, [key]);
+      else if (!list.includes(key)) list.push(key);
+    }
   }
 
+  /** Drops a decoration from every chunk it was indexed under. */
   unindexDecor(key: string) {
-    const ck = decorChunkKey(key);
-    const list = ck ? this.decorIndex.get(ck) : undefined;
-    if (!list) return;
-    const next = list.filter((k) => k !== key);
-    if (next.length) this.decorIndex.set(ck!, next);
-    else this.decorIndex.delete(ck!);
+    for (const [ck, list] of this.decorIndex) {
+      if (!list.includes(key)) continue;
+      const next = list.filter((k) => k !== key);
+      if (next.length) this.decorIndex.set(ck, next);
+      else this.decorIndex.delete(ck);
+    }
   }
 
   /** Keys of the decorations in a chunk. */

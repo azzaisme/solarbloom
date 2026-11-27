@@ -1,3 +1,4 @@
+import { hedgeReady } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState } from '../src/core/GameState';
@@ -37,7 +38,7 @@ describe('#605: the goal card says why and where', () => {
     const sim = new Sim(createInitialState(7));
     const o = objectiveSentence(sim);
     expect(o.text).toBe('Wake the fountain');
-    expect(o.why).toBe('Bloombot learns to pry open rubble');
+    expect(o.why).toBe('Bloombot learns to prune through the dead hedges');
     expect(o.parts?.map((p) => `${p.label} ${p.have} of ${p.need}`)).toEqual(['Scrap 0 of 20', 'Seeds 0 of 6', 'Park 0 of 60']);
     expect(o.progress).toBe(0);
     // the next step under it points somewhere (Show me where)
@@ -137,7 +138,8 @@ describe('#607: the guide\'s lines, once each', () => {
     const p = sim.state.progression;
     p.tutorialStep = 6;
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.state.salvage!.piles['p-test'] = 1;
     sim.state.stats.tilesRestored = 80;
     sim.state.salvage!.opened.push(REGIONS.find((r) => r.id === 'mastRow')!.gate.id);
@@ -288,35 +290,36 @@ describe('#605: after the fountain wakes, the rubble is the goal until the first
   const woke = () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     return sim;
   };
   it('the card leads to the nearest rubble, and the goal spot points at it', () => {
     const sim = woke();
     const o = objectiveSentence(sim);
-    expect(o.text).toBe('Pry open the rubble');
+    expect(o.text).toBe('Prune through the hedge');
     expect(o.why).toBe('Another robot like Bloombot is asleep on the other side');
-    expect(o.next).toBe('Hold {interact} beside the rubble to pry it open.');
+    expect(o.next).toBe('Hold {interact} at the green glow in the hedge to prune a way through.');
     const s = goalSpot(sim, o)!;
     expect(s.kind).toBe('gate');
-    const r = REGIONS.find((q) => q.gate.needs.ability === 'pry' && q.gate.cells.some(([x, z]) => x === s.cell.x && z === s.cell.z))!;
+    const r = REGIONS.find((q) => q.gate.needs.ability === 'prune' && q.gate.cells.some(([x, z]) => x === s.cell.x && z === s.cell.z))!;
     expect(r).toBeTruthy();
     expect(sim.gates.problem(r.gate)).toBeUndefined();
-    expect(o.text).toBe('Pry open the rubble');
-    expect(o.place).toMatchObject({ name: `the rubble into ${r.name}` });
+    expect(o.text).toBe('Prune through the hedge');
+    expect(o.place).toMatchObject({ name: `the hedge into ${r.name}` });
     for (const line of [o.text, o.why!, o.next!]) expect(bannedIn(line), line).toEqual([]);
   });
   it('running low still shows under it', () => {
     const sim = woke();
     sim.charge.drainForTest();
     const o = objectiveSentence(sim);
-    expect(o.text).toMatch(/^Pry open the rubble/);
+    expect(o.text).toMatch(/^Prune through the hedge/);
     expect(o.next).toMatch(/running low/);
     expect(goalSpot(sim, o)!.kind).toBe('rest');
   });
   it('once any rubble is pried, the fountain\'s next step is the goal again', () => {
     const sim = woke();
-    sim.state.salvage!.opened.push(REGIONS.find((r) => r.gate.needs.ability === 'pry')!.gate.id);
+    sim.state.salvage!.opened.push(REGIONS.find((r) => r.gate.needs.ability === 'prune')!.gate.id);
     expect(objectiveSentence(sim).text).toBe(TIERS[1].name);
   });
 });
@@ -362,6 +365,6 @@ describe('#607 review: the guide names the input the way a player would', () => 
     expect(pulse.text(() => CLICK, sim)).toBe('Press the left mouse button to turn the bare ground around Bloombot green.');
     expect(pulse.text(() => '<svg>RB</svg>', sim)).toBe('Press <svg>RB</svg> to turn the bare ground around Bloombot green.');
     const keepers = IDEAS.find((i) => i.id === 'keepers')!;
-    expect(keepers.text((a) => (a === 'pulse' ? CLICK : 'E'), sim)).toBe('A robot sleeps past the rubble. Press the left mouse button beside it to stir it, then press E to say hello.');
+    expect(keepers.text((a) => (a === 'pulse' ? CLICK : 'E'), sim)).toBe('A robot sleeps past the hedge. Press the left mouse button beside it to stir it, then press E to say hello.');
   });
 });

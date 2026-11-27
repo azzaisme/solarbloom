@@ -86,7 +86,7 @@ try {
     const s = g.sim;
     const sv = s.state.salvage;
     sv.tier = 1;
-    sv.abilities = ['pry'];
+    sv.abilities = ['prune'];
     s.areas.clear('park', true);
     s.gates.open('g-mastRow', true);
     sv.keepers.pylon = { step: 'landmark' };
@@ -165,7 +165,7 @@ try {
   const list = await run(() => {
     const g = window.solarbloom;
     const s = g.sim;
-    s.state.salvage.abilities = ['pry', 'hover', 'climb', 'glide'];
+    s.state.salvage.abilities = ['prune', 'hover', 'climb', 'glide'];
     const noon = { ...s.power.sky(), sun: 1, solar: 1 };
     s.power.skyOverride = () => noon;
     const out = [];

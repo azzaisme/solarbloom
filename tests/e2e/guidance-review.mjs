@@ -38,7 +38,7 @@ try {
     const g = window.solarbloom;
     g.app.autoRender = false;
     g.sim.state.salvage.tier = 1;
-    g.sim.state.salvage.abilities.push('pry');
+    g.sim.state.salvage.abilities.push('prune');
     g.sim.gates.open('g-oldMarket', true);
     g.skipCinematic?.();
     g.sim.state.salvage.keepers.tally = { step: 'request2' };

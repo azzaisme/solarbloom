@@ -14,7 +14,7 @@ export const PRIORITY = ['cat', 'keeper', 'salvage', 'cache', 'gate', 'door', 's
 export type TargetKind = (typeof PRIORITY)[number];
 
 /** How long a hold takes, in seconds, for the actions that are holds (decision 4). */
-export const HOLD_SECONDS = { salvage: 0.6, pry: 2 } as const;
+export const HOLD_SECONDS = { salvage: 0.6, prune: 2 } as const;
 
 export interface Candidate {
   kind: TargetKind;

@@ -173,7 +173,7 @@ export class LightVisuals {
       }
     } else {
       const base = this.tileTop(l.roofId, l.x, l.z);
-      const [ox, oz] = turn(l.rot, def.id === 'porchlight' ? 0 : def.id === 'tablelight' ? 0.08 : 0, def.id === 'porchlight' ? -0.1 : def.id === 'tablelight' ? 0.04 : 0);
+      const [ox, oz] = def.bulbAt ? turn(l.rot, def.bulbAt[0], def.bulbAt[1]) : turn(l.rot, def.id === 'porchlight' ? 0 : def.id === 'tablelight' ? 0.08 : 0, def.id === 'porchlight' ? -0.1 : def.id === 'tablelight' ? 0.04 : 0);
       at = [base[0] + ox, base[1] + def.bulbY, base[2] + oz];
       const size = (def.id === 'lamppost' || def.id === 'solarlamppost' ? 0.2 : def.id === 'uplight' ? 0.14 : def.id === 'glowpod' ? 0.09 : 0.13) * LIGHTING.bulb.cover;
       if (def.id === 'glowpod') {
@@ -182,6 +182,10 @@ export class LightVisuals {
           const ang = (i / 5) * Math.PI * 2;
           parts.push(this.part(g, this.bulbMesh, [base[0] + Math.cos(ang) * 0.12, base[1] + 0.25, base[2] + Math.sin(ang) * 0.12], size));
         }
+      } else if (def.bulbSize) {
+        // #851: a lamp's glowing shade, a little bigger than the cloth shade drawn under it (DecorArt)
+        const c = LIGHTING.bulb.cover;
+        parts.push(this.part(g, this.bulbMesh, at, [def.bulbSize[0] * c, def.bulbSize[1] * c, def.bulbSize[2] * c]));
       } else parts.push(this.part(g, this.bulbMesh, at, def.id === 'uplight' ? [size, 0.03, size] : size));
       // the light shines from the bulb; a very low one from a little above it, so its pool isn't a pinprick
       const h = Math.max(def.bulbY, C.minHeight);
