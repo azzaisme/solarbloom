@@ -110,7 +110,7 @@ try {
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`http://localhost:${port}/?slot=1&new=1${query}`);
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
-    for (const scene of ['pry', 'clouds']) {
+    for (const scene of ['prune', 'clouds']) {
       const at = await page.evaluate(standAt, scene);
       check(!at.none, `${label} ${scene}: bloombot faces something that refuses (${at.none ?? `${at.x},${at.z}: ${at.why}`})`);
       if (at.none) continue;

@@ -8,7 +8,8 @@ describe('E21: the Old City model list', () => {
     // #681: the skyline's models were the landmarks' first stand-ins; they're kept in retired/ (not fetched)
     const retired = new Set(readdirSync('assets/raw/models/retired').filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4)));
     const piles = [...PARK_SET.piles, ...REGIONS.flatMap((r) => r.piles)].map((p) => p.model);
-    const used = [...KEEPERS.map((k) => `keeper-${k.id}`), ...Object.values(GATE_MODELS), ...Object.values(OLD_LANDMARK_MODELS), ...KEEPSAKES.map((k) => k.model), 'storage-chest', 'jetty'];
+    // (a hedge gate has no model: HedgeLine draws it)
+    const used = [...KEEPERS.map((k) => `keeper-${k.id}`), ...Object.values(GATE_MODELS).filter(Boolean), ...Object.values(OLD_LANDMARK_MODELS), ...KEEPSAKES.map((k) => k.model), 'storage-chest', 'jetty'];
     for (const n of used) expect(MODEL_NAMES[n], n).toBeDefined();
     for (const n of piles) expect(MODEL_NAMES[n] !== undefined || have.has(n), n).toBe(true);
     for (const [n, m] of Object.entries(MODEL_NAMES)) expect(m.standIn === 'procedural' || have.has(m.standIn) || retired.has(m.standIn), `${n} -> ${m.standIn}`).toBe(true);

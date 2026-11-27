@@ -52,7 +52,7 @@ export interface OldCityBotOptions {
   onSecond?: (sim: Sim) => void;
 }
 
-const ACT = { salvage: SALVAGE.holdSeconds + 0.5, pulse: 0.7, interact: 0.6, build: 1.2, pry: SALVAGE.pryHoldSeconds + 0.4, think: 0.4 };
+const ACT = { salvage: SALVAGE.holdSeconds + 0.5, pulse: 0.7, interact: 0.6, build: 1.2, pry: SALVAGE.pruneHoldSeconds + 0.4, think: 0.4 };
 
 /**
  * `until`: stop at fountain tier 1, at the first Keeper awake, or (the default) run the opening with early power.
@@ -178,7 +178,7 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     // 2. After tier 1: the nearest barricade, then its Keeper
     if (!did && tier >= 1) {
       if (firsts.gate === undefined) {
-        const gates = REGIONS.filter((r) => r.ring === 1 && r.gate.kind === 'barricade' && r.gate.opensRegion !== false).sort((a, b) => dist(a.gate.cells[0][0], a.gate.cells[0][1]) - dist(b.gate.cells[0][0], b.gate.cells[0][1]));
+        const gates = REGIONS.filter((r) => r.ring === 1 && r.gate.kind === 'hedge' && r.gate.opensRegion !== false).sort((a, b) => dist(a.gate.cells[0][0], a.gate.cells[0][1]) - dist(b.gate.cells[0][0], b.gate.cells[0][1]));
         for (const r of gates) if ((did = pry(r))) break;
       } else if (firsts.keeper === undefined) {
         did = wake(REGIONS.find((q) => sim.gates.isOpen(q.gate.id) && q.gate.opensRegion !== false)!);

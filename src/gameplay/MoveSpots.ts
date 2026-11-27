@@ -20,7 +20,7 @@ export interface MoveTrip {
 /**
  * E25 (#626): the places the level II moves are for. Each move learned at the fountain gets a second level, worked
  * out at the crafting table (Research `moveLevel`), and places out in the city that need it:
- * - Pry II forces the sealed vaults (hold Interact, VAULTS) and takes what is inside;
+ * - the pry bar (Prune's second level) forces the sealed vaults (hold Interact, VAULTS) and takes what is inside;
  * - Hover II goes from the jetty's end out to the sandbar;
  * - Climb II climbs straight up a low wall onto the ruins' roofs (any roof in MOVE_LAND, from the cell beside it);
  * - Glide II glides from the east cliff out to the old pier, and from there down to the sandbar.
@@ -59,17 +59,17 @@ export class MoveSpots {
   /** Why a vault can't be forced now, or undefined. */
   vaultProblem(v: VaultDef): string | undefined {
     if (this.opened(v.id)) return 'Already open';
-    const lv = this.level('pry');
-    if (lv === 0) return 'A heavy iron door, shut tight. Bloombot has to learn to pry at the fountain first.';
-    if (lv === 1) return 'This door is too heavy to pry open yet. The workbench beside the house can work out Pry II.';
-    return this.outOfCharge('pry');
+    const lv = this.level('prune');
+    if (lv === 0) return 'A heavy iron door, shut tight. Bloombot needs a pry bar for this, and the fountain comes first.';
+    if (lv === 1) return 'This door is too heavy to open by hand. The workbench beside the house can work out a pry bar.';
+    return this.outOfCharge('prune');
   }
 
   /** Forces a vault (after the hold): what is inside goes in the backpack. */
   openVault(id: string): ItemCost | undefined {
     const v = VAULTS.find((q) => q.id === id);
     if (!v || this.vaultProblem(v)) return undefined;
-    this.sim.charge.use('pry');
+    this.sim.charge.use('prune');
     return this.take(v.id, v.x, v.z, v.gives);
   }
 

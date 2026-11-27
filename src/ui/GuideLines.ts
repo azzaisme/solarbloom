@@ -14,7 +14,7 @@ import type { Sim } from '../gameplay/Sim';
  * Each idea has `comes` (it has come up: now is the moment to say it) and `known` (the player has done it, so it
  * never needs saying). Ideas come in the order a new game meets them; one is shown at a time.
  */
-export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'build' | 'pry' | 'keepers' | 'works';
+export type IdeaId = 'salvage' | 'pulse' | 'park' | 'fountain' | 'parkDone' | 'build' | 'prune' | 'keepers' | 'works';
 
 /** What the key function gives for an action on the mouse's left button: the line names "the left mouse button" instead. */
 export const CLICK = 'Click';
@@ -38,7 +38,7 @@ export interface Idea {
 const sv = (sim: Sim) => sim.state.salvage;
 const salvaged = (sim: Sim) => Object.keys(sv(sim)?.piles ?? {}).length > 0;
 const handedIn = (sim: Sim) => Object.values(sv(sim)?.delivered ?? {}).some((n) => (n ?? 0) > 0) || (sv(sim)?.tier ?? 0) >= 1;
-const pried = (sim: Sim) => REGIONS.some((r) => r.gate.needs.ability === 'pry' && sv(sim)?.opened.includes(r.gate.id));
+const pruned = (sim: Sim) => REGIONS.some((r) => r.gate.needs.ability === 'prune' && sv(sim)?.opened.includes(r.gate.id));
 const keeperAwake = (sim: Sim) => Object.values(sv(sim)?.keepers ?? {}).some((k) => (k?.step ?? 'asleep') !== 'asleep');
 const built = (sim: Sim) => sim.state.machines.some((m) => !m.starter && m.type !== 'core');
 const carriesForFountain = (sim: Sim) => {
@@ -108,15 +108,15 @@ export const IDEAS: readonly Idea[] = [
     known: built,
   },
   {
-    id: 'pry',
-    text: (k) => `You can pry rubble open now. Hold ${k('interact')} at the rubble piled across a way out of the park.`,
-    comes: (sim) => !!sv(sim)?.abilities.includes('pry'),
-    known: pried,
+    id: 'prune',
+    text: (k) => `You can prune through the dead hedges now. Hold ${k('interact')} at the green glow in a hedge round the park.`,
+    comes: (sim) => !!sv(sim)?.abilities.includes('prune'),
+    known: pruned,
   },
   {
     id: 'keepers',
-    text: (k) => `A robot sleeps past the rubble. Press ${btn(k, 'pulse')} beside it to stir it, then press ${k('interact')} to say hello.`,
-    comes: pried,
+    text: (k) => `A robot sleeps past the hedge. Press ${btn(k, 'pulse')} beside it to stir it, then press ${k('interact')} to say hello.`,
+    comes: pruned,
     known: keeperAwake,
   },
   {

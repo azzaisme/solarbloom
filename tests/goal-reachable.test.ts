@@ -7,7 +7,7 @@ import { Sim } from '../src/gameplay/Sim';
 import { trailRoute } from '../src/gameplay/TrailRoute';
 import { Walker } from '../src/gameplay/Walker';
 import { goalSpot } from '../src/ui/GoalSpot';
-import { firstRubble } from '../src/ui/ObjectiveCard';
+import { firstHedge } from '../src/ui/ObjectiveCard';
 
 /**
  * #644: Show me where must lead somewhere bloombot can walk to. On a fresh game, once the jetty's crate was dug out,
@@ -74,8 +74,8 @@ describe('#644: Show me where picks a goal bloombot can walk to', () => {
 
   it('the rubble the card points at once bloombot can pry is rubble it can walk up to', () => {
     const sim = freshAtSpawn();
-    sim.state.salvage!.abilities.push('pry');
-    const r = firstRubble(sim)!;
+    sim.state.salvage!.abilities.push('prune');
+    const r = firstHedge(sim)!;
     expect(r).toBeDefined();
     expect(walkCost(sim, r.gate.cells[0][0], r.gate.cells[0][1])).toBeDefined();
   });

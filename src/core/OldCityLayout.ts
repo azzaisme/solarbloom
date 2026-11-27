@@ -18,7 +18,7 @@ export type SetPiece =
   | { kind: 'lookout'; id: string; region: RegionId }
   | { kind: 'shed' }
   | { kind: 'ruin'; ruin: RuinDef }
-  /** E25 (#626): a sealed vault door (Pry II) and a stash a level II move reaches */
+  /** E25 (#626): a sealed vault door (the pry bar) and a stash a level II move reaches */
   | { kind: 'vault'; vault: VaultDef }
   | { kind: 'stash'; stash: StashDef }
   /** #787: a region's works (a dark machine, a dry channel, seized machinery) its landmark waits on */

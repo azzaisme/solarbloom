@@ -389,7 +389,7 @@ export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | '
 /** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
 export type ItemId = MaterialId | ComponentId;
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
-export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
+export type AbilityId = 'prune' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
 export type KeeperStep = 'asleep' | 'request1' | 'request2' | 'landmark' | 'settled';
 
@@ -422,7 +422,7 @@ export interface SalvageState {
   store: Partial<Record<ItemId, number>>;
   /** E21.2: units left in each pile bloombot has touched (pile id → left); untouched piles are full */
   piles: Record<string, number>;
-  /** E21.5: gates opened for good (barricades pried, bridges repaired), by gate id */
+  /** E21.5: gates opened for good (hedges pruned through, bridges repaired), by gate id */
   opened: string[];
   /** E21.6: fountain tier reached (0 = dry) */
   tier: number;

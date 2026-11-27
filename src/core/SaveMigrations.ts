@@ -27,5 +27,8 @@ export function migrateSave(state: GameState): GameState {
   // open to place and counts as found
   const had = (state.cozy?.decorUnlocked ?? []).filter((id) => CAT_DECOR.includes(id) && !sv?.decorMade?.includes(id));
   if (sv && had.length) sv.decorMade = [...(sv.decorMade ?? []), ...had].sort();
+  // #hedge-line (owner, 27 Nov 2026): the first move is Prune now (it was Pry, for rubble): a save that learned it
+  // keeps it, and its second level (the pry bar for vaults) with it
+  if (sv?.abilities.includes('pry' as never)) sv.abilities = sv.abilities.map((a) => ((a as string) === 'pry' ? 'prune' : a));
   return state;
 }

@@ -80,7 +80,7 @@ export function stampOldCity(t: TileData): TileData {
   if (p.kind === 'page') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `page:${p.id}` });
   if (p.kind === 'gate') {
     const g = p.gate;
-    if (g.kind === 'barricade') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `gate:${g.id}` });
+    if (g.kind === 'hedge') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `gate:${g.id}` });
     if (g.kind === 'water' || g.kind === 'lockBridge') return Object.assign(t, { blocked: false, feature: 'water', prop: `gate:${g.id}` });
     if (g.kind === 'bridge') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `gate:${g.id}` });
   }

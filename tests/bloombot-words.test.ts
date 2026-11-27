@@ -153,7 +153,7 @@ describe('#606: plain words when something is blocked', () => {
       if (why) expect(bannedIn(why), why).toEqual([]);
       if (sim.areas.sealed(r.id)) {
         const seal = sim.areas.sealText(r.id);
-        expect(seal).toBe(`${r.name} is behind the clouds. ${r.gate.how}`);
+        expect(seal).toBe(`${r.name} is overgrown. ${r.gate.how}`);
         expect(bannedIn(seal), seal).toEqual([]);
       }
     }
@@ -164,7 +164,7 @@ describe('#606: plain words when something is blocked', () => {
     const { REGIONS } = await import('../src/data/oldcity');
     const sim = new Sim(createInitialState(7));
     const elder = REGIONS.find((r) => r.id === 'elderGrove')!;
-    expect(sim.gates.problem(elder.gate)).toBe('Rubble blocks the way. Wake the fountain and Bloombot will learn to pry it open.');
+    expect(sim.gates.problem(elder.gate)).toBe('A dead hedge blocks the way. Wake the fountain and Bloombot will learn to prune a way through.');
   });
 
   it('a machine that waits on the fountain says which step, never "tier"', async () => {

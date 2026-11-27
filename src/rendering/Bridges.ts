@@ -5,7 +5,7 @@
  *
  * What stands in the water (the census for #696):
  *   - the Landing's jetty (Saltwind Beach): the `jetty` model on six posts, or planks on posts while it's missing;
- *   - the Saltwind canal's plank bridge, once its barricade is pried open (a post on each of its tiles);
+ *   - the Saltwind canal's plank bridge, once its hedge is pruned through (a post on each of its tiles);
  *   - the Long Causeway's spans and the old pier in the bay: solid walls into the sea (their wet line is `wetLine`);
  *   - the mainland avenues over its canals: road on walls, the same.
  */

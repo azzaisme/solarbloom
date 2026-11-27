@@ -181,3 +181,17 @@ export function headlessApp() {
   app.root.addChild(root);
   return { app, device, root, destroy: () => app.destroy() };
 }
+
+/**
+ * #hedge-line: a hedge gate's lock also needs a third of the ground on Bloombot's side alive (the park, or Saltwind
+ * for its boardwalk). Tests that prune through a hedge bring half of each back first.
+ */
+export function hedgeReady(sim: Sim) {
+  for (const area of [PARK, 'saltwind']) {
+    const tiles = sim.areas.tiles(area);
+    for (const t of tiles.slice(0, Math.ceil(tiles.length / 2))) {
+      t.ground = 'restored';
+      sim.grid.touch(t);
+    }
+  }
+}

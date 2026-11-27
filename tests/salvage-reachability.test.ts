@@ -138,7 +138,7 @@ describe('E23.8 (#327–#329): every region has salvage piles of its own', () =>
 
   it('every pile stands in its region, on its own cell, clear of the set pieces, and is reached on foot from the Keeper', () => {
     const sim = new Sim(createInitialState(7));
-    sim.state.salvage!.abilities = ['pry', 'hover', 'climb', 'glide'];
+    sim.state.salvage!.abilities = ['prune', 'hover', 'climb', 'glide'];
     for (const r of REGIONS) sim.state.areas[r.id] = { fog: 'thinning', revealedAt: 0 };
     // every gate opened, as by the time a player has every ability (barricades pried, the bridge mended)
     for (const r of REGIONS)
@@ -206,7 +206,7 @@ describe('E23.8 (#327–#329): every region has salvage piles of its own', () =>
     const { Sim: BareSim } = await import('../src/gameplay/Sim');
     const { Walker: BareWalker } = await import('../src/gameplay/Walker');
     const sim = new BareSim(fresh(7));
-    sim.state.salvage!.abilities = ['pry', 'hover', 'climb', 'glide'];
+    sim.state.salvage!.abilities = ['prune', 'hover', 'climb', 'glide'];
     for (const r of oc.REGIONS) sim.state.areas[r.id] = { fog: 'thinning', revealedAt: 0 };
     for (const r of oc.REGIONS)
       for (const [x, z] of r.gate.cells) {

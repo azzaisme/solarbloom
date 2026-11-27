@@ -21,7 +21,7 @@ const loop = (sim: Sim) => sim as unknown as Record<string, unknown>;
 function tierOne(sim: Sim) {
   const sv = sim.state.salvage!;
   sv.tier = 1;
-  if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+  if (!sv.abilities.includes('prune')) sv.abilities.push('prune');
   return sv;
 }
 
