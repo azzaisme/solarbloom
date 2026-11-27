@@ -1,5 +1,6 @@
-import { HOUSE_INSIDE, type HouseFurniture, type HouseWall } from '../data/oldcity';
+import { HOUSE_INSIDE, houseRugs, type HouseFurniture, type HouseRoom, type HouseWall } from '../data/oldcity';
 import { PALETTE } from './Palette';
+import type { HouseTexName } from './HouseTex';
 import type { VPrim } from './Shapes';
 
 type V3 = [number, number, number];
@@ -11,6 +12,14 @@ type V3 = [number, number, number];
 export interface HouseSink {
   add(type: VPrim, hex: string, p: V3, s: V3 | number, glow?: number): void;
   tri?(hex: string, a: V3, b: V3, c: V3, n: V3): void;
+  /** #861: a box wearing one of the house's painted textures (HouseTex), tinted `hex`; a plain box without it */
+  tex?(name: HouseTexName, hex: string, p: V3, s: V3): void;
+}
+
+/** #861: a box in a painted texture when the sink has them, else in plain colour. */
+function tbox(b: HouseSink, name: HouseTexName, hex: string, p: V3, s: V3) {
+  if (b.tex) b.tex(name, hex, p, s);
+  else b.add('box', hex, p, s);
 }
 
 /** The house's footprint on the ground: its north-west cell, its size (cells) and its door cell (in front of it). */
@@ -295,6 +304,8 @@ export interface RoomPlan {
   furniture: HouseFurniture[];
   /** #860: the inner walls (drawn apart, by HouseInterior, so the camera can see over them; their skirting is here) */
   walls: HouseWall[];
+  /** #861: the rooms (the main room first), for each room's lamp */
+  rooms: HouseRoom[];
   /** keepsakes found (stand on the shelf) */
   keepsakes: number;
   /** the floorboards' variety, per cell (stable) */
@@ -325,30 +336,41 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
   const tall = p.wall;
   b.add('box', H.wallIn, [ox + R / 2, y + tall / 2, oz - T / 2], [R + 2 * T, tall, T]);
   for (const s of [-1, 1]) b.add('box', s < 0 ? H.wallIn : H.wallInShade, [ox + (s < 0 ? -T / 2 : R + T / 2), y + tall / 2, oz + R / 2], [T, tall, R + T]);
-  for (const [x, z, w, d] of [[ox + R / 2, oz + 0.015, R, 0.03], [ox + 0.015, oz + R / 2, 0.03, R], [ox + R - 0.015, oz + R / 2, 0.03, R]] as [number, number, number, number][]) b.add('box', H.skirting, [x, y + 0.06, z], [w, 0.12, d]);
-  b.add('box', H.beam, [ox + R / 2, y + tall - 0.08, oz + 0.03], [R, 0.12, 0.06]);
+  for (const [x, z, w, d] of [[ox + R / 2, oz + 0.015, R, 0.03], [ox + 0.015, oz + R / 2, 0.03, R], [ox + R - 0.015, oz + R / 2, 0.03, R]] as [number, number, number, number][]) tbox(b, 'wood', H.skirting, [x, y + 0.06, z], [w, 0.12, d]);
+  // #861: a wall plate along the top of each tall wall, and the ends of the ceiling's joists along the back
+  tbox(b, 'wood', H.beam, [ox + R / 2, y + tall - 0.08, oz + 0.03], [R, 0.12, 0.06]);
+  for (const s of [0, R]) tbox(b, 'wood', H.beam, [ox + s + (s ? -0.03 : 0.03), y + tall - 0.08, oz + R / 2], [0.06, 0.12, R]);
+  for (let k = 0.75; k < R; k += 1.5) tbox(b, 'wood', H.beam, [ox + k, y + tall - 0.2, oz + 0.08], [0.1, 0.12, 0.16]);
   const [dx] = p.door;
   const low = 0.45;
   if (dx > 0) b.add('box', H.wallIn, [ox + dx / 2 - T / 2, y + low / 2, oz + R + T / 2], [dx + T, low, T]);
   if (dx + 1 < R) b.add('box', H.wallIn, [ox + (dx + 1 + R) / 2 + T / 2, y + low / 2, oz + R + T / 2], [R - dx - 1 + T, low, T]);
-  for (const k of [dx, dx + 1]) b.add('box', H.beam, [ox + k, y + 0.5, oz + R + T / 2], [0.1, 1.0, T + 0.04]); // the door's posts
-  b.add('box', H.rugEdge, [ox + dx + 0.5, y + 0.005, oz + R - 0.5], [0.8, 0.01, 0.6]); // the mat at the door
-  b.add('box', H.rug, [ox + dx + 0.5, y + 0.01, oz + R - 0.5], [0.7, 0.012, 0.5]);
-  // windows along the back wall, glowing with the day outside
-  const n = Math.max(1, Math.floor(R / 3));
-  for (let i = 0; i < n; i++) {
-    const wx = ox + (R * (i + 0.5)) / n;
-    if (p.furniture.some((f) => f.z === 0 && wx >= ox + f.x - 0.2 && wx <= ox + f.x + f.w + 0.2 && f.id === 'radio')) continue;
-    b.add('box', H.trim, [wx, y + 1.3, oz + 0.02], [0.8, 0.7, 0.04]);
-    b.add('box', H.glass, [wx, y + 1.3, oz + 0.04], [0.68, 0.58, 0.02], 0.6);
-    b.add('box', H.trim, [wx, y + 1.3, oz + 0.05], [0.03, 0.58, 0.02]);
+  for (const k of [dx, dx + 1]) tbox(b, 'wood', H.beam, [ox + k, y + 0.5, oz + R + T / 2], [0.1, 1.0, T + 0.04]); // the door's posts
+  // #861: skirting along the low front wall too, each side of the door
+  if (dx > 0) tbox(b, 'wood', H.skirting, [ox + dx / 2, y + 0.06, oz + R - 0.015], [dx, 0.12, 0.03]);
+  if (dx + 1 < R) tbox(b, 'wood', H.skirting, [ox + (dx + 1 + R) / 2, y + 0.06, oz + R - 0.015], [R - dx - 1, 0.12, 0.03]);
+  // #861: a coir doormat inside the door, a dark band at each end (no higher than the rugs: below DecorArt's RUG.base)
+  tbox(b, 'coir', H.doormat, [ox + dx + 0.5, y + 0.007, oz + R - 0.42], [0.82, 0.014, 0.56]);
+  for (const s of [-1, 1]) tbox(b, 'coir', H.doormatDark, [ox + dx + 0.5, y + 0.008, oz + R - 0.42 + s * 0.22], [0.82, 0.014, 0.06]);
+  // windows, glowing with the day outside (#861: more of them as the room widens)
+  for (const w of windowSpots(p)) {
+    if (w.axis === 'z') roomWindow(b, 'z', ox + w.along, y, oz + w.at, 1);
+    else roomWindow(b, 'x', ox + w.at, y, oz + w.along, w.at === 0 ? 1 : -1);
   }
-  // a rug in the middle of the room
-  b.add('box', H.rugEdge, [ox + R / 2, y + 0.004, oz + R / 2 + 0.3], [Math.min(3.2, R - 3), 0.008, Math.min(2.2, R - 3.5)]);
-  b.add('box', H.rug, [ox + R / 2, y + 0.008, oz + R / 2 + 0.3], [Math.min(3.0, R - 3.2), 0.01, Math.min(2.0, R - 3.7)]);
-  // a lamp on the back wall, warm (the room's light, HouseInterior, hangs unseen over the rug)
-  b.add('box', H.beam, [ox + 0.6, y + 1.75, oz + 0.05], [0.12, 0.2, 0.08]);
-  b.add('sphere', H.lamp, [ox + 0.6, y + 1.9, oz + 0.12], 0.1, 1);
+  // #861: the room's rugs, more as it grows (data/oldcity houseRugs; all below DecorArt's RUG.base)
+  const RUGS = { red: H.rug, blue: H.rugBlue, green: H.rugGreen };
+  for (const r of houseRugs(p.level)) {
+    tbox(b, 'weave', H.rugEdge, [ox + r.x, y + 0.004, oz + r.z], [r.w, 0.008, r.d]);
+    tbox(b, 'weave', RUGS[r.colour], [ox + r.x, y + 0.008, oz + r.z], [r.w - 0.2, 0.01, r.d - 0.2]);
+  }
+  // a lamp on the back wall, warm (the room's light, HouseInterior, hangs unseen over the rug); #861: one in each room,
+  // the main room's moved out of the kitchen's corner once there is a kitchen
+  const lamps: [number, number][] = [[p.rooms.some((r) => r.id === 'kitchen') ? 4.6 : 0.6, 0.05]];
+  for (const r of p.rooms.slice(1)) lamps.push([r.x + r.w - 0.5, r.z + 0.05]);
+  for (const [lx, lz] of lamps) {
+    tbox(b, 'wood', H.beam, [ox + lx, y + 1.75, oz + lz], [0.12, 0.2, 0.08]);
+    b.add('sphere', H.lamp, [ox + lx, y + 1.9, oz + lz + 0.07], 0.1, 1);
+  }
   // #860: skirting along both faces of each inner wall (the walls themselves are drawn apart: they sink for the camera)
   for (const w of p.walls)
     for (const piece of innerWallPieces(w)) {
@@ -356,11 +378,81 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
       const [x0, z0, x1, z1] = piece.line;
       for (const side of [-1, 1]) {
         const off = side * (INNER_WALL.thick / 2 + 0.015);
-        if (w.axis === 'x') b.add('box', H.skirting, [ox + (x0 + x1) / 2, y + 0.06, oz + z0 + off], [x1 - x0, 0.12, 0.03]);
-        else b.add('box', H.skirting, [ox + x0 + off, y + 0.06, oz + (z0 + z1) / 2], [0.03, 0.12, z1 - z0]);
+        if (w.axis === 'x') tbox(b, 'wood', H.skirting, [ox + (x0 + x1) / 2, y + 0.06, oz + z0 + off], [x1 - x0, 0.12, 0.03]);
+        else tbox(b, 'wood', H.skirting, [ox + x0 + off, y + 0.06, oz + (z0 + z1) / 2], [0.03, 0.12, z1 - z0]);
       }
     }
   for (const f of p.furniture) furniture(b, f, [ox, y, oz], y, p.keepsakes);
+}
+
+/** #861: the pieces too tall for a window above them (a window there is left out). */
+const TALL = new Set<string>(['shelf']);
+
+/** One window on a wall's inner face: the north wall (`axis` 'z', facing south) or a side wall (facing `inward`). */
+function roomWindow(b: HouseSink, axis: 'z' | 'x', x: number, y: number, z: number, inward: number) {
+  if (axis === 'z') {
+    b.add('box', H.trim, [x, y + 1.3, z + 0.02], [0.8, 0.7, 0.04]);
+    b.add('box', H.glass, [x, y + 1.3, z + 0.04], [0.68, 0.58, 0.02], 0.6);
+    b.add('box', H.trim, [x, y + 1.3, z + 0.05], [0.03, 0.58, 0.02]);
+    b.add('box', H.trim, [x, y + 0.93, z + 0.07], [0.88, 0.04, 0.12]); // the sill
+    return;
+  }
+  b.add('box', H.trim, [x + inward * 0.02, y + 1.3, z], [0.04, 0.7, 0.8]);
+  b.add('box', H.glass, [x + inward * 0.04, y + 1.3, z], [0.02, 0.58, 0.68], 0.6);
+  b.add('box', H.trim, [x + inward * 0.05, y + 1.3, z], [0.02, 0.58, 0.03]);
+  b.add('box', H.trim, [x + inward * 0.07, y + 0.93, z], [0.12, 0.04, 0.88]);
+}
+
+/**
+ * #861: the room's windows, more as it widens. Along the back wall each room's stretch has its own (one every three
+ * squares or so), none behind the radio; from the Cottage on, the side walls have them too (one every four squares),
+ * clear of where an inner wall meets them and of anything tall against them. `along` is in cells along the wall.
+ */
+export function windowSpots(p: Pick<RoomPlan, 'room' | 'level' | 'furniture' | 'walls'>): { axis: 'z' | 'x'; at: number; along: number }[] {
+  const R = p.room;
+  const out: { axis: 'z' | 'x'; at: number; along: number }[] = [];
+  const cuts = [0, ...p.walls.filter((w) => w.axis === 'z' && w.from === 0).map((w) => w.at), R].sort((a, b) => a - b);
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const [a, c] = [cuts[i], cuts[i + 1]];
+    const n = Math.max(1, Math.floor((c - a) / 3));
+    for (let k = 0; k < n; k++) {
+      const wx = a + ((c - a) * (k + 0.5)) / n;
+      if (p.furniture.some((f) => f.z === 0 && wx >= f.x - 0.2 && wx <= f.x + f.w + 0.2 && (f.id === 'radio' || TALL.has(f.id)))) continue;
+      out.push({ axis: 'z', at: 0, along: wx });
+    }
+  }
+  if (p.level < 2) return out;
+  for (const side of [0, R]) {
+    const n = Math.floor(R / 4);
+    const joins = p.walls.filter((w) => w.axis === 'x' && (side === 0 ? w.from === 0 : w.to === R)).map((w) => w.at);
+    const col = side === 0 ? 0 : R - 1;
+    for (let k = 0; k < n; k++) {
+      const wz = (R * (k + 0.5)) / n;
+      if (joins.some((j) => Math.abs(j - wz) < 0.6)) continue;
+      if (p.furniture.some((f) => TALL.has(f.id) && col >= f.x && col < f.x + f.w && wz >= f.z - 0.2 && wz <= f.z + f.d + 0.2)) continue;
+      out.push({ axis: 'x', at: side, along: wz });
+    }
+  }
+  return out;
+}
+
+/**
+ * #861: the ceiling's beams, across the room from the west wall to the east one (more as it grows: one in the
+ * Cottage, two in the House, three in the Home). They hang at the walls' tops, so the camera sees past them: like an
+ * inner wall, one between the camera and Bloombot is put out of sight (HouseInterior).
+ */
+export function ceilingBeams(level: number, room: number): InnerWallPiece[] {
+  const n = Math.max(0, level - 1);
+  return Array.from({ length: n }, (_, i) => {
+    const z = Math.round(((room * (i + 1)) / (n + 1)) * 2) / 2 + 0.25;
+    return { line: [0, z, room, z] as [number, number, number, number], beam: true };
+  });
+}
+
+/** #861: a ceiling beam, drawn at its height (just under the walls' top). */
+export function drawCeilingBeam(b: HouseSink, piece: InnerWallPiece, o: V3) {
+  const [x0, z0, x1] = piece.line;
+  tbox(b, 'wood', H.beam, [o[0] + (x0 + x1) / 2, o[1] + HOUSE_INSIDE.wall - 0.1, o[2] + z0], [x1 - x0, 0.16, 0.14]);
 }
 
 /** #860: the inner walls' size: thinner than the outer ones; a doorway's top (the lintel) and how low a wall sinks. */
@@ -374,6 +466,8 @@ export interface InnerWallPiece {
   line: [number, number, number, number];
   /** the beam over the doorway (shown only while the wall stands tall) */
   lintel?: boolean;
+  /** #861: a ceiling beam (shown only while it isn't between the camera and Bloombot) */
+  beam?: boolean;
 }
 
 /** #860: an inner wall's stretches: each side of its doorway, and the lintel over it. */
@@ -402,7 +496,7 @@ export function drawInnerWall(b: HouseSink, piece: InnerWallPiece, o: V3) {
   if (piece.lintel) {
     const h = HOUSE_INSIDE.wall - INNER_WALL.doorTop;
     b.add('box', H.wallIn, [cx, o[1] + INNER_WALL.doorTop + h / 2, cz], size(len, h, T));
-    b.add('box', H.beam, [cx, o[1] + INNER_WALL.doorTop + 0.04, cz], size(len + 0.1, 0.08, T + 0.04));
+    tbox(b, 'wood', H.beam, [cx, o[1] + INNER_WALL.doorTop + 0.04, cz], size(len + 0.1, 0.08, T + 0.04));
     return;
   }
   b.add('box', H.wallIn, [cx, o[1] + 0.5, cz], size(len, 1, T));
@@ -410,7 +504,7 @@ export function drawInnerWall(b: HouseSink, piece: InnerWallPiece, o: V3) {
   for (const e of [0, 1]) {
     const px = o[0] + (alongX ? (e ? x1 - 0.04 : x0 + 0.04) : x0);
     const pz = o[2] + (alongX ? z0 : e ? z1 - 0.04 : z0 + 0.04);
-    b.add('box', H.beam, [px, o[1] + 0.5, pz], alongX ? [0.08, 1, T + 0.04] : [T + 0.04, 1, 0.08]);
+    tbox(b, 'wood', H.beam, [px, o[1] + 0.5, pz], alongX ? [0.08, 1, T + 0.04] : [T + 0.04, 1, 0.08]);
   }
 }
 
@@ -419,7 +513,7 @@ export function drawInnerWallCap(b: HouseSink, piece: InnerWallPiece, o: V3) {
   const [x0, z0, x1, z1] = piece.line;
   const alongX = z0 === z1;
   const len = (alongX ? x1 - x0 : z1 - z0) + 0.04;
-  b.add('box', H.beam, [o[0] + (x0 + x1) / 2, o[1] + 0.03, o[2] + (z0 + z1) / 2], alongX ? [len, 0.06, INNER_WALL.thick + 0.05] : [INNER_WALL.thick + 0.05, 0.06, len]);
+  tbox(b, 'wood', H.beam, [o[0] + (x0 + x1) / 2, o[1] + 0.03, o[2] + (z0 + z1) / 2], alongX ? [len, 0.06, INNER_WALL.thick + 0.05] : [INNER_WALL.thick + 0.05, 0.06, len]);
 }
 
 /**

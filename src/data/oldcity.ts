@@ -1278,6 +1278,29 @@ export function houseRoomAt(level: number, x: number, z: number): HouseRoom | un
   return rooms.slice(1).find((r) => x >= r.x && x < r.x + r.w && z >= r.z && z < r.z + r.d) ?? rooms[0];
 }
 
+/** #861: a rug laid in the room (cells from its north-west corner; its middle and its size, edge to edge). */
+export interface HouseRug {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  colour: 'red' | 'blue' | 'green';
+}
+
+/**
+ * #861: the rugs that come with the room, more as it grows: one in the middle of the main room at every size; from
+ * the Cottage on a small one beside the bed; from the House on a runner along the kitchen's counter.
+ */
+export function houseRugs(level: number): HouseRug[] {
+  const R = HOUSE[level - 1]?.room ?? 0;
+  if (!R) return [];
+  const out: HouseRug[] = [{ x: R / 2, z: R / 2 + 0.3, w: Math.min(3.2, R - 3), d: Math.min(2.2, R - 3.5), colour: 'red' }];
+  const bed = houseFurniture(level).find((f) => f.id === 'bed');
+  if (level >= 2 && bed) out.push({ x: bed.x + (bed.x + 1 < R ? 1.5 : -0.5), z: bed.z + 1, w: 0.8, d: 1.4, colour: 'blue' });
+  if (level >= 3) out.push({ x: 2, z: 1.5, w: 3.3, d: 0.7, colour: 'green' });
+  return out;
+}
+
 /** #782: the room's door cell (inside, in the middle of the south wall) at a level. */
 export function houseDoorInside(level: number): [number, number] {
   const room = HOUSE[level - 1]?.room ?? 6;
