@@ -108,21 +108,21 @@ export const PLACEHOLDER_ONLY: readonly string[] = [];
  * this (world units), for one that should hover over its perch.
  */
 export const VISITOR_LOOK: Record<string, { length: number; turn?: number; lift?: number }> = {
-  butterfly: { length: 0.09 },
-  songbird: { length: 0.15 },
-  bumblebee: { length: 0.06 },
-  hedgehog: { length: 0.2 },
-  squirrel: { length: 0.22 },
-  magpie: { length: 0.24 },
-  fox: { length: 0.32 },
-  frog: { length: 0.12 },
-  owl: { length: 0.2 },
-  otter: { length: 0.32 },
-  kingfisher: { length: 0.14 },
-  badger: { length: 0.3 },
-  heron: { length: 0.5 },
-  fawn: { length: 0.32 },
-  swallowtail: { length: 0.1 },
+  butterfly: { length: 0.14 },
+  songbird: { length: 0.24 },
+  bumblebee: { length: 0.12 },
+  hedgehog: { length: 0.28 },
+  squirrel: { length: 0.31 },
+  magpie: { length: 0.27 },
+  fox: { length: 0.38 },
+  frog: { length: 0.13 },
+  owl: { length: 0.28 },
+  otter: { length: 0.38 },
+  kingfisher: { length: 0.22 },
+  badger: { length: 0.36 },
+  heron: { length: 0.6 },
+  fawn: { length: 0.38 },
+  swallowtail: { length: 0.2 },
 };
 
 /** E23.2.4.2: how many come over while bloombot sits, and their timing. */

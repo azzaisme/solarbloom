@@ -3,6 +3,7 @@ import { REST } from '../data/rest';
 import { VISIT, VISITOR_LOOK, VISITORS, type Perch } from '../data/wildlife';
 import type { Visit } from '../gameplay/Wildlife';
 import { PALETTE } from './Materials';
+import type { WorldBox } from './SeatBox';
 import { group, vshape } from './Shapes';
 import { clipsFor, loops, visitorPhase, type VisitorPhase } from './VisitorClips';
 import { anyInside, type Footprint, restOn, Surface, surfacePoints, surfaceTriangles } from './SkinSurface';
@@ -72,6 +73,8 @@ interface Found {
   feet: number;
   turn: number;
   cost: number;
+  /** no room on bloombot near its perch: it sits on the ground in front of bloombot instead (dx, dz, feet from the anchor) */
+  ground?: boolean;
 }
 
 /** Where one animal on bloombot comes to rest: moved from its perch's anchor by this, worked out now and then. */
@@ -90,6 +93,8 @@ interface Rest {
    */
   bone?: pc.GraphNode;
   local: pc.Vec3;
+  /** it found no room on bloombot and sits on the ground in front of it instead (Found.ground): it stays put there */
+  ground?: boolean;
 }
 
 
@@ -133,7 +138,7 @@ const ON_GROUND: readonly Perch[] = ['beside', 'sniff', 'perchNear'];
  * front), `gapCost` for each unit its underside is off bloombot, and `turnCost` to sit turned. Its shape is its sit
  * clip looked at `poses` times across the loop, the same corner in each merged within 1/`poseGrid` (sittingShape).
  */
-const SETTLE = { step: 0.004, steps: 15, points: 240, fitEvery: 0.5, lift: 0.01, above: 0.005, gapCost: 20, behindCost: 6, turnCost: 0.1, near: 0.45, below: 0.35, budgetMs: 1.5, poses: 4, poseGrid: 250, fine: [0, 0.0125, -0.0125, 0.025, -0.025] };
+const SETTLE = { step: 0.004, steps: 15, points: 240, fitEvery: 0.5, lift: 0.01, above: 0.005, gapCost: 20, behindCost: 6, turnCost: 0.1, near: 0.45, below: 0.35, budgetMs: 1.5, poses: 4, poseGrid: 250, fine: [0, 0.0125, -0.0125, 0.025, -0.025], stalk: { r: 0.06, long: 0.03, step: 0.015 }, climbMax: 0.15, groundSpots: [[0.42, 0.05], [0.42, 0.4], [0.75, 0.15], [0.7, 0.5], [-0.75, -0.1], [0.42, -0.3]] as const };
 /**
  * How far an animal on bloombot may move from its perch's anchor to find a place to rest (world units), and how far
  * down: near first, then further, then turned a quarter either way (a tall bird has no room on the shoulder
@@ -320,8 +325,10 @@ export class Visitors {
     a.root.setPosition(p);
     a.root.setEulerAngles(0, (heading * 180) / Math.PI, 0);
     const leaving = v.leave !== undefined && now >= v.leave;
-    const phase = visitorPhase({ moving, leaving, perch: v.perch, toGo: v.arrive - now, climbFor: a.model?.climbFor ?? 0 });
-    this.animate(a, moving, h.reducedMotion, !moving && ON_BOT.includes(v.perch), phase);
+    // (one that found no room on bloombot stands on the ground like the sniffers)
+    const perch: Perch = ON_BOT.includes(v.perch) && this.rests.get(v)?.ground ? 'sniff' : v.perch;
+    const phase = visitorPhase({ moving, leaving, perch, toGo: v.arrive - now, climbFor: a.model?.climbFor ?? 0 });
+    this.animate(a, moving, h.reducedMotion, !moving && ON_BOT.includes(perch), phase);
   }
 
   /** Where a visit settles: its perch, spread out a little when several share one. */
@@ -359,21 +366,28 @@ export class Visitors {
    * The tests for one animal at one perch: whether it is blocked at a place (any of it in bloombot, any of bloombot
    * in it, any of it in the bench or the pad), how far it can come down from there, and where it rests near a spot.
    */
-  private fitter(a: Actor, v: Visit, anchor: pc.Vec3, h: VisitHost, bot: Surface) {
+  private fitter(a: Actor, v: Visit, anchor: pc.Vec3, h: VisitHost, bot: Surface, others: readonly WorldBox[] = []) {
     const facing = this.settledFacing(v.perch, h.facing);
     const shape = a.shape ?? [];
     const faces = a.faces ?? NO_FACES;
     const solids = h.solids ?? [];
     // bloombot's corners round the perch, to check none of them is in the animal
+    // (and points along the sprout's stalk on top of its head: a thin stalk has corners only at its ends, and would
+    // pass through an animal)
     const near = cornersNear(h.corners?.() ?? bot.tris, anchor, SETTLE.near, []);
+    const top = h.bones?.().find((b) => b.name === 'head_end');
+    if (top) stalkPoints(bot.tris, top.getPosition(), SETTLE.stalk, near);
     const ys: number[] = [];
     const ups: number[] = [];
     const posed: number[] = [];
     const mine: number[] = [];
-    const blocked = (x: number, y: number, z: number, hd: number) => {
+    const blockedByBot = (x: number, y: number, z: number, hd: number) => {
       const me = placeShape(shape, x, y, z, hd, posed);
       return anyInside(bot, me) || anyInside(faces, intoOwnFrame(near, x, y, z, hd, a.foot, 0, mine)) || inBoxes(me, solids);
     };
+    // (and in none of the other animals already on bloombot)
+    const inOthers = (x: number, y: number, z: number, hd: number) => overlapsBoxes(placeShape(shape, x, y, z, hd, posed), others);
+    const blocked = (x: number, y: number, z: number, hd: number) => blockedByBot(x, y, z, hd) || inOthers(x, y, z, hd);
     // how far it can come down from there before it touches anything (bloombot, the bench, the pad), and how far
     // before its underside does (its feet, its belly): straight down from each of its points to whatever is under
     // it, and from each of bloombot's corners under it up to its own underside
@@ -417,7 +431,7 @@ export class Visitors {
       const cost = Math.hypot(dx, dz) * 2 + behind * SETTLE.behindCost + Math.abs(feet - anchor.y) + gap * SETTLE.gapCost + (turn ? SETTLE.turnCost : 0);
       return { dx, dz, feet: feet - anchor.y, turn, cost };
     };
-    return { facing, blocked, drop, restAt };
+    return { facing, blocked, blockedByBot, inOthers, drop, restAt };
   }
 
   /**
@@ -425,7 +439,7 @@ export class Visitors {
    * the best), a place at a time: it is run a little each frame (SETTLE.budgetMs) while the animal comes in.
    */
   private *look(a: Actor, v: Visit, anchor: pc.Vec3, h: VisitHost, bot: Surface): Generator<void, Found> {
-    const { facing, blocked, drop, restAt } = this.fitter(a, v, anchor, h, bot);
+    const { facing, blockedByBot, inOthers, drop, restAt } = this.fitter(a, v, anchor, h, bot, this.othersOnBot(v, h.facing));
     let best: Found | undefined;
     for (const pass of NUDGE) {
       if (best) break;
@@ -448,13 +462,38 @@ export class Visitors {
           yield;
         }
     }
-    // nowhere near the anchor: up on whatever is highest under it (nothing above, so nothing through it)
+    // nowhere near the anchor (bloombot's big round head overhangs its lap and arms when it sits): up on whatever is
+    // highest over it (nothing above, so nothing through it), the top of its head: a flier may land there if no other
+    // animal is in the way; one that walks does not climb that far
     if (!best) {
       let feet = restOn(bot, anchor.x, anchor.z, facing, a.foot, anchor.y - 0.15, anchor.y + 1.5) ?? anchor.y;
-      for (let k = 0; k < 100 && blocked(anchor.x, feet, anchor.z, facing); k++) feet += 0.01;
+      for (let k = 0; k < 100 && blockedByBot(anchor.x, feet, anchor.z, facing); k++) feet += 0.01;
       const { any } = drop(anchor.x, feet, anchor.z, facing); // and down till it touches
       if (Number.isFinite(any)) feet -= Math.max(0, any - SETTLE.above);
-      best = { dx: 0, dz: 0, feet: feet - anchor.y, turn: 0, cost: 0 };
+      if ((a.flies || feet - anchor.y <= SETTLE.climbMax) && !inOthers(anchor.x, feet, anchor.z, facing)) best = { dx: 0, dz: 0, feet: feet - anchor.y, turn: 0, cost: 0 };
+    }
+    // still no room on bloombot (its hands fill its lap; the others have the top of its head): it sits on the ground
+    // at its other side from `beside` instead, clear of the animals already there
+    if (!best) {
+      // clear of the other animals, and of the bench or the pad bloombot sits on (their solid parts, not just the
+      // footprint under the seat); failing all of those, where the animals perch near bloombot, further out
+      const others = [...this.othersNear(v, h.facing), ...(h.solids ?? [])];
+      const r = a.foot.r;
+      const clear = (p: pc.Vec3) => !others.some((b) => p.x - r < b.x1 && p.x + r > b.x0 && p.z - r < b.z1 && p.z + r > b.z0);
+      let spot: pc.Vec3 | undefined;
+      for (const [side, ahead0] of SETTLE.groundSpots) {
+        const p = new pc.Vec3(anchor.x + Math.cos(h.facing) * side + Math.sin(h.facing) * ahead0, 0, anchor.z - Math.sin(h.facing) * side + Math.cos(h.facing) * ahead0);
+        keepOff(p, r, h.raised);
+        if (clear(p)) {
+          spot = p;
+          break;
+        }
+      }
+      if (!spot) {
+        spot = h.point('perchNear', new pc.Vec3());
+        keepOff(spot, r, h.raised);
+      }
+      best = { dx: spot!.x - anchor.x, dz: spot!.z - anchor.z, feet: h.groundY(spot!.x, spot!.z) - anchor.y, turn: 0, cost: 0, ground: true };
     }
     return best;
   }
@@ -464,10 +503,13 @@ export class Visitors {
     if (!r) this.rests.set(v, (r = { d: new pc.Vec3(), tick: -1, found: false, turn: 0, local: new pc.Vec3() }));
     const tick = Math.floor(this.clock / SETTLE.fitEvery);
     // between fits: riding the bone it rests on
+    if (r.ground) return r.d; // on the ground in front of bloombot: it stays there
     if (r.found && r.tick === tick) return this.ride(r, anchor);
     if (!r.found) {
-      // still looking: a little more of the look this frame (not before bloombot is in its pose)
+      // still looking: a little more of the look this frame (not before bloombot is in its pose); one animal looks at
+      // a time, so each keeps clear of where the ones before it rest
       if (!r.job && h.posing) return r.d;
+      if (!r.job && [...this.rests.values()].some((o) => o !== r && o.job)) return r.d;
       if (!r.job) {
         const bot = this.botSurface(h);
         if (!bot) return r.d;
@@ -482,6 +524,11 @@ export class Visitors {
       r.turn = step.value.turn;
       r.d.set(step.value.dx, step.value.feet, step.value.dz);
       r.tick = tick;
+      if (step.value.ground) {
+        r.ground = true;
+        r.bone = undefined;
+        return r.d;
+      }
       return this.hold(r, anchor, h);
     }
     // fitted twice a second, every animal on the same frame (so bloombot's surface is worked out once for them all)
@@ -490,7 +537,7 @@ export class Visitors {
     if (!bot) return this.ride(r, anchor);
     r.d.copy(this.ride(r, anchor)); // from where it has ridden to
     // bloombot breathes and sways under it: up until nothing of it is in anything, then down till it touches
-    const { facing, blocked, drop } = this.fitter(a, v, anchor, h, bot);
+    const { facing, blockedByBot: blocked, inOthers, drop } = this.fitter(a, v, anchor, h, bot, this.othersOnBot(v, h.facing));
     const hd = facing + r.turn;
     const x = anchor.x + r.d.x;
     const z = anchor.z + r.d.z;
@@ -504,6 +551,8 @@ export class Visitors {
     const { any } = drop(x, feet, z, hd);
     if (Number.isFinite(any)) feet -= Math.max(0, any - SETTLE.above);
     r.d.set(r.d.x, feet - anchor.y, r.d.z);
+    // swayed into another animal (each rides its own bone): look all round again, clear of it
+    if (inOthers(x, feet, z, hd)) r.found = false;
     return this.hold(r, anchor, h);
   }
 
@@ -533,6 +582,28 @@ export class Visitors {
 
 
 
+
+  /**
+   * Where the other animals already resting on bloombot are (the bounds of their own shape where they stand, world
+   * space), for one coming to keep clear of; with `all`, every other animal out now (those not on bloombot by their
+   * reach round where they stand), for one coming down off bloombot onto the ground.
+   */
+  private othersOnBot(v: Visit, facing: number, all = false): WorldBox[] {
+    const out: WorldBox[] = [];
+    const pos = new pc.Vec3();
+    for (const [w, o] of this.byVisit) {
+      if (w === v || !o.root.enabled || !o.shape) continue;
+      const r = this.rests.get(w);
+      pos.copy(o.root.getPosition());
+      if (ON_BOT.includes(w.perch) && r?.found && !r.ground) out.push(boxOf(placeShape(o.shape, pos.x, pos.y, pos.z, this.settledFacing(w.perch, facing) + r.turn, [])));
+      else if (all) out.push({ x0: pos.x - o.foot.r, x1: pos.x + o.foot.r, y0: pos.y, y1: pos.y + o.foot.h, z0: pos.z - o.foot.r, z1: pos.z + o.foot.r });
+    }
+    return out;
+  }
+
+  private othersNear(v: Visit, facing: number): WorldBox[] {
+    return this.othersOnBot(v, facing, true);
+  }
 
   /** Settled visitors face the way bloombot does, or turn to it (sniffing, perched nearby). */
   private settledFacing(p: Perch, facing: number): number {
@@ -1164,4 +1235,45 @@ function inBoxes(pts: readonly number[], boxes: readonly { x0: number; x1: numbe
     for (let i = 0; i < pts.length; i += 3)
       if (pts[i] > b.x0 && pts[i] < b.x1 && pts[i + 1] > b.y0 && pts[i + 1] < b.y1 && pts[i + 2] > b.z0 && pts[i + 2] < b.z1) return true;
   return false;
+}
+
+/**
+ * Points along the long edges standing up near `top` (bloombot's head_end: the sprout's stalk, `stalk.r` round it),
+ * every `stalk.step` (world units), so an animal resting on the top of the head keeps clear of the stalk.
+ */
+function stalkPoints(tris: readonly number[], top: pc.Vec3, stalk: { r: number; long: number; step: number }, out: number[]): number[] {
+  for (let t = 0; t + 8 < tris.length; t += 9)
+    for (let k = 0; k < 3; k++) {
+      const i = t + k * 3;
+      const j = t + ((k + 1) % 3) * 3;
+      const [ax, ay, az] = [tris[i], tris[i + 1], tris[i + 2]];
+      const [bx, by, bz] = [tris[j], tris[j + 1], tris[j + 2]];
+      if (Math.hypot(ax - top.x, az - top.z) > stalk.r || Math.hypot(bx - top.x, bz - top.z) > stalk.r) continue;
+      const len = Math.hypot(bx - ax, by - ay, bz - az);
+      if (len <= stalk.long || Math.abs(by - ay) < len * 0.7) continue; // (long, and standing up)
+      const n = Math.floor(len / stalk.step);
+      for (let q = 1; q < n; q++) out.push(ax + ((bx - ax) * q) / n, ay + ((by - ay) * q) / n, az + ((bz - az) * q) / n);
+    }
+  return out;
+}
+
+/** The bounds of these points (x, y, z triples). */
+function boxOf(pts: readonly number[]): WorldBox {
+  const b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity, z0: Infinity, z1: -Infinity };
+  for (let i = 0; i < pts.length; i += 3) {
+    b.x0 = Math.min(b.x0, pts[i]);
+    b.x1 = Math.max(b.x1, pts[i]);
+    b.y0 = Math.min(b.y0, pts[i + 1]);
+    b.y1 = Math.max(b.y1, pts[i + 1]);
+    b.z0 = Math.min(b.z0, pts[i + 2]);
+    b.z1 = Math.max(b.z1, pts[i + 2]);
+  }
+  return b;
+}
+
+/** Whether the bounds of these points overlap any of the boxes. */
+function overlapsBoxes(pts: readonly number[], boxes: readonly WorldBox[]): boolean {
+  if (!boxes.length || !pts.length) return false;
+  const m = boxOf(pts);
+  return boxes.some((b) => m.x0 < b.x1 && m.x1 > b.x0 && m.y0 < b.y1 && m.y1 > b.y0 && m.z0 < b.z1 && m.z1 > b.z0);
 }
