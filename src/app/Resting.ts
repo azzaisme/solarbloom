@@ -35,6 +35,8 @@ export type RestCandidate = Candidate & { run: () => void; at?: TileData };
  */
 export class Resting {
   private before?: { zoom: number; yaw: number; maxZoom: number };
+  /** #859: sitting indoors: the calm view keeps still (the room's walls would hide Bloombot as it turned or eased out) */
+  private still = false;
 
   constructor(private h: RestHost) {
     h.bot.onSeatMove = () => this.stand();
@@ -153,8 +155,12 @@ export class Resting {
   private calm() {
     const h = this.h;
     this.before = { zoom: h.camera.zoomTarget, yaw: h.camera.heading, maxZoom: h.camera.maxZoom };
-    h.camera.maxZoom = Math.max(h.camera.maxZoom, REST.visitZoom);
-    h.camera.zoomTo(Math.max(h.camera.minZoom, this.before.zoom * REST.calmZoom));
+    // #859: indoors (by the Home's fire) the view stays in the room: no easing out over the roof, no slow turn
+    this.still = h.camera.isIndoors;
+    if (!this.still) {
+      h.camera.maxZoom = Math.max(h.camera.maxZoom, REST.visitZoom);
+      h.camera.zoomTo(Math.max(h.camera.minZoom, this.before.zoom * REST.calmZoom));
+    }
     document.body.classList.add('resting');
     h.sfx.swell(REST.musicSwell);
   }
@@ -205,7 +211,7 @@ export class Resting {
 
   /** Each frame: the calm view turns slowly while sitting. */
   update(dt: number) {
-    if (!this.active || !this.before) return;
+    if (!this.active || !this.before || this.still) return;
     this.h.camera.orbit(dt * REST.orbitDegPerSecond);
   }
 

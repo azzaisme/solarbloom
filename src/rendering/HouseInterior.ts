@@ -52,7 +52,7 @@ export class HouseInterior {
     this.lamp.addComponent('light', { type: 'omni', color: color(PALETTE.house.lamp), intensity: 1.4, range: 9, castShadows: false });
     this.root.addChild(this.lamp);
     this.fire = new pc.Entity('house-fire');
-    this.fire.addComponent('light', { type: 'omni', color: color(PALETTE.house.ember), intensity: FIRE_LIGHT.day, range: FIRE_LIGHT.range, castShadows: false });
+    this.fire.addComponent('light', { type: 'omni', color: color(PALETTE.house.fire), intensity: FIRE_LIGHT.day, range: FIRE_LIGHT.range, castShadows: false });
     this.root.addChild(this.fire);
     this.nookLamp = new pc.Entity('house-nook-lamp');
     this.nookLamp.addComponent('light', { type: 'omni', color: color(PALETTE.house.lamp), intensity: 0.9, range: 3.2, castShadows: false });
