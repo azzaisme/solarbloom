@@ -154,6 +154,7 @@ const LEAF_NORMAL_PS = /* glsl */ `
 void getNormal() {
 	dNormalW = dVertexNormalW;
 	if (sbLeafK > 0.001) dNormalW = normalize(dNormalW + sbLeafBend * uLeafParams.y * sbLeafK);
+	dNormalW = normalize(dNormalW + sbSnowBend); // #830: lumps in lying snow
 }
 `;
 

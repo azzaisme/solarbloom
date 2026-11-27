@@ -673,6 +673,8 @@ export const PALETTE = {
     withered: '#8c6a45',
     blossom: ['#f6b9cf', '#fbeef2'],
     frost: '#e9f1f6',
+    /** #830: the cool blue in the hollows between lumps of lying snow */
+    snowShade: '#b9cce2',
     snow: '#f4f8fb',
   },
   /**

@@ -105,5 +105,14 @@ export const SNOW_BUILD = {
   springMeltDays: 0.8,
 };
 
+/**
+ * #830: the snow layer (rendering/SnowSheet): lying snow as real height over the open ground. `maxHeight`: how high
+ * the deepest drifts stand (tiles) when the garden is all white; it rises from nothing as the snow builds up.
+ * `bank`: how far in from the snow's edge (where it meets water, a building, a machine or a terrace step) it takes to
+ * reach full depth. Sheets are kept for the chunks within `reach` of the camera (`reachLow` on Low), `sub` × `sub`
+ * vertices to a cell (`subLow` on Low), and only while at least `minDepth` of snow lies.
+ */
+export const SNOW_SHEET = { maxHeight: 0.22, bank: 0.45, reach: 1, reachLow: 1, sub: 4, subLow: 2, minDepth: 0.04 };
+
 /** The look's timing: the last `blend` of each season eases into the next; a winter dawn adds `dawnFrost`. */
-export const SEASON_LOOK_TIMING = { blend: 0.34, dawnFrost: 0.3 };
+export const SEASON_LOOK_TIMING = { blend: 0.16, dawnFrost: 0.3 };
