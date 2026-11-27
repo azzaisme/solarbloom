@@ -258,7 +258,14 @@ const measure = (page, seat) =>
           .filter(([, k]) => k > 0);
         let rests = true;
         let on = '';
-        if (ON_BOT.includes(v.perch)) {
+        const rst0 = g.visitors.rests?.get(v);
+        // an animal with no room on bloombot sits on the ground beside it instead (Visitors: Found.ground); one that
+        // found room stays near its perch (never climbing up onto whatever is highest, as the frog off the lap once did)
+        const ground = !!rst0?.ground;
+        // (a flier may land up on top of its head when its arm is under the head; one that walks may not climb there)
+        const FLIERS = ['butterfly', 'swallowtail', 'bumblebee', 'songbird', 'magpie', 'kingfisher', 'owl'];
+        const strayed = ON_BOT.includes(v.perch) && !FLIERS.includes(kind) && !ground && rst0 && (rst0.d.y > 0.2 || rst0.d.y < -0.35 || Math.hypot(rst0.d.x, rst0.d.z) > 0.3);
+        if (ON_BOT.includes(v.perch) && !ground) {
           // touching: the nearest of its lowest points (the bottom fifth of it) to bloombot's surface
           const band = me.filter((p) => p[1] <= box.min[1] + he[1] * 0.4);
           let touch = Infinity;
@@ -273,19 +280,30 @@ const measure = (page, seat) =>
         } else {
           const over = (b) => c[0] > b.min[0] && c[0] < b.max[0] && c[2] > b.min[2] && c[2] < b.max[2];
           const floor = surface && over(surface.box) ? surface.top : g.groundY(c[0], c[2]);
-          on = `${surface && over(surface.box) ? surface.name : 'ground'} (feet ${(box.min[1] - floor).toFixed(3)} above it)`;
+          on = `${surface && over(surface.box) ? surface.name : 'ground'}${ground ? ' (no room on bloombot)' : ''} (feet ${(box.min[1] - floor).toFixed(3)} above it)`;
           rests = Math.abs(box.min[1] - floor) <= 0.03;
         }
         const rst = g.visitors.rests?.get(v);
         const act = g.visitors.byVisit?.get(v);
         const why = rst ? ` [rest ${[rst.d.x, rst.d.y, rst.d.z].map((n) => n.toFixed(3)).join(',')}, turned ${rst.turn.toFixed(2)}, ${rst.found ? 'found' : 'still looking'}; its shape ${(act?.shape?.length ?? 0) / 3} points, ${(act?.faces?.tris?.length ?? 0) / 9} faces, foot ${JSON.stringify(act?.foot, (k, n) => (typeof n === 'number' ? +n.toFixed(3) : n))}; anchor ${(() => { const o = { x: 0, y: 0, z: 0, copy(p) { Object.assign(this, { x: p.x, y: p.y, z: p.z }); return this; }, add(p) { this.x += p.x; this.y += p.y; this.z += p.z; return this; } }; g.bot.visuals.visitPoint(v.perch, o); const me0 = P.box(a); return `${[o.x, o.y, o.z].map((n) => n.toFixed(3)).join(',')}, its root ${[a.getPosition().x, a.getPosition().y, a.getPosition().z].map((n) => n.toFixed(3)).join(',')}, its bounds y ${me0.min[1].toFixed(3)}..${me0.max[1].toFixed(3)}`; })()}]` : '';
-        rows.push({ kind, perch: v.perch, into, intoText, why, inSolid, rests, on, ok: into === 0 && !inSolid.length && rests });
+        if (strayed) on += `, but strayed from its perch (moved ${rst0.d.x.toFixed(2)}, ${rst0.d.y.toFixed(2)}, ${rst0.d.z.toFixed(2)})`;
+        rows.push({ kind, perch: v.perch, into, intoText, why, inSolid, rests, on, ground, box, ok: into === 0 && !inSolid.length && rests && !strayed });
       }
+      // and none in another: the bounds of each one on bloombot (or come down off it) against every other animal's
+      const clash = [];
+      const lapped = (p, q) => [0, 1, 2].every((k) => p.min[k] < q.max[k] - 0.004 && q.min[k] < p.max[k] - 0.004);
+      for (let i = 0; i < rows.length; i++)
+        for (let j = i + 1; j < rows.length; j++) {
+          const [p, q] = [rows[i], rows[j]];
+          if (!(ON_BOT.includes(p.perch) || ON_BOT.includes(q.perch))) continue;
+          if (lapped(p.box, q.box)) clash.push(`${p.kind}@${p.perch} and ${q.kind}@${q.perch} by ${[0, 1, 2].map((k) => (Math.min(p.box.max[k], q.box.max[k]) - Math.max(p.box.min[k], q.box.min[k])).toFixed(3)).join(' × ')}`);
+        }
+      for (const r of rows) delete r.box;
       // the inside test reads faces the right way round: bloombot's middle is inside it, a point over its head is not
       const bb = P.box(g.bot.visuals.model);
       const mid = [0, 1, 2].map((k) => (bb.min[k] + bb.max[k]) / 2);
       const sane = !!P.insideMesh(skin, [mid[0], bb.min[1] + (bb.max[1] - bb.min[1]) * 0.35, mid[2]]) && !P.insideMesh(skin, [mid[0], bb.max[1] + 0.05, mid[2]]);
-      return { sane, botIn, botClear, under: { box: sb, top: surface.top }, rows, plan: s.wildlife.visits.map((v) => `${v.id}@${v.perch}`) };
+      return { sane, botIn, botClear, clash, under: { box: sb, top: surface.top }, rows, plan: s.wildlife.visits.map((v) => `${v.id}@${v.perch}`) };
     },
     { seat, parts: benchParts },
   );
@@ -482,6 +500,7 @@ try {
       const hi = Math.max(...lows);
       const onIt = lows.length >= 25 && lo > -0.008 && lo < 0.012;
       check(onIt, `${name} at the ${where}: bloombot sits on the ${where === 'bench' ? 'seat' : 'pad'} through a whole breath (its underside ${lo.toFixed(3)}..${hi.toFixed(3)} from the top over ${lows.length} looks)${onIt ? '' : ` [lowest look: ${JSON.stringify(worst)}]`}`);
+      check(!m.clash.length, `${name} at the ${where}: no animal in another${m.clash.length ? ` (${m.clash.join('; ')})` : ''}`);
       for (const r of m.rows)
         check(r.ok, `${name} at the ${where}: ${r.kind}@${r.perch} sits on ${r.on}${r.into ? `, ${r.intoText}` : ''}${r.inSolid.length ? `, inside the ${r.inSolid.map(([k, c, b]) => `${k} (${c}; ${b})`).join(', ')}` : ''}${r.ok ? '' : r.why}`);
       if (tier !== 'bare') {
@@ -510,6 +529,46 @@ try {
         for (const [k, ms] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`  ${ms.toFixed(0).padStart(6)}  ${k}`);
       }
       check(await stand(how), `${name}: ${how === 'pad' ? 'pad B' : 'E'} stands bloombot up and the animals leave`);
+    }
+  }
+  // SWEEP=1: every animal on every spot it takes on bloombot (the play-through above only meets the ones the seeded
+  // visits happen to pick), on the bench and at the charger, a round at a time (one animal per spot), so a change of
+  // size is checked against them all
+  if (process.env.SWEEP) {
+    // (each kind's spots on bloombot, from VISITORS in src/data/wildlife.ts)
+    const PAIRS = [
+      ['butterfly', 'landOn'], ['bumblebee', 'landOn'], ['swallowtail', 'landOn'], ['swallowtail', 'nest'],
+      ['songbird', 'nest'], ['songbird', 'head'], ['songbird', 'shoulderL'], ['songbird', 'shoulderR'],
+      ['squirrel', 'shoulderR'], ['magpie', 'shoulderL'], ['frog', 'lap'], ['owl', 'head'], ['kingfisher', 'shoulderR'],
+    ];
+    const rounds = [];
+    for (const [id, perch] of PAIRS) {
+      let r = rounds.find((x) => !x.some(([i, p]) => i === id || p === perch));
+      if (!r) rounds.push((r = []));
+      r.push([id, perch]);
+    }
+    for (const where of ['bench', 'charger']) {
+      const sat = where === 'bench' ? await sitBench('key') : await sitCharger('key');
+      check(sat, `sweep: ${where === 'bench' ? 'sits on the bench' : 'meditates at the charger'}`);
+      if (!sat) continue;
+      await settle(page);
+      const groundY = await page.evaluate((c) => window.solarbloom.groundY(c.x + 0.5, c.z + 0.5), charger);
+      for (const [k, round] of rounds.entries()) {
+        await page.evaluate((round) => {
+          const s = window.solarbloom.sim;
+          const now = s.time;
+          s.wildlife.visits = round.map(([id, perch], i) => ({ id, perch, slot: 0, from: i, start: now - 8, arrive: now - 2, logged: true }));
+        }, round);
+        await page.waitForTimeout(6000); // (they look for room one at a time)
+        const m = await measure(page, { kind: where, groundY });
+        const seen = new Set(m.rows.map((r) => `${r.kind}@${r.perch}`));
+        for (const [id, perch] of round) check(seen.has(`${id}@${perch}`), `sweep at the ${where}: ${id}@${perch} is out and measured`);
+        check(!m.clash.length, `sweep at the ${where}: no animal in another${m.clash.length ? ` (${m.clash.join('; ')})` : ''}`);
+        for (const r of m.rows) check(r.ok, `sweep at the ${where}: ${r.kind}@${r.perch} sits on ${r.on}${r.into ? `, ${r.intoText}` : ''}${r.inSolid.length ? `, inside the ${r.inSolid.map(([k2, c, b]) => `${k2} (${c}; ${b})`).join(', ')}` : ''}${r.ok ? '' : r.why}`);
+        await frame(page, where === 'bench' ? 25 : 30, 7);
+        await close(page, `50-sweep-${where}-${k + 1}`, `sweep at the ${where}: ${round.map((p) => p.join('@')).join(', ')}`);
+      }
+      check(await stand('key'), `sweep: E stands bloombot up at the ${where}`);
     }
   }
   const cost = await page.evaluate(() => {
