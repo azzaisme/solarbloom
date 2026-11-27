@@ -9,7 +9,7 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 /** One ingredient: its icon, how many the recipe takes, and how many Bloombot has (tinted short or enough). */
 function chip(n: CookNeed): string {
   const ok = n.have >= n.need;
-  return `<li class="pn-chip ${ok ? 'ok' : 'need'}" aria-label="${esc(`${n.name}: needs ${n.need}, you have ${n.have}`)}">${n.icon} ${n.need} ${esc(n.name)}<small>${n.have}/${n.need}</small></li>`;
+  return `<li class="pn-chip ${ok ? 'ok' : 'need'}" aria-label="${esc(`${n.name}: needs ${n.need}, you have ${n.have}`)}">${n.icon} ${esc(n.name)} ${n.have}/${n.need}</li>`;
 }
 
 /** Why the Cook button is greyed, in a few words under it. */
@@ -33,10 +33,10 @@ export function cookingHtml(sim: Sim): string {
     const can = !c.problem(id);
     const carried = sim.inventory.count(id);
     return (
-      `<div class="oc-tile oc-cook"><h3 class="pn-label">${materialIcon(id, 24)}${esc(r.name)}<small>${r.charge} Charge${carried ? ` · ${carried} in your backpack` : ''}</small></h3>` +
-      `<p class="pn-note">${esc(r.blurb)}</p>` +
+      `<div class="oc-tile oc-cook"><h3 class="oc-cook-name">${materialIcon(id, 28)}${esc(r.name)}</h3>` +
+      `<p class="pn-note">${esc(r.blurb)} ${r.charge} Charge.${carried ? ` You have ${carried} in your backpack.` : ''}</p>` +
       `<ul class="pn-chips oc-need">${c.needs(id).map(chip).join('')}</ul>` +
-      `<div class="oc-row"><button class="pn-btn primary oc-mat-btn" data-act="cook" data-arg="${id}" ${can ? '' : 'disabled'}>${materialIcon(id, 24)}Cook ${esc(r.name)}</button></div>` +
+      `<div class="oc-row"><button class="pn-btn${can ? ' primary' : ''} oc-mat-btn" data-act="cook" data-arg="${id}" ${can ? '' : 'disabled'}>${materialIcon(id, 24)}Cook ${esc(r.name)}</button></div>` +
       (can ? '' : `<p class="pn-note">${esc(why(sim, id))}</p>`) +
       `</div>`
     );

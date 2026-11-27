@@ -12,6 +12,7 @@ import { HOUSE_GROWTH, KEEPERS } from '../src/data/oldcity';
 import { MATERIALS } from '../src/data/salvage';
 import { rawCharge } from '../src/gameplay/Cooking';
 import { Sim } from '../src/gameplay/Sim';
+import { itemCells } from '../src/ui/BackpackModel';
 import { cookingHtml } from '../src/ui/CookingPanel';
 import { EMOJI_ICONS, EMOJI_RE } from '../src/ui/Icons';
 import { MATERIAL_ICON_IDS } from '../src/ui/MaterialIcons';
@@ -192,6 +193,15 @@ describe('#874: cooking at the stove', () => {
     expect(sim.keepers.giftFor('pylon')).toBe('copper');
     // the hint names what it loves, not the meals
     expect(sim.keepers.hint('pylon')).not.toMatch(/soup|pie|salad|bake/i);
+  });
+
+  it('in the backpack a meal says where it comes from and what it is for', () => {
+    const sim = scene();
+    sim.inventory.add('soup', 1);
+    const cell = itemCells(sim).find((c) => c.id === 'soup')!;
+    expect(cell.from).toBe('Cooked at the stove in your kitchen');
+    expect(cell.next).toMatch(/Eat it for Charge, or give it to a Keeper/);
+    expect(bannedIn(cell.next)).toEqual([]);
   });
 
   it('meals keep through a save', () => {

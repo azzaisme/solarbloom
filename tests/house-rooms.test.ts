@@ -35,7 +35,7 @@ describe('#860: the bigger houses have rooms', () => {
     expect(houseWalls(1)).toEqual([]);
     expect(houseWalls(2)).toEqual([]);
     // the House's and the Home's gives name the new room
-    expect(HOUSE[2].gives).toContain('A kitchen');
+    expect(HOUSE[2].gives).toContain('A kitchen with a stove for cooking'); // #858
     expect(HOUSE[3].gives).toContain('A bedroom');
   });
 
@@ -175,19 +175,24 @@ describe('#860: decorating each room', () => {
   });
 
   it('a big piece never stands across a wall', () => {
-    const { cozy, id } = scene(3);
+    const { sim, cozy, id } = scene(3);
     // the dining table is two squares long along x: from (3, 1) it would cross the kitchen's east wall
     expect(DECOR_OPTION.diningtable.size).toEqual([2, 1]);
     expect(decorCells('diningtable', 0, 3, 1).map((c) => c.x)).toEqual([3, 4]);
     expect(cozy.canDecorate('diningtable', id, 3, 1, 0)).toBe('A wall is in the way');
-    expect(cozy.canDecorate('diningtable', id, 1, 1, 0)).toBeUndefined();
+    // #858: where it does go down (somewhere the kitchen's furniture leaves room), it stands in one room
+    const fits: [number, number][] = [];
+    for (let x = 0; x < 10; x++) for (let z = 0; z < 10; z++) if (cozy.canDecorate('diningtable', id, x, z, 0) === undefined) fits.push([x, z]);
+    expect(fits.length).toBeGreaterThan(0);
+    for (const [x, z] of fits) expect(sim.house.roomAt(x, z)?.id, `${x},${z}`).toBe(sim.house.roomAt(x + 1, z)?.id);
   });
 
   it('a solid piece is refused where it would block the way into a room or to a piece of furniture; a rug is not', () => {
     const { sim, cozy, id } = scene(3);
     // the kitchen's doorway: a pot on either side of it would shut the kitchen off
-    expect(cozy.canDecorate('pot', id, 2, 4)).toBe('That would block the way into the kitchen');
-    expect(cozy.canDecorate('pot', id, 2, 3)).toBe('That would block the way into the kitchen');
+    // (#858: the stove inside it is shut off too, and may be the one named)
+    expect(cozy.canDecorate('pot', id, 2, 4)).toMatch(/^That would block the way (into the kitchen|to the stove)$/);
+    expect(cozy.canDecorate('pot', id, 2, 3)).toMatch(/^That would block the way (into the kitchen|to the stove)$/);
     expect(cozy.canDecorate('roundrug', id, 2, 4)).toBeUndefined(); // Bloombot walks over a rug
     // the desk at (0, 6) on the west wall: block (0, 5) and (0, 7), then (1, 6) would close it in
     const desk = sim.house.furniture().find((f) => f.id === 'desk')!;

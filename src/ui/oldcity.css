@@ -83,3 +83,7 @@ body.contrast .oc-tile, body.contrast .oc-need, body.contrast .oc-store tbody th
 body.resting #hud > :not(#prompt):not(#toasts):not(#cine):not(#res):not(#tally) { opacity: 0 !important; pointer-events: none !important; }
 /* #784: sitting, the Charge meter stays (and the "Charging up" chip), so the player sees it fill; the rest goes */
 body.resting #res > :not(#chargeRow) { opacity: 0 !important; pointer-events: none !important; }
+
+/* #874: the stove: each recipe named beside its meal's icon */
+.oc-cook-name { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font: 800 18px/1.25 var(--font-ui); color: var(--ink); }
+.oc-cook .pn-chips { margin: 8px 0; }

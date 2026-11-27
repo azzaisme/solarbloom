@@ -312,7 +312,7 @@ function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes:
     tbox(b, 'wood', H.desk, [x0 + 0.45, y + 0.83, bz + 0.05], [0.42, 0.03, 0.3]); // the chopping board
     for (let i = 0; i < 3; i++) b.add('cylinder', [H.glass, H.copper, H.paper][i], [x0 + f.w - 0.25 - i * 0.16, y + 0.9, z0 + 0.15], [0.11, 0.18, 0.11]);
     b.add('cylinder', H.plaster, [cx + 0.15, y + 0.86, bz + 0.08], [0.32, 0.08, 0.32]); // the bowl
-    for (const [k, c] of [[-0.06, H.brick], [0.06, PALETTE.leaf.mid], [0, '#e8a13a']] as [number, string][]) b.add('sphere', c, [cx + 0.15 + k, y + 0.92, bz + 0.08 + (k ? 0 : 0.06)], 0.06);
+    for (const [k, c] of [[-0.06, H.brick], [0.06, PALETTE.leaf.mid], [0, H.veg]] as [number, string][]) b.add('sphere', c, [cx + 0.15 + k, y + 0.92, bz + 0.08 + (k ? 0 : 0.06)], 0.06);
     return;
   }
   if (f.id === 'table') {
