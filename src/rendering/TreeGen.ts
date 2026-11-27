@@ -1043,7 +1043,7 @@ const smooth = (a: number, b: number, k: number) => {
 /**
  * #785: a fruit tree in the Phase 7 leafy style (P7-E29's fruit form, grown up): a short, flared trunk that opens
  * into four scaffold limbs (an orchard tree's open centre), forking twigs, and a full, round crown of leaf sprays
- * over a soft leafy heart. Its fruit sits on the twigs on short stalks, round the outside of the crown where it can
+ * filling it in. Its fruit sits on the twigs on short stalks, round the outside of the crown where it can
  * be seen: small and green when it sets, swelling and colouring up until ripe (each tree its own ripe colour, far
  * from the leaves). Before that the twig ends flower; just after picking the branches are bare. An overgrown tree
  * grows long upright shoots and a shaggier, wider crown; a pruned one is tidy. The canopy never changes with the
@@ -1075,9 +1075,13 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
     scaffold.push({ from, dir });
     limb(B, R, from, dir, 0.4 * S * (0.9 + R() * 0.2), 0.078 * S * TRUNK_RADIUS_SCALE * 0.62, 0, 2, 0.1, o, tips, i);
   }
-  // a soft leafy heart so the crown reads full, not see-through between the sprays
-  puff(B, { c: [crown.heart[0], crown.heart[1] - 0.02 * S, crown.heart[2]], r: [0.36 * S, 0.27 * S, 0.36 * S], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.45, seed: variant + 3, detail: 2, clusters: 7, crown: crown.heart, crownR: crown.r });
+  // leaves only: a spray at every twig end, and another part way in along it, so the crown reads full without a
+  // solid clump in the middle
   for (const t of tips) spray(B, R, t, Math.round(n * 1.15), 0.2 * S, 0.11 * S * k, crown, 0.7, 0.62, 0.2);
+  for (const t of tips) {
+    const inner: V = add(crown.heart, mul(sub(t.p, crown.heart), 0.55));
+    spray(B, R, { p: inner, dir: norm(sub(t.p, crown.heart)), order: t.order, branch: t.branch }, Math.round(n * 0.8), 0.22 * S, 0.11 * S * k, crown, 0.6, 0.62, 0.15);
+  }
   // the brass irrigation collar every grown tree wears, with its little status light
   const tr = 0.078 * S * TRUNK_RADIUS_SCALE;
   collar(B, 0.0, tr * 0.9, tr * 1.9, 0.045, BRASS);
@@ -1094,7 +1098,7 @@ export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
       limb(B, RO, from, norm([(RO() - 0.5) * 0.3, 1, (RO() - 0.5) * 0.3]), (0.42 + RO() * 0.16) * S, 0.012 * S, 0, 0, 0.3, { ...o, upturn: 0.6, sides: 4 }, shoots, i);
     }
     for (const t of shoots) spray(B, RO, t, Math.round(n * 0.7), 0.16 * S, 0.1 * S * k, wild, 0.8, 0.55, 0.05);
-    for (let i = 0; i < tips.length; i += 2) spray(B, RO, tips[i], Math.round(n * 0.5), 0.3 * S, 0.12 * S * k, wild, 0.75, 0.6, 0.35);
+    for (const t of tips) spray(B, RO, t, Math.round(n * 0.5), 0.3 * S, 0.12 * S * k, wild, 0.75, 0.6, 0.35);
   }
 
   // flowers, then fruit, on the twig ends round the outside of the crown (their own random stream)

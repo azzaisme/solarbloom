@@ -43,6 +43,7 @@
     "test:mouse": "vite build && node tests/e2e/mouse-hold.e2e.mjs",
     "test:old-drone": "vite build && node tests/e2e/old-drone.e2e.mjs",
     "test:fruit-trees": "vite build && node tests/e2e/fruit-trees.e2e.mjs",
+    "shots:fruit-tree-look": "vite build && node tests/e2e/fruit-tree-look.mjs",
     "test:charging": "vite build && node tests/e2e/charging.e2e.mjs",
     "test:crafting-bench": "vite build && node tests/e2e/crafting-bench.e2e.mjs",
     "test:region-gates": "vite build && node tests/e2e/region-gates.e2e.mjs",
