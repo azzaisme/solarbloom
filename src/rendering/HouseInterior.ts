@@ -7,7 +7,7 @@ import { MeshBuilder } from './ChunkRenderer';
 import { drawDecor } from './DecorArt';
 import { decorSize } from '../data/cozy';
 import { FoliageBuilder, foliageMaterial } from './Foliage';
-import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawRoom, INNER_WALL, innerWallPieces, wallSinks, type HouseSink, type InnerWallPiece } from './HouseArt';
+import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawRoom, FIREPLACE, INNER_WALL, innerWallPieces, NOOK_LAMP, wallSinks, type HouseSink, type InnerWallPiece } from './HouseArt';
 import { HouseTexBuilder, houseTexMaterial } from './HouseTex';
 import { color, PALETTE } from './Materials';
 import { MODELS, ModelBatch } from './Models';
@@ -27,6 +27,10 @@ export class HouseInterior {
   private lamp: pc.Entity;
   /** #860: a light of its own in each room beyond the main one (the kitchen, the bedroom), so its walls aren't dark */
   private roomLamps: pc.Entity[] = [];
+  /** #859: the Home's fire, a warm flickering light in its corner (brighter as the day goes), and the reading nook's lamp */
+  private fire: pc.Entity;
+  private nookLamp: pc.Entity;
+  private flicker = 0;
   private key = '';
   /** #860: the inner walls' stretches, each its own entity so it can sink for the camera */
   private walls: { piece: InnerWallPiece; body: pc.Entity; cap?: pc.Entity; h: number }[] = [];
@@ -47,6 +51,12 @@ export class HouseInterior {
     this.lamp = new pc.Entity('house-lamp');
     this.lamp.addComponent('light', { type: 'omni', color: color(PALETTE.house.lamp), intensity: 1.4, range: 9, castShadows: false });
     this.root.addChild(this.lamp);
+    this.fire = new pc.Entity('house-fire');
+    this.fire.addComponent('light', { type: 'omni', color: color(PALETTE.house.ember), intensity: FIRE_LIGHT.day, range: FIRE_LIGHT.range, castShadows: false });
+    this.root.addChild(this.fire);
+    this.nookLamp = new pc.Entity('house-nook-lamp');
+    this.nookLamp.addComponent('light', { type: 'omni', color: color(PALETTE.house.lamp), intensity: 0.9, range: 3.2, castShadows: false });
+    this.root.addChild(this.nookLamp);
   }
 
   get visible(): boolean {
@@ -68,6 +78,32 @@ export class HouseInterior {
     if (key !== this.key) this.rebuild(decor, key);
     this.root.enabled = true;
     this.sinkWalls(view);
+    this.burn();
+  }
+
+  /**
+   * #859: the fire flickers (a few slow waves, never a strobe), and lights its corner more as the daylight goes: by
+   * night it is the room's warmest light.
+   */
+  private burn() {
+    if (!this.fire.enabled) return;
+    const t = performance.now() / 1000;
+    this.flicker = 0.5 * Math.sin(t * 7.3) + 0.3 * Math.sin(t * 12.9 + 1.7) + 0.2 * Math.sin(t * 3.1 + 0.4);
+    this.fire.light!.intensity = this.fireIntensity() * (1 + FIRE_LIGHT.flicker * this.flicker);
+  }
+
+  /** #859: the fire's light now, before its flicker: from FIRE_LIGHT.day by day to FIRE_LIGHT.night in the dark. */
+  fireIntensity(): number {
+    const dark = 1 - (this.sim.clock?.daylight() ?? 1);
+    return FIRE_LIGHT.day + (FIRE_LIGHT.night - FIRE_LIGHT.day) * Math.max(0, Math.min(1, dark));
+  }
+
+  /** #859: the fire's light (tests and the review): on, where it is (cells), how far it reaches, how bright now. */
+  fireLight(): { on: boolean; x: number; z: number; range: number; intensity: number } | undefined {
+    if (!this.fire.enabled) return undefined;
+    const [ox, , oz] = HOUSE_INSIDE.origin;
+    const p = this.fire.getPosition();
+    return { on: this.root.enabled, x: p.x - ox, z: p.z - oz, range: this.fire.light!.range, intensity: this.fire.light!.intensity };
   }
 
   /** #860: each inner wall eases toward its height: low while it stands between the camera and Bloombot, else tall. */
@@ -214,9 +250,19 @@ export class HouseInterior {
       e.setPosition(ox + r.x + r.w / 2, y + HOUSE_INSIDE.wall - 0.4, oz + r.z + r.d / 2);
       e.light!.range = Math.max(r.w, r.d) * 1.3;
     });
+    // #859: the fire's light just in front of its flames, and the nook lamp's under its shade (both only at the Home)
+    const fp = h.furniture().find((f) => f.id === 'fireplace');
+    this.fire.enabled = !!fp;
+    if (fp) this.fire.setPosition(ox + fp.x + FIREPLACE.glow[0] + 0.25, y + FIREPLACE.glow[1], oz + fp.z + fp.d / 2);
+    const nook = h.furniture().find((f) => f.id === 'nook');
+    this.nookLamp.enabled = !!nook;
+    if (nook) this.nookLamp.setPosition(ox + nook.x + NOOK_LAMP[0], y + NOOK_LAMP[1] - 0.1, oz + nook.z + NOOK_LAMP[2]);
     this.lastT = 0; // the next update puts each wall straight at its height (no wall pops up and sinks again)
   }
 }
+
+/** #859: the fire's light: by day and by night (before the flicker, a share either way), and how far it reaches (m). */
+export const FIRE_LIGHT = { day: 1.2, night: 2.6, flicker: 0.12, range: 5 };
 
 /** #861: a sink drawing plain pieces into the vertex-coloured mesh and painted ones (wood, weave, coir) apart. */
 function sinkOf(b: MeshBuilder, t: HouseTexBuilder): HouseSink {

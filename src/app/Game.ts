@@ -1389,9 +1389,12 @@ export class Game {
     else if (piece.id === 'radio') add({ kind: 'door', id: 'house:radio', verb: piece.verb!, name: piece.name, run: () => this.listenToRadio() });
     else if (piece.id === 'chest') add({ kind: 'storage', id: 'house:chest', verb: piece.verb!, name: piece.name, run: () => this.oc?.openStorage('The chest in the house') });
     else if (piece.id === 'shelf') add({ kind: 'door', id: 'house:shelf', verb: piece.verb!, name: piece.name, run: () => this.lookAtShelf() });
-    else if (piece.id === 'desk') add({ kind: 'door', id: 'house:desk', verb: piece.verb!, name: 'your journal', run: () => this.readAtDesk() });
+    else if (piece.id === 'desk') add({ kind: 'door', id: 'house:desk', verb: piece.verb!, name: 'your journal', run: () => this.readJournal() });
     // #858 / #874: the stove opens cooking; the kitchen counter and the table are there to look at
     else if (piece.id === 'stove') add({ kind: 'door', id: 'house:stove', verb: piece.verb!, name: piece.name, run: () => this.oc?.stove() });
+    // #859: the Home's fire to sit by (Charge comes back quicker), and the reading nook, where the found pages are read again
+    else if (piece.id === 'fireplace') add({ kind: 'bench', id: 'house:fire', verb: piece.verb!, name: piece.name, run: () => this.resting?.sitByFire(piece) });
+    else if (piece.id === 'nook') add({ kind: 'door', id: 'house:nook', verb: piece.verb!, name: piece.name, run: () => this.readJournal() });
     return out;
   }
 
@@ -1417,7 +1420,7 @@ export class Game {
     this.hud.toast(ks.length ? `🏺 The keepsake shelf<small>${ks.join(', ')}. Each one from a friend.</small>` : '🏺 The keepsake shelf<small>Empty for now. When a Keeper gives you a keepsake, it will stand here.</small>', '', 5);
   }
 
-  private readAtDesk() {
+  private readJournal() {
     this.hud.backpack.open('journal');
     this.syncPanelPause();
   }

@@ -138,6 +138,7 @@ export class WildlifeSystem {
     const r = this.sim.rest.sitting;
     if (!r) return undefined;
     if (r.kind === 'bench') return { x: r.bench.x + 0.5, z: r.bench.z + 0.5 };
+    if (r.kind === 'fire') return undefined; // #859: indoors, by the Home's fire: no animal comes in
     const m = this.sim.machine(r.machineId);
     return m ? { x: m.x + m.size / 2, z: m.z + m.size / 2 } : undefined;
   }

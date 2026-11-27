@@ -240,6 +240,17 @@ export function drawGardenFence(b: HouseSink, g: GardenSpot, y: number) {
   (['n', 's', 'e', 'w'] as const).forEach(side);
 }
 
+/**
+ * #859: the Home's fireplace, in metres from its corner on the west wall: the chimney breast's `depth` out from the
+ * wall and `wide` along it, the firebox's `mouth` (wide) and `mouthTop` (high) with its `back` set into the wall, the
+ * hearth stone `hearth` out from the wall. The fire burns at `glow` (its light, HouseInterior).
+ */
+export const FIREPLACE = { depth: 0.5, wide: 1.7, mouth: 0.8, mouthTop: 0.8, back: 0.18, hearth: 0.95, glow: [0.38, 0.42] as [number, number] };
+/** #859: the reading nook's standing lamp, in metres from the nook's corner (x, height of its bulb, z) */
+export const NOOK_LAMP: V3 = [1.25, 1.36, 0.3];
+/** #859: the reading nook's bookcase is this tall (m): low, under the east wall's window (its sill is at 0.91) */
+export const NOOK_SHELF = 0.84;
+
 /** A piece of furniture's look, cells from the room's corner `o` (world), standing on the floor at `y`. */
 function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes: number) {
   const x0 = o[0] + f.x;
@@ -332,6 +343,83 @@ function furniture(b: HouseSink, f: HouseFurniture, o: V3, y: number, keepsakes:
     b.add('cylinder', H.glass, [cx, y + 0.743, cz], [0.12, 0.16, 0.12]);
     for (let i = 0; i < 3; i++) b.add('sphere', FLOWERS[i % FLOWERS.length], [cx + (i - 1) * 0.05, y + 0.86, cz + (i % 2) * 0.04], 0.05);
     for (const s of [-1, 1]) b.add('cylinder', H.pillow, [cx + s * 0.35, y + 0.67, cz + s * 0.2], [0.24, 0.015, 0.24]);
+    return;
+  }
+  if (f.id === 'fireplace') {
+    // #859: a brick chimney breast against the west wall, its firebox open to the room with logs burning in it, a
+    // wooden mantel with two candles and a jar on it, and a stone hearth in front (FIREPLACE: where the fire's light
+    // and Bloombot's seat go)
+    const F = FIREPLACE;
+    const bx = x0 + F.depth / 2;
+    const half = F.wide / 2;
+    const jamb = half - F.mouth / 2;
+    for (const s of [-1, 1]) tbox(b, 'brick', H.brick, [bx, y + F.mouthTop / 2, cz + s * (half - jamb / 2)], [F.depth, F.mouthTop, jamb]); // the jambs
+    tbox(b, 'brick', H.brick, [bx, y + (F.mouthTop + HOUSE_INSIDE.wall) / 2, cz], [F.depth, HOUSE_INSIDE.wall - F.mouthTop, F.wide]); // the breast above
+    b.add('box', H.soot, [x0 + F.back / 2, y + F.mouthTop / 2, cz], [F.back, F.mouthTop, F.mouth]); // the firebox's sooty back
+    for (const s of [-1, 1]) b.add('box', H.soot, [bx + F.back / 2, y + F.mouthTop / 2, cz + s * (F.mouth / 2 - 0.01)], [F.depth - F.back, F.mouthTop, 0.02]);
+    b.add('box', H.soot, [bx + F.back / 2, y + F.mouthTop - 0.01, cz], [F.depth - F.back, 0.02, F.mouth]);
+    tbox(b, 'hearth', H.hearth, [x0 + F.hearth / 2, y + 0.03, cz], [F.hearth, 0.06, F.wide + 0.2]); // the hearth stone
+    tbox(b, 'wood', H.beam, [x0 + F.depth + 0.06, y + F.mouthTop + 0.12, cz], [0.2, 0.08, F.wide + 0.16]); // the mantel
+    // the fire: two logs across, embers under them, flames rising
+    const fx = x0 + F.back + (F.depth - F.back) / 2;
+    for (const s of [-1, 1]) b.add('box', H.beam, [fx, y + 0.12 + (s > 0 ? 0.07 : 0), cz + s * 0.06], [0.11, 0.09, F.mouth - 0.2]);
+    for (const k of [-0.18, 0, 0.18]) b.add('sphere', H.ember, [fx, y + 0.08, cz + k], [0.14, 0.05, 0.14], 1);
+    for (const [k, h, c] of [[-0.12, 0.2, H.ember], [0.1, 0.24, H.ember], [0, 0.32, H.flame], [-0.05, 0.22, H.flame], [0.13, 0.17, H.flame]] as [number, number, string][])
+      b.add('sphere', c, [fx, y + 0.18 + h / 2, cz + k], [0.1, h, 0.1], 1);
+    // on the mantel: two candles and a jar
+    for (const s of [-1, 1]) {
+      b.add('cylinder', H.pillow, [x0 + F.depth + 0.06, y + F.mouthTop + 0.24, cz + s * 0.6], [0.05, 0.16, 0.05]);
+      b.add('sphere', H.flame, [x0 + F.depth + 0.06, y + F.mouthTop + 0.35, cz + s * 0.6], [0.03, 0.05, 0.03], 1);
+    }
+    b.add('cylinder', H.copper, [x0 + F.depth + 0.06, y + F.mouthTop + 0.24, cz - 0.15], [0.12, 0.16, 0.12]);
+    return;
+  }
+  if (f.id === 'nook') {
+    // #859: the reading nook in the room's south-east corner: a low bookcase full of books against the east wall, under
+    // the window (NOOK_SHELF: its top below the sill), an armchair turned to the fire, and a standing lamp at its
+    // shoulder
+    const P = PALETTE.furnish;
+    const wx = x0 + f.w - 0.2;
+    const top = NOOK_SHELF;
+    for (const yy of [0.05, top / 2, top - 0.025]) tbox(b, 'wood', H.shelf, [wx, y + yy, cz], [0.36, 0.05, f.d - 0.1]);
+    for (const k of [z0 + 0.06, z0 + f.d - 0.06]) tbox(b, 'wood', H.shelf, [wx, y + top / 2, k], [0.36, top, 0.05]);
+    let seed = 859;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (const row of [0.075, top / 2 + 0.025]) {
+      let z = z0 + 0.12;
+      let i = 0;
+      while (z < z0 + f.d - 0.2) {
+        const t = 0.05 + rnd() * 0.05;
+        const h = 0.24 + rnd() * 0.12;
+        if (rnd() < 0.08) {
+          z += 0.12; // a gap on the shelf
+          continue;
+        }
+        b.add('box', H.book[i++ % H.book.length], [wx - 0.02, y + row + h / 2, z + t / 2], [0.28, h, t]);
+        z += t + 0.005;
+      }
+    }
+    // the armchair, turned west across the room to the fire: a seat with a cushion, a high back, two rolled arms,
+    // short feet; its rug lies in front of it (houseRugs)
+    const ax = x0 + 0.7;
+    const az = z0 + 1.05;
+    b.add('box', P.fabric, [ax, y + 0.28, az], [0.7, 0.26, 0.78]);
+    b.add('box', P.cushion, [ax - 0.04, y + 0.44, az], [0.56, 0.08, 0.6]);
+    b.add('box', P.fabric, [ax + 0.3, y + 0.66, az], [0.16, 0.82, 0.78]);
+    b.add('box', P.fabricDark, [ax + 0.3, y + 1.08, az], [0.12, 0.04, 0.7]);
+    for (const s of [-1, 1]) {
+      b.add('box', P.fabricDark, [ax, y + 0.45, az + s * 0.33], [0.7, 0.3, 0.14]);
+      b.add('cylinder', P.fabric, [ax - 0.02, y + 0.6, az + s * 0.33], [0.66, 0.04, 0.15]);
+    }
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) tbox(b, 'wood', H.plankDark, [ax + sx * 0.28, y + 0.07, az + sz * 0.32], [0.06, 0.14, 0.06]);
+    b.add('box', H.book[1], [ax - 0.12, y + 0.5, az + 0.1], [0.26, 0.04, 0.2]); // a book left open on the cushion
+    b.add('box', H.paper, [ax - 0.12, y + 0.525, az + 0.1], [0.24, 0.01, 0.18]);
+    // the standing lamp at the chair's shoulder, its bulb lit under the shade (NOOK_LAMP: where its light hangs)
+    const [lx, , lz] = NOOK_LAMP;
+    b.add('cylinder', H.ironDark, [x0 + lx, y + 0.02, z0 + lz], [0.26, 0.04, 0.26]);
+    b.add('cylinder', P.brass, [x0 + lx, y + 0.72, z0 + lz], [0.03, 1.4, 0.03]);
+    b.add('cylinder', P.shade, [x0 + lx, y + 1.45, z0 + lz], [0.36, 0.26, 0.36], 0.5);
+    b.add('sphere', H.lamp, [x0 + lx, y + 1.36, z0 + lz], 0.09, 1);
     return;
   }
   // the journal desk: a table, an open book, a pen and a lamp
@@ -437,7 +525,7 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
 }
 
 /** #861: the pieces too tall for a window above them (a window there is left out). */
-const TALL = new Set<string>(['shelf']);
+const TALL = new Set<string>(['shelf', 'fireplace']);
 
 /** One window on a wall's inner face: the north wall (`axis` 'z', facing south) or a side wall (facing `inward`). */
 function roomWindow(b: HouseSink, axis: 'z' | 'x', x: number, y: number, z: number, inward: number) {

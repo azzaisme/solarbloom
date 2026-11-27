@@ -13,6 +13,7 @@ import { KNACK_TUNING as T } from '../src/data/bloombot';
 import { CHARGE } from '../src/data/charge';
 import { FARM_USES } from '../src/data/farm';
 import { POWER } from '../src/data/power';
+import { HOUSE_GROWTH } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 import { bannedIn, WORDS } from '../src/ui/words';
 
@@ -58,6 +59,20 @@ function atFountain(sim: Sim): Sim {
   expect(sim.charge.atHome()).toBe(true);
   return sim;
 }
+/** #859: grown to the Home and sitting on the hearth by its fire. */
+function byFire(sim: Sim): Sim {
+  const sv = sim.state.salvage!;
+  sv.tier = Math.max(sv.tier, HOUSE_GROWTH.opensAtStep);
+  for (const m of ['scrap', 'timber', 'glass', 'clay', 'gears', 'copper', 'sunstone'] as const) sv.store[m] = 500;
+  sim.areas.clear(PARK, true);
+  sim.bot = { roofId: GROUND, x: 4.5, z: 6.5 }; // by the house's door, in reach of its chests
+  for (let i = 0; i < 4 && sim.house.level < 4; i++) sim.house.giveAll();
+  expect(sim.house.level, 'grown to the Home').toBe(4);
+  const f = sim.house.furniture().find((p) => p.id === 'fireplace')!;
+  sim.bot = { roofId: sim.house.layerId, x: f.x + f.w + 0.5, z: f.z + 0.5 };
+  expect(sim.rest.sitByFire()).toBe(true);
+  return sim;
+}
 /** Meditating at a Charger with `panels` Solar Panels beside it, in a sky of `solar`. */
 function atCharger(sim: Sim, panels: number, solar = 1, cloudy = false): Sim {
   sky(sim, solar, cloudy);
@@ -69,6 +84,39 @@ function atCharger(sim: Sim, panels: number, solar = 1, cloudy = false): Sim {
 }
 
 describe('#784: the charging sources, in order', () => {
+  it('#859: the Home’s fire 3 a second, between a Charger and a bench, Gable’s Easy rest on top', () => {
+    expect(CHARGE.firePerSecond).toBe(3);
+    expect(CHARGE.meditatePerSecond).toBeGreaterThan(CHARGE.firePerSecond);
+    expect(CHARGE.firePerSecond).toBeGreaterThan(CHARGE.benchPerSecond);
+    // with Gable's Easy rest on both, the fire still beats the bench, and a plain Charger still beats the fire
+    expect(CHARGE.firePerSecond * T.rest).toBeGreaterThan(CHARGE.benchPerSecond * T.rest);
+    expect(CHARGE.meditatePerSecond).toBeGreaterThan(CHARGE.firePerSecond * T.rest);
+    const plain = measure(byFire(fresh()));
+    expect(plain).toBeCloseTo(CHARGE.firePerSecond, 1);
+    expect(byFire(fresh()).charge.resting, 'the home trickle never piles on top').toBe(false);
+    const s = fresh();
+    wake(s, 'gable');
+    const gable = measure(byFire(s));
+    expect(gable).toBeCloseTo(CHARGE.firePerSecond * T.rest, 1);
+    // measured: Charger > fire > bench > fountain
+    const bench = measure(onBench(fresh()));
+    const home = measure(atFountain(fresh()));
+    const charger = measure(atCharger(fresh(), 2));
+    expect(charger).toBeGreaterThan(plain);
+    expect(plain).toBeGreaterThan(bench);
+    expect(bench).toBeGreaterThan(home);
+  });
+
+  it('#859: the player sees Bloombot charging by the fire, and it stands up once out of the house', () => {
+    const sim = byFire(fresh());
+    sim.state.charge = { value: 0 };
+    sim.advance(1);
+    expect(sim.charge.chargingFrom).toBe('fire');
+    sim.bot = { roofId: GROUND, x: 4.5, z: 6.5 };
+    sim.advance(0.1);
+    expect(sim.rest.sitting).toBeUndefined();
+  });
+
   it('the tuning: bench 2 a second, the fountain 1 a second, a Charger the fastest', () => {
     expect(CHARGE.benchPerSecond).toBe(2);
     expect(CHARGE.home.perSecond).toBe(1);
