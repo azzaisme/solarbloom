@@ -16,6 +16,8 @@ type V3 = [number, number, number];
 const C = PALETTE.cozy;
 const P = PALETTE;
 const L = PALETTE.light;
+const H = PALETTE.house;
+const F = PALETTE.furnish;
 
 interface At {
   h: PlotHost;
@@ -255,6 +257,78 @@ const ART: Record<string, (a: At) => void> = {
     if (a.far) return put(a, 'box', P.flowers.pink, 0.18, 1.15, 0, [0.32, 0.36, 0.02]);
     const flags = [P.flowers.pink, P.flowers.yellow, P.leaf.shrub[0], P.glow.lamp];
     flags.forEach((c, i) => put(a, 'box', c, 0.16, 1.32 - i * 0.14, 0, [0.28, 0.12, 0.02]));
+  },
+  // ───── #850: furniture made for a room, in the woods of the bed, desk and chest already there (HouseArt) ─────
+  armchair: (a) => {
+    put(a, 'box', F.fabric, 0, 0.17, 0.02, [0.7, 0.22, 0.6]); // the seat's base
+    put(a, 'box', F.fabric, 0, 0.42, -0.26, [0.7, 0.5, 0.16]); // its back
+    if (a.far) return put(a, 'box', F.fabricDark, 0, 0.3, 0.02, [0.86, 0.14, 0.6]);
+    for (const s of [-1, 1]) {
+      put(a, 'box', F.fabricDark, s * 0.38, 0.31, 0.02, [0.12, 0.26, 0.62]); // arms
+      put(a, 'sphere', F.fabricDark, s * 0.38, 0.44, 0.02, [0.13, 0.08, 0.62]);
+      for (const k of [-1, 1]) put(a, 'box', H.bedWood, s * 0.34, 0.03, 0.02 + k * 0.24, [0.06, 0.06, 0.06]); // feet
+    }
+    put(a, 'box', F.cushion, 0, 0.31, 0.06, [0.6, 0.08, 0.48]);
+    put(a, 'box', F.cushion, 0, 0.5, -0.16, [0.54, 0.34, 0.08]);
+  },
+  stool: (a) => {
+    put(a, 'cylinder', F.seat, 0, 0.36, 0, [0.38, 0.06, 0.38]);
+    if (a.far) return put(a, 'cylinder', H.desk, 0, 0.17, 0, [0.26, 0.34, 0.26]);
+    for (let i = 0; i < 3; i++) {
+      const ang = (i / 3) * Math.PI * 2 + Math.PI / 2;
+      put(a, 'cylinder', H.desk, Math.cos(ang) * 0.12, 0.17, Math.sin(ang) * 0.12, [0.04, 0.34, 0.04]);
+    }
+    put(a, 'cylinder', H.desk, 0, 0.12, 0, [0.26, 0.025, 0.26]); // the ring between the legs
+  },
+  diningtable: (a) => {
+    // 2 × 1 squares: about the middle of its footprint, long across x
+    put(a, 'box', H.desk, 0, 0.46, 0, [1.78, 0.07, 0.78]);
+    if (a.far) return put(a, 'box', H.desk, 0, 0.22, 0, [1.5, 0.44, 0.5]);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(a, 'box', H.desk, sx * 0.8, 0.21, sz * 0.31, [0.07, 0.42, 0.07]);
+    put(a, 'box', F.cloth, 0, 0.5, 0, [1.3, 0.012, 0.36]); // a runner down the middle
+    put(a, 'box', F.clothEdge, 0, 0.505, 0, [1.3, 0.01, 0.04]);
+    for (const s of [-1, 1]) {
+      put(a, 'cylinder', F.plate, s * 0.5, 0.51, 0.2, [0.2, 0.02, 0.2]);
+      put(a, 'cylinder', F.plate, s * 0.5, 0.51, -0.2, [0.2, 0.02, 0.2]);
+    }
+    put(a, 'cylinder', H.glass, 0, 0.58, 0, [0.08, 0.16, 0.08]); // a jug of water
+    put(a, 'sphere', P.flowers.pink, 0, 0.68, 0, 0.08);
+  },
+  sidetable: (a) => {
+    put(a, 'cylinder', H.desk, 0, 0.44, 0, [0.46, 0.05, 0.46]);
+    put(a, 'cylinder', H.desk, 0, 0.22, 0, [0.06, 0.42, 0.06]);
+    if (a.far) return;
+    put(a, 'cylinder', H.desk, 0, 0.02, 0, [0.28, 0.04, 0.28]);
+    put(a, 'box', H.book[1], -0.08, 0.49, 0.04, [0.18, 0.05, 0.13]);
+    put(a, 'sphere', H.door, 0.1, 0.53, -0.06, [0.14, 0.12, 0.14]); // a teapot
+    put(a, 'cylinder', H.door, 0.19, 0.55, -0.06, [0.03, 0.06, 0.03]);
+  },
+  bookshelf: (a) => {
+    // against the wall behind it: four boards of books
+    const back = -0.3;
+    put(a, 'box', H.shelf, 0, 0.7, back - 0.08, [0.84, 1.4, 0.04]);
+    if (a.far) return put(a, 'box', H.book[0], 0, 0.7, back + 0.06, [0.76, 1.2, 0.2]);
+    for (const k of [-1, 1]) put(a, 'box', H.shelf, k * 0.41, 0.7, back + 0.04, [0.04, 1.4, 0.28]);
+    for (const yy of [0.04, 0.38, 0.72, 1.06, 1.4]) put(a, 'box', H.shelf, 0, yy, back + 0.04, [0.82, 0.04, 0.28]);
+    for (let row = 0; row < 4; row++)
+      for (let i = 0; i < 3; i++) {
+        const w = 0.18 + ((row + i) % 3) * 0.03;
+        put(a, 'box', H.book[(row + i * 2) % H.book.length], -0.24 + i * 0.25, 0.06 + row * 0.34 + 0.13, back + 0.05, [w, 0.24 - (i % 2) * 0.04, 0.2]);
+      }
+  },
+  coatstand: (a) => {
+    put(a, 'cylinder', H.bedWood, 0, 0.62, 0, [0.05, 1.24, 0.05]);
+    put(a, 'cylinder', H.bedWood, 0, 0.03, 0, [0.34, 0.05, 0.34]);
+    if (a.far) return put(a, 'box', F.coat, 0.07, 0.86, 0, [0.12, 0.5, 0.26]);
+    for (let i = 0; i < 4; i++) {
+      const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      put(a, 'box', F.brass, Math.cos(ang) * 0.08, 1.16, Math.sin(ang) * 0.08, [0.12, 0.025, 0.025]);
+    }
+    put(a, 'box', F.coat, 0.08, 0.84, 0, [0.12, 0.54, 0.28]); // a coat on one hook
+    put(a, 'box', F.coat, 0.08, 1.06, 0, [0.14, 0.1, 0.18]);
+    put(a, 'cylinder', F.hat, -0.06, 1.24, 0, [0.22, 0.03, 0.22]); // a hat on another
+    put(a, 'cylinder', F.hat, -0.06, 1.3, 0, [0.13, 0.1, 0.13]);
+    put(a, 'sphere', F.brass, 0, 1.27, 0, 0.05);
   },
 };
 

@@ -70,7 +70,8 @@ describe('#847: the tray leads with the set that suits where Bloombot is', () =>
     const firstGarden = sets.indexOf('garden');
     expect(sets.slice(0, firstGarden).every((s) => s === 'indoor')).toBe(true);
     expect(sets.slice(firstGarden).every((s) => s === 'garden')).toBe(true);
-    expect(items.slice(0, 2).map((i) => i.tool)).toEqual(['decor:test-chair', 'decor:test-lamp']);
+    expect(items[0].set).toBe('indoor');
+    expect(items.slice(0, firstGarden).map((i) => i.tool)).toEqual(expect.arrayContaining(['decor:test-chair', 'decor:test-lamp']));
     const heads = setHeads(items);
     expect(heads[0]).toBe('indoor');
     expect(heads[firstGarden]).toBe('garden');

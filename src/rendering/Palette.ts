@@ -650,6 +650,14 @@ export const PALETTE = {
     apron: '#5e8f4a', apronEdge: '#4d7a3c', rail: '#e8dcc4',
   },
   /**
+   * #842: decorations made for a room (rendering/DecorArt), in the room's own woods (PALETTE.house) plus soft
+   * furnishings: a rust armchair with cream cushions, a sage coat, a brass knob.
+   */
+  furnish: {
+    fabric: '#c7795e', fabricDark: '#a35f48', cushion: '#f3e6cc', seat: '#d9a35f', coat: '#6f9a7c', hat: '#5b4a3a',
+    brass: '#c9a14a', cloth: '#efe4cc', clothEdge: '#c86f5a', plate: '#f6f1e6', iron: '#4b4741',
+  },
+  /**
    * #830: the seasons (rendering/SeasonLook). `grass`: the colour green grass, lawns, shrubs and leaves drift toward in
    * each season (summer is the world's own green). `autumn`: deciduous leaves turning gold, orange and russet. `blossom`:
    * spring's soft pink and white blossom. `frost`: winter's frost and light snow; `snow`: falling snowflakes.

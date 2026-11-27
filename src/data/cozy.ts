@@ -127,6 +127,13 @@ export const DECOR_OPTIONS: DecorOption[] = [
   { id: 'catfountain', name: 'Cat fountain', icon: '⛲', blurb: 'A stone bowl with a cat on top, spouting water.', solid: true, unlock: { cat: true } },
   { id: 'goldlantern', name: 'Golden lantern', icon: '🏮', blurb: 'A cat-eared lantern that glows gold all night.', solid: false, unlock: { cat: true } },
   { id: 'rainbowbunting', name: 'Rainbow bunting', icon: '🌈', blurb: 'A pole of bright flags, every colour of a Rainbow Cat.', solid: true, unlock: { cat: true } },
+  // #850: furniture made for a room (#847: the tray leads with these inside the house). How each is earned: #852.
+  { id: 'armchair', name: 'Armchair', icon: '🛋️', blurb: 'A deep, soft chair to sink into.', solid: true, unlock: { start: true }, indoor: true },
+  { id: 'stool', name: 'Stool', icon: '🥁', blurb: 'A little round stool on three legs.', solid: true, unlock: { start: true }, indoor: true },
+  { id: 'diningtable', name: 'Dining table', icon: '🍽️', blurb: 'A long table with room for friends. It takes two squares.', solid: true, unlock: { start: true }, indoor: true, size: [2, 1] },
+  { id: 'sidetable', name: 'Side table', icon: '🫖', blurb: 'A small round table for a teapot or a book.', solid: true, unlock: { start: true }, indoor: true },
+  { id: 'bookshelf', name: 'Bookshelf', icon: '📚', blurb: 'A tall shelf of well-read books.', solid: true, unlock: { start: true }, indoor: true },
+  { id: 'coatstand', name: 'Coat stand', icon: '🧥', blurb: 'Somewhere by the door for a coat and a hat.', solid: true, unlock: { start: true }, indoor: true },
 ];
 
 export const DECOR_OPTION: Record<string, DecorOption> = Object.fromEntries(DECOR_OPTIONS.map((o) => [o.id, o]));
