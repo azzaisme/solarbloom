@@ -73,7 +73,26 @@ const where = (page) =>
   page.evaluate(() => {
     const g = window.solarbloom;
     const p = g.bot.pose;
-    return { room: g.sim.house.roomAt(Math.floor(p.x), Math.floor(p.z))?.id, walls: g.houseInside.wallHeights().map((h) => +h.toFixed(2)) };
+    // every stretch of inner wall standing across the line from the camera to Bloombot's head (none should)
+    const cam = g.camera.entity.getPosition();
+    const floor = g.houseInside.floorY();
+    const [ox, , oz] = [0, 400, 0];
+    const head = { x: ox + p.x, y: floor + 0.6, z: oz + p.z };
+    const blocking = g.houseInside.wallsNow().filter(({ line: [x0, z0, x1, z1], h }) => {
+      // where the line from the camera to the head crosses the wall's plane
+      const alongX = z0 === z1;
+      const at = alongX ? oz + z0 : ox + x0;
+      const a = alongX ? cam.z : cam.x;
+      const b = alongX ? head.z : head.x;
+      if ((a - at) * (b - at) > 0 || a === b) return false;
+      const t = (at - a) / (b - a);
+      const across = alongX ? cam.x + (head.x - cam.x) * t - ox : cam.z + (head.z - cam.z) * t - oz;
+      const lo = alongX ? x0 : z0;
+      const hi = alongX ? x1 : z1;
+      const y = cam.y + (head.y - cam.y) * t;
+      return across >= lo && across <= hi && y < floor + h;
+    });
+    return { room: g.sim.house.roomAt(Math.floor(p.x), Math.floor(p.z))?.id, walls: g.houseInside.wallHeights().map((h) => +h.toFixed(2)), blocking: blocking.length };
   });
 
 const grow = async (page, level) => {
@@ -135,20 +154,22 @@ try {
       const there = await walkTo(page, x, z, x, z - 1);
       w = await where(page);
       check(there && w.room === r.id, `walks into the ${r.id} (${w.room})`);
-      check(w.walls.some((h) => h < 1), `the wall between the camera and the ${r.id} has sunk (${w.walls.join(', ')})`);
+      check(w.walls.some((h) => h < 1) && w.blocking === 0, `no wall stands between the camera and Bloombot in the ${r.id}: the near one has sunk (${w.walls.join(', ')})`);
       await shot(page, `${level}-${name}-${r.id}.png`);
     }
     for (const id of await page.evaluate(() => window.solarbloom.sim.house.furniture().map((f) => f.id))) {
       const v = await visit(page, id);
-      check(v.ok && (!PROMPTS[id] || PROMPTS[id].test(v.text)), `walks to the ${id}: "${v.text}"`);
+      const seen = await where(page);
+      check(v.ok && (!PROMPTS[id] || PROMPTS[id].test(v.text)) && seen.blocking === 0, `walks to the ${id}, in view: "${v.text}"`);
     }
     // back to the front door, in the main room, the walls up again
     const door = await page.evaluate(() => window.solarbloom.sim.house.doorInside());
     const back = await walkTo(page, door[0], door[1], door[0], door[1] + 1);
     const p = await prompt(page);
     check(back && /Go outside/.test(p), `walks back to the front door: "${p}"`);
-    // turned to look into the room (the camera behind it, by the door), every inner wall stands beyond it, tall
-    await page.evaluate(() => window.solarbloom.bot.turnTo(Math.PI));
+    // the view turned back to its usual angle (looking in from the door's side): every inner wall stands beyond
+    // Bloombot, tall
+    await page.evaluate(() => window.solarbloom.camera.recentre());
     await wait(3000);
     w = await where(page);
     check(w.walls.every((h) => h > 2), `from the door, looking in, the inner walls stand tall (${w.walls.join(', ')})`);
@@ -186,7 +207,7 @@ try {
   await wait(4000);
   const w = await where(page);
   const kept = await page.evaluate(() => window.solarbloom.cozy.insideCount());
-  check(w.room === 'kitchen' && w.walls.some((h) => h < 1), `after a reload Bloombot is still in the kitchen, the wall sunk (${JSON.stringify(w)})`);
+  check(w.room === 'kitchen' && w.walls.some((h) => h < 1) && w.blocking === 0, `after a reload Bloombot is still in the kitchen, in view (${JSON.stringify(w)})`);
   check(kept === 3, `the three houseplants are still there (${kept})`);
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 } catch (e) {
