@@ -72,6 +72,63 @@ export const LOOK = {
    */
   emissive: { gain: 4, vertexGlow: 4, tile: 4, preview: 3, particles: 2.5 },
   /**
+   * VFX 1: Bloombot's pulse is a ring of healing light, not a beam. Power gathers into Bloombot (motes drawn in, a
+   * ring closing round it), then a shockwave rolls out across the ground from its feet: a faint wash inside, a
+   * glowing band, a white-hot rim that blooms and broken streaks along it, with leaves carried on the wave and a
+   * flash of real light. All additive, so it brightens what it crosses. Lengths are tiles.
+   *
+   * `gather` seconds of drawing in before the release (a tap; a Mega Pulse gathers while it is held). A tap's fire is
+   * one wave from the middle of the ground it heals, just over it (one tile: that tile alone), in `seconds` +
+   * `perTile` × radius. `glow` is the emissive of the wash,
+   * band, rim and streaks (bloom starts at 1.8). `light`: the flash's peak intensity and range (× the wave's radius).
+   *
+   * `mega`: holding a Mega Pulse lifts Bloombot `lift` off the ground as the power builds, rings spin round it and
+   * motes stream in from the edge of the circle; at full charge it bursts: `waves` shockwaves out to the edge, the
+   * first in time with the chain's restore wave (TUNING.chain.stepDelay a tile), a sphere of sparks and a big flash.
+   * Bloombot settles back down over `settle` seconds.
+   *
+   * `front`: the wave's rim grows from `r0` to its radius as 1 - (1 - k)^`ease` over its seconds. The ground it heals
+   * turns green exactly as the rim passes (TransitionMaterial's wash), so both read this.
+   */
+  pulseFx: {
+    gather: 0.24,
+    seconds: 0.5,
+    perTile: 0.09,
+    front: { r0: 0.25, ease: 2.2 },
+    /** a saturated lime wash and band, a gold-lime rim that burns white in its core, yellow-green streaks; gold for the Mega Pulse's second wave */
+    colours: { wash: '#a6ff1f', rim: '#efff6a', streak: '#e4ff5a', gold: '#ffd94a' },
+    /** the fire: white-hot at its foot, yellow-green, green at the tips of the flames */
+    flame: { hot: '#fff7c8', mid: '#e2ff52', tip: '#6dff24' },
+    glow: { wash: 1.8, rim: 7.5, streak: 6, veil: 4.5, spiral: 5, ribbon: 5 },
+    /**
+     * The magic in the air: ribbons of light with trailing tails. `bolts` arc from Bloombot's palm down to the ground
+     * as the power leaves it; `tendrils` (+ `perTile` a tile of radius, at most `max`) curl up out of the healed
+     * ground in a rising vortex, `rise` metres (a tile's worth more on a big patch), over `seconds`, shedding `shed`
+     * sparkles a second. Mega: `megaTendrils` round the whole circle, rising `megaRise`, and `megaBolts` bolts out of
+     * Bloombot down onto the ground; while it charges, `chargeRate` (+ `chargeRamp` at full charge) a second spiral in
+     * from the edge of the circle to Bloombot, and an orb of magic `orb` across (+ `orbGrow` at full charge) churns
+     * round it.
+     */
+    /**
+     * Clouds of magic (MagicCloud): a bright heart opening out and `puffs` (+ `puffsPerTile` a tile of radius, at most
+     * `max`) of glowing smoke churning up over the healed ground, `size` (+ `perTile`, at most `maxSize`) across, rising `rise` over about
+     * `seconds`. White-hot `core` with crackling veins, `mid` green, deep `smoke` at the edges.
+     */
+    cloud: { size: 0.6, perTile: 0.5, maxSize: 1.9, puffs: 4, puffsPerTile: 3, max: 22, seconds: 1.7, rise: 0.4, alpha: 1.25, colours: { core: '#f2ffc4', mid: '#7cf03a', smoke: '#1d5214' } },
+    ribbons: { bolts: 3, tendrils: 4, perTile: 2.5, max: 14, rise: 1.1, seconds: 1.15, width: 0.026, shed: 16, megaTendrils: 20, megaRise: 1.8, megaBolts: 10, chargeRate: 3, chargeRamp: 12, orb: 0.6, orbGrow: 1.1 },
+    /**
+     * The release's extras: a curtain of fire rising off the rim (`veil` tall at its tallest flame; shorter on a small
+     * wave), `arms` arms of fire swirling out from the middle, sparks rising
+     * off the ground along the rim as it passes (`sparks` a second per tile of radius), `swirl` wisps of light (and
+     * petals) spiralling round inside it, and the whole picture's bloom swelling by `surge` (1 = double) for
+     * `surgeSeconds`. `flicker`: how much the rim and curtain lick and flare round the ring (0 steady, 1 wild).
+     */
+    extra: { veil: 0.6, arms: 3, flicker: 0.85, sparks: 26, swirl: 28, surge: 1.2, surgeSeconds: 0.5 },
+    light: { intensity: 3.2, range: 1.3, seconds: 0.55 },
+    leaves: 10,
+    mega: { lift: 0.85, settle: 0.7, waves: 3, veil: 1.1, sparks: 70, leaves: 40, swirl: 60, light: { intensity: 7, range: 1.25, seconds: 1.4 }, chargeLight: 2.4, surge: 2.2, surgeSeconds: 0.9 },
+  },
+  /**
    * Look 1.6: screen-space ambient occlusion for contact shadows (High tier). The radius is in world units (a tile
    * is 1): `radiusPerView` × the world height in view, clamped, so close-ups get tight contact shadows under
    * bushes and machines and the overview still shows grounding around buildings and trees.

@@ -168,8 +168,45 @@ export class Overlays {
     });
   }
 
+  /** VFX 1: the outline of an area (a Mega Pulse's): glowing edges where its tiles meet ground outside it */
+  private edges: pc.Entity[] = [];
+
+  /**
+   * VFX 1: shows the perimeter of `tiles` (one outline round the whole area) instead of a frame on every tile: a
+   * glowing edge wherever a tile in it borders one that isn't. Replaces any radius tiles shown.
+   */
+  showOutline(tiles: TileData[], tone: OverlayTone = 'mega') {
+    for (const e of this.radius) e.enabled = false;
+    const key = (roofId: string, x: number, z: number) => `${roofId}|${x}|${z}`;
+    const inside = new Set(tiles.map((t) => key(t.roofId, t.x, t.z)));
+    const m = this.radiusMats[tone];
+    this.radiusTone = tone;
+    let n = 0;
+    for (const t of tiles) {
+      const [x, y0, z] = this.sim.grid.tileWorld(t);
+      const y = y0 + SLAB_TOP + pavingOverlayLift(this.sim.grid, t) + 0.03;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        if (inside.has(key(t.roofId, t.x + dx, t.z + dz))) continue;
+        let e = this.edges[n];
+        if (!e) {
+          e = shape(this.radiusRoot, 'box', m, { receive: false });
+          e.render!.castShadows = false;
+          this.edges.push(e);
+        }
+        e.render!.meshInstances[0].material = m;
+        e.setPosition(x + dx * 0.5, y, z + dz * 0.5);
+        // a little over a tile long, so the corners meet
+        e.setLocalScale(dx ? 0.07 : 1.07, 0.014, dx ? 1.07 : 0.07);
+        e.enabled = true;
+        n++;
+      }
+    }
+    for (let i = n; i < this.edges.length; i++) this.edges[i].enabled = false;
+  }
+
   hideRadius() {
     for (const e of this.radius) e.enabled = false;
+    for (const e of this.edges) e.enabled = false;
   }
 
   update(dt: number, view?: MarkerView) {
@@ -186,7 +223,7 @@ export class Overlays {
         this.shimmerMat.update();
       }
     }
-    if (this.radiusTone && this.radius[0]?.enabled) {
+    if (this.radiusTone && (this.radius[0]?.enabled || this.edges[0]?.enabled)) {
       // The preview tiles breathe softly together, a little out of step with the hover frame.
       const m = this.radiusMats[this.radiusTone];
       m.opacity = this.radiusTone === 'mega' ? 0.4 + 0.6 * this.megaCharge : this.reducedMotion ? 0.69 : 0.62 + 0.18 * Math.sin(this.time * 3.2);

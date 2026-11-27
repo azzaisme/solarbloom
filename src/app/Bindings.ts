@@ -49,6 +49,7 @@ export type Action =
   | 'loadPrev'
   | 'pinNext'
   | 'showWhere'
+  | 'sense'
   | 'cancel'
   | 'menu'
   | 'photo'
@@ -99,6 +100,8 @@ export const ACTIONS: readonly ActionDef[] = [
   A('pinNext', 'Put the next request on your goal card', 'act', 'world'),
   // #605 (E24): the objective card's Show me where
   A('showWhere', 'Show me where to go next', 'act', 'world'),
+  // VFX 1: lighting up what is nearby is its own control (a pulse no longer does it)
+  A('sense', 'Sense what is nearby: piles, pages and buried finds', 'act', 'world'),
   A('buildMenu', 'Build menu', 'build', 'world'),
   A('place', 'Place (in build mode)', 'build', 'build'),
   A('rotate', 'Turn the piece', 'build', 'build'),
@@ -189,6 +192,7 @@ export function defaultKeys(): Record<Action, string[]> {
     loadPrev: ['KeyZ'],
     pinNext: ['KeyG'],
     showWhere: ['KeyH'],
+    sense: ['KeyR'],
     cancel: [FIXED_KEY],
     menu: [FIXED_KEY],
     photo: ['KeyP'],
@@ -207,7 +211,6 @@ export function defaultPad(): Partial<Record<Action, number>> {
   const p: Partial<Record<Action, number>> = {
     sprint: 6,
     sprintToggle: 10,
-    recentre: 11,
     zoomCamera: 13,
     interact: 0,
     pulse: 2,
@@ -231,6 +234,8 @@ export function defaultPad(): Partial<Record<Action, number>> {
     pinNext: 15,
     // #605: RT while walking (in build mode RT is Remove)
     showWhere: 7,
+    // VFX 1: click the right stick to sense what is nearby (Recentre keeps C, and can be given a pad button)
+    sense: 11,
   };
   p.eat = 14; // E23.2.1: d-pad left eats
   // E23.2.2: the bumpers turn the load wheel while walking (in build mode they turn the piece)

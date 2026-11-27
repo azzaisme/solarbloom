@@ -20,6 +20,7 @@ const KEYS: [Action, string[]][] = [
   ['pulse', ['Mouse0', 'Space']],
   ['buildMenu', ['KeyQ']],
   ['rotate', ['KeyR', 'Wheel']],
+  ['sense', ['KeyR']], // VFX 1: R walking; R turns the piece only in build mode
   ['removeMode', ['KeyX']],
   ['powerOverlay', ['KeyO']], // E23.3.4
   ['backpack', ['Tab', 'KeyI']],
@@ -37,7 +38,8 @@ const PAD: [Action, number | undefined][] = [
   ['sprint', 6], // left trigger, held
   ['sprintToggle', 10], // click the left stick
   ['zoomCamera', 13], // d-pad down cycles
-  ['recentre', 11], // click the right stick
+  ['recentre', undefined], // VFX 1: C on the keyboard; the right stick senses now
+  ['sense', 11], // click the right stick
   ['interact', 0], // A
   ['pulse', 2], // X
   ['place', 0], // A also places in build mode

@@ -85,6 +85,22 @@ export class PulseLoad {
     return d;
   }
 
+  private nextSense = 0;
+
+  /**
+   * VFX 1: Bloombot senses what is nearby (its own control: the right stick, R): the reveal ripple from tile `t`
+   * lights up salvage, caches, pages and buried finds in reach, and buried ones get their mound. A short wait
+   * between senses. Returns false while waiting.
+   */
+  sense(t: Pick<TileData, 'roofId' | 'x' | 'z'> & { id: string }): boolean {
+    if (this.sim.time < this.nextSense) return false;
+    this.nextSense = this.sim.time + RIPPLE.senseCooldown;
+    const ripple = this.ripple(t);
+    this.sim.buried.reveal(ripple.filter((g) => g.kind === 'buried')); // found: a mound marks each until it is dug up
+    this.sim.bus.emit('pulse.ripple', { tileId: t.id, targets: ripple });
+    return true;
+  }
+
   /** Every target the reveal ripple from tile `t` lights up, nearest first (pure). */
   ripple(t: Pick<TileData, 'roofId' | 'x' | 'z'>): RippleTarget[] {
     const sv = this.sim.state.salvage;

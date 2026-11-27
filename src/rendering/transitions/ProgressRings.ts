@@ -18,8 +18,8 @@ interface Ring {
 }
 
 /**
- * Look 6.10 (#179): a subtle progress ring on tiles mid-process (the Cultivator's tiles and tiles still growing in
- * the sim), near zoom only. A pooled handful of rings (12 segments each, lit by progress); the centre pip is the
+ * Look 6.10 (#179): a subtle progress ring on tiles mid-process (the Cultivator's tiles: softening, then growing),
+ * near zoom only. VFX 1: not on ground a pulse or anything else restored (that heals in front of you). A pooled handful of rings (12 segments each, lit by progress); the centre pip is the
  * stage icon: sand while the slab softens, green while it grows. Hidden at mid and far zoom and with nothing to show.
  */
 export class ProgressRings {
@@ -58,7 +58,8 @@ export class ProgressRings {
     const s = this.sim;
     if (t.ground === 'growing') {
       const on = s.cultivators.unitOn(t.id);
-      const total = on ? TUNING.cultivator.growSeconds / s.cultivators.speed(on.m) : TUNING.pulse.growSeconds;
+      if (!on && t.growSource !== 'cultivator') return undefined;
+      const total = on ? TUNING.cultivator.growSeconds / s.cultivators.speed(on.m) : TUNING.cultivator.growSeconds;
       return { p: 1 - Math.max(0, t.growthRemainingSec) / Math.max(0.01, total), phase: 'grow' };
     }
     if (t.ground === 'polluted' && t.tr?.g && t.tr.k === 'soften') {
