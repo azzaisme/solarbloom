@@ -1,4 +1,4 @@
-import type { HouseFurniture } from '../data/oldcity';
+import { HOUSE_INSIDE, type HouseFurniture, type HouseWall } from '../data/oldcity';
 import { PALETTE } from './Palette';
 import type { VPrim } from './Shapes';
 
@@ -293,6 +293,8 @@ export interface RoomPlan {
   level: number;
   door: [number, number];
   furniture: HouseFurniture[];
+  /** #860: the inner walls (drawn apart, by HouseInterior, so the camera can see over them; their skirting is here) */
+  walls: HouseWall[];
   /** keepsakes found (stand on the shelf) */
   keepsakes: number;
   /** the floorboards' variety, per cell (stable) */
@@ -347,5 +349,98 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
   // a lamp on the back wall, warm (the room's light, HouseInterior, hangs unseen over the rug)
   b.add('box', H.beam, [ox + 0.6, y + 1.75, oz + 0.05], [0.12, 0.2, 0.08]);
   b.add('sphere', H.lamp, [ox + 0.6, y + 1.9, oz + 0.12], 0.1, 1);
+  // #860: skirting along both faces of each inner wall (the walls themselves are drawn apart: they sink for the camera)
+  for (const w of p.walls)
+    for (const piece of innerWallPieces(w)) {
+      if (piece.lintel) continue;
+      const [x0, z0, x1, z1] = piece.line;
+      for (const side of [-1, 1]) {
+        const off = side * (INNER_WALL.thick / 2 + 0.015);
+        if (w.axis === 'x') b.add('box', H.skirting, [ox + (x0 + x1) / 2, y + 0.06, oz + z0 + off], [x1 - x0, 0.12, 0.03]);
+        else b.add('box', H.skirting, [ox + x0 + off, y + 0.06, oz + (z0 + z1) / 2], [0.03, 0.12, z1 - z0]);
+      }
+    }
   for (const f of p.furniture) furniture(b, f, [ox, y, oz], y, p.keepsakes);
+}
+
+/** #860: the inner walls' size: thinner than the outer ones; a doorway's top (the lintel) and how low a wall sinks. */
+export const INNER_WALL = { thick: 0.12, doorTop: 1.55, low: 0.45 };
+
+/**
+ * #860: one stretch of an inner wall, on the room's cells' edges (`line`: from x0, z0 to x1, z1, in cells from the
+ * room's north-west corner). A wall is cut at its doorway: a stretch each side, and the lintel over the gap.
+ */
+export interface InnerWallPiece {
+  line: [number, number, number, number];
+  /** the beam over the doorway (shown only while the wall stands tall) */
+  lintel?: boolean;
+}
+
+/** #860: an inner wall's stretches: each side of its doorway, and the lintel over it. */
+export function innerWallPieces(w: HouseWall): InnerWallPiece[] {
+  const line = (a: number, c: number): [number, number, number, number] => (w.axis === 'x' ? [a, w.at, c, w.at] : [w.at, a, w.at, c]);
+  if (w.door === undefined) return [{ line: line(w.from, w.to) }];
+  const out: InnerWallPiece[] = [];
+  if (w.door > w.from) out.push({ line: line(w.from, w.door) });
+  if (w.door + 1 < w.to) out.push({ line: line(w.door + 1, w.to) });
+  out.push({ line: line(w.door, w.door + 1), lintel: true });
+  return out;
+}
+
+/**
+ * #860: a stretch of inner wall, drawn one unit high from the floor (the caller stretches it to its height): plaster
+ * faces, a post at each end. A lintel is drawn at its own height, a beam over the doorway.
+ */
+export function drawInnerWall(b: HouseSink, piece: InnerWallPiece, o: V3) {
+  const [x0, z0, x1, z1] = piece.line;
+  const alongX = z0 === z1;
+  const cx = o[0] + (x0 + x1) / 2;
+  const cz = o[2] + (z0 + z1) / 2;
+  const len = alongX ? x1 - x0 : z1 - z0;
+  const T = INNER_WALL.thick;
+  const size = (l: number, h: number, t: number): V3 => (alongX ? [l, h, t] : [t, h, l]);
+  if (piece.lintel) {
+    const h = HOUSE_INSIDE.wall - INNER_WALL.doorTop;
+    b.add('box', H.wallIn, [cx, o[1] + INNER_WALL.doorTop + h / 2, cz], size(len, h, T));
+    b.add('box', H.beam, [cx, o[1] + INNER_WALL.doorTop + 0.04, cz], size(len + 0.1, 0.08, T + 0.04));
+    return;
+  }
+  b.add('box', H.wallIn, [cx, o[1] + 0.5, cz], size(len, 1, T));
+  // a post at each end (the doorway's frame, or where it meets the outer wall)
+  for (const e of [0, 1]) {
+    const px = o[0] + (alongX ? (e ? x1 - 0.04 : x0 + 0.04) : x0);
+    const pz = o[2] + (alongX ? z0 : e ? z1 - 0.04 : z0 + 0.04);
+    b.add('box', H.beam, [px, o[1] + 0.5, pz], alongX ? [0.08, 1, T + 0.04] : [T + 0.04, 1, 0.08]);
+  }
+}
+
+/** #860: the cap along an inner wall's top, drawn at y = 0 (the caller lifts it to the wall's height). */
+export function drawInnerWallCap(b: HouseSink, piece: InnerWallPiece, o: V3) {
+  const [x0, z0, x1, z1] = piece.line;
+  const alongX = z0 === z1;
+  const len = (alongX ? x1 - x0 : z1 - z0) + 0.04;
+  b.add('box', H.beam, [o[0] + (x0 + x1) / 2, o[1] + 0.03, o[2] + (z0 + z1) / 2], alongX ? [len, 0.06, INNER_WALL.thick + 0.05] : [INNER_WALL.thick + 0.05, 0.06, len]);
+}
+
+/**
+ * #860: does a stretch of inner wall sink low for the camera? When it stands between the camera and Bloombot: on the
+ * camera's side of it (nearer the camera by more than a little) and facing the camera rather than running toward it
+ * (a wall seen end-on hides nothing). Points in the room's cells, `bot` where Bloombot stands and `cam` where the
+ * camera is (seen from above).
+ */
+export function wallSinks(piece: InnerWallPiece, bot: [number, number], cam: [number, number]): boolean {
+  const [x0, z0, x1, z1] = piece.line;
+  let fx = bot[0] - cam[0];
+  let fz = bot[1] - cam[1];
+  const fl = Math.hypot(fx, fz);
+  if (fl < 1e-6) return false; // straight overhead: nothing stands between
+  fx /= fl;
+  fz /= fl;
+  const ux = x1 - x0;
+  const uz = z1 - z0;
+  const ul = Math.hypot(ux, uz) || 1;
+  if (Math.abs((ux * fx + uz * fz) / ul) > 0.75) return false;
+  // how much nearer the camera the wall is than Bloombot: its nearest end counts
+  const nearer = (px: number, pz: number) => -((px - bot[0]) * fx + (pz - bot[1]) * fz);
+  return Math.max(nearer(x0, z0), nearer(x1, z1)) > 0.2 && nearer((x0 + x1) / 2, (z0 + z1) / 2) > -0.5;
 }

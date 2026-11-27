@@ -89,19 +89,39 @@ export class Walker {
   fits(roofId: string, x: number, z: number, r: number = BOT.radius): boolean {
     if (roofId === GROUND && hitsParkFence(x, z, r)) return false;
     const terraced = this.sim.grid.terraced(roofId);
+    const house = this.walled(roofId);
     const ox = Math.floor(x);
     const oz = Math.floor(z);
     for (let cx = Math.floor(x - r); cx <= Math.floor(x + r); cx++)
       for (let cz = Math.floor(z - r); cz <= Math.floor(z + r); cz++) {
         if (!this.walkable(roofId, cx, cz)) return false;
         if (terraced && !connected(ox, oz, cx, cz)) return false;
+        if (house && !this.sim.house.connected(ox, oz, cx, cz)) return false;
       }
     return true;
   }
 
-  /** E21.24: may bloombot move from one cell to a touching one (a cliff edge blocks both ways)? */
+  /** #860: is this layer the house's inside, with walls between its rooms? */
+  private walled(roofId: string): boolean {
+    return roofId !== GROUND && !!this.sim.house?.isInside(roofId) && this.sim.house.walls().length > 0;
+  }
+
+  /** E21.24: may bloombot move from one cell to a touching one (a cliff edge blocks both ways; #860: so does a wall)? */
   stepOk(roofId: string, ax: number, az: number, bx: number, bz: number): boolean {
+    if (this.walled(roofId) && !this.sim.house.connected(ax, az, bx, bz)) return false;
     return !this.sim.grid.terraced(roofId) || connected(ax, az, bx, bz);
+  }
+
+  /**
+   * One step of a search, from (x, z) by (dx, dz): over cliff edges' steps on a terrace (#860: and never through the
+   * house's walls), a diagonal only when all four of its side steps are open.
+   */
+  private edgesOk(terraced: boolean, house: boolean, x: number, z: number, dx: number, dz: number): boolean {
+    const nx = x + dx;
+    const nz = z + dz;
+    const open = (ax: number, az: number, bx: number, bz: number) => (!terraced || canStep(ax, az, bx, bz)) && (!house || !this.sim.house.wallBetween(ax, az, bx, bz));
+    if (!terraced && !house) return true;
+    return dx && dz ? open(x, z, x + dx, z) && open(x + dx, z, nx, nz) && open(x, z, x, z + dz) && open(x, z + dz, nx, nz) : open(x, z, nx, nz);
   }
 
   /** In water (bloombot wades: slower, with a splash)? */
@@ -220,6 +240,7 @@ export class Walker {
     const heap = new MinHeap<[number, number, string]>();
     heap.push(0, [sx, sz, key(sx, sz)]);
     const terraced = this.sim.grid.terraced(roofId);
+    const house = this.walled(roofId);
     while (heap.size && done.size < budget) {
       const [x, z, k] = heap.pop()!;
       if (done.has(k)) continue;
@@ -231,7 +252,7 @@ export class Walker {
         if (!this.walkable(roofId, nx, nz)) continue;
         if (dx && dz && (!this.walkable(roofId, x + dx, z) || !this.walkable(roofId, x, z + dz))) continue;
         if (roofId === GROUND && hitsParkFence(x + 0.5 + dx * 0.5, z + 0.5 + dz * 0.5, BOT.radius)) continue;
-        if (terraced && !(dx && dz ? canStep(x, z, x + dx, z) && canStep(x + dx, z, nx, nz) && canStep(x, z, x, z + dz) && canStep(x, z + dz, nx, nz) : canStep(x, z, nx, nz))) continue;
+        if (!this.edgesOk(terraced, house, x, z, dx, dz)) continue;
         const nk = key(nx, nz);
         const ng = gk + (dx && dz ? Math.SQRT2 : 1);
         if (ng > maxCost || ng >= (g.get(nk) ?? Infinity)) continue;
@@ -258,6 +279,7 @@ export class Walker {
     heap.push(h(sx, sz), [sx, sz, key(sx, sz)]);
     const closed = new Set<string>();
     const terraced = this.sim.grid.terraced(roofId);
+    const house = this.walled(roofId);
     const back = (end: string) => {
       const out: { x: number; z: number }[] = [];
       let c: string | undefined = end;
@@ -290,7 +312,7 @@ export class Walker {
         if (!this.walkable(roofId, nx, nz)) continue;
         if (dx && dz && (!this.walkable(roofId, x + dx, z) || !this.walkable(roofId, x, z + dz))) continue;
         if (roofId === GROUND && hitsParkFence(x + 0.5 + dx * 0.5, z + 0.5 + dz * 0.5, BOT.radius)) continue;
-        if (terraced && !(dx && dz ? canStep(x, z, x + dx, z) && canStep(x + dx, z, nx, nz) && canStep(x, z, x, z + dz) && canStep(x, z + dz, nx, nz) : canStep(x, z, nx, nz))) continue;
+        if (!this.edgesOk(terraced, house, x, z, dx, dz)) continue;
         const nk = key(nx, nz);
         const ng = gk + (dx && dz ? Math.SQRT2 : 1);
         if (ng >= (g.get(nk) ?? Infinity)) continue;

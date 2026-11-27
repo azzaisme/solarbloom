@@ -357,7 +357,21 @@ export class Cozy {
       const why = this.cellProblem(roofId, c.x, c.z, inside);
       if (why) return big && why === 'Nothing to stand it on here' ? 'It doesn’t fit here' : why;
     }
+    if (inside) return this.roomProblem(kind, cells);
     return undefined;
+  }
+
+  /**
+   * #860: inside the house, a piece never stands across a wall, and a solid one never shuts Bloombot out of a room or
+   * away from a piece of furniture (it can always walk from the door to every room and every piece).
+   */
+  private roomProblem(kind: string, cells: { x: number; z: number }[]): string | undefined {
+    const h = this.sim.house;
+    for (const a of cells) for (const b of cells) if (h.wallBetween(a.x, a.z, b.x, b.z)) return 'A wall is in the way';
+    if (DECOR_OPTION[kind]?.solid === false) return undefined;
+    const lost = h.cutOff(new Set(cells.map((c) => `${c.x},${c.z}`)));
+    if (!lost || lost.id === h.cutOff()?.id) return undefined;
+    return 'verb' in lost ? `That would block the way to ${lost.name}` : `That would block the way into ${lost.name}`;
   }
 
   /** Why one square can't take (part of) a decoration, or undefined. */
@@ -410,6 +424,23 @@ export class Cozy {
           if (!this.placeDecor(d.kind, r, c.roofId, ax, az)) break place;
         }
     }
+  }
+
+  /**
+   * #860: makes the inside match the house's level (HouseSystem.sync) and moves every decoration now in the way: on a
+   * square a piece of furniture took, or standing across one of the new inner walls. Each goes to the nearest free
+   * floor, as clearCells does.
+   */
+  settleHouse() {
+    const h = this.sim.house;
+    const taken: { roofId: string; x: number; z: number }[] = h.sync();
+    if (!h.hasInside()) return;
+    for (const d of this.decorations()) {
+      if (d.roofId !== h.layerId) continue;
+      const cells = decorCells(d.kind, d.rot, d.x, d.z);
+      if (cells.some((a) => cells.some((b) => h.wallBetween(a.x, a.z, b.x, b.z)))) taken.push({ roofId: d.roofId, x: d.x, z: d.z });
+    }
+    this.clearCells(taken);
   }
 
   /** #782: the ground at the house's door (where the house stands): decorations go round it, never in the way in. */

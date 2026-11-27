@@ -475,6 +475,7 @@ export class Game {
       this.waterLife = new WaterLife(this.app.graphicsDevice, life, water.id);
     }
     this.cozy = new Cozy(this.sim);
+    this.cozy.settleHouse(); // #860: a save from before the rooms: nothing left inside furniture or across a wall
     this.chunks.plots = { look: (p) => this.plotLook(p), growth: (p) => this.plotGrowth(p) };
     this.chunks.decor = { inChunk: (cx, cz) => this.decorInChunk(cx, cz) }; // E19.2
     this.chainSummary = new ChainSummary(this.sim);
@@ -1377,7 +1378,9 @@ export class Game {
     const front = s.grid.get(h.layerId, f.x, f.z);
     const out: InteractTarget[] = [];
     if (f.x === dx && (f.z === dz || f.z === dz + 1)) out.push({ kind: 'door', id: 'house:exit', verb: 'Go outside', name: '', distance: fd, at: front, run: () => this.exitHouse() });
-    const piece = h.furnitureAt(f.x, f.z);
+    // #860: nothing is used through a wall (the kitchen's stove from the main room's side of it)
+    const b = this.bot!.pose;
+    const piece = h.connected(Math.floor(b.x), Math.floor(b.z), f.x, f.z) ? h.furnitureAt(f.x, f.z) : undefined;
     if (!piece) return out;
     const frame = { roofId: h.layerId, x: piece.x, z: piece.z, size: Math.max(piece.w, piece.d) };
     const add = (t: Omit<InteractTarget, 'distance' | 'at' | 'frame'>) => out.push({ ...t, distance: fd, at: front, frame });
@@ -1416,7 +1419,7 @@ export class Game {
   private updateHouse() {
     const inside = !!this.bot && this.sim.house.isInside(this.bot.pose.roofId);
     if (inside && !this.camera.isIndoors) this.camera.indoors(true); // a game saved inside comes back inside
-    this.houseInside.update(inside);
+    this.houseInside.update(inside, inside ? { bot: this.bot!.pose, cam: this.camera.entity.getPosition() } : undefined);
     if (this.outsideRadio) this.outsideRadio.enabled = !this.sim.house.hasInside();
   }
 
@@ -1428,7 +1431,7 @@ export class Game {
     const b = this.bot;
     const h = this.sim.house;
     if (!b || !h.hasInside() || this.cinematic) return;
-    this.cozy.clearCells(h.sync());
+    this.cozy.settleHouse();
     const [dx, dz] = h.doorInside();
     this.outsideView = this.camera.snapshot();
     b.teleport(h.layerId, dx + 0.5, dz - 0.5);
@@ -5274,7 +5277,7 @@ export class Game {
     });
     // #782: the house grew: it is drawn anew, its room's furniture moves any decoration out of its way, and a toast says so
     b.on('house.level', ({ level }) => {
-      this.cozy.clearCells(s.house.sync());
+      this.cozy.settleHouse();
       const sh = PARK_SET.shed;
       for (let z = sh.z - 2; z <= sh.z + sh.size + 2; z++) for (let x = sh.x - 2; x <= sh.x + sh.size + 2; x++) {
         const t = s.grid.get(GROUND, x, z);

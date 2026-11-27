@@ -1,6 +1,7 @@
 import type { LayerData, MaterialId, TileData } from '../core/types';
-import { HOUSE, HOUSE_GROWTH, HOUSE_INSIDE, houseDoorInside, houseFurniture, type HouseFurniture, type HouseLevel } from '../data/oldcity';
+import { HOUSE, HOUSE_GROWTH, HOUSE_INSIDE, houseDoorInside, houseFurniture, houseRoomAt, houseRooms, houseWallBetween, houseWalls, type HouseFurniture, type HouseLevel, type HouseRoom, type HouseWall } from '../data/oldcity';
 import type { Sim } from './Sim';
+import { Walker } from './Walker';
 
 /**
  * #782 (E21 §11): Bloombot's house grows from the ruined shed (level 0) through the Shed, the Cottage and the House to
@@ -140,6 +141,101 @@ export class HouseSystem {
   /** The piece of furniture on a cell of the room, if any. */
   furnitureAt(x: number, z: number): HouseFurniture | undefined {
     return this.furniture().find((f) => x >= f.x && x < f.x + f.w && z >= f.z && z < f.z + f.d);
+  }
+
+  /** #860: the rooms now, the main room first. */
+  rooms(): HouseRoom[] {
+    return houseRooms(this.level);
+  }
+
+  /** #860: the inner walls now. */
+  walls(): HouseWall[] {
+    return houseWalls(this.level);
+  }
+
+  /** #860: the room a cell is in. */
+  roomAt(x: number, z: number): HouseRoom | undefined {
+    return houseRoomAt(this.level, x, z);
+  }
+
+  /** #860: is an inner wall between two cells side by side (not at its doorway)? */
+  wallBetween(ax: number, az: number, bx: number, bz: number): boolean {
+    return houseWallBetween(this.level, ax, az, bx, bz);
+  }
+
+  /**
+   * #860: can Bloombot get from a cell to a touching one without going through a wall? Side by side: no wall between
+   * them. Diagonally: round one of the two corners, both of its steps open.
+   */
+  connected(ax: number, az: number, bx: number, bz: number): boolean {
+    const dx = bx - ax;
+    const dz = bz - az;
+    if (!dx && !dz) return true;
+    if (Math.abs(dx) > 1 || Math.abs(dz) > 1) return false;
+    if (!dx || !dz) return !this.wallBetween(ax, az, bx, bz);
+    const open = (px: number, pz: number, qx: number, qz: number) => !this.wallBetween(px, pz, qx, qz);
+    return (open(ax, az, bx, az) && open(bx, az, bx, bz)) || (open(ax, az, ax, bz) && open(ax, bz, bx, bz));
+  }
+
+  /**
+   * #860: every cell Bloombot can walk to from the door inside, keyed `x,z` (steps side by side, never through a
+   * wall), over the cells it may stand in (the Walker's rules); `also` blocks more (a decoration about to be placed).
+   */
+  reach(also?: Set<string>): Set<string> {
+    const out = new Set<string>();
+    if (!this.hasInside()) return out;
+    const room = this.room();
+    const w = new Walker(this.sim);
+    const id = this.layerId;
+    const ok = (x: number, z: number) => x >= 0 && z >= 0 && x < room && z < room && !also?.has(`${x},${z}`) && w.walkable(id, x, z);
+    const [dx, dz] = this.doorInside();
+    if (!ok(dx, dz)) return out;
+    const todo: [number, number][] = [[dx, dz]];
+    out.add(`${dx},${dz}`);
+    while (todo.length) {
+      const [x, z] = todo.pop()!;
+      for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + sx;
+        const nz = z + sz;
+        const k = `${nx},${nz}`;
+        if (out.has(k) || !ok(nx, nz) || this.wallBetween(x, z, nx, nz)) continue;
+        out.add(k);
+        todo.push([nx, nz]);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * #860: what Bloombot couldn't get to from the door if `also` were blocked too: a piece of furniture with no square
+   * beside it to stand on (not through a wall), or a room with no square to walk into. Undefined when all is in reach.
+   */
+  cutOff(also?: Set<string>): HouseFurniture | HouseRoom | undefined {
+    if (!this.hasInside()) return undefined;
+    const r = this.reach(also);
+    for (const f of this.furniture()) {
+      let near = false;
+      for (let x = f.x; x < f.x + f.w && !near; x++)
+        for (let z = f.z; z < f.z + f.d && !near; z++)
+          for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+            if (r.has(`${x + sx},${z + sz}`) && !this.wallBetween(x, z, x + sx, z + sz)) {
+              near = true;
+              break;
+            }
+      if (!near) return f;
+    }
+    for (const room of this.rooms()) {
+      let any = false;
+      for (const k of r) {
+        const [x, z] = k.split(',').map(Number);
+        if (this.roomAt(x, z)?.id === room.id) {
+          any = true;
+          break;
+        }
+      }
+      if (!any) return room;
+    }
+    return undefined;
   }
 
   /** The door cell inside (where Bloombot comes in and goes out). */
