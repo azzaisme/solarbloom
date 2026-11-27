@@ -7,7 +7,7 @@ import { MeshBuilder } from './ChunkRenderer';
 import { drawDecor } from './DecorArt';
 import { decorSize } from '../data/cozy';
 import { FoliageBuilder, foliageMaterial } from './Foliage';
-import { drawRoom } from './HouseArt';
+import { drawInnerWall, drawInnerWallCap, drawRoom, INNER_WALL, innerWallPieces, wallSinks, type InnerWallPiece } from './HouseArt';
 import { color, PALETTE } from './Materials';
 import { MODELS, ModelBatch } from './Models';
 import { vertexColourMaterial } from './Shapes';
@@ -25,6 +25,9 @@ export class HouseInterior {
   private buffers: pc.VertexBuffer[] = [];
   private lamp: pc.Entity;
   private key = '';
+  /** #860: the inner walls' stretches, each its own entity so it can sink for the camera */
+  private walls: { piece: InnerWallPiece; body: pc.Entity; cap?: pc.Entity; h: number }[] = [];
+  private lastT = 0;
 
   constructor(
     private sim: Sim,
@@ -47,8 +50,11 @@ export class HouseInterior {
     return this.root.enabled;
   }
 
-  /** Shows the room (rebuilt first when something in it changed) or hides it. */
-  update(show: boolean) {
+  /**
+   * Shows the room (rebuilt first when something in it changed) or hides it. #860: `view` (Bloombot's spot in the
+   * room's cells and the camera's in the world) sinks each inner wall standing between them.
+   */
+  update(show: boolean, view?: { bot: { x: number; z: number }; cam: pc.Vec3 }) {
     const h = this.sim.house;
     if (!show || !h.hasInside()) {
       this.root.enabled = false;
@@ -58,6 +64,34 @@ export class HouseInterior {
     const key = `${h.level}|${this.keepsakes()}|${decor.map((d) => `${d.key}:${d.kind}:${d.rot}`).join(',')}|${MODELS ? 1 : 0}`;
     if (key !== this.key) this.rebuild(decor, key);
     this.root.enabled = true;
+    this.sinkWalls(view);
+  }
+
+  /** #860: each inner wall eases toward its height: low while it stands between the camera and Bloombot, else tall. */
+  private sinkWalls(view?: { bot: { x: number; z: number }; cam: pc.Vec3 }) {
+    const now = performance.now();
+    const dt = this.lastT ? Math.min(0.1, (now - this.lastT) / 1000) : 1;
+    this.lastT = now;
+    const [ox, , oz] = HOUSE_INSIDE.origin;
+    const y = this.floorY();
+    const k = 1 - Math.exp(-10 * dt);
+    for (const w of this.walls) {
+      const low = !!view && wallSinks(w.piece, [view.bot.x, view.bot.z], [view.cam.x - ox, view.cam.z - oz]);
+      const goal = low ? INNER_WALL.low : HOUSE_INSIDE.wall;
+      w.h += (goal - w.h) * k;
+      if (Math.abs(goal - w.h) < 0.002) w.h = goal;
+      if (w.piece.lintel) {
+        w.body.enabled = w.h > INNER_WALL.doorTop + 0.05;
+        continue;
+      }
+      w.body.setLocalScale(1, w.h, 1);
+      w.cap?.setLocalPosition(0, y + w.h, 0);
+    }
+  }
+
+  /** #860: is a stretch of inner wall standing tall now (for tests and the review)? */
+  wallHeights(): number[] {
+    return this.walls.filter((w) => !w.piece.lintel).map((w) => w.h);
   }
 
   /** The floor's top in the world (where Bloombot's feet and the decorations stand). */
@@ -70,6 +104,7 @@ export class HouseInterior {
     for (const vb of this.buffers) vb.destroy();
     this.parts = [];
     this.buffers = [];
+    this.walls = [];
     this.key = key;
     const h = this.sim.house;
     const room = h.room();
@@ -83,6 +118,7 @@ export class HouseInterior {
       level: h.level,
       door: h.doorInside(),
       furniture: h.furniture(),
+      walls: h.walls(),
       keepsakes: this.keepsakes(),
       variant: (x, z) => this.sim.grid.get(h.layerId, x, z)?.variant ?? x * 7 + z,
     });
@@ -100,13 +136,30 @@ export class HouseInterior {
       drawDecor(host, d.kind, ox + d.x + w / 2, y, oz + d.z + dd / 2, d.rot, false, d.x * 31 + d.z);
     }
     const mesh = (name: string, m: pc.Mesh | undefined, material: pc.Material) => {
-      if (!m) return;
+      if (!m) return undefined;
       const e = new pc.Entity(name);
       e.addComponent('render', { meshInstances: [new pc.MeshInstance(m, material)], castShadows: false, receiveShadows: true });
       this.root.addChild(e);
       this.parts.push(e);
+      return e;
     };
     mesh('house-room', b.build(this.device), vertexColourMaterial());
+    // #860: each stretch of inner wall its own entity: drawn a unit high and stretched to its height each frame
+    for (const w of h.walls())
+      for (const piece of innerWallPieces(w)) {
+        const wb = new MeshBuilder();
+        drawInnerWall(wb, piece, [ox, piece.lintel ? y : 0, oz]);
+        const body = mesh('house-wall', wb.build(this.device), vertexColourMaterial());
+        if (!body) continue;
+        if (!piece.lintel) body.setLocalPosition(0, y, 0);
+        let cap: pc.Entity | undefined;
+        if (!piece.lintel) {
+          const cb = new MeshBuilder();
+          drawInnerWallCap(cb, piece, [ox, 0, oz]);
+          cap = mesh('house-wall-cap', cb.build(this.device), vertexColourMaterial());
+        }
+        this.walls.push({ piece, body, cap, h: HOUSE_INSIDE.wall });
+      }
     mesh('house-plants', fb.build(this.device), foliageMaterial());
     if (batch?.count) {
       const bounds = new pc.BoundingBox(new pc.Vec3(ox + room / 2, y + 1, oz + room / 2), new pc.Vec3(room / 2 + 1, 2, room / 2 + 1));
@@ -119,5 +172,6 @@ export class HouseInterior {
     }
     this.lamp.setPosition(ox + room / 2, y + HOUSE_INSIDE.wall - 0.4, oz + room / 2);
     this.lamp.light!.range = room * 1.1;
+    this.lastT = 0; // the next update puts each wall straight at its height (no wall pops up and sinks again)
   }
 }

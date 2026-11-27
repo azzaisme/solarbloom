@@ -1157,6 +1157,34 @@ export interface HouseFurniture {
   d: number;
 }
 
+/** #860: a room of the house: the main room is the whole floor less the others (cells from the north-west corner). */
+export interface HouseRoom {
+  id: 'main' | 'kitchen' | 'bedroom';
+  /** as a sentence says it ("the kitchen") */
+  name: string;
+  /** the level it arrives at */
+  level: number;
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+}
+
+/**
+ * #860: a straight inner wall standing on the cells' edges. `axis` 'x' runs along x on the line z = `at` (between rows
+ * at − 1 and at), from cell `from` up to `to` (not included); 'z' runs along z on the line x = `at`. `door` is the
+ * cell along it left open as the doorway.
+ */
+export interface HouseWall {
+  axis: 'x' | 'z';
+  at: number;
+  from: number;
+  to: number;
+  door?: number;
+  /** the level it arrives at */
+  level: number;
+}
+
 /**
  * #782: the inside of the house: a room of `room` × `room` floorboards (HOUSE), drawn far above the park and shown
  * only while Bloombot is in it. The door is in the middle of the south wall; furniture stands along the north wall
@@ -1178,18 +1206,76 @@ export const HOUSE_INSIDE = {
  */
 export const HOUSE_GARDEN = { x: 0, z: 2, w: 2, d: 4, gate: 'e' as const, level: 3 };
 
+/**
+ * #782 / #860: where each piece stands at each level (cells from the room's north-west corner, by level 1 … 4). The
+ * Shed and the Cottage keep the spots they always had. From the House on, the kitchen fills the north-west corner, so
+ * the bed, the radio and the desk move along; at the Home the bed and the chest go into the bedroom.
+ */
+const FURNITURE: (Omit<HouseFurniture, 'x' | 'z'> & { at: ([number, number] | undefined)[] })[] = [
+  { id: 'bed', name: 'the bed', verb: 'Sleep', level: 1, w: 1, d: 2, at: [[0, 0], [0, 0], [5, 0], [11, 0]] },
+  { id: 'radio', name: 'the radio', verb: 'Listen to', level: 1, w: 1, d: 1, at: [[2, 0], [3, 0], [7, 0], [5, 0]] },
+  { id: 'chest', name: 'the chest', verb: 'Open', level: 1, w: 1, d: 1, at: [[5, 0], [7, 0], [9, 0], [8, 0]] },
+  { id: 'shelf', name: 'the keepsake shelf', verb: 'Look at', level: 2, w: 1, d: 2, at: [undefined, [7, 2], [9, 2], [11, 7]] },
+  { id: 'desk', name: 'the journal desk', verb: 'Read', level: 2, w: 1, d: 1, at: [undefined, [0, 3], [0, 6], [0, 6]] },
+];
+
 /** #782: the room's furniture at a level (each piece from the level it arrives at). */
 export function houseFurniture(level: number): HouseFurniture[] {
+  if (!HOUSE[level - 1]) return [];
+  return FURNITURE.flatMap(({ at, ...f }) => {
+    const p = f.level <= level ? at[level - 1] : undefined;
+    return p ? [{ ...f, x: p[0], z: p[1] }] : [];
+  });
+}
+
+/**
+ * #860: the rooms beyond the main one. The Shed and the Cottage are one room; the House adds a kitchen in the
+ * north-west corner, and the Home a bedroom in the north-east one. Each keeps its cells as the house grows (the room
+ * widens to the east and the south), so what was placed in the kitchen stays in the kitchen.
+ */
+export const HOUSE_ROOMS: HouseRoom[] = [
+  { id: 'kitchen', name: 'the kitchen', level: 3, x: 0, z: 0, w: 4, d: 4 },
+  { id: 'bedroom', name: 'the bedroom', level: 4, x: 8, z: 0, w: 4, d: 5 },
+];
+
+/** #860: the inner walls round those rooms, each with its doorway (on the south side, toward the camera). */
+export const HOUSE_WALLS: HouseWall[] = [
+  { axis: 'z', at: 4, from: 0, to: 4, level: 3 }, // the kitchen's east wall
+  { axis: 'x', at: 4, from: 0, to: 4, door: 2, level: 3 }, // the kitchen's south wall, with its doorway
+  { axis: 'z', at: 8, from: 0, to: 5, level: 4 }, // the bedroom's west wall
+  { axis: 'x', at: 5, from: 8, to: 12, door: 10, level: 4 }, // the bedroom's south wall, with its doorway
+];
+
+/** #860: the rooms at a level, the main room (the rest of the floor) first. */
+export function houseRooms(level: number): HouseRoom[] {
   const room = HOUSE[level - 1]?.room ?? 0;
   if (!room) return [];
-  const all: HouseFurniture[] = [
-    { id: 'bed', name: 'the bed', verb: 'Sleep', level: 1, x: 0, z: 0, w: 1, d: 2 },
-    { id: 'radio', name: 'the radio', verb: 'Listen to', level: 1, x: Math.floor(room / 2) - 1, z: 0, w: 1, d: 1 },
-    { id: 'chest', name: 'the chest', verb: 'Open', level: 1, x: room - 1, z: 0, w: 1, d: 1 },
-    { id: 'shelf', name: 'the keepsake shelf', verb: 'Look at', level: 2, x: room - 1, z: 2, w: 1, d: 2 },
-    { id: 'desk', name: 'the journal desk', verb: 'Read', level: 2, x: 0, z: 3, w: 1, d: 1 },
-  ];
-  return all.filter((f) => f.level <= level);
+  return [{ id: 'main', name: 'the main room', level: 1, x: 0, z: 0, w: room, d: room }, ...HOUSE_ROOMS.filter((r) => r.level <= level)];
+}
+
+/** #860: the inner walls standing at a level. */
+export function houseWalls(level: number): HouseWall[] {
+  return HOUSE[level - 1] ? HOUSE_WALLS.filter((w) => w.level <= level) : [];
+}
+
+/**
+ * #860: is there a wall between two cells side by side (not the doorway)? Diagonal neighbours: see
+ * HouseSystem.connected.
+ */
+export function houseWallBetween(level: number, ax: number, az: number, bx: number, bz: number): boolean {
+  const dx = bx - ax;
+  const dz = bz - az;
+  if (Math.abs(dx) + Math.abs(dz) !== 1) return false;
+  const axis = dz ? 'x' : 'z';
+  const line = dz ? Math.max(az, bz) : Math.max(ax, bx);
+  const along = dz ? ax : az;
+  return houseWalls(level).some((w) => w.axis === axis && w.at === line && along >= w.from && along < w.to && along !== w.door);
+}
+
+/** #860: the room a cell is in at a level (the main room for any cell outside the others). */
+export function houseRoomAt(level: number, x: number, z: number): HouseRoom | undefined {
+  const rooms = houseRooms(level);
+  return rooms.slice(1).find((r) => x >= r.x && x < r.x + r.w && z >= r.z && z < r.z + r.d) ?? rooms[0];
 }
 
 /** #782: the room's door cell (inside, in the middle of the south wall) at a level. */
@@ -1201,8 +1287,8 @@ export function houseDoorInside(level: number): [number, number] {
 export const HOUSE: HouseLevel[] = [
   { level: 1, name: 'Shed', delivery: { scrap: 15, timber: 10 }, room: 6, decor: 12, gives: ['A bed', 'A storage chest', 'A radio by the window'] },
   { level: 2, name: 'Cottage', delivery: { timber: 30, glass: 20, clay: 20 }, room: 8, decor: 40, gives: ['Keepsake shelf', 'Journal desk'] },
-  { level: 3, name: 'House', delivery: { gears: 40, copper: 40, glass: 30 }, room: 10, decor: 80, gives: ['A fenced garden outside'] },
-  { level: 4, name: 'Home', delivery: { sunstone: 40, timber: 60, clay: 40 }, room: 12, decor: 140, gives: ['Travel home from anywhere'] },
+  { level: 3, name: 'House', delivery: { gears: 40, copper: 40, glass: 30 }, room: 10, decor: 80, gives: ['A kitchen', 'A fenced garden outside'] },
+  { level: 4, name: 'Home', delivery: { sunstone: 40, timber: 60, clay: 40 }, room: 12, decor: 140, gives: ['A bedroom', 'Travel home from anywhere'] },
 ];
 
 /** §17 one-off items. */
