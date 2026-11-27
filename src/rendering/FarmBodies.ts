@@ -74,14 +74,14 @@ export function orchardBody(b: pc.Entity) {
   const stones = PALETTE.orchard.stone.map((c) => mat(c, { gloss: 0.12 })); // matte: a glossy stone mirrors the blue sky
   // [angle (turns), distance, length, width, height]: an uneven ring of big and small stones, a few pairs side by side
   const ring: [number, number, number, number, number][] = [
-    [0.0, 0.37, 0.17, 0.12, 0.08], [0.085, 0.39, 0.11, 0.085, 0.06], [0.16, 0.36, 0.16, 0.11, 0.075], [0.25, 0.38, 0.13, 0.1, 0.065],
-    [0.33, 0.37, 0.18, 0.12, 0.08], [0.42, 0.39, 0.1, 0.08, 0.055], [0.5, 0.36, 0.16, 0.115, 0.075], [0.59, 0.38, 0.14, 0.1, 0.07],
-    [0.67, 0.37, 0.17, 0.12, 0.08], [0.76, 0.39, 0.11, 0.085, 0.06], [0.84, 0.36, 0.15, 0.11, 0.07], [0.925, 0.38, 0.13, 0.095, 0.065],
+    [0.0, 0.37, 0.15, 0.12, 0.085], [0.085, 0.39, 0.1, 0.085, 0.065], [0.16, 0.36, 0.14, 0.11, 0.08], [0.25, 0.38, 0.12, 0.1, 0.07],
+    [0.33, 0.37, 0.15, 0.12, 0.085], [0.42, 0.39, 0.095, 0.08, 0.06], [0.5, 0.36, 0.14, 0.115, 0.08], [0.59, 0.38, 0.125, 0.1, 0.075],
+    [0.67, 0.37, 0.15, 0.12, 0.085], [0.76, 0.39, 0.1, 0.085, 0.065], [0.84, 0.36, 0.135, 0.11, 0.075], [0.925, 0.38, 0.12, 0.095, 0.07],
   ];
   ring.forEach(([turn, d, l, w, h], i) => {
     const a = turn * Math.PI * 2;
     // faceted stones lying along the ring, each turned a little off it, their rounded tops above the mulch
-    stoneShape(b, stones[i % stones.length], i, { pos: [Math.cos(a) * d, 0.03 + h * 0.3, Math.sin(a) * d], rot: [0, -turn * 360 + 90 + ((i * 37) % 30) - 15, (i % 3) * 3 - 3], scale: [l, h * 1.15, w], shadow: true });
+    stoneShape(b, stones[i % stones.length], i, { pos: [Math.cos(a) * d, 0.03 + h * 0.25, Math.sin(a) * d], rot: [0, -turn * 360 + 90 + ((i * 37) % 30) - 15, (i % 3) * 3 - 3], scale: [l, h * 1.4, w], shadow: true });
   });
 }
 
