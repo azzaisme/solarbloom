@@ -79,7 +79,11 @@ const where = (page) =>
 const grow = async (page, level) => {
   await page.evaluate(() => window.solarbloom.exitHouse());
   await wait(800);
-  await page.evaluate(() => window.solarbloom.sim.house.giveAll());
+  await page.evaluate((l) => {
+    const g = window.solarbloom;
+    g.bot.teleport('g', 4.5, 6.5); // at the door, in reach of the chests
+    for (let i = 0; i < 4 && g.sim.house.level < l; i++) g.sim.house.giveAll();
+  }, level);
   await page.waitForFunction((l) => window.solarbloom.sim.house.level === l, level, { timeout: 60_000 });
   await wait(1500);
   await page.evaluate(() => {
@@ -107,8 +111,6 @@ try {
     const sv = g.sim.state.salvage;
     sv.tier = Math.max(1, sv.tier);
     for (const m of ['scrap', 'timber', 'glass', 'clay', 'gears', 'copper', 'sunstone']) sv.store[m] = 999;
-    g.sim.house.giveAll();
-    g.sim.house.giveAll();
   });
   await wait(1500);
 
