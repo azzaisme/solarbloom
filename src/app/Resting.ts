@@ -2,7 +2,7 @@ import type { CameraController } from '../rendering/CameraController';
 import type { KeeperVisuals } from '../rendering/KeeperVisuals';
 import type { Sfx } from '../audio/Sfx';
 import type { MachineData, TileData } from '../core/types';
-import { KEEPERS } from '../data/oldcity';
+import { KEEPERS, type HouseFurniture } from '../data/oldcity';
 import { REST } from '../data/rest';
 import type { Bench } from '../gameplay/Rest';
 import type { Sim } from '../gameplay/Sim';
@@ -35,6 +35,8 @@ export type RestCandidate = Candidate & { run: () => void; at?: TileData };
  */
 export class Resting {
   private before?: { zoom: number; yaw: number; maxZoom: number };
+  /** #859: sitting indoors: the calm view keeps still (the room's walls would hide Bloombot as it turned or eased out) */
+  private still = false;
 
   constructor(private h: RestHost) {
     h.bot.onSeatMove = () => this.stand();
@@ -99,6 +101,28 @@ export class Resting {
     this.calm();
   }
 
+  /**
+   * #859: sits cross-legged on the hearth in front of the Home's fire (on the west wall: the hearth is the column
+   * east of it), facing the flames, and rests: Charge comes back quicker than on a bench. From elsewhere in the room
+   * Bloombot first walks to the nearer of the hearth's squares.
+   */
+  sitByFire(f: HouseFurniture) {
+    const h = this.h;
+    const p = h.bot.pose;
+    const hx = f.x + f.w;
+    const spots = Array.from({ length: f.d }, (_, i) => f.z + i).sort((a, b) => Math.abs(a + 0.5 - p.z) - Math.abs(b + 0.5 - p.z));
+    const here = Math.floor(p.x) === hx && spots.includes(Math.floor(p.z));
+    if (!here) {
+      for (const z of spots) if (h.bot.goToCell(p.roofId, hx, z, { x: f.x, z }, () => this.sitByFire(f))) return;
+      return;
+    }
+    if (!h.sim.rest.sitByFire()) return;
+    const [, y] = h.bot.world();
+    const z = Math.floor(p.z) + 0.5;
+    h.bot.sitOn({ x: hx + REST.hearthOut, y, z, facing: -Math.PI / 2 }, () => h.bot.visuals.setPose('meditate'));
+    this.calm();
+  }
+
   /** E23.2.4: on a bench, the seat's free end where an animal beside bloombot settles (undefined: no room, or not sitting). */
   benchSpot?: { x: number; y: number; z: number };
 
@@ -131,8 +155,12 @@ export class Resting {
   private calm() {
     const h = this.h;
     this.before = { zoom: h.camera.zoomTarget, yaw: h.camera.heading, maxZoom: h.camera.maxZoom };
-    h.camera.maxZoom = Math.max(h.camera.maxZoom, REST.visitZoom);
-    h.camera.zoomTo(Math.max(h.camera.minZoom, this.before.zoom * REST.calmZoom));
+    // #859: indoors (by the Home's fire) the view stays in the room: no easing out over the roof, no slow turn
+    this.still = h.camera.isIndoors;
+    if (!this.still) {
+      h.camera.maxZoom = Math.max(h.camera.maxZoom, REST.visitZoom);
+      h.camera.zoomTo(Math.max(h.camera.minZoom, this.before.zoom * REST.calmZoom));
+    }
     document.body.classList.add('resting');
     h.sfx.swell(REST.musicSwell);
   }
@@ -183,7 +211,7 @@ export class Resting {
 
   /** Each frame: the calm view turns slowly while sitting. */
   update(dt: number) {
-    if (!this.active || !this.before) return;
+    if (!this.active || !this.before || this.still) return;
     this.h.camera.orbit(dt * REST.orbitDegPerSecond);
   }
 

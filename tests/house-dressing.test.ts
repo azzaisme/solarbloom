@@ -36,8 +36,8 @@ function room(level: number): Box[] {
 const plan = (level: number) => ({ room: HOUSE[level - 1].room, level, furniture: houseFurniture(level), walls: houseWalls(level) });
 
 describe('#861: the built-in dressing grows with the room', () => {
-  it('a second rug from the Cottage on, and a third (the kitchen’s runner) from the House on', () => {
-    expect([1, 2, 3, 4].map((l) => houseRugs(l).length)).toEqual([1, 2, 3, 3]);
+  it('a second rug from the Cottage on, a third (the kitchen’s runner) from the House on, a fourth (the reading nook’s, #859) at the Home', () => {
+    expect([1, 2, 3, 4].map((l) => houseRugs(l).length)).toEqual([1, 2, 3, 4]);
   });
 
   it('every rug lies on the floor, inside one room, clear of the furniture and the door', () => {
@@ -225,7 +225,7 @@ describe('#861: the house’s painted textures (klad)', () => {
   it('with textures, the dressing is painted: rugs woven, the doormat coir, beams, plates, joists, posts and skirting wood', () => {
     for (const level of [1, 2, 3, 4]) {
       const plain: string[] = [];
-      const tex: Record<string, string[]> = { wood: [], weave: [], coir: [], cloth: [], tiles: [] };
+      const tex: Record<string, string[]> = { wood: [], weave: [], coir: [], cloth: [], tiles: [], brick: [], hearth: [] };
       const sink: HouseSink = {
         add: (type, hex) => {
           if (type === 'box') plain.push(hex);

@@ -26,7 +26,7 @@ const STEPS: KeeperStep[] = ['asleep', 'request1', 'request2', 'landmark', 'sett
  */
 export class RestSystem {
   /** where bloombot sits now (undefined: standing) */
-  sitting?: { kind: 'bench'; bench: Bench } | { kind: 'charger'; machineId: string };
+  sitting?: { kind: 'bench'; bench: Bench } | { kind: 'charger'; machineId: string } | { kind: 'fire' };
   /** "let time run faster" while sitting */
   fast = false;
 
@@ -79,6 +79,23 @@ export class RestSystem {
     return true;
   }
 
+  /**
+   * #859: sits on the hearth by the Home's fire (the fireplace, from the Home on): Charge comes back quicker than on a
+   * bench (CHARGE.firePerSecond, Gable's Easy rest on top). Only inside the house, with a fireplace in it.
+   */
+  sitByFire(): boolean {
+    if (!this.fireHere()) return false;
+    this.sitting = { kind: 'fire' };
+    this.sim.bus.emit('rest.sat', { kind: 'fire' });
+    return true;
+  }
+
+  /** #859: is Bloombot in the house, and is there a fireplace in it? */
+  private fireHere(): boolean {
+    const h = this.sim.house;
+    return !!this.sim.bot && h.isInside(this.sim.bot.roofId) && h.furniture().some((f) => f.id === 'fireplace');
+  }
+
   stand() {
     if (!this.sitting) return;
     this.sitting = undefined;
@@ -118,6 +135,12 @@ export class RestSystem {
       // the bench was taken away (a placed one picked up) while bloombot sat on it: stand
       if (!this.benchAt(s.bench.x, s.bench.z)) return this.stand();
       this.sim.charge.recharge(CHARGE.benchPerSecond * dt * this.sim.knacks.rest, 'bench'); // #625 Easy rest (Gable)
+      return;
+    }
+    if (s.kind === 'fire') {
+      // #859: out of the house (or no fireplace any more): stand
+      if (!this.fireHere()) return this.stand();
+      this.sim.charge.recharge(CHARGE.firePerSecond * dt * this.sim.knacks.rest, 'fire'); // #625 Easy rest (Gable)
       return;
     }
     // meditating: the pad charges bloombot (sim.chargers) while it is docked there; the charger gone, or bloombot

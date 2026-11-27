@@ -13,7 +13,7 @@ export interface GameEvents {
   'pulse.loadEmpty': { load: import('../data/pulse').PulseLoadId };
   /** E23.2.3: an old bench mended; bloombot sat down (on a bench, or to meditate at a charger); stood up. */
   'bench.mended': { benchId: string; x: number; z: number };
-  'rest.sat': { kind: 'bench' | 'charger' };
+  'rest.sat': { kind: 'bench' | 'charger' | 'fire' };
   'rest.stood': Record<string, never>;
   /** E23.2.4: an animal came over while bloombot sits, and the visitor log took it in (first: a new kind) */
   'wildlife.arrived': { id: string; perch: import('../data/wildlife').Perch; area: string };

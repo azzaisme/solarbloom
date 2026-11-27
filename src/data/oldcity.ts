@@ -1145,7 +1145,7 @@ export const HOUSE_GROWTH = {
 
 /** #782: a piece of furniture inside the house (cells from the room's north-west corner; `w` × `d` cells). */
 export interface HouseFurniture {
-  id: 'bed' | 'chest' | 'radio' | 'shelf' | 'desk' | 'stove' | 'counter' | 'table';
+  id: 'bed' | 'chest' | 'radio' | 'shelf' | 'desk' | 'stove' | 'counter' | 'table' | 'fireplace' | 'nook';
   name: string;
   /** what {interact} does at it, as the prompt says it ("Sleep", "Open"); none for a piece that is only there to look at */
   verb?: string;
@@ -1221,6 +1221,11 @@ const FURNITURE: (Omit<HouseFurniture, 'x' | 'z'> & { at: ([number, number] | un
   { id: 'stove', name: 'the stove', verb: 'Cook at', level: 3, w: 1, d: 1, at: [undefined, undefined, [0, 0], [0, 0]] },
   { id: 'counter', name: 'the kitchen counter', level: 3, w: 2, d: 1, at: [undefined, undefined, [1, 0], [1, 0]] },
   { id: 'table', name: 'the kitchen table', level: 3, w: 2, d: 2, at: [undefined, undefined, [0, 2], [0, 2]] },
+  // #859: the Home's main room: a fireplace on the west wall to sit by (Charge comes back quicker there), between the
+  // journal desk and a window, and a reading nook in the south-east corner (an armchair, a standing lamp and a low
+  // bookcase under the window) for reading the journal's pages again
+  { id: 'fireplace', name: 'the fire', verb: 'Sit by', level: 4, w: 1, d: 2, at: [undefined, undefined, undefined, [0, 7]] },
+  { id: 'nook', name: 'the reading nook', verb: 'Read in', level: 4, w: 2, d: 2, at: [undefined, undefined, undefined, [10, 10]] },
 ];
 
 /** #782: the room's furniture at a level (each piece from the level it arrives at). */
@@ -1293,7 +1298,8 @@ export interface HouseRug {
 
 /**
  * #861: the rugs that come with the room, more as it grows: one in the middle of the main room at every size; from
- * the Cottage on a small one beside the bed; from the House on a runner along the kitchen's counter.
+ * the Cottage on a small one beside the bed; from the House on a runner along the kitchen's counter; at the Home one
+ * at the reading nook's armchair's feet.
  */
 export function houseRugs(level: number): HouseRug[] {
   const R = HOUSE[level - 1]?.room ?? 0;
@@ -1302,6 +1308,9 @@ export function houseRugs(level: number): HouseRug[] {
   const bed = houseFurniture(level).find((f) => f.id === 'bed');
   if (level >= 2 && bed) out.push({ x: bed.x + (bed.x + 1 < R ? 1.5 : -0.5), z: bed.z + 1, w: 0.8, d: 1.4, colour: 'blue' });
   if (level >= 3) out.push({ x: 2, z: 1.5, w: 3.3, d: 0.7, colour: 'green' });
+  // #859: the reading nook's, at the armchair's feet (just west of the nook, clear of it)
+  const nook = houseFurniture(level).find((f) => f.id === 'nook');
+  if (nook) out.push({ x: nook.x - 0.5, z: nook.z + 1.05, w: 0.9, d: 1.5, colour: 'green' });
   return out;
 }
 
@@ -1315,7 +1324,7 @@ export const HOUSE: HouseLevel[] = [
   { level: 1, name: 'Shed', delivery: { scrap: 15, timber: 10 }, room: 6, decor: 12, gives: ['A bed', 'A storage chest', 'A radio by the window'] },
   { level: 2, name: 'Cottage', delivery: { timber: 30, glass: 20, clay: 20 }, room: 8, decor: 40, gives: ['Keepsake shelf', 'Journal desk'] },
   { level: 3, name: 'House', delivery: { gears: 40, copper: 40, glass: 30 }, room: 10, decor: 80, gives: ['A kitchen with a stove for cooking', 'A kitchen counter', 'A table and four chairs', 'A fenced garden outside'] },
-  { level: 4, name: 'Home', delivery: { sunstone: 40, timber: 60, clay: 40 }, room: 12, decor: 140, gives: ['A bedroom', 'Travel home from anywhere'] },
+  { level: 4, name: 'Home', delivery: { sunstone: 40, timber: 60, clay: 40 }, room: 12, decor: 140, gives: ['A bedroom', 'A fireplace to sit by', 'A reading nook', 'Travel home from anywhere'] },
 ];
 
 /** §17 one-off items. */

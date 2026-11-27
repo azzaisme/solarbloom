@@ -86,7 +86,7 @@ describe('#858: the kitchen is furnished at the House', () => {
   it('the kitchen wears painted textures: a gingham cloth on the table, tiles behind the stove and counter, wood for the rest', () => {
     const H = PALETTE.house;
     for (const level of [3, 4]) {
-      const tex: Record<string, string[]> = { wood: [], weave: [], coir: [], cloth: [], tiles: [] };
+      const tex: Record<string, string[]> = { wood: [], weave: [], coir: [], cloth: [], tiles: [], brick: [], hearth: [] };
       const plain: string[] = [];
       const sink: HouseSink = { add: (type, hex) => type === 'box' && plain.push(hex), tex: (name, hex) => tex[name].push(hex) };
       drawRoom(sink, { origin: [0, 0, 0], room: HOUSE[level - 1].room, wall: HOUSE_INSIDE.wall, level, door: houseDoorInside(level), furniture: houseFurniture(level), walls: houseWalls(level), rooms: houseRooms(level), keepsakes: 0, variant: (x, z) => x * 7 + z });

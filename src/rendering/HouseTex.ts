@@ -4,7 +4,8 @@ import { lin } from './ChunkRenderer';
 /**
  * #861 (epic #845): the house's painted textures, on the pieces inside that are made of something you'd see the
  * grain or weave of: wood (beams, wall plates, joist ends, door posts, skirting), the rugs' weave and the coir
- * doormat; #858: the kitchen's gingham tablecloth and its tiled splashback (its table, chairs and counter are wood). Painted by hand in klad (owner, 28 Nov 2026: no procedural noise or stock images), as seamless tiles in
+ * doormat; #858: the kitchen's gingham tablecloth and its tiled splashback (its table, chairs and counter are wood);
+ * #859: the Home's fireplace in brick, on a stone hearth. Painted by hand in klad (owner, 28 Nov 2026: no procedural noise or stock images), as seamless tiles in
  * light warm greys: the piece's palette colour tints them, so one wood tile serves the dark beams and the paler
  * skirting, and one weave every rug. The `.klad` sources sit next to the PNGs in `assets/raw/textures/house/`
  * (`paint.py` there made the strokes, `klad render <name>.klad --region 256,256,256,256` cuts out the tile), so
@@ -13,17 +14,17 @@ import { lin } from './ChunkRenderer';
  * Each texture is one mesh per room (boxes with UVs, the vertex colour the tint), drawn with its own material.
  */
 
-export type HouseTexName = 'wood' | 'weave' | 'coir' | 'cloth' | 'tiles';
-export const HOUSE_TEXTURES: HouseTexName[] = ['wood', 'weave', 'coir', 'cloth', 'tiles'];
+export type HouseTexName = 'wood' | 'weave' | 'coir' | 'cloth' | 'tiles' | 'brick' | 'hearth';
+export const HOUSE_TEXTURES: HouseTexName[] = ['wood', 'weave', 'coir', 'cloth', 'tiles', 'brick', 'hearth'];
 
 /** World metres one copy of each tile covers. */
-export const HOUSE_TEX_METRES: Record<HouseTexName, number> = { wood: 0.9, weave: 1.6, coir: 1.0, cloth: 0.5, tiles: 0.6 };
+export const HOUSE_TEX_METRES: Record<HouseTexName, number> = { wood: 0.9, weave: 1.6, coir: 1.0, cloth: 0.5, tiles: 0.6, brick: 1.0, hearth: 1.2 };
 
 /**
  * Each tile's mean brightness (sRGB, measured from the PNGs): the material lifts the tint by its inverse, so a
  * textured piece averages out at its palette colour rather than a shade darker.
  */
-export const HOUSE_TEX_MEAN: Record<HouseTexName, number> = { wood: 0.846, weave: 0.893, coir: 0.802, cloth: 0.807, tiles: 0.885 };
+export const HOUSE_TEX_MEAN: Record<HouseTexName, number> = { wood: 0.846, weave: 0.893, coir: 0.802, cloth: 0.807, tiles: 0.885, brick: 0.812, hearth: 0.862 };
 
 const FILES = import.meta.glob('../../assets/raw/textures/house/*.png', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
 

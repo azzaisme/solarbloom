@@ -1,6 +1,6 @@
 """Paints the house's tiles with klad brush strokes (JSON lines for `klad apply`), into a 768 x 768 bundle made
 without --wrap, the tile its middle square (see stroke). Light warm greys: the game tints
-them with the palette colour of the piece they lie on. Usage: python paint.py <wood|weave|coir|cloth|tiles> > ops.jsonl"""
+them with the palette colour of the piece they lie on. Usage: python paint.py <wood|weave|coir|cloth|tiles|brick|hearth> > ops.jsonl"""
 import json, math, random, sys
 
 S = 256
@@ -162,6 +162,61 @@ def tiles():
                 stroke('pencil', 1.0, '#ffffff', [(x0 + 8, y), (x1 - 10, y + R.uniform(-1, 1))], 0.5)
 
 
-{'wood': wood, 'weave': weave, 'coir': coir, 'cloth': cloth, 'tiles': tiles}[sys.argv[1]]()
+
+def brick():
+    """#859: the Home's fireplace: bricks in a running bond, each its own fired shade, with mortar between (the
+    background). Each brick is a filled shape with soft corners, darker at its foot, with a few mottles and chips."""
+    R = random.Random(859)
+    W, H = 64, 32  # four bricks across, eight courses down
+    g = 2.6  # half the mortar's width
+    for row in range(S // H):
+        shift = (W / 2) * (row % 2)
+        for k in range(-1, S // W + 1):
+            x0, y0 = k * W + shift + g, row * H + g
+            x1, y1 = (k + 1) * W + shift - g, (row + 1) * H - g
+            if x1 <= 0 or x0 >= S:
+                continue
+            c = 2.5  # the corners, a little worn
+            j = lambda: R.uniform(-0.7, 0.7)
+            fill(R.choice(['#f2e6dc', '#e8d6c8', '#ddc6b4', '#f6ede4', '#d4b9a6']),
+                 [(x0 + c, y0 + j()), (x1 - c, y0 + j()), (x1 + j(), y0 + c), (x1 + j(), y1 - c), (x1 - c, y1 + j()), (x0 + c, y1 + j()), (x0 + j(), y1 - c), (x0 + j(), y0 + c)])
+            fill('#9c806a60', [(x0 + 2, y1 - 5), (x1 - 2, y1 - 5), (x1 - 2, y1 - 0.5), (x0 + 2, y1 - 0.5)])  # its foot in shade
+            for _ in range(3):  # mottles from the kiln
+                mx, my = R.uniform(x0 + 6, x1 - 6), R.uniform(y0 + 5, y1 - 7)
+                stroke('soft', R.uniform(5, 10), R.choice(['#c8a892', '#fbf3ea', '#b8967e']), [(mx, my), (mx + R.uniform(3, 9), my + R.uniform(-1, 1))], 0.45)
+            if R.random() < 0.35:  # a chip off an edge
+                cx = R.uniform(x0 + 8, x1 - 8)
+                stroke('pencil', 2.0, '#a78c76', [(cx, y0 + 1), (cx + 3, y0 + 3), (cx + 6, y0 + 1)], 0.8)
+    for _ in range(140):  # grit in the mortar
+        x, y = R.uniform(0, S), R.uniform(0, S)
+        stroke('pencil', 1.0, R.choice(['#9a8f80', '#ffffff']), [(x, y), (x + 1.2, y + 0.6)], 0.5)
+
+
+def hearth():
+    """#859: the hearth in front of the fire: big flagstones, uneven, with a thin dark joint between (the
+    background), each stone its own grey with soft patches and a few pits."""
+    R = random.Random(8590)
+    N = 3  # three stones across the tile, three down, the corners nudged so none is square
+    g = 2.0
+    jit = {(i % N, k % N): (R.uniform(-14, 14), R.uniform(-14, 14)) for i in range(N) for k in range(N)}
+    def corner(i, k):
+        dx, dy = jit[(i % N, k % N)]
+        return (i * S / N + dx, k * S / N + dy)
+    for k in range(N):
+        for i in range(N):
+            a, b, c, d = corner(i, k), corner(i + 1, k), corner(i + 1, k + 1), corner(i, k + 1)
+            cx, cy = (a[0] + b[0] + c[0] + d[0]) / 4, (a[1] + b[1] + c[1] + d[1]) / 4
+            shrink = lambda p: (p[0] + (cx - p[0]) * g / 60, p[1] + (cy - p[1]) * g / 60)
+            pts = [shrink(p) for p in (a, b, c, d)]
+            fill(R.choice(['#efeae2', '#e4ded4', '#f5f1ea', '#dcd5ca']), pts)
+            for _ in range(5):  # patches where the stone is lighter or darker
+                px, py = cx + R.uniform(-28, 28), cy + R.uniform(-28, 28)
+                stroke('soft', R.uniform(12, 24), R.choice(['#fbf8f3', '#cfc7ba', '#e0d9ce']), [(px, py), (px + R.uniform(-10, 10), py + R.uniform(-6, 6))], 0.35)
+            for _ in range(10):  # pits
+                px, py = cx + R.uniform(-30, 30), cy + R.uniform(-30, 30)
+                stroke('pencil', R.uniform(1.0, 2.0), '#a69d90', [(px, py), (px + 0.8, py + 0.5)], 0.7)
+
+
+{'wood': wood, 'weave': weave, 'coir': coir, 'cloth': cloth, 'tiles': tiles, 'brick': brick, 'hearth': hearth}[sys.argv[1]]()
 for op in out:
     print(json.dumps(op))

@@ -54,6 +54,8 @@ export const REST = {
    * settled), so a hair over the top; `settle` takes it the rest of the way.
    */
   padTop: 0.103,
+  /** #859: by the Home's fire bloombot sits cross-legged on the floor this far out from the fireplace's front (cells), on the hearth's rug, facing the flames */
+  hearthOut: 0.55,
   /**
    * On a bench bloombot sits right back, its backpack against the backrest, and its short legs stick out over the
    * seat's front edge, as a toddler's do on a grown-up bench: its shins are raised `lift` degrees forward from
