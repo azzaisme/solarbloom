@@ -369,7 +369,14 @@ export class Cozy {
     const h = this.sim.house;
     for (const a of cells) for (const b of cells) if (h.wallBetween(a.x, a.z, b.x, b.z)) return 'A wall is in the way';
     if (DECOR_OPTION[kind]?.solid === false) return undefined;
-    const lost = h.cutOff(new Set(cells.map((c) => `${c.x},${c.z}`)));
+    const set = new Set(cells.map((c) => `${c.x},${c.z}`));
+    if (this.opening) {
+      // #862: while ways are being opened, a piece moved aside may not close off any floor Bloombot reaches now
+      const r0 = h.reach();
+      const r1 = h.reach(set);
+      if (r1.size < r0.size - [...set].filter((k) => r0.has(k)).length) return 'That would block the way';
+    }
+    const lost = h.cutOff(set);
     if (!lost || lost.id === h.cutOff()?.id) return undefined;
     return 'verb' in lost ? `That would block the way to ${lost.name}` : `That would block the way into ${lost.name}`;
   }
@@ -407,7 +414,8 @@ export class Cozy {
    * #782: the house grew and its furniture took these cells: a decoration standing on one moves to the nearest free
    * floor (nothing placed is lost), or, with no free floor left, back into the build menu (it stays made).
    */
-  clearCells(cells: { roofId: string; x: number; z: number }[]) {
+  clearCells(cells: { roofId: string; x: number; z: number }[], notBack: { x: number; z: number }[] = []): Decoration[] {
+    const back: Decoration[] = [];
     for (const c of cells) {
       const d = this.decorAt(c.roofId, c.x, c.z);
       if (!d) continue;
@@ -418,29 +426,99 @@ export class Cozy {
         .sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
       // #849: a big piece tries each free square as its middle, in both of its turns
       const turns = [d.rot, (d.rot + 1) & 3];
-      place: for (const t of free)
+      let placed = false;
+      place: for (const t of free) {
+        if (notBack.some((n) => n.x === t.x && n.z === t.z)) continue; // #862: not straight back where it was in the way
         for (const r of turns) {
           const [ax, az] = decorAnchor(d.kind, r, t.x, t.z);
-          if (!this.placeDecor(d.kind, r, c.roofId, ax, az)) break place;
+          if (decorCells(d.kind, r, ax, az).some((q) => notBack.some((n) => n.x === q.x && n.z === q.z))) continue;
+          if (!this.placeDecor(d.kind, r, c.roofId, ax, az)) {
+            placed = true;
+            break place;
+          }
         }
+      }
+      if (!placed) back.push(d);
     }
+    return back;
   }
 
   /**
-   * #860: makes the inside match the house's level (HouseSystem.sync) and moves every decoration now in the way: on a
-   * square a piece of furniture took, or standing across one of the new inner walls. Each goes to the nearest free
-   * floor, as clearCells does.
+   * #860 / #862: makes the inside match the house's level (HouseSystem.sync) and moves every decoration now in the
+   * way: on a square a piece of furniture took, standing across one of the new inner walls, or shutting Bloombot off
+   * from a room or a piece of furniture. Each goes to the nearest free floor, as clearCells does. Run when the house
+   * grows, when Bloombot goes in, and when a game loads (an older save into the new rooms). Returns the decorations
+   * with nowhere left to go: they are back in the build menu (they stay made), for the caller to say so.
    */
-  settleHouse() {
+  settleHouse(): Decoration[] {
     const h = this.sim.house;
     const taken: { roofId: string; x: number; z: number }[] = h.sync();
-    if (!h.hasInside()) return;
+    if (!h.hasInside()) return [];
     for (const d of this.decorations()) {
       if (d.roofId !== h.layerId) continue;
       const cells = decorCells(d.kind, d.rot, d.x, d.z);
       if (cells.some((a) => cells.some((b) => h.wallBetween(a.x, a.z, b.x, b.z)))) taken.push({ roofId: d.roofId, x: d.x, z: d.z });
     }
-    this.clearCells(taken);
+    return [...this.clearCells(taken), ...this.openWays()];
+  }
+
+  /**
+   * #862: while a room or a piece of furniture is out of Bloombot's reach from the door, moves the solid decoration in
+   * the way: of those at the edge of where it can walk, the one whose moving opens the most floor. It goes to the
+   * nearest square where it shuts nothing off, or back to the build menu. Returns those sent back.
+   */
+  private opening = false;
+  private openWays(): Decoration[] {
+    this.opening = true;
+    try {
+      return this.openWaysNow();
+    } finally {
+      this.opening = false;
+    }
+  }
+
+  private openWaysNow(): Decoration[] {
+    const h = this.sim.house;
+    const id = h.layerId;
+    const back: Decoration[] = [];
+    const sides = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const moved = new Set<string>(); // where pieces moved to: each moves once, so two pieces never trade places for ever
+    for (let guard = 0; guard < 400; guard++) {
+      const shut = h.cutOff();
+      if (!shut) break;
+      const room = h.rooms().find((r) => r.id === shut.id);
+      // whether Bloombot could get to what is shut off, walking on `reach`
+      const gets = (reach: Set<string>) =>
+        room
+          ? [...reach].some((k) => h.roomAt(...(k.split(',').map(Number) as [number, number]))?.id === room.id)
+          : Array.from({ length: shut.w * shut.d }, (_, i) => [shut.x + (i % shut.w), shut.z + Math.floor(i / shut.w)]).some(([x, z]) =>
+              sides.some(([sx, sz]) => reach.has(`${x + sx},${z + sz}`) && !h.wallBetween(x, z, x + sx, z + sz)),
+            );
+      const reach = h.reach();
+      const edge = this.decorations().filter(
+        (d) =>
+          d.roofId === id &&
+          !moved.has(d.key) &&
+          DECOR_OPTION[d.kind]?.solid !== false &&
+          decorCells(d.kind, d.rot, d.x, d.z).some((c) => sides.some(([sx, sz]) => reach.has(`${c.x + sx},${c.z + sz}`) && !h.wallBetween(c.x, c.z, c.x + sx, c.z + sz))),
+      );
+      // first a piece whose moving lets Bloombot get there; else the one that opens the most floor
+      let best: Decoration | undefined;
+      let most = reach.size;
+      for (const d of edge) {
+        const open = h.reach(undefined, new Set(decorCells(d.kind, d.rot, d.x, d.z).map((c) => `${c.x},${c.z}`)));
+        const score = (gets(open) ? 1e6 : 0) + open.size;
+        if (score > most) {
+          most = score;
+          best = d;
+        }
+      }
+      if (!best) break;
+      const before = new Set(this.decorations().map((d) => d.key));
+      back.push(...this.clearCells([best], decorCells(best.kind, best.rot, best.x, best.z)));
+      for (const d of this.decorations()) if (!before.has(d.key)) moved.add(d.key);
+    }
+    return back;
   }
 
   /** #782: the ground at the house's door (where the house stands): decorations go round it, never in the way in. */

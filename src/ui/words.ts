@@ -219,6 +219,11 @@ export const WORDS = {
     /** a level reached: its name, what it brings, and that there is an inside to go into */
     grew: (name: string, gives: string, decor: number, first = false, goHome = false) =>
       `🏡 Bloombot’s house is a ${String(name).toLowerCase()} now<small>${first ? 'Walk up to the door and press {interact} to go inside. ' : ''}${gives}, and room inside for ${decor} decorations.${goHome ? ' Press {menu} and choose Go home.' : ''}</small>`,
+    /** #862: decorations the house's new rooms had no free floor for (they are back in the build menu) */
+    handedBack: (list: readonly string[] | string) => {
+      const names = [list].flat();
+      return `🏡 ${names.length === 1 ? `Your ${String(names[0]).toLowerCase()} was` : `${names.length} of your decorations were`} in the way of the house’s new furniture<small>${names.length === 1 ? 'It’s' : `${names.join(', ')}: they’re`} back in your build menu, ready to put down again.</small>`;
+    },
     /** what a level brings, as one line ("A bed, a storage chest, a radio by the window") */
     gives: (gives: readonly string[] | string) => [gives].flat().map((g, i) => (i ? g[0].toLowerCase() + g.slice(1) : g)).join(', '),
   },

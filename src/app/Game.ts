@@ -475,7 +475,7 @@ export class Game {
       this.waterLife = new WaterLife(this.app.graphicsDevice, life, water.id);
     }
     this.cozy = new Cozy(this.sim);
-    this.cozy.settleHouse(); // #860: a save from before the rooms: nothing left inside furniture or across a wall
+    this.houseBack = this.cozy.settleHouse(); // #860 / #862: a save from before the rooms: nothing left in furniture, across a wall or in the way (said once on screen)
     this.chunks.plots = { look: (p) => this.plotLook(p), growth: (p) => this.plotGrowth(p) };
     this.chunks.decor = { inChunk: (cx, cz) => this.decorInChunk(cx, cz) }; // E19.2
     this.chainSummary = new ChainSummary(this.sim);
@@ -1393,6 +1393,16 @@ export class Game {
     return out;
   }
 
+  /** #862: decorations taken out of the house when its rooms changed, waiting for the screen to say so */
+  private houseBack: Decoration[] = [];
+
+  /** #862: says which decorations went back to the build menu (none: nothing to say). */
+  private handBack(back: Decoration[]) {
+    if (!back.length) return;
+    const names = back.map((d) => DECOR_OPTION[d.kind]?.name ?? d.kind);
+    this.hud.toast(WORDS.house.handedBack(names), '', 6);
+  }
+
   /** #782: the keepsakes standing on the shelf (the ones the Keepers have given). */
   private keepsakesFound(): string[] {
     const st = this.sim.state;
@@ -1431,7 +1441,7 @@ export class Game {
     const b = this.bot;
     const h = this.sim.house;
     if (!b || !h.hasInside() || this.cinematic) return;
-    this.cozy.settleHouse();
+    this.handBack(this.cozy.settleHouse());
     const [dx, dz] = h.doorInside();
     this.outsideView = this.camera.snapshot();
     b.teleport(h.layerId, dx + 0.5, dz - 0.5);
@@ -4420,6 +4430,8 @@ export class Game {
       this.decorGift(gift);
       this.houseHintAfter = this.clock + HOUSE_HINT_WAIT; // the gift's toast first, the house's after it
     }
+    // #862: decorations a loaded game had to take out of the house (they had nowhere to go in the new rooms)
+    if (this.onScreen && this.houseBack.length) this.handBack(this.houseBack.splice(0));
     // #852: a piece for the room with each level of the house, and a Keeper's piece as each wakes (a save past them, once)
     const earned = this.onScreen ? this.cozy.giveEarnedDecor() : [];
     if (earned.length) this.houseGifts(earned);
@@ -5277,7 +5289,7 @@ export class Game {
     });
     // #782: the house grew: it is drawn anew, its room's furniture moves any decoration out of its way, and a toast says so
     b.on('house.level', ({ level }) => {
-      this.cozy.settleHouse();
+      this.handBack(this.cozy.settleHouse());
       const sh = PARK_SET.shed;
       for (let z = sh.z - 2; z <= sh.z + sh.size + 2; z++) for (let x = sh.x - 2; x <= sh.x + sh.size + 2; x++) {
         const t = s.grid.get(GROUND, x, z);

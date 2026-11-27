@@ -179,15 +179,16 @@ export class HouseSystem {
 
   /**
    * #860: every cell Bloombot can walk to from the door inside, keyed `x,z` (steps side by side, never through a
-   * wall), over the cells it may stand in (the Walker's rules); `also` blocks more (a decoration about to be placed).
+   * wall), over the cells it may stand in (the Walker's rules); `also` blocks more (a decoration about to be placed),
+   * and `clear` counts squares as free floor whatever stands on them (but furniture): a decoration that might move.
    */
-  reach(also?: Set<string>): Set<string> {
+  reach(also?: Set<string>, clear?: Set<string>): Set<string> {
     const out = new Set<string>();
     if (!this.hasInside()) return out;
     const room = this.room();
     const w = new Walker(this.sim);
     const id = this.layerId;
-    const ok = (x: number, z: number) => x >= 0 && z >= 0 && x < room && z < room && !also?.has(`${x},${z}`) && w.walkable(id, x, z);
+    const ok = (x: number, z: number) => x >= 0 && z >= 0 && x < room && z < room && !also?.has(`${x},${z}`) && (clear?.has(`${x},${z}`) ? !this.sim.grid.get(id, x, z)?.blocked : w.walkable(id, x, z));
     const [dx, dz] = this.doorInside();
     if (!ok(dx, dz)) return out;
     const todo: [number, number][] = [[dx, dz]];
