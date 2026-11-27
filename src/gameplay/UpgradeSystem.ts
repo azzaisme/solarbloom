@@ -87,23 +87,23 @@ export class UpgradeSystem {
   private eff(id: string): number {
     return this.sim.research?.effect(id) ?? 0;
   }
-  /** Quick hands: what a pry hold (rubble, a vault door) takes, as a share of before (1 without it). Digging is Nimble hands'. */
+  /** Quick hands: what a prune or pry hold (a dead hedge, a vault door) takes, as a share of before (1 without it). Digging is Nimble hands'. */
   get holdFactor(): number {
     return 1 - this.eff('quickHands');
   }
   /**
    * The one place a hold's length is worked out (#624): seconds Interact is held to dig out a pile once. Nimble
-   * hands from the park (#622) shortens it; Quick hands is for prying only (the owner's call, E25), so the two never
+   * hands from the park (#622) shortens it; Quick hands is for pruning and prying only (the owner's call, E25), so the two never
    * pile up on digging. It never drops below RESEARCH.minHold.
    */
   get salvageHold(): number {
     return Math.max(RESEARCH.minHold, SALVAGE.holdSeconds * (this.sim.parkGrowth?.holdShare ?? 1));
   }
-  /** Seconds Interact is held to pry rubble open (Quick hands; never below RESEARCH.minHold either). */
-  get pryHold(): number {
-    return Math.max(RESEARCH.minHold, SALVAGE.pryHoldSeconds * this.holdFactor);
+  /** Seconds Interact is held to prune through a dead hedge (Quick hands; never below RESEARCH.minHold either). */
+  get pruneHold(): number {
+    return Math.max(RESEARCH.minHold, SALVAGE.pruneHoldSeconds * this.holdFactor);
   }
-  /** E25 (#626): seconds Interact is held to force a vault door with Pry II (Quick hands shortens it too). */
+  /** E25 (#626): seconds Interact is held to force a vault door with the pry bar (Quick hands shortens it too). */
   get vaultHold(): number {
     return Math.max(RESEARCH.minHold, MOVE_LEVELS.vaultHoldSeconds * this.holdFactor);
   }

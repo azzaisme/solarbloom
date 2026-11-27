@@ -15,7 +15,7 @@ import type { Sim } from '../gameplay/Sim';
 
 /**
  * #620 (E24): Bloombot's page in the backpack. Everything it can grow into, in one place: the moves the fountain
- * teaches (Pry, Hover, Climb, Glide) and the five workshop upgrades with their levels, each with what it does, where
+ * teaches (Prune, Hover, Climb, Glide) and the five workshop upgrades with their levels, each with what it does, where
  * it stands and how to get the next one. Pure reads (tests check the words without a page); Backpack draws it.
  *
  * E25 (#626) adds each move's second level, from the workshop, with where it's used.
@@ -49,7 +49,7 @@ export interface BloombotRow {
 }
 
 const MOVES: Record<AbilityId, { name: string; does: string }> = {
-  pry: { name: 'Pry', does: 'Pries open the rubble that blocks a way.' },
+  prune: { name: 'Prune', does: 'Prunes a way through the dead hedges round the park.' },
   hover: { name: 'Hover', does: 'Floats over water too deep to wade.' },
   climb: { name: 'Climb', does: 'Climbs up onto the roofs.' },
   glide: { name: 'Glide', does: 'Glides down from the edge of a roof.' },
@@ -63,7 +63,7 @@ const UPGRADE_DOES: Record<string, string> = {
   pulseRadius: 'Each pulse brings back more ground at once.',
   backpack: 'Bloombot can carry 20 more of each thing.',
   // #624
-  quickHands: 'Bloombot pries rubble and old vault doors open faster.',
+  quickHands: 'Bloombot prunes through hedges and pries old vault doors open faster.',
   keenEye: 'Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too.',
   sunSoak: 'Standing still in the sun slowly charges Bloombot, so it can top up anywhere by day.',
   lantern: 'Bloombot carries its own light at night, so dark streets are easier to see.',
@@ -128,7 +128,7 @@ function openHow(sim: Sim, p: ProjectDef | undefined, move = false): string {
 function moveTwoSpot(sim: Sim, a: AbilityId): BloombotRow['where'] {
   const shut = (id: string) => !sim.state.salvage?.caches.includes(id);
   const at = (x: number, z: number, name: string) => ({ roofId: GROUND, x, z, name });
-  if (a === 'pry') {
+  if (a === 'prune') {
     const v = VAULTS.find((q) => shut(q.id));
     return v ? at(v.x, v.z + 1, 'an old vault') : undefined;
   }
@@ -191,7 +191,7 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
       level,
       max,
       next: top ? undefined : u.each,
-      now: u.id === 'quickHands' ? pryNow(sim) : undefined,
+      now: u.id === 'quickHands' ? pruneNow(sim) : undefined,
       how,
       where: top ? undefined : benchSpot(sim),
       part: UPGRADE_PART[u.id] ?? 'core',
@@ -289,8 +289,8 @@ export function digNow(sim: Sim): string {
   return `Right now digging out a pile takes ${secs(sim.upgrades.salvageHold)}.`;
 }
 
-/** Quick hands: how long prying takes now (and a vault door, once Bloombot can pry one open). */
-export function pryNow(sim: Sim): string {
-  const vault = sim.research.moveLevel('pry') >= 2 ? `, and an old vault door ${secs(sim.upgrades.vaultHold)}` : '';
-  return `Right now prying rubble open takes ${secs(sim.upgrades.pryHold)}${vault}.`;
+/** Quick hands: how long pruning through a hedge takes now (and a vault door, once Bloombot has the pry bar). */
+export function pruneNow(sim: Sim): string {
+  const vault = sim.research.moveLevel('prune') >= 2 ? `, and prying an old vault door ${secs(sim.upgrades.vaultHold)}` : '';
+  return `Right now pruning through a hedge takes ${secs(sim.upgrades.pruneHold)}${vault}.`;
 }

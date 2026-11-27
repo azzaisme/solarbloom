@@ -1,3 +1,4 @@
+import { hedgeReady } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -199,7 +200,8 @@ describe('#632: with no way there yet, it goes as close as it can and says why',
 
   it('with Pry in hand, the same rubble says to walk up and open it', () => {
     const sim = fresh();
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     const walker = new Walker(sim);
     const region = REGIONS.find((q) => q.id === 'mastRow')!;
     const [gx, gz] = region.gate.cells[0];

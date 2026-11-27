@@ -258,7 +258,7 @@ try {
   await page.evaluate(() => {
     const sv = window.solarbloom.sim.state.salvage;
     sv.tier = Math.max(sv.tier, 1); // build mode opens at fountain step 1
-    if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+    if (!sv.abilities.includes('prune')) sv.abilities.push('prune');
   });
   for (const time of ['day', 'night']) {
     if (time === 'night')

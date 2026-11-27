@@ -40,7 +40,7 @@ function pageNow() {
 function growLate() {
   const s = window.solarbloom.sim;
   const sv = s.state.salvage;
-  for (const a of ['pry', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
+  for (const a of ['prune', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
   sv.research ??= { analysed: [], done: [], running: [], levels: {} };
   sv.research.done.push('rb-cells', 'rb-backpack', 'rb-pulse', 'rb-efficiency');
   Object.assign(sv.research.levels, { chargeCells: 3, backpack: 2, pulseRadius: 1 });

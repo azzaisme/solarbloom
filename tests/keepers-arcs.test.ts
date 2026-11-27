@@ -32,7 +32,7 @@ describe('E23.9.2: every Keeper, from waking to friendship', () => {
       let sim = new Sim(createInitialState(7));
       const sv = sim.state.salvage!;
       sv.tier = 4;
-      sv.abilities.push('pry', 'hover', 'climb', 'glide');
+      sv.abilities.push('prune', 'hover', 'climb', 'glide');
       sim.areas.clear('park', true);
       sim.gates.open(r.gate.id, true);
       sim.gates.openRegion(r.id);

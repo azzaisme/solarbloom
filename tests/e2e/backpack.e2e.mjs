@@ -86,7 +86,7 @@ async function open(dev, settings = {}) {
     sv.pages = ['p-park-1', 'p-mastRow-1'];
     sv.blueprints = ['networks'];
     sv.tier = 1;
-    if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+    if (!sv.abilities.includes('prune')) sv.abilities.push('prune');
     const f = s.state.machines.find((m) => m.type === 'core' && s.areas.areaOf(m) === 'park');
     g.bot.teleport(f.roofId, f.x + f.size / 2, f.z + f.size + 1.6);
     g.bot.pose.facing = 0; // facing away from the fountain: open ground in front

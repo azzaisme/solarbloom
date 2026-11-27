@@ -18,20 +18,61 @@ function tier1(seed = 7) {
   return sim;
 }
 
+/** Brings `share` of an area's tiles back to life (#hedge-line: what a hedge's lock waits on). */
+function green(sim: Sim, area: string, share: number) {
+  const tiles = sim.areas.tiles(area);
+  for (const t of tiles.slice(0, Math.ceil(tiles.length * share))) {
+    t.ground = 'restored';
+    sim.grid.touch(t);
+  }
+}
+
+describe('#hedge-line: a hedge lock needs a third of the ground on the near side alive (owner, 27 Nov 2026)', () => {
+  it('Prune alone is not enough: the park has to be a third alive, and the prompt says how far along it is', () => {
+    const sim = tier1();
+    sim.state.salvage!.abilities.push('prune');
+    const g = region('oldMarket').gate;
+    expect(sim.gates.aliveArea(g)).toBe(PARK);
+    expect(sim.gates.problem(g)).toMatch(/^The hedge won't give yet\. Bring a third of the park back to life first \(\d+% so far\)\.$/);
+    expect(sim.gates.open(g.id)).toBe(false);
+    green(sim, PARK, 0.2);
+    expect(sim.gates.problem(g)).toMatch(/Bring a third of the park/);
+    green(sim, PARK, 0.5);
+    expect(sim.gates.aliveShare(g)).toBeGreaterThanOrEqual(1 / 3);
+    expect(sim.gates.problem(g)).toBeUndefined();
+    expect(sim.gates.open(g.id)).toBe(true);
+  });
+
+  it('the boardwalk hedge counts Saltwind itself, the open ground it stands in', () => {
+    const sim = tier1();
+    const g = region('saltwind').gate;
+    expect(sim.gates.aliveArea(g)).toBe('saltwind');
+    expect(g.needs.alive).toBeCloseTo(1 / 3);
+  });
+
+  it('every hedge gate needs Prune and a third alive', () => {
+    for (const r of REGIONS.filter((q) => q.gate.kind === 'hedge')) {
+      expect(r.gate.needs.ability).toBe('prune');
+      expect(r.gate.needs.alive).toBeCloseTo(1 / 3);
+    }
+  });
+});
+
 describe('E21.5: gates', () => {
   it('revealed regions are sealed, and their seal says what is in the way (nothing is bought)', () => {
     const sim = tier1();
     expect(sim.areas.sealed('mastRow')).toBe(true);
-    expect(sim.areas.sealText('mastRow')).toBe('Mast Row is behind the clouds. Wake the fountain and Bloombot will learn to pry it open.');
+    expect(sim.areas.sealText('mastRow')).toBe('Mast Row is overgrown. Wake the fountain and Bloombot will learn to prune a way through.');
     expect(sim.areas.sealed('saltwind')).toBe(false); // the beach is open from the start
   });
 
   it('a barricade refuses without Pry and opens with it, its region and the backstreets beside it', () => {
     const sim = tier1();
     const g = region('mastRow').gate;
-    expect(sim.gates.problem(g)).toBe('Rubble blocks the way. Wake the fountain and Bloombot will learn to pry it open.');
+    expect(sim.gates.problem(g)).toBe('A dead hedge blocks the way. Wake the fountain and Bloombot will learn to prune a way through.');
     expect(sim.gates.open(g.id)).toBe(false);
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    green(sim, PARK, 0.5);
     expect(sim.gates.open(g.id)).toBe(true);
     expect(sim.areas.sealed('mastRow')).toBe(false);
     expect(sim.areas.fog('bs_2_-1')).not.toBe('hidden');
@@ -41,8 +82,9 @@ describe('E21.5: gates', () => {
 
   it('the beach\'s barricade opens the boardwalk but no region', () => {
     const sim = tier1();
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
     const g = region('saltwind').gate;
+    green(sim, 'saltwind', 0.5);
     expect(sim.gates.open(g.id)).toBe(true);
     expect(sim.gates.isOpen(g.id)).toBe(true);
     expect(sim.areas.sealed('mastRow')).toBe(true);
@@ -78,7 +120,8 @@ describe('E21.5: gates', () => {
 
   it('opened gates stay open after reload, byte for byte', () => {
     const sim = tier1(21);
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    green(sim, PARK, 0.5);
     sim.gates.open(region('mastRow').gate.id);
     const json = saver.serialize(sim.state);
     const back = new Sim(saver.deserialize(json)!);

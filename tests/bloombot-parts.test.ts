@@ -41,8 +41,8 @@ describe('#627: one list of Bloombot\'s parts', () => {
 
   it('each move has its own mark, and only the moves learned show', () => {
     const marks = (moves: string[]) => ofPart({ ...none, moves }, 'marks').map((p) => p.name);
-    expect(marks(['pry'])).toEqual(['grow-marks-pry']);
-    expect(marks(['pry', 'hover', 'climb', 'glide'])).toEqual(['grow-marks-pry', 'grow-marks-hover', 'grow-marks-climb', 'grow-marks-glide']);
+    expect(marks(['prune'])).toEqual(['grow-marks-prune']);
+    expect(marks(['prune', 'hover', 'climb', 'glide'])).toEqual(['grow-marks-prune', 'grow-marks-hover', 'grow-marks-climb', 'grow-marks-glide']);
     // each a different shape or turn, so they read apart
     const shapes = ofPart({ ...none, moves: [...MOVE_ORDER] }, 'marks').map((p) => `${p.shape}:${p.euler}`);
     expect(new Set(shapes).size).toBe(4);
@@ -79,14 +79,14 @@ describe('#627: one list of Bloombot\'s parts', () => {
   });
 
   it('the visuals rebuild only when something they draw changes', () => {
-    const a = growthKey({ moves: ['pry'], levels: { chargeCells: 1, sprint: 0 }, park: 1 });
-    expect(growthKey({ moves: ['pry'], levels: { chargeCells: 1 }, park: 1 })).toBe(a);
-    expect(growthKey({ moves: ['pry'], levels: { chargeCells: 2 }, park: 1 })).not.toBe(a);
+    const a = growthKey({ moves: ['prune'], levels: { chargeCells: 1, sprint: 0 }, park: 1 });
+    expect(growthKey({ moves: ['prune'], levels: { chargeCells: 1 }, park: 1 })).toBe(a);
+    expect(growthKey({ moves: ['prune'], levels: { chargeCells: 2 }, park: 1 })).not.toBe(a);
   });
 });
 
 describe('#629: what the next level adds (the turntable shows it as a ghost)', () => {
-  const g: BotGrowth = { moves: ['pry'], levels: { chargeCells: 2 }, park: 1 };
+  const g: BotGrowth = { moves: ['prune'], levels: { chargeCells: 2 }, park: 1 };
   const added = (row: Parameters<typeof nextGrowth>[1]) => partsAdded(g, nextGrowth(g, row)).map((p) => p.name);
 
   it('an upgrade: the next level of its part, and nothing at the top level', () => {
@@ -97,7 +97,7 @@ describe('#629: what the next level adds (the turntable shows it as a ghost)', (
 
   it('a move: its mark, if not learned yet', () => {
     expect(added({ kind: 'move', id: 'climb' })).toEqual(['grow-marks-climb']);
-    expect(added({ kind: 'move', id: 'pry' })).toEqual([]);
+    expect(added({ kind: 'move', id: 'prune' })).toEqual([]);
   });
 
   it('a park milestone: its part, once the park gets there', () => {

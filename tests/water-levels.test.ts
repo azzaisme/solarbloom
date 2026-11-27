@@ -414,13 +414,13 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(sim.water.isLow(area)).toBe(true);
   });
 
-  it('the advisor never hints at an area the player has not seen (still behind the clouds)', () => {
+  it('the advisor never hints at an area the player has not seen (still overgrown)', () => {
     const sim = city();
     const t = canalTile(sim);
     const b = sim.water.bodyAt(t)!;
     const area = sim.areas.map.areaOfCell(t.x, t.z);
     garden(sim, t);
-    sim.state.areas[area].sealed = true; // behind the clouds, as before its gate opens
+    sim.state.areas[area].sealed = true; // overgrown, as before its gate opens
     expect(sim.areas.fog(area)).toBe('hidden');
     sim.water.draw(b.id, b.capacity);
     expect(sim.water.isLow(area)).toBe(false);

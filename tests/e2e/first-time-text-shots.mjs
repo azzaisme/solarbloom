@@ -55,12 +55,12 @@ try {
   await page.evaluate(() => {
     const sv = window.solarbloom.sim.state.salvage;
     sv.tier = Math.max(sv.tier, 1);
-    if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+    if (!sv.abilities.includes('prune')) sv.abilities.push('prune');
     window.solarbloom.hud.guide.hide();
   });
   await page.waitForTimeout(1500);
   const card = await page.evaluate(() => ({ title: document.querySelector('#objTitle')?.textContent, why: document.querySelector('#objWhy')?.textContent, next: document.querySelector('#objNext')?.textContent }));
-  check(card.title === 'Pry open the rubble' && card.why === 'Another robot like Bloombot is asleep on the other side', `the card leads to the rubble ("${card.title}" / "${card.why}" / "${card.next}")`);
+  check(card.title === 'Prune through the hedge' && card.why === 'Another robot like Bloombot is asleep on the other side', `the card leads to the rubble ("${card.title}" / "${card.why}" / "${card.next}")`);
   check(await whole(page, '#obj'), 'the goal card sits whole on screen');
   await page.screenshot({ path: `${dir}/card-rubble.png` });
 

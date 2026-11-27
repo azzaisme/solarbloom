@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
-import { DAY_LIGHT } from '../data/sky';
+import { DAY_LIGHT, TWILIGHT } from '../data/sky';
 import { color } from './Materials';
 import { waterLayer, worldLightLayers } from './WaterSurface';
 import type { Tweens } from './Tween';
@@ -108,6 +108,13 @@ export class SceneBuilder {
     const zen = new pc.Color().lerp(color(E.zenith).linear(), color(NC.zenith).linear(), n);
     const hor = new pc.Color().lerp(color(E.horizon).linear(), color(NC.horizon).linear(), n);
     const gnd = new pc.Color().lerp(color(E.ground).linear(), color(NC.ground).linear(), n);
+    const tw = this.envTwilight;
+    if (tw > 0) {
+      const TE = TWILIGHT.env;
+      zen.lerp(zen, color(TE.zenith).linear(), tw);
+      hor.lerp(hor, color(TE.horizon).linear(), tw);
+      gnd.lerp(gnd, color(TE.ground).linear(), tw);
+    }
     const levels: Uint8Array[] = [];
     const dir = new pc.Vec3();
     const mix = (a: pc.Color, b: pc.Color, t: number, k: number) => [a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t].map((v) => v * k);
@@ -167,13 +174,17 @@ export class SceneBuilder {
 
   /** E23.7.5: how far into night the ambient environment is (0 day … 1 night), in DAY_LIGHT.envSteps steps. */
   private envNight = 0;
+  /** #twilight: how far the ambient has turned to the afterglow's purple (TWILIGHT.env), in envSteps steps */
+  private envTwilight = 0;
 
   /** Shift the ambient environment toward night's colours; re-bakes only when it crosses a step. */
-  setEnvNight(night: number) {
+  setEnvNight(night: number, twilight = 0) {
     const steps = DAY_LIGHT.envSteps;
     const n = Math.round(Math.min(1, Math.max(0, night)) * steps) / steps;
-    if (n === this.envNight) return;
+    const t = Math.round(Math.min(1, Math.max(0, twilight)) * steps) / steps;
+    if (n === this.envNight && t === this.envTwilight) return;
     this.envNight = n;
+    this.envTwilight = t;
     this.buildEnvironment();
   }
 
