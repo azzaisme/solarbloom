@@ -15,7 +15,8 @@ Reads <in_dir>/<name>.glb (a textured Tripo model, made from the wildlife sheet)
   colour edges are kept as seams; afterwards each face is snapped back to one palette colour. Smooth shaded.
 - Eyes (owner: glossy, black, cute and round): the texture's two dark eye patches are found (a matching pair of
   Charcoal patches, high and to the front), painted over, and replaced with round Charcoal domes with a small Cream
-  highlight, in a second, glossy material. The butterflies have none (a few pixels across in the game).
+  highlight, in a second, glossy material. Where the texture drew eye whites round them ("whites": the frog), they
+  take the colour round the eye: no white rims (owner, 27 Nov). The butterflies have none (a few pixels across in the game).
 - No textures: the materials read the vertex colour (COLOR_0).
 """
 import math
@@ -51,9 +52,11 @@ ANIMALS = {
     "squirrel": (0.31, 2000, ["orange", "cream", "charcoal"], {"regions": True, "yaw": 43}),
     "magpie": (0.27, 2000, ["charcoal", "deep_navy", "bright_blue", "cream"], {"regions": True}),
     "hedgehog": (0.28, 2000, ["dark_brown", "warm_brown", "cream", "charcoal"], {"regions": True}),
-    "fox": (0.38, 3000, ["orange", "cream", "charcoal", "dark_brown"], {}),
-    "frog": (0.13, 1000, ["frog_green", "cream", "golden_yellow", "charcoal"], {"regions": True, "recolour": {"golden_yellow": "cream"},
-                                                                    "eyes": [(-0.0318, -0.0342, 0.08), (0.0279, -0.0366, 0.0865)]}),
+    "fox": (0.38, 3000, ["orange", "cream", "charcoal", "dark_brown"], {"regions": True, "yaw": 180,  # standing (owner, 27 Nov)
+                                                                 "eyes": [(0.032, -0.145, 0.265), (-0.05, -0.155, 0.267)]}),
+    "frog": (0.13, 1600, ["frog_green", "cream", "golden_yellow", "charcoal"], {"regions": True, "recolour": {"golden_yellow": "cream"}, "yaw": 90,
+                                                                    "whites": ("cream", "golden_yellow"),
+                                                                    "eyes": [(-0.0172, -0.0136, 0.1015), (0.0183, -0.0134, 0.1012)]}),  # legs apart, T-pose (owner, 27 Nov)
     "owl": (0.28, 2500, ["cream", "cream", "cream", "orange", "charcoal"], {"regions": True, "ring": {"orange": "cream"},
                                                               "eye_scale": 1.35}),  # white (owner)
     "otter": (0.38, 3000, ["warm_brown", "cream", "charcoal"], {"regions": True}),
@@ -318,7 +321,7 @@ def paint_over(cls, group):
             cls[i] = c
 
 
-def eye_specs(bm, cls, dims, length, colour, placed=None):
+def eye_specs(bm, cls, dims, length, colour, placed=None, whites=()):
     """The two eyes: (centre on the surface, outward normal, radius). `placed` (the animal's "eyes" option) names
     each eye's spot by hand, (x, y, z) in metres, for heads turned aside or eyes inside a stripe: the biggest patch of
     the eye colour near each spot is used, or, if none is close, the surface there."""
@@ -353,7 +356,28 @@ def eye_specs(bm, cls, dims, length, colour, placed=None):
         r = min(max(span * 1.1, 0.02 * length), 0.07 * length)
         paint_over(cls, group)
         specs.append((c.copy(), n.copy(), r))
-    return specs
+    if not whites:
+        return specs
+    return [cover_whites(bm, cls, c, n, r, whites) for c, n, r in specs]
+
+
+def cover_whites(bm, cls, c, n, r, white):
+    """The texture's eye whites (faces of the `white` colours close round the eye, facing the same way) take the colour
+    round the eye (the frog's go green, owner 27 Nov); the eye itself stays as it is."""
+    def flat(f):
+        d = f.calc_center_median() - c
+        return (d - n * d.dot(n)).length, d.length
+    near = [(f, *flat(f)) for f in bm.faces if f.normal.dot(n) > 0.2]
+    whites = [f for f, pl, d in near if cls[f.index] in white and d < 2.0 * r]
+    ring = [cls[f.index] for f, pl, d in near if 2.0 * r <= d < 2.8 * r and cls[f.index] != "charcoal"]
+    if not whites or not ring:
+        return (c, n, r)
+    around = max(set(ring), key=ring.count)
+    if around in white:
+        return (c, n, r)
+    for f in whites:
+        cls[f.index] = around
+    return (c, n, r)
 
 
 EYE_RES = {False: (10, 6, 6, 4), True: (6, 4, 4, 3)}   # lod1 -> eye segments, rings, highlight segments, rings
@@ -458,7 +482,8 @@ def finish(src, out_dir, name):
     vs = np.array([v.co[:] for v in me.vertices])
     dims = tuple(vs.max(0) - vs.min(0))
     eye_colour = opt.get("eye_patch", "eye" if "eye" in allowed else "charcoal")
-    specs = [] if opt.get("no_eyes") else eye_specs(bm, cls, dims, length, eye_colour, opt.get("eyes"))
+    specs = [] if opt.get("no_eyes") else eye_specs(bm, cls, dims, length, eye_colour, opt.get("eyes"),
+                                                             opt.get("whites", ()))
     if opt.get("eye_scale"):
         specs = [(c, n, r * opt["eye_scale"]) for c, n, r in specs]
     if opt.get("ring"):
