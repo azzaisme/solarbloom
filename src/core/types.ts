@@ -383,7 +383,9 @@ export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'cl
   // #785: picked from fruit trees (data/fruit FRUIT_IDS)
   | 'apple' | 'pear' | 'peach' | 'lemon'
   // E23.8.3.2: from the mainland's industrial ruins only
-  | 'steel';
+  | 'steel'
+  // #874: meals cooked at the kitchen's stove (data/cooking MEAL_IDS)
+  | 'soup' | 'salad' | 'cornBake' | 'pie';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
 export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
 /** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */

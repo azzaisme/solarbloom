@@ -57,6 +57,11 @@ const BODY: Record<ItemId | 'biomass' | 'unknown', string> = {
   fertiliser: `<path d="M11 6 H21 L19 10 C26 13 27 24 23 28 H9 C5 24 6 13 13 10 Z"/><path d="M12 10 H20" class="mi-line"/><path d="M16 15 C18 18 19 20 19 21.5 a3 3 0 0 1 -6 0 C13 20 14 18 16 15 Z" class="mi-hi"/>`,
   // E23.5.4.1 Honey: a round pot with a dipper
   honey: `<path d="M7 12 C5 20 8 28 16 28 C24 28 27 20 25 12 Z"/><path d="M6 12 H26" class="mi-line"/><path d="M19 4 L14 14" class="mi-line"/><circle cx="12" cy="20" r="2" class="mi-hi"/>`,
+  // #874 meals from the stove, each its own shape: a steaming bowl, a bowl of leaves and tomatoes, a baking dish, a pie
+  soup: `<path d="M3 15 H29 C29 23 23 28 16 28 C9 28 3 23 3 15 Z"/><path d="M3 15 H29" class="mi-line"/><path d="M11 11 C9 8 13 7 11 4 M16 11 C14 8 18 7 16 4 M21 11 C19 8 23 7 21 4" class="mi-line"/><circle cx="10" cy="20" r="1.8" class="mi-hi"/>`,
+  salad: `<path d="M3 17 H29 C29 24 23 28 16 28 C9 28 3 24 3 17 Z"/><path d="M5 17 C5 11 10 9 13 12 C14 7 20 7 21 12 C24 9 28 12 27 17" class="mi-hi"/><circle cx="12" cy="15" r="2.6" class="mi-cut"/><circle cx="20" cy="14.5" r="2.6" class="mi-cut"/>`,
+  cornBake: `<rect x="3" y="11" width="26" height="15" rx="3"/><rect x="6" y="13.5" width="20" height="10" rx="2" class="mi-hi"/><path d="M10 14 V23 M14 14 V23 M18 14 V23 M22 14 V23" class="mi-line"/><path d="M1 15 H3 M29 15 H31" class="mi-line"/>`,
+  pie: `<path d="M2 18 C2 11 9 7 16 7 C23 7 30 11 30 18 L28 24 H4 Z"/><path d="M5 15 L27 15 M5 19 L27 19 M11 9 L9 24 M16 7.5 V24 M21 9 L23 24" class="mi-line"/><path d="M2 22 H30" class="mi-line"/>`,
   // not found yet
   unknown: `<circle cx="16" cy="16" r="12" class="mi-ghost"/><path d="M12 13 a4 4 0 1 1 6 3.4 c-1.6 1 -2 1.8 -2 3.4" class="mi-line"/><circle cx="16" cy="24" r="1.4" class="mi-dot"/>`,
 };

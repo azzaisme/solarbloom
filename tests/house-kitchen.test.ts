@@ -3,7 +3,9 @@ import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { DECOR_RECIPES } from '../src/data/crafting';
-import { HOUSE, HOUSE_GROWTH, HOUSE_INSIDE, houseFurniture } from '../src/data/oldcity';
+import { HOUSE, HOUSE_GROWTH, HOUSE_INSIDE, houseDoorInside, houseFurniture, houseRooms, houseWalls } from '../src/data/oldcity';
+import { drawRoom, type HouseSink } from '../src/rendering/HouseArt';
+import { PALETTE } from '../src/rendering/Palette';
 import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
 import { houseHtml } from '../src/ui/OldCityPanel';
@@ -78,6 +80,21 @@ describe('#858: the kitchen is furnished at the House', () => {
       for (const d of cozy.decorations()) expect(again.house.furnitureAt(d.x, d.z), `${d.kind} at level ${level}`).toBeUndefined();
       expect(cozy.decorAt(ID, 3, 3)?.kind).toBe('roundrug');
       expect(again.house.cutOff()).toBeUndefined();
+    }
+  });
+
+  it('the kitchen wears painted textures: a gingham cloth on the table, tiles behind the stove and counter, wood for the rest', () => {
+    const H = PALETTE.house;
+    for (const level of [3, 4]) {
+      const tex: Record<string, string[]> = { wood: [], weave: [], coir: [], cloth: [], tiles: [] };
+      const plain: string[] = [];
+      const sink: HouseSink = { add: (type, hex) => type === 'box' && plain.push(hex), tex: (name, hex) => tex[name].push(hex) };
+      drawRoom(sink, { origin: [0, 0, 0], room: HOUSE[level - 1].room, wall: HOUSE_INSIDE.wall, level, door: houseDoorInside(level), furniture: houseFurniture(level), walls: houseWalls(level), rooms: houseRooms(level), keepsakes: 0, variant: (x, z) => x * 7 + z });
+      expect(tex.cloth, `level ${level}: the cloth's top and its two hanging sides`).toEqual([H.cloth, H.cloth, H.cloth]);
+      expect(tex.tiles, `level ${level}: behind the stove and the counter`).toEqual([H.tileWhite, H.tileWhite]);
+      for (const hex of [H.plank, H.plankLight, H.plankDark]) expect(tex.wood, `level ${level}: the counter's ${hex}`).toContain(hex);
+      expect(tex.wood.filter((h) => h === H.bedWood).length, `level ${level}: the table's top and legs`).toBe(5);
+      for (const hex of [H.cloth, H.tileWhite, H.plankDark]) expect(plain, `level ${level}: no plain ${hex}`).not.toContain(hex);
     }
   });
 });

@@ -26,6 +26,8 @@ export interface KeeperStory {
   likes: string[];
   /** what it says when handed a gift */
   thanks: string;
+  /** #874: what it says when handed a meal cooked at the stove (every Keeper loves one) */
+  mealThanks: string;
   /** what it gives back on the first gift (its region's material) */
   giftBack: MaterialCost;
   /** what it says when talked to as a friend (one line, in turn) */
@@ -81,6 +83,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['sunflower', 'copper'],
     thanks: 'For me? Nobody ever gave me anything that wasn\'t an order!',
+    mealThanks: "You cooked this? For me? I'll tell everyone. Quietly, I mean.",
     giftBack: { gears: 5 },
     chatter: ['The swallows are back on the wires. I counted eleven!', 'Wind from the sea today. Rain by evening, I think.', 'I don\'t miss the orders. I thought I would.'],
   },
@@ -94,6 +97,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['radish', 'glass', 'pear'], // #785: its region's fruit
     thanks: 'A gift? I\'ll need a new column for this.',
+    mealThanks: "Home-cooked. That's worth more than I can count.",
     giftBack: { copper: 5 },
     chatter: ['A sparrow took a crumb off my counter today. I let it.', 'Three bees, two butterflies, one beetle. Business is good.', 'The ledger balances. First time in years.'],
   },
@@ -107,6 +111,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['seaKale', 'timber', 'lemon'], // #785: its region's fruit
     thanks: 'Oh. Thank you. That is kind.',
+    mealThanks: "Warm. Like the shallows at noon. Thank you.",
     giftBack: { glass: 5 },
     chatter: ['Low tide. Good for crabs.', 'The gulls came back. Loud. I don\'t mind.', 'Rain upriver. It will reach us.'],
   },
@@ -120,6 +125,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['potato', 'seeds', 'apple'], // #785: Elder Grove's fruit trees bear apples
     thanks: 'Mm. For me? Thank you, little one.',
+    mealThanks: "Mm, still warm. I'll eat it slowly, little one.",
     giftBack: { timber: 5 },
     chatter: ['A hedgehog sleeps under the roots. Shh.', 'The tree said good morning. In its way.', 'Mm. Mushrooms after the rain.'],
   },
@@ -133,6 +139,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['watercress', 'clay'],
     thanks: 'For me? Are you sure? Thank you. Thank you.',
+    mealThanks: "You made this yourself? It's perfect. Is it? It is. Thank you.",
     giftBack: { copper: 5 },
     chatter: ['The frogs are back. Very loud. Very good.', 'The level\'s fine. I checked. Twice.', 'Rain tomorrow, maybe. I hope so.'],
   },
@@ -146,6 +153,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['lettuce', 'gears'],
     thanks: 'Right on time. Thank you!',
+    mealThanks: "Cooked and still hot. Perfect timing!",
     giftBack: { glass: 5 },
     chatter: ['The bees are early today. Good for them.', 'Sunset at about… whenever it likes.', 'I wound the clock and forgot to look at it. Lovely.'],
   },
@@ -159,6 +167,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['beans', 'sunstone', 'peach'], // #785: its region's fruit
     thanks: 'Ha! Lovely. Thank you!',
+    mealThanks: "Ha! Home cooking! That's how you build a friend.",
     giftBack: { seeds: 5 },
     chatter: ['Twelve swallow nests and counting!', 'The north roofs went wild. I love them.', 'You can see the sea from every roof. Did you know?'],
   },
@@ -172,6 +181,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['flowers', 'herbs', 'glass'],
     thanks: 'Oh! For me? Thank you. Sorry. Thank you.',
+    mealThanks: "You cooked? For me? It smells like the glasshouse in spring. Thank you.",
     giftBack: { seeds: 5 },
     chatter: ['The lavender\'s out. The bees are very happy about it.', 'I left a window open for the moths.', 'The seedlings are hardier now. So am I.'],
   },
@@ -185,6 +195,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['moonflower', 'glass'],
     thanks: 'For me? How lovely. Thank you.',
+    mealThanks: "Something warm, from right here. I'll remember this one.",
     giftBack: { copper: 5 },
     chatter: ['A comet tonight, maybe. Or a moth. Both are nice.', 'The owls are back on the hill.', 'I used to look for lights out there. Now I count the stars, and the fireflies.'],
   },
@@ -198,6 +209,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     },
     likes: ['pumpkin', 'gears'],
     thanks: 'For me? That is very kind. Thank you.',
+    mealThanks: "A hot meal. I'll sit down for this one. Thank you.",
     giftBack: { sunstone: 5 },
     chatter: ['Swallows on the forty-first floor. No rent.', 'I took the stairs today. Slowly. Nice view.', 'The causeway is down there, under the bay. Waiting.'],
   },

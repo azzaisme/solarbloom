@@ -6,6 +6,7 @@ import type { KeeperState, KeeperStep, MaterialId } from '../core/types';
 import { FRIENDSHIP, KEEPER_HELP, KEEPER_STORIES, type ArcBeat, type KeeperStory } from '../data/keepers';
 import { KEEPERS, KEEPSAKES, type KeeperDef, type RegionDef, type RegionId } from '../data/oldcity';
 import { CROPS, type CropId } from '../data/crops';
+import { isMeal, MEAL_IDS } from '../data/cooking';
 import { MATERIAL_IDS, MATERIALS, type MaterialCost } from '../data/salvage';
 import type { Sim } from './Sim';
 import { Walker } from './Walker';
@@ -159,7 +160,8 @@ export class KeeperSystem {
   /** The material a waking gift takes: the one bloombot carries most of (at least 5), else from the store if near. */
   giftMaterial(): MaterialId | undefined {
     const inv = this.sim.inventory;
-    const by = (f: (m: MaterialId) => number) => MATERIAL_IDS.filter((m) => f(m) >= WAKE_GIFT).sort((a, b) => f(b) - f(a) || MATERIAL_IDS.indexOf(a) - MATERIAL_IDS.indexOf(b))[0];
+    // #874: never a meal (a waking gift is 5 of anything; meals are for eating and for settled Keepers)
+    const by = (f: (m: MaterialId) => number) => MATERIAL_IDS.filter((m) => !MATERIALS[m].meal && f(m) >= WAKE_GIFT).sort((a, b) => f(b) - f(a) || MATERIAL_IDS.indexOf(a) - MATERIAL_IDS.indexOf(b))[0];
     return by((m) => inv.count(m)) ?? by((m) => inv.available(m));
   }
 
@@ -451,10 +453,13 @@ export class KeeperSystem {
     return KEEPERS.find((k) => k.region === region && this.isFriend(k.id))?.id;
   }
 
-  /** Everything it loves, best first (its own likes, then what every Keeper loves). */
+  /**
+   * Everything it loves, best first (its own likes, then what every Keeper loves). #874: then any meal cooked at the
+   * stove, last, so a meal is handed over only when Bloombot carries nothing else it loves (a meal is also food).
+   */
   likes(id: string): string[] {
     const own = this.story(id)?.likes ?? [];
-    return [...own, ...(own.includes(FRIENDSHIP.everyoneLikes) ? [] : [FRIENDSHIP.everyoneLikes])];
+    return [...own, ...(own.includes(FRIENDSHIP.everyoneLikes) ? [] : [FRIENDSHIP.everyoneLikes]), ...MEAL_IDS];
   }
 
   /** The gift bloombot would hand over now: the best thing it loves that bloombot carries (undefined: none, or not today). */
@@ -515,7 +520,7 @@ export class KeeperSystem {
         if (left > 0) this.sim.inventory.addToStore(m, left);
       }
     if (hearts < FRIENDSHIP.giftsToFriend) {
-      this.say(id, [story.thanks]);
+      this.say(id, [isMeal(item) ? story.mealThanks : story.thanks]); // #874: a meal has its own thanks
       return;
     }
     // the friend beat, and its region's keepsake
@@ -548,7 +553,7 @@ export class KeeperSystem {
       default: {
         // E23.9.2: until it is a friend, what it loves (the backpack's names; things not found yet stay unnamed)
         if (this.isFriend(id) || !this.story(id)) return `${d.name} looks after ${this.region(id).name}.`;
-        const named = this.likes(id).filter((m) => m in MATERIALS).map((m) => MATERIALS[m as MaterialId].name);
+        const named = this.likes(id).filter((m) => m in MATERIALS && !isMeal(m)).map((m) => MATERIALS[m as MaterialId].name);
         return `${d.name} looks after ${this.region(id).name}.${named.length ? ` It loves ${named.join(' and ')}.` : ''}`;
       }
     }

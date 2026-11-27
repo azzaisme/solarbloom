@@ -1390,7 +1390,8 @@ export class Game {
     else if (piece.id === 'chest') add({ kind: 'storage', id: 'house:chest', verb: piece.verb!, name: piece.name, run: () => this.oc?.openStorage('The chest in the house') });
     else if (piece.id === 'shelf') add({ kind: 'door', id: 'house:shelf', verb: piece.verb!, name: piece.name, run: () => this.lookAtShelf() });
     else if (piece.id === 'desk') add({ kind: 'door', id: 'house:desk', verb: piece.verb!, name: 'your journal', run: () => this.readAtDesk() });
-    // #858: the kitchen counter and the table are there to look at (the stove's cooking: #874)
+    // #858 / #874: the stove opens cooking; the kitchen counter and the table are there to look at
+    else if (piece.id === 'stove') add({ kind: 'door', id: 'house:stove', verb: piece.verb!, name: piece.name, run: () => this.oc?.stove() });
     return out;
   }
 

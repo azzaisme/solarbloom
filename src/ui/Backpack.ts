@@ -4,6 +4,7 @@ import { sketchPage } from './TideSketchbook';
 import type { Sim } from '../gameplay/Sim';
 import { blueprintRows, collection, itemCells, journalPages, oneOffItems, pinRequest, requestRows, TABS, type TabId } from './BackpackModel';
 import { materialIcon } from './MaterialIcons';
+import { CHARGE } from '../data/charge';
 import { BLOOMBOT_GROUPS, bloombotRows, howHeading, pips, stateWords, type BloombotRow } from './BloombotPage';
 import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell';
 import { reveal } from './PadFocus';
@@ -289,9 +290,14 @@ export class Backpack {
         `<h4 id="bpTakeH">Take out</h4><div class="pn-moves" role="group" aria-labelledby="bpTakeH">${take.join('')}</div>` +
         `<div class="pn-moves bp-all">${all}</div>`
       : `<p class="pn-note bp-note">Stand by the fountain, a chest or a woken landmark to put things away or take them out. Whatever you put away waits for you at all of them.</p>`;
+    // #874: anything edible can be eaten from here, one at a time (a snack key eats the raw food first, so this is how
+    // a meal from the stove is eaten on purpose)
+    const edible = CHARGE.edibles.find((e) => e.id === c.id);
+    const eat = edible ? `<div class="pn-moves bp-eat"><button class="pn-btn small primary" id="bp-eat" data-eat="${c.id}" aria-label="${esc(`Eat one ${c.name}, for ${Math.round(edible.charge)} Charge`)}" ${c.count > 0 ? '' : 'aria-disabled="true"'}>Eat one (${Math.round(edible.charge)} Charge)</button></div>` : '';
     return (
       `<h3><span class="pn-tile">${materialIcon(c.id, 40)}</span>${esc(c.name)}</h3>` +
       `<dl><dt>In your backpack</dt><dd>${c.count} of ${c.limit}</dd><dt>Put away</dt><dd>${c.stored}</dd></dl>` +
+      eat +
       `<h4>Where it comes from</h4><p>${esc(c.from)}.</p><h4>Needed next</h4><p>${esc(c.next)}.</p>` +
       moves
     );
@@ -484,6 +490,14 @@ export class Backpack {
       to?.focus({ focusVisible: true } as FocusOptions);
       to?.scrollIntoView({ block: 'nearest' });
       return;
+    }
+    const eat = t.closest<HTMLElement>('[data-eat]');
+    if (eat) {
+      // #874: eat one of this item (a meal, or any snack)
+      const r = this.host.sim.charge.eat(eat.dataset.eat as Parameters<Sim['charge']['eat']>[0]);
+      this.say(typeof r === 'object' ? `Eating ${r.name}` : r === 'full' ? 'Fully charged' : r === 'busy' ? 'Still eating' : 'None left to eat');
+      this.host.changed?.();
+      return this.refresh();
     }
     const mv = t.closest<HTMLElement>('[data-move]');
     if (mv) return mv.getAttribute('aria-disabled') ? this.say(this.host.sim.inventory.nearStore() ? 'Nothing to move' : 'Stand by the fountain, a chest or a woken landmark to move things.') : this.move(mv.dataset.move!, mv.dataset.n!);

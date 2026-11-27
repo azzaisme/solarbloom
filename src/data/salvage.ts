@@ -3,7 +3,11 @@
 // recipes only change if the pacing bot (§19) fails.
 
 import type { AbilityId, ItemId, MaterialId } from '../core/types';
+import { MEAL_IDS, RECIPES, type MealId } from './cooking';
 import { MACHINES } from './machines';
+
+/** #874: each meal's tint (its fly-ups and panel row) */
+const MEAL_COLOURS: Record<MealId, string> = { soup: '#d9893f', salad: '#d8503a', cornBake: '#f0c24a', pie: '#e88a3a' };
 import { MAINLAND } from './mainland';
 
 export interface MaterialDef {
@@ -23,6 +27,8 @@ export interface MaterialDef {
   from?: string;
   /** E23.8.3.2: where it lies when that is not an Old City region, in world words ("Found in …", "Needs Steel — …") */
   place?: string;
+  /** #874: a meal cooked at the stove (never traded, never a waking gift: data/cooking) */
+  meal?: boolean;
 }
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
@@ -47,6 +53,8 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   lemon: { id: 'lemon', name: 'Lemon', icon: '🍋', models: [], home: [], colour: '#f2d43a', from: 'Picked from fruit trees in Saltwind or the Glasshouse' },
   honey: { id: 'honey', name: 'Honey', icon: '🍯', models: [], home: [], colour: '#f2b632', from: 'From beehives settled near flowers' },
   fertiliser: { id: 'fertiliser', name: 'Fertiliser', icon: '🧪', models: [], home: [], colour: '#c9b06a', from: 'Compost left to mature in a compost bin' },
+  // #874: meals, cooked at the stove in the house's kitchen (data/cooking)
+  ...(Object.fromEntries(MEAL_IDS.map((id) => [id, { id, name: RECIPES[id].name, icon: RECIPES[id].icon, models: [], home: [], colour: MEAL_COLOURS[id], from: 'Cooked at the stove in your kitchen', meal: true }])) as unknown as Record<MealId, MaterialDef>),
 };
 
 export const MATERIAL_IDS = Object.keys(MATERIALS) as MaterialId[];

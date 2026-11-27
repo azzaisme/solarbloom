@@ -1,6 +1,6 @@
 """Paints the house's tiles with klad brush strokes (JSON lines for `klad apply`), into a 768 x 768 bundle made
 without --wrap, the tile its middle square (see stroke). Light warm greys: the game tints
-them with the palette colour of the piece they lie on. Usage: python paint.py <wood|weave|coir> > ops.jsonl"""
+them with the palette colour of the piece they lie on. Usage: python paint.py <wood|weave|coir|cloth|tiles> > ops.jsonl"""
 import json, math, random, sys
 
 S = 256
@@ -103,6 +103,65 @@ def coir():
                [(x, y), (x + l * math.cos(a), y + l * math.sin(a))], R.uniform(0.6, 1.0))
 
 
-{'wood': wood, 'weave': weave, 'coir': coir}[sys.argv[1]]()
+def fill(color, pts):
+    """A filled polygon (crisp edges, for checks and tiles), wrapped like a stroke: a copy a tile over in each
+    direction it reaches past an edge (klad's fills never wrap), drawn a tile right and down (O)."""
+    xs, ys = [x for x, _ in pts], [y for _, y in pts]
+    for ox in (-S, 0, S):
+        for oy in (-S, 0, S):
+            if min(xs) + ox >= S or max(xs) + ox <= 0 or min(ys) + oy >= S or max(ys) + oy <= 0:
+                continue
+            out.append({'op': 'fill', 'layer': 'l1', 'polygon': [[round(x + ox + O, 1), round(y + oy + O, 1)] for x, y in pts], 'color': color})
+
+
+def band(x0, y0, x1, y1, R, wob=0.8):
+    """A rectangle whose long edges wobble a little, as cloth is woven, not ruled."""
+    across = (x1 - x0) > (y1 - y0)
+    n = 8
+    if across:
+        top = [(x0 + (x1 - x0) * k / n, y0 + R.uniform(-wob, wob)) for k in range(n + 1)]
+        bot = [(x0 + (x1 - x0) * k / n, y1 + R.uniform(-wob, wob)) for k in range(n, -1, -1)]
+        return top + bot
+    left = [(x0 + R.uniform(-wob, wob), y0 + (y1 - y0) * k / n) for k in range(n + 1)]
+    right = [(x1 + R.uniform(-wob, wob), y0 + (y1 - y0) * k / n) for k in range(n, -1, -1)]
+    return left + right
+
+
+def cloth():
+    """#858: gingham for the kitchen table's cloth: see-through bands across and down, darker where they cross."""
+    R = random.Random(858)
+    B = 32  # a check is 32 px: 8 across the tile
+    for i in range(S // B):
+        a = i * B
+        fill('#a8987e70', band(-2, a, S + 2, a + B / 2, R))
+        fill('#a8987e70', band(a, -2, a + B / 2, S + 2, R))
+    # the cotton's threads, fine, both ways
+    for _ in range(360):
+        x, y = R.uniform(0, S), R.uniform(0, S)
+        l = R.uniform(6, 16)
+        d = (l, R.uniform(-0.3, 0.3)) if R.random() < 0.5 else (R.uniform(-0.3, 0.3), l)
+        stroke('pencil', 0.8, R.choice(['#ffffff', '#cfc4b2']), [(x, y), (x + d[0], y + d[1])], 0.7)
+
+
+def tiles():
+    """#858: the kitchen's splashback: square glazed tiles, each its own shade, with grout between (the background)."""
+    R = random.Random(8580)
+    T = 64  # four tiles across the tile
+    g = 2.2  # half the grout's width
+    for gy in range(S // T):
+        for gx in range(S // T):
+            x0, y0 = gx * T + g, gy * T + g
+            x1, y1 = (gx + 1) * T - g, (gy + 1) * T - g
+            fill(R.choice(['#f7f3ec', '#efe9df', '#f3eee6', '#e9e2d6']), [(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+            # the glaze: a soft shade along the bottom and right, a glint at the top left
+            fill('#d6ccbc90', [(x0, y1 - 5), (x1, y1 - 5), (x1, y1), (x0, y1)])
+            fill('#d6ccbc90', [(x1 - 5, y0), (x1, y0), (x1, y1 - 5), (x1 - 5, y1 - 5)])
+            stroke('soft', 9, '#ffffff', [(x0 + 9, y0 + 11), (x0 + 22, y0 + 8)], 0.8)
+            for _ in range(2):  # a faint brushed streak in the glaze
+                y = R.uniform(y0 + 14, y1 - 12)
+                stroke('pencil', 1.0, '#ffffff', [(x0 + 8, y), (x1 - 10, y + R.uniform(-1, 1))], 0.5)
+
+
+{'wood': wood, 'weave': weave, 'coir': coir, 'cloth': cloth, 'tiles': tiles}[sys.argv[1]]()
 for op in out:
     print(json.dumps(op))

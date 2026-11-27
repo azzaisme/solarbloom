@@ -14,6 +14,8 @@ import { HOLD_ACTS } from '../data/botActs';
 import { crossName, CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
 import { compostHtml, digesterHtml } from '../ui/CompostPanel';
+import { cookingHtml } from '../ui/CookingPanel';
+import { isMeal } from '../data/cooking';
 import { extraHtml } from '../ui/ExtrasPanel';
 import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, houseHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
@@ -418,6 +420,20 @@ export class OldCityController {
       (act, arg) => {
         const n = act === 'fill' ? c.fill(m, arg as 'biomass' | 'food' | 'fruit') : act === 'take' ? c.take(m, arg as 'compost' | 'fertiliser') : act === 'return' ? c.returnCompost(m) : 0;
         if (n > 0) this.host.sound(act === 'take' ? 'salvage' : 'deliver', act === 'take' ? 'seeds' : undefined);
+      },
+    );
+  }
+
+  /** #874: the house's stove: cook a meal from crops kept in the basket and food in the backpack. */
+  stove() {
+    this.host.sound('click');
+    this.panel.open(
+      () => cookingHtml(this.sim),
+      (act, arg) => {
+        if (act === 'cook' && isMeal(arg) && this.sim.cooking.cook(arg)) {
+          this.host.sound('deliver');
+          this.host.bot.visuals.startAct('tend');
+        }
       },
     );
   }
