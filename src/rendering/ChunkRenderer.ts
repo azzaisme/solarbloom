@@ -25,6 +25,7 @@ import { drawGardenFence, drawHouse, type HouseSink } from './HouseArt';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
+import { decorSize } from '../data/cozy';
 import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageBounds, foliageMaterial, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type TreeStage, type Lod } from './TreeGen';
@@ -2017,7 +2018,11 @@ export class ChunkRenderer {
         model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
-      for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + 0.5, d.rot, !!v.far);
+      // #849: a big piece is drawn about the middle of its footprint
+      for (const d of decor) {
+        const [w, dd] = decorSize(d.kind, d.rot);
+        drawDecor(host, d.kind, d.x + w / 2, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + dd / 2, d.rot, !!v.far, d.x * 31 + d.z);
+      }
     }
     // #783: the workbench beside the house
     const wb = s.bench?.at;

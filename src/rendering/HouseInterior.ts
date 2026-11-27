@@ -5,6 +5,7 @@ import { HOUSE_INSIDE } from '../data/oldcity';
 import type { Sim } from '../gameplay/Sim';
 import { MeshBuilder } from './ChunkRenderer';
 import { drawDecor } from './DecorArt';
+import { decorSize } from '../data/cozy';
 import { FoliageBuilder, foliageMaterial } from './Foliage';
 import { drawRoom } from './HouseArt';
 import { color, PALETTE } from './Materials';
@@ -93,7 +94,11 @@ export class HouseInterior {
       model: (name: string, x: number, yy: number, z: number, rot: number, sc: number) => !!batch?.add(name, x, yy, z, rot, sc),
       lod: 2 as Lod,
     };
-    for (const d of decor) drawDecor(host, d.kind, ox + d.x + 0.5, y, oz + d.z + 0.5, d.rot, false);
+    // #849: a big piece about the middle of its footprint; the seed keeps each houseplant its own
+    for (const d of decor) {
+      const [w, dd] = decorSize(d.kind, d.rot);
+      drawDecor(host, d.kind, ox + d.x + w / 2, y, oz + d.z + dd / 2, d.rot, false, d.x * 31 + d.z);
+    }
     const mesh = (name: string, m: pc.Mesh | undefined, material: pc.Material) => {
       if (!m) return;
       const e = new pc.Entity(name);

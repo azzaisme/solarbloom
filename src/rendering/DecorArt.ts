@@ -11,11 +11,14 @@
 import type { PlotHost } from './PlotArt';
 import { PALETTE } from './Palette';
 import type { VPrim } from './Shapes';
+import { houseplantGeo } from './TreeGen';
 
 type V3 = [number, number, number];
 const C = PALETTE.cozy;
 const P = PALETTE;
 const L = PALETTE.light;
+const H = PALETTE.house;
+const F = PALETTE.furnish;
 
 interface At {
   h: PlotHost;
@@ -25,6 +28,8 @@ interface At {
   z: number;
   rot: number;
   far: boolean;
+  /** #849/#851: a number particular to this placed piece (from its square), so pieces like houseplants differ */
+  seed: number;
 }
 
 /** Turns a local offset (facing +z) by the decoration's quarter turns. */
@@ -46,6 +51,17 @@ function put(a: At, type: VPrim, hex: string, dx: number, dy: number, dz: number
   const [ox, oz] = turn(a.rot, dx, dz);
   const sc: V3 | number = typeof s === 'number' ? s : a.rot & 1 ? [s[2], s[1], s[0]] : s;
   a.h.add(type, hex, [a.x + ox, a.y + dy, a.z + oz], sc, glow);
+}
+
+/**
+ * #851: the rugs' layers. Each is a slab from the floor up to its own height, `RUG.step` above the layer under it, the
+ * lowest `RUG.base` up: clear of the room's own rug and door mat (rendering/HouseArt, at most 0.016 high), so a rug laid
+ * over them, or a layer over a layer, never flickers.
+ */
+export const RUG = { base: 0.026, step: 0.007 };
+function rug(a: At, type: VPrim, hex: string, dx: number, dz: number, w: number, d: number, layer: number) {
+  const top = RUG.base + layer * RUG.step;
+  put(a, type, hex, dx, top / 2, dz, [w, top, d]);
 }
 
 /** A model copy at a local offset, turned with the decoration. False when the model isn't there. */
@@ -254,15 +270,183 @@ const ART: Record<string, (a: At) => void> = {
     const flags = [P.flowers.pink, P.flowers.yellow, P.leaf.shrub[0], P.glow.lamp];
     flags.forEach((c, i) => put(a, 'box', c, 0.16, 1.32 - i * 0.14, 0, [0.28, 0.12, 0.02]));
   },
+  // ───── #850: furniture made for a room, in the woods of the bed, desk and chest already there (HouseArt) ─────
+  armchair: (a) => {
+    put(a, 'box', F.fabric, 0, 0.17, 0.02, [0.7, 0.22, 0.6]); // the seat's base
+    put(a, 'box', F.fabric, 0, 0.42, -0.26, [0.7, 0.5, 0.16]); // its back
+    if (a.far) return put(a, 'box', F.fabricDark, 0, 0.3, 0.02, [0.86, 0.14, 0.6]);
+    for (const s of [-1, 1]) {
+      put(a, 'box', F.fabricDark, s * 0.38, 0.31, 0.02, [0.12, 0.26, 0.62]); // arms
+      put(a, 'sphere', F.fabricDark, s * 0.38, 0.44, 0.02, [0.13, 0.08, 0.62]);
+      for (const k of [-1, 1]) put(a, 'box', H.bedWood, s * 0.34, 0.03, 0.02 + k * 0.24, [0.06, 0.06, 0.06]); // feet
+    }
+    put(a, 'box', F.cushion, 0, 0.31, 0.06, [0.6, 0.08, 0.48]);
+    put(a, 'box', F.cushion, 0, 0.5, -0.16, [0.54, 0.34, 0.08]);
+  },
+  stool: (a) => {
+    put(a, 'cylinder', F.seat, 0, 0.36, 0, [0.38, 0.06, 0.38]);
+    if (a.far) return put(a, 'cylinder', H.desk, 0, 0.17, 0, [0.26, 0.34, 0.26]);
+    for (let i = 0; i < 3; i++) {
+      const ang = (i / 3) * Math.PI * 2 + Math.PI / 2;
+      put(a, 'cylinder', H.desk, Math.cos(ang) * 0.12, 0.17, Math.sin(ang) * 0.12, [0.04, 0.34, 0.04]);
+    }
+    put(a, 'cylinder', H.desk, 0, 0.12, 0, [0.26, 0.025, 0.26]); // the ring between the legs
+  },
+  diningtable: (a) => {
+    // 2 × 1 squares: about the middle of its footprint, long across x
+    put(a, 'box', H.desk, 0, 0.46, 0, [1.78, 0.07, 0.78]);
+    if (a.far) return put(a, 'box', H.desk, 0, 0.22, 0, [1.5, 0.44, 0.5]);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(a, 'box', H.desk, sx * 0.8, 0.21, sz * 0.31, [0.07, 0.42, 0.07]);
+    put(a, 'box', F.cloth, 0, 0.5, 0, [1.3, 0.012, 0.36]); // a runner down the middle
+    put(a, 'box', F.clothEdge, 0, 0.505, 0, [1.3, 0.01, 0.04]);
+    for (const s of [-1, 1]) {
+      put(a, 'cylinder', F.plate, s * 0.5, 0.51, 0.2, [0.2, 0.02, 0.2]);
+      put(a, 'cylinder', F.plate, s * 0.5, 0.51, -0.2, [0.2, 0.02, 0.2]);
+    }
+    put(a, 'cylinder', H.glass, 0, 0.58, 0, [0.08, 0.16, 0.08]); // a jug of water
+    put(a, 'sphere', P.flowers.pink, 0, 0.68, 0, 0.08);
+  },
+  sidetable: (a) => {
+    put(a, 'cylinder', H.desk, 0, 0.44, 0, [0.46, 0.05, 0.46]);
+    put(a, 'cylinder', H.desk, 0, 0.22, 0, [0.06, 0.42, 0.06]);
+    if (a.far) return;
+    put(a, 'cylinder', H.desk, 0, 0.02, 0, [0.28, 0.04, 0.28]);
+    put(a, 'box', H.book[1], -0.08, 0.49, 0.04, [0.18, 0.05, 0.13]);
+    put(a, 'sphere', H.door, 0.1, 0.53, -0.06, [0.14, 0.12, 0.14]); // a teapot
+    put(a, 'cylinder', H.door, 0.19, 0.55, -0.06, [0.03, 0.06, 0.03]);
+  },
+  bookshelf: (a) => {
+    // against the wall behind it: four boards of books
+    const back = -0.3;
+    put(a, 'box', H.shelf, 0, 0.7, back - 0.08, [0.84, 1.4, 0.04]);
+    if (a.far) return put(a, 'box', H.book[0], 0, 0.7, back + 0.06, [0.76, 1.2, 0.2]);
+    for (const k of [-1, 1]) put(a, 'box', H.shelf, k * 0.41, 0.7, back + 0.04, [0.04, 1.4, 0.28]);
+    for (const yy of [0.04, 0.38, 0.72, 1.06, 1.4]) put(a, 'box', H.shelf, 0, yy, back + 0.04, [0.82, 0.04, 0.28]);
+    for (let row = 0; row < 4; row++)
+      for (let i = 0; i < 3; i++) {
+        const w = 0.18 + ((row + i) % 3) * 0.03;
+        put(a, 'box', H.book[(row + i * 2) % H.book.length], -0.24 + i * 0.25, 0.06 + row * 0.34 + 0.13, back + 0.05, [w, 0.24 - (i % 2) * 0.04, 0.2]);
+      }
+  },
+  coatstand: (a) => {
+    put(a, 'cylinder', H.bedWood, 0, 0.62, 0, [0.05, 1.24, 0.05]);
+    put(a, 'cylinder', H.bedWood, 0, 0.03, 0, [0.34, 0.05, 0.34]);
+    if (a.far) return put(a, 'box', F.coat, 0.07, 0.86, 0, [0.12, 0.5, 0.26]);
+    for (let i = 0; i < 4; i++) {
+      const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      put(a, 'box', F.brass, Math.cos(ang) * 0.08, 1.16, Math.sin(ang) * 0.08, [0.12, 0.025, 0.025]);
+    }
+    put(a, 'box', F.coat, 0.08, 0.84, 0, [0.12, 0.54, 0.28]); // a coat on one hook
+    put(a, 'box', F.coat, 0.08, 1.06, 0, [0.14, 0.1, 0.18]);
+    put(a, 'cylinder', F.hat, -0.06, 1.24, 0, [0.22, 0.03, 0.22]); // a hat on another
+    put(a, 'cylinder', F.hat, -0.06, 1.3, 0, [0.13, 0.1, 0.13]);
+    put(a, 'sphere', F.brass, 0, 1.27, 0, 0.05);
+  },
+  // ───── #851: soft furnishings. Rugs lie flat (Bloombot walks over them); lamps glow by LightVisuals at night. ─────
+  roundrug: (a) => {
+    rug(a, 'cylinder', F.rugGreenEdge, 0, 0, 0.88, 0.88, 0);
+    rug(a, 'cylinder', F.rugGreen, 0, 0, 0.78, 0.78, 1);
+    if (a.far) return;
+    rug(a, 'cylinder', F.rugGreenEdge, 0, 0, 0.44, 0.44, 2);
+    rug(a, 'cylinder', F.rugGreen, 0, 0, 0.34, 0.34, 3);
+  },
+  hallrunner: (a) => {
+    // 1 × 3 squares, long along z
+    rug(a, 'box', F.rugBlue, 0, 0, 0.7, 2.78, 0);
+    if (a.far) return;
+    for (const s of [-1, 1]) {
+      rug(a, 'box', F.rugBlueEdge, s * 0.29, 0, 0.05, 2.66, 1); // a pale stripe down each side
+      rug(a, 'box', F.rugBlueEdge, 0, s * 1.12, 0.58, 0.05, 1);
+      rug(a, 'box', F.rugBlueEdge, 0, s * 1.42, 0.62, 0.06, 0); // the fringe at each end
+    }
+    for (const z of [-0.6, 0, 0.6]) rug(a, 'box', F.rugBlueEdge, 0, z, 0.16, 0.16, 1);
+  },
+  bigrug: (a) => {
+    // 2 × 3 squares
+    rug(a, 'box', F.rugCream, 0, 0, 1.84, 2.84, 0);
+    rug(a, 'box', F.rugRed, 0, 0, 1.6, 2.6, 1);
+    if (a.far) return;
+    rug(a, 'box', F.rugCream, 0, 0, 1.2, 2.2, 2);
+    rug(a, 'box', F.rugRed, 0, 0, 1.08, 2.08, 3);
+    rug(a, 'cylinder', F.rugCream, 0, 0, 0.6, 0.9, 4); // a medallion in the middle
+    rug(a, 'cylinder', F.rugRed, 0, 0, 0.4, 0.66, 5);
+  },
+  patternrug: (a) => {
+    // 2 × 2 squares: a field of checks round a big middle square
+    rug(a, 'box', F.rugTeal, 0, 0, 1.84, 1.84, 0);
+    if (a.far) return rug(a, 'box', F.rugGold, 0, 0, 1.1, 1.1, 1);
+    rug(a, 'box', F.rugGold, 0, 0, 1.7, 1.7, 1);
+    rug(a, 'box', F.rugTeal, 0, 0, 1.56, 1.56, 2);
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++) {
+        const big = i === 0 && j === 0;
+        rug(a, 'box', (i + j) % 2 ? F.rugCream : F.rugGold, i * 0.5, j * 0.5, big ? 0.44 : 0.26, big ? 0.44 : 0.26, 3);
+      }
+  },
+  floorlamp: (a) => {
+    put(a, 'cylinder', F.iron, 0, 0.02, 0, [0.32, 0.04, 0.32]);
+    put(a, 'cylinder', F.brass, 0, 0.5, 0, [0.04, 0.96, 0.04]);
+    put(a, 'cylinder', F.shade, 0, 1.08, 0, [0.34, 0.24, 0.34]); // its shade: LightVisuals glows it at night
+    if (a.far) return;
+    put(a, 'cylinder', F.brass, 0, 0.94, 0, [0.08, 0.04, 0.08]);
+    put(a, 'cylinder', F.brass, 0, 1.21, 0, [0.06, 0.03, 0.06]);
+  },
+  tablelamp: (a) => {
+    put(a, 'cylinder', H.desk, 0, 0.36, 0, [0.42, 0.05, 0.42]);
+    put(a, 'cylinder', H.desk, 0, 0.18, 0, [0.06, 0.34, 0.06]);
+    put(a, 'cylinder', F.shade, 0.06, 0.66, -0.04, [0.22, 0.16, 0.22]); // its shade: LightVisuals glows it at night
+    if (a.far) return;
+    put(a, 'cylinder', H.desk, 0, 0.02, 0, [0.26, 0.04, 0.26]);
+    put(a, 'sphere', F.potWhite, 0.06, 0.45, -0.04, [0.12, 0.12, 0.12]); // the lamp's round base
+    put(a, 'cylinder', F.brass, 0.06, 0.54, -0.04, [0.02, 0.12, 0.02]);
+    put(a, 'box', H.book[2], -0.1, 0.4, 0.08, [0.16, 0.04, 0.12]); // a book beside it
+  },
+  houseplant: (a) => {
+    put(a, 'cylinder', F.pot, 0, 0.12, 0, [0.3, 0.24, 0.3]);
+    put(a, 'cylinder', F.potRim, 0, 0.24, 0, [0.34, 0.04, 0.34]);
+    if (a.far) return put(a, 'sphere', P.leaf.mid, 0, 0.42, 0, [0.42, 0.34, 0.42]);
+    put(a, 'cylinder', F.soil, 0, 0.255, 0, [0.28, 0.01, 0.28]);
+    // grown by the tree and shrub code, its own shape from its square (TreeGen buildHouseplant)
+    a.h.foliage(houseplantGeo(a.seed, a.h.lod), a.x, a.y + 0.26, a.z, (a.seed % 12) * 0.52, 1.6);
+  },
+  pottedtree: (a) => {
+    put(a, 'cylinder', F.potWhite, 0, 0.16, 0, [0.4, 0.32, 0.4]);
+    put(a, 'cylinder', F.potWhite, 0, 0.32, 0, [0.44, 0.04, 0.44]);
+    if (a.far) return put(a, 'sphere', P.leaf.mid, 0, 0.85, 0, [0.6, 0.6, 0.6]);
+    put(a, 'cylinder', F.soil, 0, 0.335, 0, [0.38, 0.01, 0.38]);
+    a.h.foliage(houseplantGeo(a.seed, a.h.lod, true), a.x, a.y + 0.34, a.z, (a.seed % 12) * 0.52, 1.35);
+  },
+  cushions: (a) => {
+    const c = F.cushions;
+    put(a, 'box', c[0], -0.08, 0.07, 0.06, [0.5, 0.14, 0.44]);
+    put(a, 'box', c[1], 0.14, 0.07, -0.14, [0.42, 0.14, 0.38]);
+    if (a.far) return;
+    put(a, 'box', c[2], 0.02, 0.19, -0.02, [0.36, 0.12, 0.32]);
+    put(a, 'sphere', c[3], -0.2, 0.06, -0.2, [0.26, 0.12, 0.26]);
+    for (const [x, z] of [[-0.28, 0.24], [0.16, 0.24], [-0.28, -0.12]]) put(a, 'sphere', c[0], x, 0.08, z, 0.04); // tassels
+  },
+  clock: (a) => {
+    // a tall case clock, its face to the front
+    put(a, 'box', F.clockWood, 0, 0.62, -0.1, [0.4, 1.24, 0.26]);
+    put(a, 'sphere', F.clockFace, 0, 1.0, 0.035, [0.26, 0.26, 0.02]);
+    if (a.far) return;
+    put(a, 'box', F.clockWood, 0, 1.3, -0.1, [0.46, 0.1, 0.3]);
+    put(a, 'box', F.clockWood, 0, 0.04, -0.1, [0.46, 0.08, 0.3]);
+    put(a, 'box', F.iron, 0, 1.03, 0.05, [0.015, 0.09, 0.01]); // the hands
+    put(a, 'box', F.iron, 0.025, 0.99, 0.05, [0.06, 0.012, 0.01]);
+    put(a, 'box', H.glass, 0, 0.55, 0.035, [0.24, 0.5, 0.01]); // the glass door…
+    put(a, 'cylinder', F.brass, 0, 0.6, 0.02, [0.012, 0.32, 0.012]); // …and the pendulum behind it
+    put(a, 'sphere', F.brass, 0, 0.42, 0.025, [0.1, 0.1, 0.02]);
+  },
 };
 
 /** Ids with art (tests check every decoration has some). */
 export const DECOR_ART = Object.keys(ART);
 
 /**
- * Draws a decoration on the tile centred at (`x`, `z`), its ground top at `y`. `rot` in quarter turns; `far` the
- * far level of detail.
+ * Draws a decoration about (`x`, `z`), the middle of its footprint, its ground top at `y`. `rot` in quarter turns;
+ * `far` the far level of detail; `seed` a number particular to the placed piece (#849), so no two houseplants match.
  */
-export function drawDecor(h: PlotHost, kind: string, x: number, y: number, z: number, rot: number, far: boolean) {
-  (ART[kind] ?? ART.pot)({ h, x, y, z, rot: rot & 3, far });
+export function drawDecor(h: PlotHost, kind: string, x: number, y: number, z: number, rot: number, far: boolean, seed = 0) {
+  (ART[kind] ?? ART.pot)({ h, x, y, z, rot: rot & 3, far, seed });
 }
