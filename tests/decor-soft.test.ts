@@ -10,7 +10,7 @@ import { POWER } from '../src/data/power';
 import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
 import { Walker } from '../src/gameplay/Walker';
-import { drawDecor } from '../src/rendering/DecorArt';
+import { drawDecor, RUG } from '../src/rendering/DecorArt';
 import { buildHouseplant, houseplantGeo } from '../src/rendering/TreeGen';
 import { EMOJI_ICONS } from '../src/ui/Icons';
 import { bannedIn } from '../src/ui/words';
@@ -111,6 +111,34 @@ describe('#851: rugs lie under Bloombot’s feet', () => {
       }
     }
     expect(cozy.insideCount()).toBe(0);
+  });
+});
+
+describe('#851: rugs lie clear of the room’s own rug and of each other (no flicker)', () => {
+  it('every layer of every rug stands above the built-in rug and door mat, and a layer over a layer is a step higher', () => {
+    for (const id of RUGS)
+      for (const far of [false, true]) {
+        const tops: { top: number; x: [number, number]; z: [number, number] }[] = [];
+        drawDecor(
+          {
+            add: (_t, _c, p, s) => {
+              const sz = typeof s === 'number' ? [s, s, s] : s;
+              tops.push({ top: p[1] + sz[1] / 2, x: [p[0] - sz[0] / 2, p[0] + sz[0] / 2], z: [p[2] - sz[2] / 2, p[2] + sz[2] / 2] });
+            },
+            foliage: () => {},
+            model: () => false,
+            lod: far ? 0 : 1,
+          },
+          id, 0, 0, 0, 0, far,
+        );
+        for (const t of tops) expect(t.top, id).toBeGreaterThanOrEqual(RUG.base - 1e-9);
+        // the room's own rug and mat (rendering/HouseArt) are at most 0.016 high
+        expect(RUG.base - 0.016).toBeGreaterThanOrEqual(0.008);
+        const overlap = (a: [number, number], b: [number, number]) => Math.min(a[1], b[1]) - Math.max(a[0], b[0]) > 1e-6;
+        for (const [i, a] of tops.entries())
+          for (const b of tops.slice(i + 1))
+            if (overlap(a.x, b.x) && overlap(a.z, b.z) && a.top !== b.top) expect(Math.abs(a.top - b.top), id).toBeGreaterThanOrEqual(RUG.step - 1e-9);
+      }
   });
 });
 

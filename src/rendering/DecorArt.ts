@@ -53,6 +53,17 @@ function put(a: At, type: VPrim, hex: string, dx: number, dy: number, dz: number
   a.h.add(type, hex, [a.x + ox, a.y + dy, a.z + oz], sc, glow);
 }
 
+/**
+ * #851: the rugs' layers. Each is a slab from the floor up to its own height, `RUG.step` above the layer under it, the
+ * lowest `RUG.base` up: clear of the room's own rug and door mat (rendering/HouseArt, at most 0.016 high), so a rug laid
+ * over them, or a layer over a layer, never flickers.
+ */
+export const RUG = { base: 0.026, step: 0.007 };
+function rug(a: At, type: VPrim, hex: string, dx: number, dz: number, w: number, d: number, layer: number) {
+  const top = RUG.base + layer * RUG.step;
+  put(a, type, hex, dx, top / 2, dz, [w, top, d]);
+}
+
 /** A model copy at a local offset, turned with the decoration. False when the model isn't there. */
 function model(a: At, name: string, dx: number, dz: number, scale: number, extraRot = 0, dy = 0): boolean {
   const [ox, oz] = turn(a.rot, dx, dz);
@@ -333,43 +344,43 @@ const ART: Record<string, (a: At) => void> = {
   },
   // ───── #851: soft furnishings. Rugs lie flat (Bloombot walks over them); lamps glow by LightVisuals at night. ─────
   roundrug: (a) => {
-    put(a, 'cylinder', F.rugGreenEdge, 0, 0.008, 0, [0.88, 0.016, 0.88]);
-    put(a, 'cylinder', F.rugGreen, 0, 0.012, 0, [0.78, 0.016, 0.78]);
+    rug(a, 'cylinder', F.rugGreenEdge, 0, 0, 0.88, 0.88, 0);
+    rug(a, 'cylinder', F.rugGreen, 0, 0, 0.78, 0.78, 1);
     if (a.far) return;
-    put(a, 'cylinder', F.rugGreenEdge, 0, 0.016, 0, [0.44, 0.012, 0.44]);
-    put(a, 'cylinder', F.rugGreen, 0, 0.02, 0, [0.34, 0.012, 0.34]);
+    rug(a, 'cylinder', F.rugGreenEdge, 0, 0, 0.44, 0.44, 2);
+    rug(a, 'cylinder', F.rugGreen, 0, 0, 0.34, 0.34, 3);
   },
   hallrunner: (a) => {
     // 1 × 3 squares, long along z
-    put(a, 'box', F.rugBlue, 0, 0.01, 0, [0.7, 0.02, 2.78]);
+    rug(a, 'box', F.rugBlue, 0, 0, 0.7, 2.78, 0);
     if (a.far) return;
     for (const s of [-1, 1]) {
-      put(a, 'box', F.rugBlueEdge, s * 0.29, 0.016, 0, [0.05, 0.014, 2.66]); // a pale stripe down each side
-      put(a, 'box', F.rugBlueEdge, 0, 0.016, s * 1.12, [0.58, 0.014, 0.05]);
-      put(a, 'box', F.rugBlueEdge, 0, 0.012, s * 1.42, [0.62, 0.01, 0.06]); // the fringe at each end
+      rug(a, 'box', F.rugBlueEdge, s * 0.29, 0, 0.05, 2.66, 1); // a pale stripe down each side
+      rug(a, 'box', F.rugBlueEdge, 0, s * 1.12, 0.58, 0.05, 1);
+      rug(a, 'box', F.rugBlueEdge, 0, s * 1.42, 0.62, 0.06, 0); // the fringe at each end
     }
-    for (const z of [-0.6, 0, 0.6]) put(a, 'box', F.rugBlueEdge, 0, 0.018, z, [0.16, 0.014, 0.16]);
+    for (const z of [-0.6, 0, 0.6]) rug(a, 'box', F.rugBlueEdge, 0, z, 0.16, 0.16, 1);
   },
   bigrug: (a) => {
     // 2 × 3 squares
-    put(a, 'box', F.rugCream, 0, 0.008, 0, [1.84, 0.016, 2.84]);
-    put(a, 'box', F.rugRed, 0, 0.013, 0, [1.6, 0.016, 2.6]);
+    rug(a, 'box', F.rugCream, 0, 0, 1.84, 2.84, 0);
+    rug(a, 'box', F.rugRed, 0, 0, 1.6, 2.6, 1);
     if (a.far) return;
-    put(a, 'box', F.rugCream, 0, 0.018, 0, [1.2, 0.012, 2.2]);
-    put(a, 'box', F.rugRed, 0, 0.022, 0, [1.08, 0.012, 2.08]);
-    put(a, 'cylinder', F.rugCream, 0, 0.026, 0, [0.6, 0.01, 0.9]); // a medallion in the middle
-    put(a, 'cylinder', F.rugRed, 0, 0.029, 0, [0.4, 0.01, 0.66]);
+    rug(a, 'box', F.rugCream, 0, 0, 1.2, 2.2, 2);
+    rug(a, 'box', F.rugRed, 0, 0, 1.08, 2.08, 3);
+    rug(a, 'cylinder', F.rugCream, 0, 0, 0.6, 0.9, 4); // a medallion in the middle
+    rug(a, 'cylinder', F.rugRed, 0, 0, 0.4, 0.66, 5);
   },
   patternrug: (a) => {
     // 2 × 2 squares: a field of checks round a big middle square
-    put(a, 'box', F.rugTeal, 0, 0.01, 0, [1.84, 0.02, 1.84]);
-    if (a.far) return put(a, 'box', F.rugGold, 0, 0.016, 0, [1.1, 0.012, 1.1]);
-    put(a, 'box', F.rugGold, 0, 0.014, 0, [1.7, 0.012, 1.7]);
-    put(a, 'box', F.rugTeal, 0, 0.017, 0, [1.56, 0.012, 1.56]);
+    rug(a, 'box', F.rugTeal, 0, 0, 1.84, 1.84, 0);
+    if (a.far) return rug(a, 'box', F.rugGold, 0, 0, 1.1, 1.1, 1);
+    rug(a, 'box', F.rugGold, 0, 0, 1.7, 1.7, 1);
+    rug(a, 'box', F.rugTeal, 0, 0, 1.56, 1.56, 2);
     for (let i = -1; i <= 1; i++)
       for (let j = -1; j <= 1; j++) {
         const big = i === 0 && j === 0;
-        put(a, 'box', (i + j) % 2 ? F.rugCream : F.rugGold, i * 0.5, 0.021, j * 0.5, big ? [0.44, 0.012, 0.44] : [0.26, 0.012, 0.26]);
+        rug(a, 'box', (i + j) % 2 ? F.rugCream : F.rugGold, i * 0.5, j * 0.5, big ? 0.44 : 0.26, big ? 0.44 : 0.26, 3);
       }
   },
   floorlamp: (a) => {
