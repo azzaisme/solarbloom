@@ -184,6 +184,13 @@ const BODIES = {
   clipboard: R(4.5, 4, 15, 17.5, 2.2, 'wood') + R(6.5, 6.5, 11, 13, 1.2, 'cream') + R(9, 2.5, 6, 3, 1, 'steel') + L('M8.6 10.5h6.8M8.6 13.5h6.8M8.6 16.5h4.4', '#a39d90', 1.2),
   broom: L('M18.5 3.5 11 11', '#3a2a1a', 2.6) + L('M18.5 3.5 11 11', '#d79a55', 1.4) + P('M10.2 9.4l4.4 4.4-3.4 3.4c-1.6 1.6-4.4 2.6-7.6 3.2.6-3.2 1.6-6 3.2-7.6z', 'gold'),
   bench: P('M3.5 9.5h17v3h-17z', 'wood') + P('M3.5 13.8h17v2.4h-17z', 'wood') + L('M6 16.2V20M18 16.2V20M6 9.5V6M18 9.5V6', '#3a2a1a', 2),
+  // #850: furniture for the house
+  armchair: P('M5 6.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6H5z', 'orange') + R(2.5, 10, 4, 7.5, 1.6, 'orange') + R(17.5, 10, 4, 7.5, 1.6, 'orange') + R(6.5, 12, 11, 4, 1.2, 'cream') + L('M4.5 17.5V20M19.5 17.5V20', '#3a2a1a', 2),
+  stool: E(12, 8, 7, 2.6, 'wood') + L('M7.5 9.8 6 20M16.5 9.8 18 20M12 10.6V20M7.2 15.5h9.6', '#3a2a1a', 1.8),
+  diningTable: R(2, 8, 20, 3, 1, 'wood') + L('M4.5 11v9M19.5 11v9', '#3a2a1a', 2) + E(8, 7, 2.6, 0.9, 'cream') + E(16, 7, 2.6, 0.9, 'cream'),
+  sideTable: E(12, 10, 7.5, 2.4, 'wood') + L('M12 12.4V20M8.5 20.5h7', '#3a2a1a', 2) + P('M9.5 8.6c0-2.6 1.1-4 2.5-4s2.5 1.4 2.5 4z', 'teal'),
+  bookshelf: R(4, 2.5, 16, 19, 1.4, 'wood') + L('M4 9h16M4 15.2h16', '#3a2a1a', 1.6) + R(6, 4.2, 2, 4.4, 0.4, 'red') + R(8.4, 4.2, 2, 4.4, 0.4, 'water') + R(10.8, 4.6, 2, 4, 0.4, 'sun') + R(6.5, 10.4, 2, 4.4, 0.4, 'leaf') + R(9, 10.4, 2.4, 4.4, 0.4, 'pink') + R(14, 16.6, 4, 4.2, 0.4, 'teal'),
+  coatStand: L('M12 4v15.5M7.5 21h9M12 6l-3.5-2M12 6l3.5-2', '#3a2a1a', 1.8) + P('M9 7.5h6l1.5 8h-9z', 'teal') + E(12, 3.8, 2.6, 1.2, 'dark'),
   bulb: P('M12 2.5a6.5 6.5 0 0 0-3.8 11.8c.8.6 1.3 1.6 1.3 2.6h5c0-1 .5-2 1.3-2.6A6.5 6.5 0 0 0 12 2.5z', 'sun') + R(9.4, 17, 5.2, 4.2, 1.4, 'steel') + HI('M9.4 6.8a3.6 3.6 0 0 1 2.4-1.6'),
   coins: P('M8 6.5h8l-1.4-3h-5.2zM12 6.5c5 0 8 4.2 8 8.2 0 3.6-3 5.8-8 5.8s-8-2.2-8-5.8c0-4 3-8.2 8-8.2z', 'gold') + L('M12 10v7.4M10 11.6h3.2a1.4 1.4 0 0 1 0 2.8h-2.4a1.4 1.4 0 0 0 0 2.8H14', '#9a5f08', 1.4),
   puzzle: P('M4 8h4a2.2 2.2 0 1 1 4 0h4v4a2.2 2.2 0 1 1 0 4v4H4z', 'leaf'),
@@ -332,6 +339,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🛠': 'wrench',
   // E23.5.4 beyond planters (the bee and the hedgehog are the visitors' icons above)
   '🍄': 'sprout', '🪱': 'sprout', '🦇': 'moon',
+  // #850: furniture for the house
+  '🛋': 'armchair', '🥁': 'stool', '🍽': 'diningTable', '🫖': 'sideTable', '📚': 'bookshelf', '🧥': 'coatStand',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */
