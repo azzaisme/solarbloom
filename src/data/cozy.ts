@@ -92,6 +92,16 @@ export interface DecorOption {
   blurb: string;
   solid: boolean;
   unlock: CozyUnlock;
+  /**
+   * #847: made for a room. Inside the house the tray leads with these, outside with the rest (garden pieces). It only
+   * changes the tray's order: anything can go anywhere.
+   */
+  indoor?: boolean;
+  /**
+   * #849: the squares it covers, [across, deep], seen facing its front (rot 0). It turns with the piece, so a quarter
+   * turn swaps the two. One square when unset.
+   */
+  size?: [number, number];
 }
 
 /** Tray order. Art: rendering/DecorArt.ts (existing prop models where one fits, primitives otherwise). */
@@ -120,6 +130,30 @@ export const DECOR_OPTIONS: DecorOption[] = [
 ];
 
 export const DECOR_OPTION: Record<string, DecorOption> = Object.fromEntries(DECOR_OPTIONS.map((o) => [o.id, o]));
+
+/** #849: the squares a decoration covers when turned `rot` quarter turns, [along x, along z]. */
+export function decorSize(kind: string, rot: number): [number, number] {
+  const s = DECOR_OPTION[kind]?.size;
+  if (!s) return [1, 1];
+  return rot & 1 ? [s[1], s[0]] : [s[0], s[1]];
+}
+
+/**
+ * #849: the north-west square (the one its save key names) of a decoration aimed at square (x, z): the aimed square
+ * is its middle one, or the one just north-west of the middle when a side is even.
+ */
+export function decorAnchor(kind: string, rot: number, x: number, z: number): [number, number] {
+  const [w, d] = decorSize(kind, rot);
+  return [x - Math.floor((w - 1) / 2), z - Math.floor((d - 1) / 2)];
+}
+
+/** #849: every square a decoration with its north-west square at (x, z) covers. */
+export function decorCells(kind: string, rot: number, x: number, z: number): { x: number; z: number }[] {
+  const [w, d] = decorSize(kind, rot);
+  const out: { x: number; z: number }[] = [];
+  for (let j = 0; j < d; j++) for (let i = 0; i < w; i++) out.push({ x: x + i, z: z + j });
+  return out;
+}
 
 /** E23.12.2 (#529): the cat-only decorations, in the order Lucky Cats leave them. */
 export const CAT_DECOR: readonly string[] = DECOR_OPTIONS.filter((o) => 'cat' in o.unlock).map((o) => o.id);

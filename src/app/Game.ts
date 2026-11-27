@@ -140,9 +140,9 @@ import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
 import { Cozy } from '../gameplay/Cozy';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS, PLOT_WORK_TUNING, type DecorOption } from '../data/cozy';
+import { decorAnchor, DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, decorSize, PLOT_OPTIONS, PLOT_WORK_TUNING, type DecorOption } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
-import type { Decoration } from '../core/Decor';
+import { decorChunkKey, type Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
 import { type LoadResult, SaveService, type Slot } from './SaveService';
 import { Loading, type LoadSteps } from '../ui/Loading';
@@ -3979,11 +3979,11 @@ export class Game {
   }
 
   /** Is a footprint within bloombot's reach, on its layer? (Always, without bloombot.) */
-  private inReach(roofId: string, x: number, z: number, size: number): boolean {
+  private inReach(roofId: string, x: number, z: number, size: number, depth = size): boolean {
     const b = this.bot;
     if (!b) return true;
     if (b.pose.roofId !== roofId) return false;
-    return Math.hypot(b.pose.x - (x + size / 2), b.pose.z - (z + size / 2)) <= DECOR_GEN.reach + (size - 1) / 2;
+    return Math.hypot(b.pose.x - (x + size / 2), b.pose.z - (z + depth / 2)) <= DECOR_GEN.reach + (Math.max(size, depth) - 1) / 2;
   }
 
   /** Words for turning what's in hand, for the input used last. */
@@ -4016,7 +4016,9 @@ export class Game {
   private previewDecor(p: Pick, x: number, y: number, kind: string) {
     const t = p.tile!;
     const o = DECOR_OPTION[kind];
-    const why = this.decorProblem(kind, p.roofId, t.x, t.z);
+    // #849: a big piece is centred on the square aimed at, its whole footprint framed
+    const [ax, az] = decorAnchor(kind, this.buildRot, t.x, t.z);
+    const why = this.decorProblem(kind, p.roofId, ax, az, this.buildRot);
     this.overlays.hideRadius();
     const line = LIGHT[kind]?.line ? this.sim.lights.poleNear(p.roofId, t.x, t.z) : undefined;
     if (LIGHT[kind]?.line) {
@@ -4024,7 +4026,7 @@ export class Game {
       this.overlays.hideGhost();
       if (line) this.overlays.showFrame(line.roofId, line.x, line.z, line.size, why ? 'bad' : 'ok');
       else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'bad');
-    } else this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
+    } else this.overlays.showGhost(p.roofId, ax, az, decorSize(kind, this.buildRot), !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
     const how = line ? `${this.press('E')} to hang it on this pole` : `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
     const kindNote = LIGHT[kind]?.line ? 'On the pole’s lines' : o?.solid ? 'Bloombot walks around it' : 'Bloombot can walk over it';
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
@@ -4075,14 +4077,14 @@ export class Game {
     }
     const o = DECOR_OPTION[d.kind];
     const far = !this.inReach(p.roofId, t.x, t.z, 1);
-    // the decoration aimed at lights up red: removing it is free and instant
-    this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.4, this.bot ? { kind: 'decor', decor: d.kind, rot: d.rot } : undefined);
+    // the decoration aimed at lights up red (#849: its whole footprint): removing it is free and instant
+    this.overlays.showGhost(p.roofId, d.x, d.z, decorSize(d.kind, d.rot), false, 0.4, this.bot ? { kind: 'decor', decor: d.kind, rot: d.rot } : undefined);
     const how = far ? `<span class="bad">${TOO_FAR}</span>` : `<span class="ok">${this.press('E')} to remove${this.bot ? ` · ${this.press('Q')} to pick it up and move it` : ''}</span>`;
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? d.kind}</b>${how}`);
   }
 
   /** Why a decoration in hand can't go here (the tile's rules, reach, and not on top of bloombot if it's solid). */
-  private decorProblem(kind: string, roofId: string, x: number, z: number): string | undefined {
+  private decorProblem(kind: string, roofId: string, x: number, z: number, rot = 0): string | undefined {
     // E23.3.5: line lights hang on a power pole's lines (aim at the pole) instead of standing on a tile
     if (LIGHT[kind]?.line) {
       const o = DECOR_OPTION[kind];
@@ -4092,11 +4094,13 @@ export class Game {
       const pole = this.sim.lights.poleNear(roofId, x, z)!;
       return this.inReach(roofId, pole.x, pole.z, pole.size) ? undefined : TOO_FAR;
     }
-    const why = this.cozy.canDecorate(kind, roofId, x, z);
+    const why = this.cozy.canDecorate(kind, roofId, x, z, rot);
     if (why) return why;
-    if (!this.inReach(roofId, x, z, 1)) return TOO_FAR;
+    // #849: `x`, `z` is a big piece's north-west square; reach and Bloombot's feet are measured over all of it
+    const [w, d] = decorSize(kind, rot);
+    if (!this.inReach(roofId, x, z, w, d)) return TOO_FAR;
     const b = this.bot;
-    if (b && DECOR_OPTION[kind]?.solid && b.pose.roofId === roofId && Math.abs(b.pose.x - (x + 0.5)) < 0.5 + BOT.radius && Math.abs(b.pose.z - (z + 0.5)) < 0.5 + BOT.radius) return 'Bloombot is standing there';
+    if (b && DECOR_OPTION[kind]?.solid && b.pose.roofId === roofId && Math.abs(b.pose.x - (x + w / 2)) < w / 2 + BOT.radius && Math.abs(b.pose.z - (z + d / 2)) < d / 2 + BOT.radius) return 'Bloombot is standing there';
     return undefined;
   }
 
@@ -4104,7 +4108,8 @@ export class Game {
   private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
     const t = p.tile!;
     const line = !!LIGHT[kind]?.line;
-    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z));
+    const [ax, az] = line ? [t.x, t.z] : decorAnchor(kind, this.buildRot, t.x, t.z);
+    const why = this.decorProblem(kind, p.roofId, ax, az, this.buildRot) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, ax, az));
     if (why) {
       this.hud.showFail(why, x, y);
       return 'none';
@@ -4115,7 +4120,7 @@ export class Game {
       this.buildKey = '';
       return 'select';
     }
-    this.chunks.markTile(t);
+    this.markDecor(p.roofId, ax, az);
     this.sfx.build();
     this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.2), 8, { up: 1.6, size: 0.04, life: 0.8 });
     this.buildKey = '';
@@ -4170,7 +4175,7 @@ export class Game {
       return 'none';
     }
     this.cozy.removeDecor(d.roofId, d.x, d.z);
-    this.chunks.markTile(t);
+    this.markDecor(d.roofId, d.x, d.z);
     this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.2), 6, { up: 1.2, size: 0.035, life: 0.6 });
     const o = DECOR_OPTION[d.kind];
     if (pickUp && o) {
@@ -4182,11 +4187,21 @@ export class Game {
     return 'select';
   }
 
-  /** The decorations of one ground chunk, for the chunk renderer. */
+  /** #849: redraws the chunk a decoration is drawn by (its north-west square's). */
+  private markDecor(roofId: string, x: number, z: number) {
+    const t = this.sim.grid.peek(roofId, x, z);
+    if (t) this.chunks.markTile(t);
+  }
+
+  /**
+   * The decorations of one ground chunk, for the chunk renderer. #849: a big piece is indexed by every chunk it
+   * covers (so each stamps its squares) but drawn once, by the chunk its north-west square is in.
+   */
   private decorInChunk(cx: number, cz: number): Decoration[] {
-    const keys = this.sim.grid.decorInChunk(chunkKey(GROUND, cx, cz));
+    const ck = chunkKey(GROUND, cx, cz);
+    const keys = this.sim.grid.decorInChunk(ck);
     if (!keys.length) return [];
-    return keys.flatMap((k) => this.cozy.decorByKey(k) ?? []);
+    return keys.flatMap((k) => (decorChunkKey(k) === ck ? (this.cozy.decorByKey(k) ?? []) : []));
   }
 
   /**

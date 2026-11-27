@@ -127,22 +127,24 @@ function cached(device: pc.GraphicsDevice, key: string, make: () => Marks) {
 }
 
 /** Solid corners and restrained fill keep the silhouette visible on both brick and soil. */
-export function tileMarkerMesh(device: pc.GraphicsDevice, kind: TileMarkerKind, size = 1) {
-  return cached(device, `${kind}:${size}`, () => {
+export function tileMarkerMesh(device: pc.GraphicsDevice, kind: TileMarkerKind, size = 1, depth = size) {
+  return cached(device, depth === size ? `${kind}:${size}` : `${kind}:${size}x${depth}`, () => {
     const mesh = new Marks();
     const ink = art[kind];
+    // #849: half-widths across (x) and deep (z); a square frame when they match
     const h = size / 2 - 0.085;
+    const hz = depth / 2 - 0.085;
     const arm = 0.146;
     const chamfer = 0.025;
     const edge = kind === 'hover' ? 0.012 : 0.013;
-    if (ink.fill) mesh.fill([[-h, -h], [h, -h], [h, h], [-h, h]], [ink.line, ink.fill], 0);
+    if (ink.fill) mesh.fill([[-h, -hz], [h, -hz], [h, hz], [-h, hz]], [ink.line, ink.fill], 0);
     for (const sign of [-1, 1]) {
-      const sides = [
-        (a: number, b: number): Point[] => [[a, sign * h], [b, sign * h]],
-        (a: number, b: number): Point[] => [[sign * h, a], [sign * h, b]],
+      const sides: [(a: number, b: number) => Point[], number][] = [
+        [(a: number, b: number): Point[] => [[a, sign * hz], [b, sign * hz]], h],
+        [(a: number, b: number): Point[] => [[sign * h, a], [sign * h, b]], hz],
       ];
-      for (const side of sides) {
-        const lo = -h + arm - 0.015, hi = h - arm + 0.015;
+      for (const [side, half] of sides) {
+        const lo = -half + arm - 0.015, hi = half - arm + 0.015;
         const n = kind === 'invalid' ? Math.max(2, Math.ceil((hi - lo) / 0.12)) : 1;
         for (let i = 0; i < n; i++) {
           const d = (hi - lo) / n;
@@ -153,8 +155,8 @@ export function tileMarkerMesh(device: pc.GraphicsDevice, kind: TileMarkerKind, 
         }
       }
       for (const z of [-1, 1]) {
-        const corner: Point[] = [[sign * (h - arm), z * h], [sign * (h - chamfer), z * h],
-          [sign * h, z * (h - chamfer)], [sign * h, z * (h - arm)]];
+        const corner: Point[] = [[sign * (h - arm), z * hz], [sign * (h - chamfer), z * hz],
+          [sign * h, z * (hz - chamfer)], [sign * h, z * (hz - arm)]];
         const width = kind === 'hover' ? 0.024 : 0.038;
         mesh.stroke(corner, width + 0.018, [ink.shadow, 0.64], 0.004);
         mesh.stroke(corner, 0.139, [ink.line, ink.halo], 0.005, true);

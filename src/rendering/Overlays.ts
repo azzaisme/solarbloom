@@ -15,6 +15,10 @@ const TONES = Object.keys(TONE) as OverlayTone[];
 type FrameTone = Exclude<OverlayTone, 'mega'> | 'restore';
 const FRAME: Record<FrameTone, TileMarkerKind> = { hover: 'hover', ok: 'valid', bad: 'invalid', info: 'selected', restore: 'restore' };
 
+/** #849: a footprint's size: squares a side, or [across, deep]. */
+export type FootSize = number | [number, number];
+const footDims = (s: FootSize): [number, number] => (typeof s === 'number' ? [s, s] : s);
+
 /**
  * Hover frame, placement ghost and radius tiles. (E24 #609: the old first-tile arrow is retired; rendering/Waymark marks the goal.) Look 3.14: the frame and the radius / pulse-preview tiles are
  * glowing tile outlines with a soft inner fill (shared meshes, one shared material per tone and use).
@@ -40,6 +44,8 @@ export class Overlays {
   private radiusRoot: pc.Entity;
   private time = 0;
   private frameSize = 1;
+  /** #849: the frame's depth (z), when the footprint isn't square */
+  private frameDepth = 1;
   private gridLines: pc.Entity;
   /** E19: the build hologram (replaces the plain ghost box when given a shape). */
   readonly holo: Hologram;
@@ -89,22 +95,26 @@ export class Overlays {
     }
   }
 
-  private footprintCenter(roofId: string, x: number, z: number, size: number): pc.Vec3 {
+  private footprintCenter(roofId: string, x: number, z: number, size: FootSize): pc.Vec3 {
     const r = this.sim.grid.roof(roofId)!;
+    const [w, d] = footDims(size);
     // E21.24: on its terrace
-    return new pc.Vec3(r.origin[0] + x + size / 2, r.origin[1] + r.height + SLAB_TOP + 0.02 + this.sim.grid.groundOffset(roofId, x, z), r.origin[2] + z + size / 2);
+    return new pc.Vec3(r.origin[0] + x + w / 2, r.origin[1] + r.height + SLAB_TOP + 0.02 + this.sim.grid.groundOffset(roofId, x, z), r.origin[2] + z + d / 2);
   }
 
-  showFrame(roofId: string, x: number, z: number, size: number, tone: FrameTone) {
-    if (this.frameTone !== tone || this.frameSize !== size) {
+  /** `size`: squares a side, or (#849) [across, deep] for a footprint that isn't square. */
+  showFrame(roofId: string, x: number, z: number, size: FootSize, tone: FrameTone) {
+    const [w, d] = footDims(size);
+    if (this.frameTone !== tone || this.frameSize !== w || this.frameDepth !== d) {
       this.frameTone = tone;
-      this.frameSize = size;
-      this.frameMi.mesh = tileMarkerMesh(this.device, FRAME[tone], size);
+      this.frameSize = w;
+      this.frameDepth = d;
+      this.frameMi.mesh = tileMarkerMesh(this.device, FRAME[tone], w, d);
     }
     const p = this.footprintCenter(roofId, x, z, size);
     let lift = 0;
-    for (let dx = 0; dx < size; dx++) {
-      for (let dz = 0; dz < size; dz++) {
+    for (let dx = 0; dx < w; dx++) {
+      for (let dz = 0; dz < d; dz++) {
         lift = Math.max(lift, pavingOverlayLift(this.sim.grid, this.sim.grid.peek(roofId, x + dx, z + dz)));
       }
     }
@@ -117,7 +127,7 @@ export class Overlays {
   framesTile(tile: TileData): boolean {
     const at = this.frameAt;
     return !!at && this.frame.enabled && tile.roofId === at.roofId && tile.x >= at.x && tile.z >= at.z
-      && tile.x < at.x + this.frameSize && tile.z < at.z + this.frameSize;
+      && tile.x < at.x + this.frameSize && tile.z < at.z + this.frameDepth;
   }
 
   showGrid(on: boolean) {
@@ -128,18 +138,19 @@ export class Overlays {
     this.frame.enabled = false;
   }
 
-  showGhost(roofId: string, x: number, z: number, size: number, ok: boolean, height = 0.5, shape?: HoloShape) {
+  showGhost(roofId: string, x: number, z: number, size: FootSize, ok: boolean, height = 0.5, shape?: HoloShape) {
     const p = this.footprintCenter(roofId, x, z, size);
+    const [w, d] = footDims(size);
     if (shape) {
       // E19: a hologram of the real thing, projected from bloombot's eyes
       this.ghost.enabled = false;
-      this.holo.show(shape, p.x, p.y, p.z, size, ok ? 'ok' : 'bad');
+      this.holo.show(shape, p.x, p.y, p.z, Math.max(w, d), ok ? 'ok' : 'bad');
       this.showFrame(roofId, x, z, size, ok ? 'ok' : 'bad');
       return;
     }
     this.holo.hide();
     this.ghost.setPosition(p.x, p.y + height / 2, p.z);
-    this.ghostBox.setLocalScale(size * 0.92, height, size * 0.92);
+    this.ghostBox.setLocalScale(w - (w === d ? w * 0.08 : 0.08), height, d - (w === d ? d * 0.08 : 0.08));
     this.ghostBox.render!.material = mat(ok ? TONE.ok : TONE.bad, { opacity: 0.5, unlit: true });
     this.ghost.enabled = true;
     this.showFrame(roofId, x, z, size, ok ? 'ok' : 'bad');
