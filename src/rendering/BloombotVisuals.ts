@@ -6,7 +6,7 @@ import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
 import { worldLightLayers } from './WaterSurface';
 import { botParts, growthKey, type BotGrowth, type BotMat, type PartId, type PartPiece } from '../data/botParts';
-import { BOT_CLIPS, REST, seatLift } from '../data/rest';
+import { BOT_CLIPS, REST, seatLift, seatRamp } from '../data/rest';
 import { VISIT_POINTS, type Perch } from '../data/wildlife';
 import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
 import { surfaceTriangles, skinnedVertices, vertexOnBones } from './SkinSurface';
@@ -86,7 +86,7 @@ export class BloombotVisuals {
   private asset?: pc.Asset;
   private clips = new Map<string, number>();
   private loop: BotLoop = 'idle';
-  private action?: { name: BotAction | SeatClip; until: number };
+  private action?: { name: BotAction | SeatClip; until: number; at?: number };
   private clock = 0;
   private destroyed = false;
   private faceMat?: pc.StandardMaterial;
@@ -118,6 +118,8 @@ export class BloombotVisuals {
   private needOut = 0;
   private settledAt = 0;
   private posedAt = 0;
+  /** when the clip into the pose last finished (its blend into the seated loop follows) */
+  private clipDoneAt = -Infinity;
   private hanging?: Uint8Array;
   private measured: number[] = [];
   private legs = 1;
@@ -653,19 +655,38 @@ export class BloombotVisuals {
     }
     applyTurnLook(this.model, this.root, look, this.turnAxes);
     const sink = mv.body.knee > 0 ? this.feetHeight() - before : 0;
-    holder?.setLocalPosition(0, -sink + mv.up, -mv.back);
+    // standing up off a bench: still on the seat until the stand-up clip's hips rise (seatShare)
+    const on = this.rise ? this.seatShare : 0;
+    if (this.rise && !on) this.rise = undefined;
+    holder?.setLocalPosition(0, -sink + mv.up + (this.rise?.y ?? 0) * on, -mv.back + (this.rise?.z ?? 0) * on);
   }
   private frontTmp = new pc.Vec3();
   private footTmp = new pc.Vec3();
 
   /** Places bloombot (feet) and turns it to face `facing` (radians, 0 = +z). */
   place(x: number, y: number, z: number, facing: number) {
-    this.root.setPosition(x, y, z);
+    this.root.setPosition(x, y + this.levitate, z);
     this.root.setEulerAngles(0, (facing * 180) / Math.PI, 0);
   }
 
   /** the bench seat's height while sitting on one (world units) */
   private seat = 0;
+  /** standing up off a bench: the model's offset on the seat as it rose (it comes down off the seat with its hips) */
+  private rise?: { y: number; z: number };
+
+  /**
+   * How far onto the seat bloombot is drawn now: 0 standing on the ground in front of it, 1 sitting on it (REST.onto).
+   * Sitting down it stays 0 while the sit-down clip turns it round and only comes up to 1 as the clip's hips come
+   * down; standing up it goes back to 0 as the stand-up clip's hips rise. Without the clips (the stand-in) it is 1
+   * as soon as it sits and 0 as soon as it stands.
+   */
+  get seatShare(): number {
+    const a = this.action;
+    const k = REST.onto;
+    if (this.pose === 'sit') return a?.name === BOT_CLIPS.sitDown && a.at !== undefined ? seatRamp(this.clock - a.at, k.down) : 1;
+    if (this.pose) return 1;
+    return this.rise && a?.name === BOT_CLIPS.standUp && a.at !== undefined ? 1 - seatRamp(this.clock - a.at, k.up) : 0;
+  }
 
   /**
    * E23.2.3: sit on a bench (`seat`: its height), meditate at a charger, or stand (undefined). Plays the clip into
@@ -679,6 +700,8 @@ export class BloombotVisuals {
       this.prop?.destroy();
       this.prop = undefined;
     }
+    // standing up off a bench: the model comes down off the seat as the stand-up clip rises (seatShare)
+    this.rise = !pose && was === 'sit' && this.holder ? { y: this.holder.getLocalPosition().y, z: this.holder.getLocalPosition().z } : undefined;
     this.pose = pose;
     this.seat = seat;
     if (pose !== was) {
@@ -774,7 +797,7 @@ export class BloombotVisuals {
     if (!anim || !len) return;
     anim.speed = 1;
     anim.baseLayer?.transition(name, 0.12);
-    this.action = { name, until: this.clock + len * 0.95 };
+    this.action = { name, until: this.clock + len * 0.95, at: this.clock };
   }
 
   private posed() {
@@ -787,7 +810,9 @@ export class BloombotVisuals {
       const y = clip(BOT_CLIPS.sit) ? seatLift(this.seat, SCALE) : this.fold('sit') + this.seat;
       this.swingLegs();
       this.settle();
-      h?.setLocalPosition(0, y + this.settleUp, -0.12 + this.settleOut);
+      // up onto the seat (and back onto it) only as the sit-down clip's hips come down (seatShare)
+      const on = this.seatShare;
+      h?.setLocalPosition(0, (y + this.settleUp) * on, (-0.12 + this.settleOut) * on);
       h?.setLocalEulerAngles(0, 0, 0);
       this.standIn?.setLocalPosition(0, 0.4 + this.seat, -0.1);
     } else if (this.pose === 'meditate') {
@@ -823,7 +848,9 @@ export class BloombotVisuals {
     this.settleUp += (this.wantUp - this.settleUp) * ease;
     this.settleOut += (this.wantOut - this.settleOut) * ease;
     // not while it is still getting into the pose (its legs straight down under it as it bends)
-    if (this.action || this.clock - this.posedAt < k.after) return;
+    // nor while it blends from the end of the sit-down clip into the seated loop: the clip ends with its hips 7 cm
+    // further back than the loop has them, and a look then would bring it that much too far forward for good
+    if (this.action || this.clock - Math.max(this.posedAt, this.clipDoneAt + BLEND) < k.after) return;
     if (this.settling === 'look') {
       const m = this.measure();
       this.aim(m.up, m.out);
@@ -912,14 +939,22 @@ export class BloombotVisuals {
    * while something sits in its lap (a frog on its knees).
    */
   private swingLegs() {
-    if (!this.model || this.reducedMotion) return;
+    if (!this.model) return;
     const s = REST.legSwing;
+    // legs out over the seat's edge (REST.legSwing), raised as it comes onto the seat
+    const lift = s.lift * this.seatShare;
+    if (this.reducedMotion) {
+      swingShins(this.model, this.root, lift, lift);
+      this.swung = 0;
+      this.swingMost = 0;
+      return;
+    }
     const dt = Math.min(0.1, Math.max(0, this.clock - this.legsAt));
     this.legsAt = this.clock;
     this.legs += ((this.lapFull ? 0 : 1) - this.legs) * Math.min(1, dt * s.settle);
     const drift = 0.5 - 0.5 * Math.cos((this.clock * Math.PI * 2) / s.driftSeconds);
     const deg = this.legs * s.degrees * (s.calmest + (1 - s.calmest) * drift) * Math.sin(this.clock * Math.PI * 2 * s.perSecond);
-    swingShins(this.model, this.root, deg, -deg);
+    swingShins(this.model, this.root, lift + deg, lift - deg);
     this.swung = deg;
     this.swingMost = this.legs * s.degrees;
   }
@@ -1122,8 +1157,27 @@ export class BloombotVisuals {
     return Math.min(l.getPosition().y, r.getPosition().y) - this.root.getPosition().y;
   }
 
+  /**
+   * VFX 1: how high it floats off the ground (a Mega Pulse lifts it while the power builds), and how high it is
+   * heading. It rises with the charge and settles back down over `settle` seconds or so.
+   */
+  levitate = 0;
+  private floatGoal = 0;
+  private floatSettle = 0.7;
+
+  /** Float `h` off the ground (0 to come down; `settle` how slowly it comes down). */
+  floatTo(h: number, settle = 0.7) {
+    this.floatGoal = Math.max(0, h);
+    this.floatSettle = Math.max(0.05, settle);
+  }
+
   update(dt: number) {
     this.clock += dt;
+    if (this.levitate !== this.floatGoal) {
+      const up = this.floatGoal > this.levitate;
+      this.levitate += (this.floatGoal - this.levitate) * Math.min(1, dt * (up ? 10 : 3 / this.floatSettle));
+      if (Math.abs(this.floatGoal - this.levitate) < 0.002) this.levitate = this.floatGoal;
+    }
     this.runAct(dt);
     this.drawBody(dt);
     this.placeGrowth();
@@ -1135,6 +1189,7 @@ export class BloombotVisuals {
       this.blinkAt = this.clock + 2.5 + ((this.clock * 7.31) % 3);
     }
     if (this.action && this.clock >= this.action.until) {
+      if (this.isSeatClip(this.action.name)) this.clipDoneAt = this.clock;
       this.action = undefined;
       const anim = this.model?.anim;
       if (anim) {

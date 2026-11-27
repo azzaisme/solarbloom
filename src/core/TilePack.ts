@@ -7,7 +7,7 @@ import type { GroundState, LayerData, PlantKind, RestoreSource, TileData, TileTr
  * Otherwise four columns, compact and very compressible:
  *   ground (1 char/tile) · bloom (1 digit/tile) · pollution (2 base-36 chars/tile) · '|' · extras
  * where extras lists tiles with a growth timer, a grow source, a lush timer, an entry fix or a transition:
- * `i,growth,src,lush,u,tr,lushAt,plant,drySince,treeAt;…` (`tr` = `kind:t0:duration:dir:from:g`).
+ * `i,growth,src,lush,u,tr,lushAt,plant,drySince,treeAt;…` (`tr` = `kind:t0:duration:dir:from:g:wave`, wave = `x/z/radius/seconds`).
  * Occupancy is not saved: it is rebuilt from the machine list. Variant and blocked come from generation.
  */
 const G2C: Record<GroundState, string> = { polluted: 'p', prepared: 'm', growing: 'g', restored: 'r' };
@@ -17,15 +17,18 @@ const K2C: Record<TransitionKind, string> = { soften: 's', moss: 'm', restore: '
 const C2K: Record<string, TransitionKind> = { s: 'soften', m: 'moss', r: 'restore', b: 'bloom', u: 'unblock' };
 
 function packTr(tr: TileTransition): string {
-  return `${K2C[tr.k]}:${r3(tr.t0)}:${r3(tr.d)}:${tr.dir ?? ''}:${tr.from ?? ''}:${tr.g ? 1 : ''}`;
+  const w = tr.w ? `:${tr.w.map(r3).join('/')}` : '';
+  return `${K2C[tr.k]}:${r3(tr.t0)}:${r3(tr.d)}:${tr.dir ?? ''}:${tr.from ?? ''}:${tr.g ? 1 : ''}${w}`;
 }
 function unpackTr(s: string): TileTransition | undefined {
-  const [k, t0, d, dir, from, g] = s.split(':');
+  const [k, t0, d, dir, from, g, w] = s.split(':');
   if (!C2K[k] || !Number.isFinite(Number(t0)) || !(Number(d) > 0)) return undefined;
   const tr: TileTransition = { k: C2K[k], t0: Number(t0), d: Number(d) };
   if (dir) tr.dir = Number(dir);
   if (from) tr.from = Number(from);
   if (g === '1') tr.g = 1;
+  const wv = w?.split('/').map(Number);
+  if (wv && wv.length === 4 && wv.every(Number.isFinite)) tr.w = wv as [number, number, number, number];
   return tr;
 }
 /** E23.2.2: what a loaded pulse grew (the extras' eighth field). */

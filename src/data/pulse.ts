@@ -36,8 +36,10 @@ export const PULSE_LOAD: Record<PulseLoadId, PulseLoadDef> = Object.fromEntries(
 /** What grows from each plant kind (biomass and look are read from the load that grew it). */
 export const PLANT_LOAD: Record<PlantKind, PulseLoadId> = { meadow: 'seeds', rare: 'rare', grove: 'fertiliser' };
 
-/** E23.2.2.3: the reveal ripple every pulse sends out. */
+/** E23.2.2.3: the reveal ripple. VFX 1: Bloombot sends it out when it senses what is nearby (its own control), not with every pulse. */
 export const RIPPLE = {
+  /** seconds between senses */
+  senseCooldown: 1.2,
   /** reach in tiles, from the pulsed tile */
   radius: 7,
   /** how long what it found stays lit, seconds */
@@ -96,7 +98,7 @@ export const RARE_PLANT_DEFAULT: RarePlant = RARE_PLANTS.park;
 
 /**
  * E23.2.2.3: buried finds. Seeds and salvage lie buried in open ground across the island, about one tile in
- * `oneIn`. Nothing shows until a pulse's ripple (or the fox, E23.2.5) reveals one; from then a little mound marks
+ * `oneIn`. Nothing shows until sensing's ripple (or the fox, E23.2.5) reveals one; from then a little mound marks
  * it until bloombot digs it up (Interact). Never on or beside a Lucky Cat's nook (open ground only, away from props).
  */
 export const BURIED = {

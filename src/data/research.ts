@@ -123,7 +123,7 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   /** a share off how long Interact is held to dig out a pile or pry rubble (UpgradeSystem.salvageHold / pryHold) */
   { id: 'quickHands', branch: 'bloombot', name: 'Quick hands', each: 'Prying rubble and old vault doors open takes less time', per: 0.2, needs: 'always', levels: [{ cost: { gears: 4, scrap: 8 } }, { cost: { gears: 6, wire: 4 } }, { cost: { motor: 1, copper: 10 } }] },
   /** tiles added to the pulse's ripple (what it lights up) and to how far the piles the fountain wants glint */
-  { id: 'keenEye', branch: 'bloombot', name: 'Keen eye', each: 'Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too', per: 4, needs: 'always', levels: [{ cost: { glassPane: 2, copper: 4 } }, { cost: { glassPane: 4, wire: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }] },
+  { id: 'keenEye', branch: 'bloombot', name: 'Keen eye', each: 'Sensing lights up piles and hidden things from further away. At level 3 they show on the map too', per: 4, needs: 'always', levels: [{ cost: { glassPane: 2, copper: 4 } }, { cost: { glassPane: 4, wire: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }] },
   /** charge a second back in full sun, standing still (times the sun's strength now) */
   { id: 'sunSoak', branch: 'bloombot', name: 'Sun soak', each: 'Bloombot slowly charges standing still in the sun', per: 0.12, needs: 'charge', levels: [{ cost: { glassPane: 2, sunstone: 2 } }, { cost: { sunstone: 6, wire: 4 } }, { cost: { sunCell: 2, sunstone: 6 } }] },
   /** how far Bloombot's own light reaches at night (tiles) */

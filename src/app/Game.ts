@@ -97,6 +97,7 @@ import { PowerOverlay } from '../rendering/PowerOverlay';
 import { LightVisuals } from '../rendering/LightVisuals';
 import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
+import { pavingOverlayLift } from '../rendering/PavingSurface';
 import { Sky } from '../rendering/Sky';
 import { fogMatchingSky } from '../rendering/LookShaders';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
@@ -508,6 +509,17 @@ export class Game {
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
+    this.vfx.onSurge = (amount, seconds) => this.look.post.surgeBloom(amount, seconds); // VFX 1: a pulse swells the glow
+    this.vfx.eye = () => this.camera.entity.getPosition(); // VFX 1: ribbons of light turn to face the camera
+    // VFX 1: a pulse's wave lies on the ground of the roof Bloombot is on, on top of raised paving (and isn't drawn
+    // over drops or the sea)
+    this.vfx.groundAt = (x, z) => {
+      const r = this.sim.grid.roof(this.bot?.pose.roofId ?? GROUND);
+      if (!r) return undefined;
+      const t = this.sim.grid.get(r.id, Math.floor(x - r.origin[0]), Math.floor(z - r.origin[2]));
+      if (!t || t.blocked || t.feature === 'water') return undefined;
+      return this.sim.grid.tileWorld(t)[1] + SLAB_TOP + pavingOverlayLift(this.sim.grid, t);
+    };
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.crops = new CropVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
     this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
@@ -1844,6 +1856,8 @@ export class Game {
       case 'showWhere':
         if (!this.hud.objective.showWhere()) this.hud.toast(WORDS.objective.nowhere, '', 2.2);
         return;
+      case 'sense':
+        return this.senseNearby();
       case 'recentre':
         return this.camera.recentre();
       case 'debug':
@@ -1852,6 +1866,18 @@ export class Game {
       case 'nextTab':
         return this.panelTab(a === 'nextTab' ? 1 : -1);
     }
+  }
+
+  /**
+   * VFX 1: R / the right stick: Bloombot senses what is nearby, the reveal ripple from where it stands (a pulse no
+   * longer does this: it only heals). Its eyes widen for a moment as the ripple goes out.
+   */
+  private senseNearby() {
+    const b = this.bot;
+    if (!b || this.cinematic || this.paused || this.hud.modalOpen || this.building()) return;
+    const tile = this.sim.grid.get(b.pose.roofId, Math.floor(b.pose.x), Math.floor(b.pose.z));
+    if (!tile || !this.sim.pulseLoad.sense(tile)) return;
+    b.visuals.setFace('surprised', 0.5);
   }
 
   /** LB / RB, Q / E: the tabs of the panel on top. */
@@ -2420,12 +2446,7 @@ export class Game {
     if (r === 'pulse') {
       v.play('pulse');
       this.drones.companionReact('pulse');
-      // The echo pulse: green rings (#631) leave the palms and travel to the tile in front (as in the reference image).
-      const f = this.frontPick();
-      if (f?.tile) {
-        const to = this.tileVec(f.tile, SLAB_TOP + 0.25);
-        setTimeout(() => this.vfx.palmWave(v.palmWorld(new pc.Vec3()), to), 140); // when the palms push out
-      }
+      // VFX 1: the pulse's ring of light is drawn when it fires (pulse.fired, mega.released), all the way round Bloombot
     }
     else if (r === 'build') v.play('assemble');
     else if (r === 'select' || r === 'wake') v.play('interact');
@@ -2466,12 +2487,19 @@ export class Game {
     this.buildKey = '';
   }
 
-  private megaHold?: { input: string | number; tile: TileData; targets: MegaTarget[]; elapsed: number; shown: number };
+  private megaHold?: { input: string | number; tile: TileData; targets: MegaTarget[]; elapsed: number; shown: number; radius: number };
+  /** VFX 1: the Mega Pulse being released: its ground (for its burst), and when it burst */
+  private megaFx?: { radius: number; targets: MegaTarget[] };
+  /** VFX 1: the Mega Pulse's wave across the ground, while its chain heals it (each tile washes green as it passes) */
+  private megaWave?: { cx: number; cz: number; R: number; seconds: number; t0: number };
+  private megaBurstAt = -1;
 
+  /** VFX 1: a Mega Pulse goes off all round Bloombot, from the tile it stands on (or the one in front, if not that). */
   private megaAim(): TileData | undefined {
     if (!this.bot || this.building() || this.overviewOn || this.paused || this.panelOpen() || this.hud.modalOpen || this.cinematic || this.photo.active || this.resting?.active || this.bot.visuals.busy === 'assemble') return;
-    const tile = this.frontPick()?.tile;
-    if (tile && !tile.occupantId && this.sim.restoration.checkPulse(tile, true).ok) return tile;
+    const p = this.bot.pose;
+    const here = this.sim.grid.get(p.roofId, Math.floor(p.x), Math.floor(p.z));
+    for (const tile of [here, this.frontPick()?.tile]) if (tile && !tile.occupantId && this.sim.restoration.checkPulse(tile, true).ok) return tile;
   }
 
   private beginMegaHold(input: string | number): boolean {
@@ -2480,11 +2508,13 @@ export class Game {
     if (!rest.megaReady() || !rest.pulseReady()) return false;
     const tile = this.megaAim();
     if (!tile) return false;
-    const targets = rest.megaTargets(tile, this.bot!.pose.facing);
+    const targets = rest.megaTargets(tile);
     if (!targets.length) return false;
     this.overlays.hideFrame();
     this.overlays.hideRadius();
-    this.megaHold = { input, tile, targets, elapsed: 0, shown: -1 };
+    const [ox, , oz] = this.sim.grid.tileWorld(tile);
+    const radius = Math.max(1.5, ...targets.map(({ tile: t }) => { const [x, , z] = this.sim.grid.tileWorld(t); return Math.hypot(x - ox, z - oz); }));
+    this.megaHold = { input, tile, targets, elapsed: 0, shown: -1, radius };
     return true;
   }
 
@@ -2494,6 +2524,41 @@ export class Game {
     this.overlays.megaCharge = 0;
     this.overlays.hideRadius();
     this.botPreviewKey = '';
+    this.bot?.visuals.floatTo(0, LOOK.pulseFx.mega.settle);
+  }
+
+  /**
+   * VFX 1: where a pulse on `t` comes from: Bloombot's feet and the point the power gathers at (its palms; its middle
+   * for a Mega Pulse), when it is the one pulsing; else the tile itself (a pulse from the cursor).
+   */
+  /**
+   * VFX 1: the ground a pulse heals, as its effects see it: the middle of all its tiles (on the ground), how far out
+   * its furthest corner is, and whether a world point is on one of them.
+   */
+  private pulseArea(tiles: TileData[]): { centre: pc.Vec3; R: number; inside: (x: number, z: number) => boolean } {
+    const at = tiles.map((nb) => this.sim.grid.tileWorld(nb));
+    const mx = at.reduce((a, w) => a + w[0], 0) / at.length;
+    const mz = at.reduce((a, w) => a + w[2], 0) / at.length;
+    const R = Math.max(...at.map(([x, , z]) => Math.hypot(Math.abs(x - mx) + 0.5, Math.abs(z - mz) + 0.5)));
+    const cells = new Set(at.map(([x, , z]) => `${Math.floor(x)},${Math.floor(z)}`));
+    const inside = (x: number, z: number) => cells.has(`${Math.floor(x)},${Math.floor(z)}`);
+    const y = this.vfx.groundAt?.(mx, mz) ?? this.tileVec(tiles[0]).y;
+    return { centre: new pc.Vec3(mx, y + 0.02, mz), R, inside };
+  }
+
+  private pulseOrigin(t: TileData, middle = false): { feet: pc.Vec3; core: pc.Vec3 } {
+    const b = this.bot;
+    const [tx, , tz] = this.sim.grid.tileWorld(t);
+    if (b && b.pose.roofId === t.roofId) {
+      const v = b.visuals;
+      const p = v.root.getPosition();
+      if (Math.hypot(p.x - tx, p.z - tz) < 2.5) {
+        const feet = new pc.Vec3(p.x, p.y - v.levitate + 0.02, p.z);
+        return { feet, core: middle ? new pc.Vec3(p.x, p.y + 0.55, p.z) : v.palmWorld(new pc.Vec3()) };
+      }
+    }
+    const feet = this.tileVec(t, SLAB_TOP + pavingOverlayLift(this.sim.grid, t) + 0.02);
+    return { feet, core: new pc.Vec3(feet.x, feet.y + 0.6, feet.z) };
   }
 
   private endMegaHold(input: string | number) {
@@ -2521,15 +2586,24 @@ export class Game {
     const progress = Math.min(1, h.elapsed / TUNING.mega.holdSeconds);
     if (progress >= 1) {
       this.clearMegaHold();
+      this.megaFx = { radius: h.radius, targets: h.targets };
       if (this.sim.restoration.playerPulse(h.tile.id, h.targets)) this.botAnim('pulse');
+      this.megaFx = undefined;
       return false;
     }
     this.overlays.megaCharge = progress;
+    // VFX 1: the power builds: Bloombot lifts off the ground, rings spin round it and light streams in to it
+    const M = LOOK.pulseFx.mega;
+    this.bot!.visuals.floatTo(M.lift * (1 - Math.pow(1 - progress, 2)) * (this.settings.reducedMotion ? 0.4 : 1));
+    const { feet, core } = this.pulseOrigin(h.tile, true);
+    this.vfx.megaCharge(feet, core, h.radius, progress, this.frameDt);
+    if (progress > 0.6 && !this.settings.reducedMotion) this.camera.shake(0.004 + 0.012 * (progress - 0.6));
     // Leave the entire footprint lit briefly before firing.
     const count = Math.max(1, Math.ceil(Math.min(1, progress / 0.9) * h.targets.length));
     if (count !== h.shown) {
       h.shown = count;
-      this.overlays.showRadius(h.targets.slice(0, count).map(({ tile }) => tile), 'mega');
+      // VFX 1: one outline round the ground it will heal, growing out as the power builds (not a frame on every tile)
+      this.overlays.showOutline(h.targets.slice(0, count).map(({ tile }) => tile), 'mega');
     }
     this.hud.prompt.show({ glyph: this.glyph('pulse'), text: 'for Mega Pulse', hold: true, progress });
     return true;
@@ -2549,7 +2623,10 @@ export class Game {
       this.hud.showFail(t.refused, sc?.x, sc?.y);
       return;
     }
-    const hold = holdFor(t, this.settings.holdToAct !== false);
+    const holdsOn = this.settings.holdToAct !== false;
+    const hold = holdFor(t, holdsOn);
+    // keep Interact down and the next hold starts as this one finishes (scrap, greens, fruit, …)
+    this.holdRepeat = holdsOn && (hold > 0 || !!t.ocHold);
     if (hold) {
       this.holding = { id: t.id, t: 0, need: hold };
       return;
@@ -2574,7 +2651,23 @@ export class Game {
     return [...pads].some((p) => p?.connected && p.buttons[btn]?.pressed);
   }
 
+  /** Set when Interact started a hold: while it stays down, the next hold starts once this one ends. */
+  private holdRepeat = false;
+
+  /** Holding Interact keeps collecting: a finished hold is followed by the next one on whatever is in front. */
+  private repeatHold(target: InteractTarget | undefined) {
+    if (!this.holdRepeat) return;
+    if (!this.interactHeld() || this.paused || this.settings.holdToAct === false) {
+      this.holdRepeat = false;
+      return;
+    }
+    if (this.holding || this.oc?.holdProgress() !== undefined || this.oc?.busy) return; // one still running
+    if (!target || target.refused || !(holdFor(target, true) || target.ocHold)) return; // nothing to hold for yet
+    this.botInteract();
+  }
+
   private updateHold(dt: number, target: InteractTarget | undefined) {
+    this.repeatHold(target);
     const h = this.holding;
     if (!h) return;
     if (!target || target.id !== h.id || !this.interactHeld() || this.paused) {
@@ -4775,25 +4868,36 @@ export class Game {
     b.on('tile.restoring', ({ tile, source }) => {
       this.grid.refresh(tile, true);
       const p = this.tileVec(tile);
+      // VFX 1: a pulse's own ground (pulse, broad) gets its fire (pulse.fired), not a ring spilling past it
       if (source === 'pulse') {
-        this.vfx.ring(p, PALETTE.botPulse, 1.1, 0.55);
         this.vfx.burst(p, 6, { up: 1.5, speed: 1.4, size: 0.05 });
         // Look 6.4: the slab fractures under your tap: a short, punchy shake and a burst of grit.
         this.vfx.burst(p, 8, { up: 1.1, speed: 1.6, size: 0.045, life: 0.6, hex: PALETTE.debris });
         if (!this.settings.reducedMotion) this.camera.shake(0.035);
         this.sfx.at(p, (q) => q.pulse());
-      } else if (source === 'broad') this.vfx.ring(p, PALETTE.botPulse, 0.8, 0.45);
-      else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
+      } else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
       else if (source === 'overflow') this.vfx.ring(p, '#a8ecff', 0.9, 0.5);
       else if (source === 'drone') this.vfx.ring(p, PALETTE.leafFin, 0.8, 0.5);
     });
     b.on('mega.ready', () => {
-      this.hud.toast('💥 Mega Pulse is ready<small>Hold {pulse} to light up the ground ahead and bring it to life.</small>', 'gold', 4);
+      this.hud.toast('💥 Mega Pulse is ready<small>Hold {pulse} to bring the ground all around you to life.</small>', 'gold', 4);
       this.hud.nudge('[data-tool="pulse"]', 4);
     });
+    // VFX 1: the Mega Pulse bursts out of Bloombot, up in the air, and rolls out across the ground all round it in
+    // time with the restore wave (each tile a chain step later than the one inside it); then Bloombot settles
     b.on('mega.released', ({ tileId }) => {
       const t = s.grid.byTileId(tileId);
-      if (t) for (let i = 0; i < 4; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(this.tileVec(t), i % 2 ? PALETTE.gold : PALETTE.coreGlow, 3 + i * 3, 1.1) });
+      if (t) {
+        // one burst over all the ground it heals, from its middle; the wave is slow enough that its rim reaches each
+        // tile just after the chain does, and turns it green
+        const { core } = this.pulseOrigin(t, true);
+        const area = this.pulseArea(this.megaFx?.targets.map((m) => m.tile) ?? [t]);
+        const seconds = 0.2 + LOOK.pulseFx.front.ease * TUNING.chain.stepDelay * area.R;
+        this.megaWave = { cx: area.centre.x, cz: area.centre.z, R: area.R, seconds, t0: s.time };
+        this.vfx.megaBurst(core, area.centre, area.R, seconds, area.inside);
+      }
+      this.megaBurstAt = this.clock;
+      this.bot?.visuals.floatTo(0, LOOK.pulseFx.mega.settle);
       this.camera.shake?.(0.25);
     });
     // E23.2.2.3: the reveal ripple: a wide soft ring, then what it found glows for a few seconds (never a cat:
@@ -4827,14 +4931,20 @@ export class Game {
     b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
       const t = s.grid.byTileId(tileId);
       if (!t) return;
+      if (this.megaBurstAt === this.clock) return; // a Mega Pulse: its own burst (mega.released)
       const p = this.tileVec(t);
-      if (!overcharged) {
-        // Phase 4 E03.2: a restore already rings (tile.restoring); a nurture tap answers with its own quick ring,
-        // and a Wide Pulse adds one ring spanning its whole footprint.
-        if (t.ground === 'restored') this.vfx.ring(p, '#ffe9a0', 0.8, 0.22);
-        else if (extra.length) this.vfx.ring(p, '#c8ffa8', 1.4 + 0.25 * Math.min(8, extra.length), 0.25);
-        return;
+      // VFX 1: Bloombot gathers the power, and one fire swirls out from the middle of the ground it heals, over that
+      // ground alone (one tile: just that tile); that ground turns green as the fire's rim passes over it
+      const { feet, core } = this.pulseOrigin(t);
+      const tiles = [t, ...extra.map((id) => s.grid.byTileId(id)).filter((x): x is TileData => !!x)];
+      const { centre, R, inside } = this.pulseArea(tiles);
+      this.vfx.pulse(feet, core, centre, R, overcharged ? 1.35 : 1, inside);
+      const F = LOOK.pulseFx;
+      for (const nb of tiles) {
+        const [x, , z] = s.grid.tileWorld(nb);
+        s.transitions.wash(nb, centre.x - x, centre.z - z, R, F.seconds + F.perTile * R, this.vfx.reducedMotion ? 0 : F.gather);
       }
+      if (!overcharged) return;
       this.vfx.ring(p, PALETTE.gold, 2.8, 0.8);
       this.tweens.add(0.01, () => {}, { delay: 0.15, done: () => this.vfx.ring(p, '#fff3a0', 2.2, 0.7) });
       this.vfx.burst(p, 30, { up: 3.5, speed: 2.2, size: 0.07 });
@@ -4847,7 +4957,13 @@ export class Game {
       // Player actions get the full burst; automation (drones, machines, chains) is quieter.
       const manual = source === 'pulse' || source === 'broad';
       this.vfx.burst(p, manual ? 14 : source === 'drone' ? 9 : source === 'condenser' ? 6 : 9, { up: manual ? 2.6 : source === 'drone' ? 2.2 : 1.8, size: manual ? 0.07 : 0.055 });
-      this.vfx.restoreBloom(p, manual ? 1 : 0.6); // Look 3.14: sparkles, a shockwave and drifting petals
+      // Look 3.14: sparkles, a shockwave and drifting petals (VFX 1: a pulse's ground had its fire: no shockwave)
+      this.vfx.restoreBloom(p, manual ? 1 : 0.6, !manual && source !== 'mega');
+      const mw = this.megaWave;
+      if (source === 'mega' && mw && s.time < mw.t0 + mw.seconds + 2) {
+        const [x, , z] = s.grid.tileWorld(tile);
+        s.transitions.wash(tile, mw.cx - x, mw.cz - z, mw.R, mw.seconds, mw.t0 - s.time);
+      }
       // Drone redesign D05: a drone's restore ends in a small bloom burst (petals above, plus a cyan puff and a
       // leaf-green ring). Visual only: the reward was paid by the sim.
       if (source === 'drone') {
@@ -5275,8 +5391,9 @@ export class Game {
       case 'LUSH': {
         const t = s.grid.byTileId(ev.target);
         if (t && ev.type === 'LUSH') this.vfx.burst(this.tileVec(t, 0.3), 8, { up: 1.6, size: 0.06 });
-        if (t) this.tileFx.flash(t, wave, 0.45, 0.9);
-        if (from && to && ev.cause !== 'motherTree' && ev.cause !== 'canopy')
+        if (t && ev.cause !== 'mega') this.tileFx.flash(t, wave, 0.45, 0.9); // VFX 1: a Mega Pulse's wave is its flash
+        // VFX 1: a Mega Pulse's own wave shows where its tiles come from (no streak from Bloombot to each one)
+        if (from && to && ev.cause !== 'motherTree' && ev.cause !== 'canopy' && ev.cause !== 'mega')
           this.vfx.arc(from, to, ev.cause === 'overflow' ? PALETTE.water : ev.cause === 'relay' ? PALETTE.coreGlow : combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
         this.sfx.at(t && this.tileVec(t), (q) => q.bloom(combo));
         break;

@@ -113,6 +113,8 @@ PLANS = {
     "butterfly": ("insect", INSECT),
     "swallowtail": ("insect", INSECT),
     "koi": ("fish", FISH),
+    "golden-carp": ("fish", FISH),
+    "rainbow-minnow": ("fish", FISH),
 }
 
 # ---------------------------------------------------------------- rig

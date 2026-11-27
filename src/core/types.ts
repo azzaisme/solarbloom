@@ -66,6 +66,11 @@ export interface TileTransition {
   dir?: number;
   from?: number;
   g?: 1;
+  /**
+   * VFX 1: a restore washed in by a pulse's wave: where the wave starts (x, z offset from the tile's centre), the
+   * radius it reaches and the seconds it takes from `t0`. The ground turns as the wave's rim passes over it.
+   */
+  w?: [number, number, number, number];
 }
 
 export interface TileData {
