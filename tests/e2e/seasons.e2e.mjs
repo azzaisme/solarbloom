@@ -154,6 +154,8 @@ try {
     await page.evaluate(() => document.querySelectorAll('style').forEach((st) => st.textContent.includes('#toasts, .toast') && st.remove()));
   }
   const L = looks;
+  await goTo(page, 'summer', 2, 'sunny', 3000);
+  check((await page.evaluate(() => window.solarbloom.snowSheets.count)) === 0, 'no snow layer at all in summer (nothing drawn, nothing built)');
   check(L.spring.blossom > 0.3 && L.summer.blossom === 0, `spring blossoms (${L.spring.blossom.toFixed(2)}), summer doesn't`);
   check(L.autumn.autumn > 0.6 && L.autumn.leafFall > L.summer.leafFall * 2, `autumn turns the leaves (${L.autumn.autumn.toFixed(2)}) and many more fall (${L.autumn.leafFall} vs ${L.summer.leafFall})`);
   check(L.winter.bare > 0.7 && L.winter.frost > 0.2, `winter: bare branches (${L.winter.bare.toFixed(2)}) and frost (${L.winter.frost.toFixed(2)})`);
@@ -179,8 +181,9 @@ try {
     return { years, season: s.seasons.season(), day: s.seasons.dayOfSeason(), before };
   });
   await wait(8000);
-  const lying = await page.evaluate(() => ({ cover: window.solarbloom.sim.seasons.snowCover(), shader: window.solarbloom.seasonShading.current.uSeasonB[2] }));
+  const lying = await page.evaluate(() => ({ cover: window.solarbloom.sim.seasons.snowCover(), shader: window.solarbloom.seasonShading.current.uSeasonB[2], sheets: window.solarbloom.snowSheets.count }));
   check(deep.season === 'winter' && deep.day === 3 && lying.cover >= 0.88 && lying.shader >= 0.88, `snow builds up over snowy days, all the way to white (${JSON.stringify({ ...deep, ...lying })})`);
+  check(lying.sheets > 0, `the lying snow is a real layer with height near the camera (${lying.sheets} chunk sheets)`);
   await page.addStyleTag({ content: '#toasts, .toast { display: none !important; }' });
   await page.screenshot({ path: `${dir}/winter-deep-snow.png` });
   // up close the lying snow is lumpy: soft drifts, sunlit tops and pale blue hollows

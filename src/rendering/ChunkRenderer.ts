@@ -828,6 +828,8 @@ export class ChunkRenderer {
   parkStage = -1;
   /** Called when the park's stage rises (Game shows a line and a sparkle). */
   onParkStage?: (stage: number, prev: number) => void;
+  /** #830: a chunk was just rebuilt (its snow layer is built again: something may stand where snow lay) */
+  onChunkBuilt?: (cx: number, cz: number) => void;
 
   update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1, wind = 0) {
     this.time += dt;
@@ -2043,6 +2045,7 @@ export class ChunkRenderer {
     }
     // E23.12.3: everything this build drew solid, the facades included, into the per-tile index
     this.solids.setChunk(v.key, solids.boxes);
+    this.onChunkBuilt?.(v.cx, v.cz);
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
     this.treeTris.set(v.key, fb.tris);

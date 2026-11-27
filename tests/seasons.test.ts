@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/core/GameState';
 import type { GameState } from '../src/core/types';
-import { SEASON_DAYS, SEASON_LOOK, SEASON_WEATHER_ODDS, SEASON_WORDS, SEASONS, SNOW_BUILD, WINTER_COZY, seasonLine, type Season } from '../src/data/seasons';
+import { SEASON_DAYS, SEASON_LOOK, SEASON_WEATHER_ODDS, SEASON_WORDS, SEASONS, SNOW_BUILD, SNOW_SHEET, WINTER_COZY, seasonLine, type Season } from '../src/data/seasons';
 import { DAY, DAY_SECONDS, gameDays } from '../src/data/time';
 import { WEATHER, WEATHER_KINDS } from '../src/data/weather';
 import { nextSeason, seasonOf, seasonOnDayOf, snowBuild } from '../src/gameplay/Seasons';
@@ -392,5 +392,45 @@ describe('#830: snow builds up', () => {
       return { charge: sim.state.charge, bloom: sim.weather.bloomSpeed() };
     };
     expect(run(true)).toEqual(run(false));
+  });
+});
+
+describe('#830: snow builds up as a real layer (SnowSheet)', () => {
+  // a 4 × 4 patch: a pond at (1, 1), a machine at (2, 2), a terrace step up at x = 3
+  const ground = {
+    levelAt: (x: number, z: number) => {
+      if (x < 0 || z < 0 || x > 3 || z > 3) return undefined;
+      if ((x === 1 && z === 1) || (x === 2 && z === 2)) return undefined;
+      return x === 3 ? 1 : 0;
+    },
+    yAt: (_px: number, _pz: number, cx: number) => (cx === 3 ? 1.2 : 0),
+  };
+
+  it('covers only the open cells, each at its own height', async () => {
+    const { buildSnowSheet } = await import('../src/rendering/SnowSheet');
+    const g = buildSnowSheet(ground, 0, 0, 4, 2);
+    expect(g.cells).toBe(16 - 2);
+    expect(g.pos.length / 3).toBe(14 * 9);
+    expect(g.idx.length).toBe(14 * 8 * 3);
+    for (let i = 0; i < g.pos.length; i += 3) {
+      const cx = Math.min(3, Math.floor(g.pos[i] - 1e-6 * Math.sign(g.pos[i])));
+      if (g.pos[i] > 3.001) expect(g.pos[i + 1]).toBeCloseTo(1.2, 5);
+      if (cx < 2 && g.pos[i] < 2.999) expect(g.pos[i + 1]).toBeCloseTo(0, 5);
+    }
+  });
+
+  it('banks down to nothing where it meets a pond, a machine or a terrace step, and is full depth inside', async () => {
+    const { rimAt } = await import('../src/rendering/SnowSheet');
+    expect(rimAt(ground, 1, 1.5, 0, 1, 0)).toBe(0); // right against the pond's edge
+    expect(rimAt(ground, 0.5, 2.5, 0, 2, 0)).toBeGreaterThan(0.99); // half a cell from anything: full depth
+    expect(rimAt(ground, 3, 0.5, 2, 0, 0)).toBe(0); // the foot of the terrace step
+    expect(rimAt(ground, 0.2, 0.2, 0, 0, 0)).toBeGreaterThan(0); // the garden's own edge is no bank (no neighbour there to share)
+  });
+
+  it('is tuned in data: a soft depth, built near the camera, coarser on Low', () => {
+    expect(SNOW_SHEET.maxHeight).toBeGreaterThan(0.1);
+    expect(SNOW_SHEET.maxHeight).toBeLessThan(0.4);
+    expect(SNOW_SHEET.subLow).toBeLessThan(SNOW_SHEET.sub);
+    expect(SNOW_SHEET.reachLow).toBeLessThanOrEqual(SNOW_SHEET.reach);
   });
 });

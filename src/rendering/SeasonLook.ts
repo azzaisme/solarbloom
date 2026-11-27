@@ -140,7 +140,11 @@ export const seasonShading = new SeasonShading();
  * - `sbSeasonLeaf(c, p)`: a deciduous leaf's blossom or autumn colour (foliage; `p` the leaf's rest position)
  * - `sbSeasonBare(p, big)`: true where a leaf has fallen (foliage opacity, both passes)
  */
-export const SEASON_GLSL = /* glsl */ `
+/**
+ * #830: the season's uniforms and the frost and snow field (noise, lumps, cover). Safe in a vertex shader: the snow
+ * sheet (SnowSheet) raises its drifts with it.
+ */
+export const SEASON_FIELD_GLSL = /* glsl */ `
 uniform vec4 uSeasonA; // grass shift, autumn, bare, blossom
 uniform vec4 uSeasonB; // frost, detail (0 on Low), snow lying (0 … 1, all white), unused
 uniform vec3 uSeasonGrass;
@@ -152,8 +156,6 @@ uniform vec3 uSeasonBlos0;
 uniform vec3 uSeasonBlos1;
 uniform vec3 uSeasonFrost;
 uniform vec3 uSeasonSnowShade;
-// #830: lumpy snow: the tilt of the lumps under this point (getNormal adds it to the surface's normal)
-vec3 sbSnowBend = vec3(0.0);
 float sbsLum(vec3 c) {
 	return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
@@ -177,6 +179,22 @@ float sbsLumps(vec2 q) {
 	if (uSeasonB.y > 0.5) h = 0.72 * h + 0.28 * sbsNoise(q * 3.6 + 5.7);
 	return h;
 }
+// #830: how much of a spot lies under frost or snow, 0 … 1, before its slope: the patches widen with the frost and
+// the lying snow until they join, and their edges follow the lumps. The ground's tint and the snow sheet share it.
+float sbsCoverAt(vec2 xz) {
+	float snow = uSeasonB.z;
+	float nz = sbsNoise(xz * 2.1);
+	if (uSeasonB.y > 0.5) nz = 0.65 * nz + 0.35 * sbsNoise(xz * 6.7 + 3.1);
+	if (snow > 0.001) nz += (sbsLumps(xz) - 0.5) * 0.55 * snow;
+	float cover = uSeasonB.x + snow * 1.3;
+	return smoothstep(1.0 - cover, 1.0 - cover + mix(0.22, 0.08, snow), nz);
+}
+`;
+
+export const SEASON_GLSL = /* glsl */ `
+${SEASON_FIELD_GLSL}
+// #830: lumpy snow: the tilt of the lumps under this point (getNormal adds it to the surface's normal)
+vec3 sbSnowBend = vec3(0.0);
 // how green a colour is (linear): 0 for stone, wood, flowers and machines, 1 for grass and leaves
 float sbsGreen(vec3 c) {
 	float mx = max(c.r, max(c.g, c.b));
@@ -194,21 +212,14 @@ vec3 sbSeasonColour(vec3 c, vec3 n, vec3 p) {
 		float snow = uSeasonB.z;
 		// frost sits on upward faces; deep snow also settles on gentle slopes, kerbs and the bevels between slabs
 		float up = smoothstep(0.35 - 0.3 * snow, 0.9 - 0.45 * snow, n.y);
-		float nz = sbsNoise(p.xz * 2.1);
-		if (uSeasonB.y > 0.5) nz = 0.65 * nz + 0.35 * sbsNoise(p.xz * 6.7 + 3.1);
-		// lying snow widens the frost's patches until they join (past 1 every upward face is covered)
-		float cover = uSeasonB.x + uSeasonB.z * 1.3;
 		float h = 0.5;
 		vec2 grad = vec2(0.0);
 		if (snow > 0.001) {
 			h = sbsLumps(p.xz);
 			const float e = 0.12;
 			grad = vec2(sbsLumps(p.xz + vec2(e, 0.0)) - h, sbsLumps(p.xz + vec2(0.0, e)) - h) / e;
-			nz += (h - 0.5) * 0.55 * snow;
 		}
-		// a thin frost edge is soft; lying snow has a firmer edge, like a layer with some depth to it
-		float edge = mix(0.22, 0.08, snow);
-		float f = up * smoothstep(1.0 - cover, 1.0 - cover + edge, nz);
+		float f = up * sbsCoverAt(p.xz);
 		// frost: a pale glaze over what is under it
 		vec3 sc = uSeasonFrost * mix(0.7, 0.88, up);
 		float k = f * 0.7;

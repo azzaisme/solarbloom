@@ -158,6 +158,7 @@ import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
 import { WEATHER, WEATHER_WORDS } from '../data/weather';
 import { SEASON_WORDS } from '../data/seasons';
+import { SnowSheets } from '../rendering/SnowSheet';
 import { fallingLeafColour, seasonLookAt, seasonShading, type SeasonLookNow } from '../rendering/SeasonLook';
 import { WeatherVisuals, type WeatherLook } from '../rendering/WeatherVisuals';
 import { buildRadio } from '../rendering/HouseRadio';
@@ -451,6 +452,16 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    // #830: lying snow as a real layer over the open ground (SnowSheet), rebuilt with its chunk
+    this.snowSheets = new SnowSheets(this.app.graphicsDevice, this.scene.world, {
+      levelAt: (x, z) => {
+        const t = this.sim.grid.peek(GROUND, x, z);
+        if (!t || t.blocked || t.occupantId || t.feature === 'water' || t.feature === 'building' || this.sunkAt(x, z)) return undefined;
+        return t.level ?? 0;
+      },
+      yAt: (px, pz) => this.groundY(px, pz),
+    }, CHUNK);
+    this.chunks.onChunkBuilt = (cx, cz) => this.snowSheets.dirty(`${cx},${cz}`);
     this.giants = new GiantTrees(this.sim, this.scene.world, this.app.graphicsDevice, (x, z) => this.groundY(x, z));
     this.farmland = new FarmlandView(this.scene.world, this.app.graphicsDevice);
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
@@ -3518,6 +3529,8 @@ export class Game {
   );
 
   private nextFallingLeaf = 0;
+  /** #830: lying snow as a real layer (SnowSheet) */
+  snowSheets!: SnowSheets;
   /** #830: the season shading every season material reads (the e2e and perf checks read and set it) */
   readonly seasonShading = seasonShading;
   /** #830: the season's look on screen now (SeasonLook), worked out once a frame */
@@ -3529,6 +3542,9 @@ export class Game {
     const sc = sceneNow(this.sim, this.photo);
     this.seasonNow = seasonLookAt(n.season, n.progress, sc.f, sc.weather === 'snow', this.sim.seasons.snowCover());
     seasonShading.set(this.seasonNow);
+    // #830: the snow layer builds up with the lying snow (none at all without it)
+    this.snowSheets.low = this.gfxTier === 'low';
+    this.snowSheets.update(this.seasonNow.snow, this.camera.target.x, this.camera.target.z);
   }
 
   private updateFallingLeaves(dt: number, wind: number, view: { x0: number; x1: number; z0: number; z1: number }) {
