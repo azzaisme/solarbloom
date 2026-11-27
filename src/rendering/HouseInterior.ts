@@ -93,7 +93,7 @@ export class HouseInterior {
 
   /** #860: each stretch of inner wall now: where it stands (cells) and how tall it is (tests and the review). */
   wallsNow(): { line: [number, number, number, number]; h: number }[] {
-    return this.walls.filter((w) => !w.piece.lintel && !w.piece.beam).map((w) => ({ line: w.piece.line, h: w.h }));
+    return this.walls.filter((w) => !w.piece.lintel).map((w) => ({ line: w.piece.line, h: w.h }));
   }
 
   /** #860: is a stretch of inner wall standing tall now (for tests and the review)? */

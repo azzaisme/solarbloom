@@ -113,12 +113,25 @@ const grow = async (page, level) => {
     const g = window.solarbloom;
     g.bot.teleport('g', 4.5, 6.5);
     g.bot.turnTo(Math.PI);
+    g.bot.lastInput = 'keys';
+    g.pointer.inside = false;
   });
   // through the front door with the real key, once the prompt offers it
   await page.waitForFunction(() => /Go inside/.test(document.getElementById('prompt')?.innerText ?? ''), null, { timeout: 60_000, polling: 300 }).catch(() => {});
   await press(page, await keyOf(page, 'interact'));
   await page.waitForFunction(() => window.solarbloom.bot.pose.roofId === 'house', null, { timeout: 60_000, polling: 300 });
-  await wait(5000); // the indoor camera settles
+  // the first time in, the indoor shaders compile (slow in a software-rendered browser): wait until the camera has
+  // reached Bloombot inside, then let it settle
+  await page.waitForFunction(
+    () => {
+      const g = window.solarbloom;
+      const c = g.camera.target;
+      return c.y > 300 && Math.hypot(c.x - g.bot.pose.x, c.z - g.bot.pose.z) < 1.5;
+    },
+    null,
+    { timeout: LONG, polling: 500 },
+  );
+  await wait(2500);
 };
 
 const PROMPTS = { bed: /Sleep|bed is for the night/, radio: /Listen to the radio/, chest: /Open the chest/, shelf: /Look at the keepsake shelf/, desk: /Read your journal/ };
