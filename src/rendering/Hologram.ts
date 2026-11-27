@@ -3,6 +3,8 @@ import type { PlotSpot } from '../core/Plots';
 import { color, PALETTE } from './Materials';
 import { MODELS } from './Models';
 import { drawDecor } from './DecorArt';
+import { drawFurniture } from './HouseArt';
+import type { HouseFurniture } from '../data/oldcity';
 import { drawPlot } from './PlotArt';
 import { group } from './Shapes';
 import type { TreeGeo } from './TreeGen';
@@ -23,6 +25,8 @@ export type HoloShape =
   | { kind: 'plot'; plot: PlotSpot; option: string }
   /** E19.2: a decoration (its models and primitives, turned `rot` quarter turns) */
   | { kind: 'decor'; decor: string; rot: number }
+  /** #875: a piece of the house's furniture being moved (turned `rot` quarter turns) */
+  | { kind: 'furniture'; piece: HouseFurniture }
   | { kind: 'block'; height: number };
 
 /** Lays geometry out as the chunk's MeshBuilder does: what PlotArt needs to draw into a standalone mesh. */
@@ -124,6 +128,7 @@ export class Hologram {
       shape.kind === 'model' ? `m|${shape.name}|${shape.scale}|${!!MODELS?.has(shape.name)}`
       : shape.kind === 'plot' ? `p|${shape.plot.id}|${shape.option}`
       : shape.kind === 'decor' ? `d|${shape.decor}|${shape.rot}|${!!MODELS}`
+      : shape.kind === 'furniture' ? `f|${shape.piece.id}|${shape.piece.rot}`
       : `b|${size}|${shape.height}`;
     this.at.set(x, y, z);
     if (key !== this.contentKey) {
@@ -140,7 +145,7 @@ export class Hologram {
     // plots are drawn in world coordinates (their art is laid out on the plot's own cells)
     if (shape.kind === 'plot') this.body.setPosition(0, 0, 0);
     else this.body.setPosition(x, y, z);
-    this.height = shape.kind === 'block' ? shape.height : shape.kind === 'plot' ? 1.1 : shape.kind === 'decor' ? 0.8 : 0.4 + size * 0.45;
+    this.height = shape.kind === 'block' ? shape.height : shape.kind === 'plot' ? 1.1 : shape.kind === 'decor' ? 0.8 : shape.kind === 'furniture' ? 1.2 : 0.4 + size * 0.45;
     this.root.enabled = true;
   }
 
@@ -201,6 +206,18 @@ export class Hologram {
       const mesh = b.build(this.device);
       if (mesh) root.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, this.mats[this.tone].body)], castShadows: false, receiveShadows: false });
       return root;
+    }
+    if (shape.kind === 'furniture' && this.sink) {
+      // #875: the piece as it would stand, about the footprint's middle (the body's origin)
+      const b = this.sink();
+      const f = shape.piece;
+      drawFurniture({ add: b.add.bind(b) }, { ...f, x: -f.w / 2, z: -f.d / 2 }, [0, 0, 0], 0, 0, false);
+      const mesh = b.build(this.device);
+      if (mesh) {
+        const e = new pc.Entity('holo-furniture');
+        e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, this.mats[this.tone].body)], castShadows: false, receiveShadows: false });
+        return e;
+      }
     }
     // A footprint block: what a machine without a model (or a plot without art) looks like as a hologram.
     const h = shape.kind === 'block' ? shape.height : 0.5;

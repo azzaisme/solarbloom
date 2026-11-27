@@ -33,7 +33,7 @@ import { ORCHARD } from '../data/farmExtras';
 import { FRUITS, isFruit } from '../data/fruit';
 import { fruitShort, fruitTip } from '../ui/FruitWords';
 import { EXPLORE } from '../rendering/CameraController';
-import { HOUSE, HOUSE_GROWTH, KEEPSAKES, OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
+import { furnitureAt, HOUSE, HOUSE_GROWTH, KEEPSAKES, OLD_CITY, PARK_SET, REGIONS, type HouseFurniture } from '../data/oldcity';
 import { HouseInterior } from '../rendering/HouseInterior';
 
 /** #782: saved once the player has been told the house can be mended (presentation: `salvage.seen`). */
@@ -114,7 +114,7 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { buildItem, costWords } from '../ui/BuildCatalog';
-import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
+import { decorType, furnitureType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { DroneStatus } from '../gameplay/DroneSystem';
@@ -2388,7 +2388,7 @@ export class Game {
 
   /** Is what's in hand something that turns (a decoration)? */
   private turnable(): boolean {
-    return !!this.bot && !!decorType(this.hud.currentTool);
+    return !!this.bot && (!!decorType(this.hud.currentTool) || !!furnitureType(this.hud.currentTool)); // #875: and a piece of furniture being moved
   }
 
   /** E19.2: a quarter turn of the decoration in hand (wheel, + / -, or the pad's bumpers). */
@@ -2491,6 +2491,9 @@ export class Game {
   private botAct() {
     if (!this.bot || this.cinematic || this.paused || this.hud.modalOpen || this.bot.visuals.busy === 'assemble') return;
     if (this.oc && !this.building() && this.oc.pulse(this.bot.front())) return; // E21.8: a pulse stirs a sleeping Keeper
+    // #875: in the house, Pulse at a piece of furniture picks it up to move it
+    const piece = !this.building() ? this.pieceInFront() : undefined;
+    if (piece && this.sim.house.movable(piece)) return this.pickUpFurniture(piece);
     const aim = this.building() ? this.buildAim() : undefined; // E19.2: build mode acts where the hologram is
     const p = aim ? aim.p : this.frontPick();
     if (!p || !p.tile) return;
@@ -2949,6 +2952,9 @@ export class Game {
       pulse = { glyph: this.glyph('pulse'), text };
     }
     if (this.sim.restoration.megaReady() && this.megaAim()) pulse = { glyph: this.glyph('pulse'), text: pulse ? `${pulse.text} · Hold for Mega Pulse` : 'Hold for Mega Pulse' };
+    // #875: a piece of the house's furniture in front: Pulse picks it up to move it
+    const piece = this.pieceInFront();
+    if (piece && this.sim.house.movable(piece)) pulse = { glyph: this.glyph('pulse'), text: `Move ${piece.name}` };
     if (!target) return pulse ? { glyph: pulse.glyph, text: pulse.text } : undefined;
     const hold = holdFor(target, this.settings.holdToAct !== false) || (target.ocHold && this.settings.holdToAct !== false ? target.ocHold : 0);
     const h = this.holding;
@@ -2979,8 +2985,14 @@ export class Game {
       const name = decName ?? (lights ? (DECOR_OPTION[lights]?.name ?? 'lights') : occ && occ.type !== 'core' && !occ.starter ? machineName(occ) : t && t.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z) ? 'pipe' : undefined);
       return { glyph, text: name ? `Remove the ${name}` : 'Remove' };
     }
+    // #875: a piece of furniture in hand: put it here (and turn it); a decoration in hand aimed at a piece picks it up
+    const fk = furnitureType(tool);
+    const held = fk ? this.sim.house.furniture().find((f) => f.id === fk) : undefined;
+    if (held) return { glyph, text: `Put ${held.name} here`, pulse: { glyph: this.glyph('rotateBack') + this.glyph('rotate'), text: 'Turn' } };
+    const aimedPiece = t && this.sim.house.isInside(t.roofId) && !dec ? this.sim.house.furnitureAt(t.x, t.z) : undefined;
     const dk = decorType(tool);
     if (dk && decName) return { glyph, text: `Pick up the ${decName}` };
+    if (dk && aimedPiece && this.sim.house.movable(aimedPiece)) return { glyph, text: `Move ${aimedPiece.name}` };
     const name = dk ? DECOR_OPTION[dk]?.name : tool === 'pipe' ? 'pipe' : machineTool(tool) ? MACHINES[tool].name : undefined;
     if (!name) return undefined;
     const text = dk ? `Place the ${name}` : tool === 'pipe' ? 'Lay a pipe' : `Build ${/^[AEIOU]/i.test(name) ? 'an' : 'a'} ${name}`;
@@ -3862,7 +3874,11 @@ export class Game {
       return;
     }
     const t = p.tile;
+    const fk = furnitureType(tool);
+    if (fk) return this.previewFurniture(p, x, y, fk);
     const dk = decorType(tool);
+    const aimedPiece = dk && this.sim.house.isInside(p.roofId) && !t.occupantId ? this.sim.house.furnitureAt(t.x, t.z) : undefined;
+    if (aimedPiece) return this.previewPiece(p, x, y, aimedPiece);
     if (dk) return this.previewDecor(p, x, y, dk);
     if (tool === 'remove') return this.previewRemove(p, x, y);
     if (tool === 'pipe') return this.previewPipe(p, x, y);
@@ -4143,6 +4159,88 @@ export class Game {
     this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.2), 8, { up: 1.6, size: 0.04, life: 0.8 });
     this.buildKey = '';
     return 'select';
+  }
+
+  /** "the bed" to "The bed" */
+  private static cap(s: string): string {
+    return s[0].toUpperCase() + s.slice(1);
+  }
+
+  /** #875: the piece of the house's furniture right in front of Bloombot (not through a wall), if any. */
+  private pieceInFront() {
+    const b = this.bot;
+    const h = this.sim.house;
+    if (!b || !h.isInside(b.pose.roofId)) return undefined;
+    const f = b.front();
+    return h.connected(Math.floor(b.pose.x), Math.floor(b.pose.z), f.x, f.z) ? h.furnitureAt(f.x, f.z) : undefined;
+  }
+
+  /**
+   * #875: picks a piece of the house's furniture up to move it: it goes into Bloombot's hands as a hologram, turned as
+   * it stands, and stays where it is until it is put down somewhere new (Back leaves it where it was).
+   */
+  private pickUpFurniture(f: HouseFurniture) {
+    this.buildRot = f.rot;
+    this.selectTool(`furniture:${f.id}`);
+    this.bot?.visuals.play('interact');
+    this.hud.toast(`${Game.cap(f.name)} in hand<small>Aim where it goes and press ${this.hudKey('pulse')}. ${this.hudKey('rotate')} turns it. ${this.hudKey('cancel')} leaves it where it was.</small>`, '', 3.2);
+  }
+
+  /** #875: where a piece in hand would stand, aimed at a square: about its middle (its north-west square). */
+  private pieceAnchor(id: HouseFurniture['id'], t: { x: number; z: number }): HouseFurniture | undefined {
+    const f = this.sim.house.furniture().find((p) => p.id === id);
+    if (!f) return undefined;
+    const at = furnitureAt(f, 0, 0, this.buildRot);
+    return furnitureAt(f, t.x - Math.floor((at.w - 1) / 2), t.z - Math.floor((at.d - 1) / 2), this.buildRot);
+  }
+
+  /** #875: why the piece in hand can't go there: the house's rules, Bloombot's reach and Bloombot's own square. */
+  private furnitureProblem(roofId: string, to: HouseFurniture): string | undefined {
+    const h = this.sim.house;
+    if (!h.isInside(roofId)) return 'Furniture stays in the house';
+    const b = this.bot?.pose;
+    const why = h.placeProblem(to.id, to.x, to.z, to.rot, b && h.isInside(b.roofId) ? { x: b.x, z: b.z } : undefined);
+    if (why) return why;
+    return this.inReach(roofId, to.x, to.z, to.w, to.d) ? undefined : TOO_FAR;
+  }
+
+  /** #875: the hologram of the piece in hand where it would go, green where it can, red (and why) where it can't. */
+  private previewFurniture(p: Pick, x: number, y: number, id: HouseFurniture['id']) {
+    const to = this.pieceAnchor(id, p.tile!);
+    if (!to) return this.overlays.hideGhost();
+    const why = this.furnitureProblem(p.roofId, to);
+    this.overlays.hideRadius();
+    this.overlays.showGhost(p.roofId, to.x, to.z, [to.w, to.d], !why, 1, this.bot ? { kind: 'furniture', piece: to } : undefined);
+    this.hud.showTip(x, y, `<b>${Game.cap(to.name)}</b>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to put it here · ${this.turnHint()}</span>`}`);
+  }
+
+  /** #875: a piece of the house's furniture aimed at with a decoration in hand: it can be picked up to move (or is built in). */
+  private previewPiece(p: Pick, x: number, y: number, f: HouseFurniture) {
+    this.overlays.hideGhost();
+    this.overlays.hideRadius();
+    this.overlays.showFrame(p.roofId, f.x, f.z, [f.w, f.d], this.sim.house.movable(f) ? 'info' : 'bad');
+    this.hud.showTip(x, y, `<b>${Game.cap(f.name)}</b>${this.sim.house.movable(f) ? `<span class="ok">${this.press('E')} to pick it up and move it</span>` : `<span class="bad">${this.sim.house.placeProblem(f.id, f.x, f.z, f.rot)}</span>`}`);
+  }
+
+  /** #875: puts the piece in hand down where it is aimed: it moves there, and Bloombot's hands are free again. */
+  private placeFurnitureAt(p: Pick, x: number, y: number, id: HouseFurniture['id']): ActResult {
+    const to = this.pieceAnchor(id, p.tile!);
+    if (!to) {
+      this.selectTool('pulse');
+      return 'none';
+    }
+    const b = this.bot?.pose;
+    const h = this.sim.house;
+    const why = this.furnitureProblem(p.roofId, to) ?? h.move(id, to.x, to.z, to.rot, b && h.isInside(b.roofId) ? { x: b.x, z: b.z } : undefined);
+    if (why) {
+      this.hud.showFail(why, x, y);
+      return 'none';
+    }
+    this.sfx.build();
+    this.vfx.burst(this.tileVec(p.tile!, SLAB_TOP + 0.3), 8, { up: 1.2, size: 0.04, life: 0.7 });
+    this.selectTool('pulse');
+    this.buildKey = '';
+    return 'build';
   }
 
   /** Removes the decoration on a tile (free, instant); with `pickUp` it goes into bloombot's hands, turned as it was. */
@@ -4588,9 +4686,22 @@ export class Game {
       return 'none';
     }
     const t = p.tile;
+    // #875: a piece of the house's furniture in hand: it goes here
+    const fk = furnitureType(tool);
+    if (fk) return this.placeFurnitureAt(p, x, y, fk);
     const dk = decorType(tool);
     // E23.11: a decoration in hand, aimed at one already placed: that one comes back into bloombot's hands to move
     if (dk && this.cozy.decorOf(t.occupantId)) return this.removeDecorAt(p, x, y, true);
+    // #875: a decoration in hand, aimed at a piece of the house's furniture: that piece comes into Bloombot's hands to move
+    const aimed = dk && this.sim.house.isInside(p.roofId) ? this.sim.house.furnitureAt(t.x, t.z) : undefined;
+    if (aimed) {
+      if (!this.sim.house.movable(aimed)) {
+        this.hud.showFail(this.sim.house.placeProblem(aimed.id, aimed.x, aimed.z, aimed.rot) ?? 'It stays where it is', x, y);
+        return 'none';
+      }
+      this.pickUpFurniture(aimed);
+      return 'select';
+    }
     if (dk) return this.placeDecorAt(p, x, y, dk);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
     if (tool === 'pipe') return this.layPipeAt(p, x, y);

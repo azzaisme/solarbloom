@@ -7,7 +7,7 @@ import { MeshBuilder } from './ChunkRenderer';
 import { drawDecor } from './DecorArt';
 import { decorSize } from '../data/cozy';
 import { FoliageBuilder, foliageMaterial } from './Foliage';
-import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawCoals, drawFlameTongue, drawRoom, FIRE_BASE, FIRE_TONGUES, fireX, FIREPLACE, INNER_WALL, innerWallPieces, NOOK_LAMP, wallSinks, type HouseSink, type InnerWallPiece } from './HouseArt';
+import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawCoals, drawFlameTongue, drawRoom, pieceSpot, FIRE_BASE, FIRE_TONGUES, fireX, FIREPLACE, INNER_WALL, innerWallPieces, NOOK_LAMP, wallSinks, type HouseSink, type InnerWallPiece } from './HouseArt';
 import { HouseTexBuilder, houseTexMaterial } from './HouseTex';
 import { color, PALETTE } from './Materials';
 import { MODELS, ModelBatch } from './Models';
@@ -79,7 +79,9 @@ export class HouseInterior {
       return;
     }
     const decor = this.decor();
-    const key = `${h.level}|${this.keepsakes()}|${decor.map((d) => `${d.key}:${d.kind}:${d.rot}`).join(',')}|${MODELS ? 1 : 0}`;
+    // #875: and where each piece of furniture stands, and how it is turned (the player can move them)
+    const layout = h.furniture().map((f) => `${f.id}@${f.x},${f.z},${f.rot}`).join(',');
+    const key = `${h.level}|${this.keepsakes()}|${decor.map((d) => `${d.key}:${d.kind}:${d.rot}`).join(',')}|${layout}|${MODELS ? 1 : 0}`;
     if (key !== this.key) this.rebuild(decor, key);
     this.root.enabled = true;
     this.sinkWalls(view);
@@ -310,7 +312,10 @@ export class HouseInterior {
     this.placeFlames(fp, ox, y, oz);
     const nook = h.furniture().find((f) => f.id === 'nook');
     this.nookLamp.enabled = !!nook;
-    if (nook) this.nookLamp.setPosition(ox + nook.x + NOOK_LAMP[0], y + NOOK_LAMP[1] - 0.1, oz + nook.z + NOOK_LAMP[2]);
+    if (nook) {
+      const [lx, lz] = pieceSpot(nook, NOOK_LAMP[0], NOOK_LAMP[2]); // #875: wherever the nook stands, however turned
+      this.nookLamp.setPosition(ox + lx, y + NOOK_LAMP[1] - 0.1, oz + lz);
+    }
     this.lastT = 0; // the next update puts each wall straight at its height (no wall pops up and sinks again)
   }
 }

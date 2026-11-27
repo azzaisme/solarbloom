@@ -444,6 +444,11 @@ export interface SalvageState {
   house: number;
   /** #782: what has been handed in toward the house's next level (part deliveries; cleared when it grows) */
   houseDelivered?: Partial<Record<MaterialId, number>>;
+  /**
+   * #875: where the player has moved each built-in piece of the house's furniture (by its id): its north-west square
+   * and its quarter turns. A piece not listed stands where its level puts it (data/oldcity houseFurniture).
+   */
+  houseLayout?: Record<string, { x: number; z: number; rot: number }>;
   /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
   /** E23.7.4: when each pile that isn't full last gained a unit (sim time), by pile id: it refills from there */

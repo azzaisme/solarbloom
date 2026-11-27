@@ -1,3 +1,4 @@
+import type { HouseFurniture } from '../data/oldcity';
 import type { AreaMode } from '../core/types';
 import type { BuildableType, MachineData } from '../core/types';
 import { MACHINES } from '../data/machines';
@@ -21,9 +22,13 @@ import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
 /** E19.2: `decor:<id>` holds a decoration to place; `remove` aims at decorations to remove or pick up. */
 export type DecorTool = `decor:${string}`;
-export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | 'remove' | 'pipe';
+/** #875: `furniture:<id>` holds a piece of the house's furniture being moved. */
+export type FurnitureTool = `furniture:${string}`;
+export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | FurnitureTool | 'remove' | 'pipe';
 /** E19.2: the decoration a tool holds, if it holds one. */
 export const decorType = (t: Tool) => (t.startsWith('decor:') ? t.slice(6) : undefined);
+/** #875: the piece of furniture a tool holds, if it holds one. */
+export const furnitureType = (t: Tool) => (t.startsWith('furniture:') ? (t.slice(10) as HouseFurniture['id']) : undefined);
 /** A machine build tool (a machine type), not pulse, inspect, a core, a decoration or remove. */
 export const machineTool = (t: Tool): t is BuildableType => t in MACHINES;
 
