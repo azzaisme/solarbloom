@@ -69,6 +69,8 @@ export class Hologram {
   /** footprint centre (world) and size, and the hologram's height */
   private at = new pc.Vec3();
   private size = 1;
+  /** #849: the footprint's depth (z) when it isn't square */
+  private depth = 1;
   private height = 0.6;
   reducedMotion = false;
   /** Where the beam starts: bloombot's eyes (undefined: no beam, e.g. cursor play). */
@@ -114,9 +116,10 @@ export class Hologram {
 
   /**
    * Shows `shape` on a footprint: `x`, `y`, `z` the footprint's centre on the ground (world), `size` its width in
-   * tiles. Cheap to call every frame with the same arguments.
+   * tiles (#849: and `depth` its depth, for a footprint that isn't square). Cheap to call every frame with the same
+   * arguments.
    */
-  show(shape: HoloShape, x: number, y: number, z: number, size: number, tone: HoloTone) {
+  show(shape: HoloShape, x: number, y: number, z: number, size: number, tone: HoloTone, depth = size) {
     const key =
       shape.kind === 'model' ? `m|${shape.name}|${shape.scale}|${!!MODELS?.has(shape.name)}`
       : shape.kind === 'plot' ? `p|${shape.plot.id}|${shape.option}`
@@ -133,6 +136,7 @@ export class Hologram {
     if (tone !== this.tone) this.retone(tone);
     this.at.set(x, y, z);
     this.size = size;
+    this.depth = depth;
     // plots are drawn in world coordinates (their art is laid out on the plot's own cells)
     if (shape.kind === 'plot') this.body.setPosition(0, 0, 0);
     else this.body.setPosition(x, y, z);
@@ -231,7 +235,7 @@ export class Hologram {
     if (!still) {
       const k = (this.time * 0.7) % 1;
       this.scan.setPosition(this.at.x, this.at.y + k * this.height, this.at.z);
-      this.scan.setLocalScale(this.size * 0.98, 0.02, this.size * 0.98);
+      this.scan.setLocalScale(this.size * 0.98, 0.02, this.depth * 0.98);
       m.scan.opacity = 0.25 * Math.sin(k * Math.PI);
       m.scan.update();
     }
@@ -240,8 +244,9 @@ export class Hologram {
     this.beam.enabled = !!eye;
     if (!eye) return;
     const h = this.size / 2;
+    const hz = this.depth / 2;
     const top = this.at.y + 0.04;
-    const cs: [number, number][] = [[-h, -h], [h, -h], [h, h], [-h, h]];
+    const cs: [number, number][] = [[-h, -hz], [h, -hz], [h, hz], [-h, hz]];
     const P = this.beamPos;
     for (let i = 0; i < 4; i++) {
       const a = cs[i];
