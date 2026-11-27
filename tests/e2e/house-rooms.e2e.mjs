@@ -84,22 +84,51 @@ try {
     const sv = window.solarbloom.sim.state.salvage;
     sv.decorMade = [...new Set([...(sv.decorMade ?? []), 'pot', 'houseplant'])].sort();
   });
-  for (const [x, z, fx, fz, room] of [
-    [5, 8, 5, 7, 'main'],
-    [1, 2, 1, 1, 'kitchen'],
-    [9, 2, 9, 1, 'bedroom'],
-  ]) {
-    await walkTo(page, x, z, fx, fz);
-    await page.evaluate(() => window.solarbloom.selectTool('decor:houseplant'));
-    await wait(1200);
-    const before = await page.evaluate(() => window.solarbloom.cozy.insideCount());
-    await press(page, pulse);
-    await page.waitForFunction((n) => window.solarbloom.cozy.insideCount() > n, before, { timeout: 30_000, polling: 300 }).catch(() => {});
-    const placed = await page.evaluate((room) => window.solarbloom.cozy.decorations().filter((d) => d.roofId === 'house' && window.solarbloom.sim.house.roomAt(d.x, d.z)?.id === room).length, room);
-    check(placed >= 1, `a houseplant goes down in the ${room}`);
+  const plants = () => page.evaluate(() => window.solarbloom.cozy.decorations().filter((d) => d.roofId === 'house').map((d) => `${d.kind}@${d.x},${d.z}`).sort());
+  const down = []; // each houseplant by its square
+  for (const room of ['main', 'kitchen', 'bedroom']) {
+    // a square in the room where a houseplant may go (free, and shutting nothing off), with a free square beside it
+    // to stand on facing it: asked of the game, not written down, as the rooms' furniture changes
+    const spots = await page.evaluate((room) => {
+      const g = window.solarbloom;
+      const h = g.sim.house;
+      const reach = h.reach();
+      const out = [];
+      for (const t of g.sim.grid.tilesOf('house')) {
+        if (t.x === 2 && t.z === 1) continue; // where Bloombot stands to be saved in the kitchen, below
+        if (h.roomAt(t.x, t.z)?.id !== room || g.cozy.canDecorate('houseplant', 'house', t.x, t.z) !== undefined) continue;
+        for (const [sx, sz] of [[0, 1], [1, 0], [-1, 0], [0, -1]]) {
+          const [x, z] = [t.x + sx, t.z + sz];
+          if (reach.has(`${x},${z}`) && h.roomAt(x, z)?.id === room && !h.wallBetween(t.x, t.z, x, z) && !g.cozy.decorAt('house', x, z)) out.push([x, z, t.x, t.z]);
+        }
+      }
+      return out;
+    }, room);
+    let at;
+    for (const s of spots.slice(0, 8)) {
+      if (!(await walkTo(page, ...s))) continue;
+      await page.evaluate(() => window.solarbloom.selectTool('decor:houseplant'));
+      await wait(1200);
+      const aimed = await page.evaluate(() => window.solarbloom.buildAim().p?.tile);
+      if (aimed && aimed.x === s[2] && aimed.z === s[3]) {
+        at = s;
+        break;
+      }
+      await page.evaluate(() => window.solarbloom.selectTool('inspect'));
+    }
+    const before = await plants();
+    if (at) {
+      await press(page, pulse);
+      await page.waitForFunction((n) => window.solarbloom.cozy.insideCount() > n, before.length, { timeout: 30_000, polling: 300 }).catch(() => {});
+    }
+    const after = await plants();
+    const sq = at && `houseplant@${at[2]},${at[3]}`;
+    check(!!sq && after.includes(sq) && after.length === before.length + 1 && before.every((p) => after.includes(p)), `a houseplant goes down in the ${room} (${sq ?? 'no spot'}), and nothing else moves`);
+    if (sq) down.push(sq);
     await page.evaluate(() => window.solarbloom.selectTool('inspect'));
     await wait(600);
   }
+  const saved = await plants();
 
   // saved in the kitchen: a reload comes back in the kitchen, its wall sunk for the camera
   const inKitchen = await walkTo(page, 2, 1, 2, 0);
@@ -109,9 +138,9 @@ try {
   await waitForGame(page);
   await wait(4000);
   const w = await where(page);
-  const kept = await page.evaluate(() => window.solarbloom.cozy.insideCount());
+  const kept = await plants();
   check(w.room === 'kitchen' && w.walls.some((h) => h < 1) && w.blocking === 0, `after a reload Bloombot is still in the kitchen, in view (${JSON.stringify(w)})`);
-  check(kept === 3, `the three houseplants are still there (${kept})`);
+  check(down.length === 3 && down.every((p) => kept.includes(p)) && JSON.stringify(kept) === JSON.stringify(saved), `the three houseplants are still in their squares (saved ${saved.join(' ')}; loaded ${kept.join(' ')})`);
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 } catch (e) {
   console.error(e);
