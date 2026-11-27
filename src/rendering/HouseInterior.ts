@@ -7,7 +7,7 @@ import { MeshBuilder } from './ChunkRenderer';
 import { drawDecor } from './DecorArt';
 import { decorSize } from '../data/cozy';
 import { FoliageBuilder, foliageMaterial } from './Foliage';
-import { drawInnerWall, drawInnerWallCap, drawRoom, INNER_WALL, innerWallPieces, wallSinks, type InnerWallPiece } from './HouseArt';
+import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawRoom, INNER_WALL, innerWallPieces, wallSinks, type InnerWallPiece } from './HouseArt';
 import { color, PALETTE } from './Materials';
 import { MODELS, ModelBatch } from './Models';
 import { vertexColourMaterial } from './Shapes';
@@ -82,7 +82,7 @@ export class HouseInterior {
       const goal = low ? INNER_WALL.low : HOUSE_INSIDE.wall;
       w.h += (goal - w.h) * k;
       if (Math.abs(goal - w.h) < 0.002) w.h = goal;
-      if (w.piece.lintel) {
+      if (w.piece.lintel || w.piece.beam) {
         w.body.enabled = w.h > INNER_WALL.doorTop + 0.05;
         continue;
       }
@@ -98,7 +98,12 @@ export class HouseInterior {
 
   /** #860: is a stretch of inner wall standing tall now (for tests and the review)? */
   wallHeights(): number[] {
-    return this.walls.filter((w) => !w.piece.lintel).map((w) => w.h);
+    return this.walls.filter((w) => !w.piece.lintel && !w.piece.beam).map((w) => w.h);
+  }
+
+  /** #861: is each ceiling beam shown now (for tests and the review)? */
+  beamsShown(): boolean[] {
+    return this.walls.filter((w) => w.piece.beam).map((w) => w.body.enabled);
   }
 
   /** The floor's top in the world (where Bloombot's feet and the decorations stand). */
@@ -126,6 +131,7 @@ export class HouseInterior {
       door: h.doorInside(),
       furniture: h.furniture(),
       walls: h.walls(),
+      rooms: h.rooms(),
       keepsakes: this.keepsakes(),
       variant: (x, z) => this.sim.grid.get(h.layerId, x, z)?.variant ?? x * 7 + z,
     });
@@ -167,6 +173,13 @@ export class HouseInterior {
         }
         this.walls.push({ piece, body, cap, h: HOUSE_INSIDE.wall });
       }
+    // #861: the ceiling's beams, each its own entity so one between the camera and Bloombot can go out of sight
+    for (const piece of ceilingBeams(h.level, room)) {
+      const bb = new MeshBuilder();
+      drawCeilingBeam(bb, piece, [ox, y, oz]);
+      const body = mesh('house-beam', bb.build(this.device), vertexColourMaterial());
+      if (body) this.walls.push({ piece, body, h: HOUSE_INSIDE.wall });
+    }
     mesh('house-plants', fb.build(this.device), foliageMaterial());
     if (batch?.count) {
       const bounds = new pc.BoundingBox(new pc.Vec3(ox + room / 2, y + 1, oz + room / 2), new pc.Vec3(room / 2 + 1, 2, room / 2 + 1));
