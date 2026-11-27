@@ -146,9 +146,12 @@ try {
     const door = await page.evaluate(() => window.solarbloom.sim.house.doorInside());
     const back = await walkTo(page, door[0], door[1], door[0], door[1] + 1);
     const p = await prompt(page);
-    w = await where(page);
     check(back && /Go outside/.test(p), `walks back to the front door: "${p}"`);
-    check(w.walls.every((h) => h > 2), `from the main room the inner walls stand tall (${w.walls.join(', ')})`);
+    // turned to look into the room (the camera behind it, by the door), every inner wall stands beyond it, tall
+    await page.evaluate(() => window.solarbloom.bot.turnTo(Math.PI));
+    await wait(3000);
+    w = await where(page);
+    check(w.walls.every((h) => h > 2), `from the door, looking in, the inner walls stand tall (${w.walls.join(', ')})`);
   }
 
   // a decoration in every room of the Home, put down with Bloombot's own key
@@ -175,7 +178,8 @@ try {
   }
 
   // saved in the kitchen: a reload comes back in the kitchen, its wall sunk for the camera
-  await walkTo(page, 1, 1, 1, 0);
+  const inKitchen = await walkTo(page, 2, 1, 2, 0);
+  check(inKitchen, 'walks back into the kitchen');
   await page.evaluate(() => window.solarbloom.saveNow?.());
   await page.goto(`http://localhost:${PORT}/?slot=1&gfx=low`);
   await waitForGame(page);

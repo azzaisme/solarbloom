@@ -24,6 +24,8 @@ export class HouseInterior {
   private parts: pc.Entity[] = [];
   private buffers: pc.VertexBuffer[] = [];
   private lamp: pc.Entity;
+  /** #860: a light of its own in each room beyond the main one (the kitchen, the bedroom), so its walls aren't dark */
+  private roomLamps: pc.Entity[] = [];
   private key = '';
   /** #860: the inner walls' stretches, each its own entity so it can sink for the camera */
   private walls: { piece: InnerWallPiece; body: pc.Entity; cap?: pc.Entity; h: number }[] = [];
@@ -172,6 +174,20 @@ export class HouseInterior {
     }
     this.lamp.setPosition(ox + room / 2, y + HOUSE_INSIDE.wall - 0.4, oz + room / 2);
     this.lamp.light!.range = room * 1.1;
+    const extra = h.rooms().slice(1);
+    while (this.roomLamps.length < extra.length) {
+      const e = new pc.Entity('house-room-lamp');
+      e.addComponent('light', { type: 'omni', color: color(PALETTE.house.lamp), intensity: 1.1, range: 6, castShadows: false });
+      this.root.addChild(e);
+      this.roomLamps.push(e);
+    }
+    this.roomLamps.forEach((e, i) => {
+      const r = extra[i];
+      e.enabled = !!r;
+      if (!r) return;
+      e.setPosition(ox + r.x + r.w / 2, y + HOUSE_INSIDE.wall - 0.4, oz + r.z + r.d / 2);
+      e.light!.range = Math.max(r.w, r.d) * 1.3;
+    });
     this.lastT = 0; // the next update puts each wall straight at its height (no wall pops up and sinks again)
   }
 }
