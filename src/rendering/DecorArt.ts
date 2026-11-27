@@ -25,6 +25,8 @@ interface At {
   z: number;
   rot: number;
   far: boolean;
+  /** #849/#851: a number particular to this placed piece (from its square), so pieces like houseplants differ */
+  seed: number;
 }
 
 /** Turns a local offset (facing +z) by the decoration's quarter turns. */
@@ -260,9 +262,9 @@ const ART: Record<string, (a: At) => void> = {
 export const DECOR_ART = Object.keys(ART);
 
 /**
- * Draws a decoration on the tile centred at (`x`, `z`), its ground top at `y`. `rot` in quarter turns; `far` the
- * far level of detail.
+ * Draws a decoration about (`x`, `z`), the middle of its footprint, its ground top at `y`. `rot` in quarter turns;
+ * `far` the far level of detail; `seed` a number particular to the placed piece (#849), so no two houseplants match.
  */
-export function drawDecor(h: PlotHost, kind: string, x: number, y: number, z: number, rot: number, far: boolean) {
-  (ART[kind] ?? ART.pot)({ h, x, y, z, rot: rot & 3, far });
+export function drawDecor(h: PlotHost, kind: string, x: number, y: number, z: number, rot: number, far: boolean, seed = 0) {
+  (ART[kind] ?? ART.pot)({ h, x, y, z, rot: rot & 3, far, seed });
 }

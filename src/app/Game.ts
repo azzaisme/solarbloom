@@ -3870,7 +3870,7 @@ export class Game {
     if (dec) {
       // E19.2: a decoration: Q picks it up to move it (the remove tool removes it)
       const o = DECOR_OPTION[dec.kind];
-      this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'info');
+      this.overlays.showFrame(dec.roofId, dec.x, dec.z, decorSize(dec.kind, dec.rot), 'info'); // #849: its whole footprint
       this.overlays.hideRadius();
       this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? 'Decoration'}</b>${this.previewFromBot ? `<span class="ok">${this.press('Q')} to pick it up and move it</span>` : 'A decoration'}`);
       return;
@@ -4017,7 +4017,7 @@ export class Game {
     const t = p.tile!;
     const o = DECOR_OPTION[kind];
     // #849: a big piece is centred on the square aimed at, its whole footprint framed
-    const [ax, az] = decorAnchor(kind, this.buildRot, t.x, t.z);
+    const [ax, az] = decorAnchor(kind, this.buildRot, t.x, t.z, this.botFrom(p.roofId));
     const why = this.decorProblem(kind, p.roofId, ax, az, this.buildRot);
     this.overlays.hideRadius();
     const line = LIGHT[kind]?.line ? this.sim.lights.poleNear(p.roofId, t.x, t.z) : undefined;
@@ -4108,7 +4108,7 @@ export class Game {
   private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
     const t = p.tile!;
     const line = !!LIGHT[kind]?.line;
-    const [ax, az] = line ? [t.x, t.z] : decorAnchor(kind, this.buildRot, t.x, t.z);
+    const [ax, az] = line ? [t.x, t.z] : decorAnchor(kind, this.buildRot, t.x, t.z, this.botFrom(p.roofId));
     const why = this.decorProblem(kind, p.roofId, ax, az, this.buildRot) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, ax, az));
     if (why) {
       this.hud.showFail(why, x, y);
@@ -4185,6 +4185,12 @@ export class Game {
     } else this.sfx.click();
     this.buildKey = '';
     return 'select';
+  }
+
+  /** #849: where Bloombot stands, when it is on this layer (a big piece aimed from there runs on away from it). */
+  private botFrom(roofId: string): { x: number; z: number } | undefined {
+    const b = this.bot;
+    return b && b.pose.roofId === roofId ? { x: b.pose.x, z: b.pose.z } : undefined;
   }
 
   /** #849: redraws the chunk a decoration is drawn by (its north-west square's). */

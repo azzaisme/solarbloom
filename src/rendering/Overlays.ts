@@ -144,7 +144,7 @@ export class Overlays {
     if (shape) {
       // E19: a hologram of the real thing, projected from bloombot's eyes
       this.ghost.enabled = false;
-      this.holo.show(shape, p.x, p.y, p.z, Math.max(w, d), ok ? 'ok' : 'bad');
+      this.holo.show(shape, p.x, p.y, p.z, w, ok ? 'ok' : 'bad', d);
       this.showFrame(roofId, x, z, size, ok ? 'ok' : 'bad');
       return;
     }

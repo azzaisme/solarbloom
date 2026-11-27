@@ -140,11 +140,18 @@ export function decorSize(kind: string, rot: number): [number, number] {
 
 /**
  * #849: the north-west square (the one its save key names) of a decoration aimed at square (x, z): the aimed square
- * is its middle one, or the one just north-west of the middle when a side is even.
+ * is its middle one. On an even side there are two middles: the piece runs on away from `from` (where Bloombot
+ * stands), so a long table aimed at the square in front is laid out ahead, not over Bloombot; without `from`, the
+ * aimed square is the one just north-west of the middle.
  */
-export function decorAnchor(kind: string, rot: number, x: number, z: number): [number, number] {
+export function decorAnchor(kind: string, rot: number, x: number, z: number, from?: { x: number; z: number }): [number, number] {
   const [w, d] = decorSize(kind, rot);
-  return [x - Math.floor((w - 1) / 2), z - Math.floor((d - 1) / 2)];
+  const side = (n: number, at: number, f: number | undefined) => {
+    const back = Math.floor((n - 1) / 2);
+    // even: the extra square goes on the far side from Bloombot (towards -x / -z when it stands beyond the square)
+    return n % 2 === 0 && f !== undefined && f > at + 1 ? at - back - 1 : at - back;
+  };
+  return [side(w, x, from?.x), side(d, z, from?.z)];
 }
 
 /** #849: every square a decoration with its north-west square at (x, z) covers. */
