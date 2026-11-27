@@ -7,7 +7,8 @@ import { MeshBuilder } from './ChunkRenderer';
 import { drawDecor } from './DecorArt';
 import { decorSize } from '../data/cozy';
 import { FoliageBuilder, foliageMaterial } from './Foliage';
-import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawRoom, INNER_WALL, innerWallPieces, wallSinks, type InnerWallPiece } from './HouseArt';
+import { ceilingBeams, drawCeilingBeam, drawInnerWall, drawInnerWallCap, drawRoom, INNER_WALL, innerWallPieces, wallSinks, type HouseSink, type InnerWallPiece } from './HouseArt';
+import { HouseTexBuilder, houseTexMaterial } from './HouseTex';
 import { color, PALETTE } from './Materials';
 import { MODELS, ModelBatch } from './Models';
 import { vertexColourMaterial } from './Shapes';
@@ -123,7 +124,8 @@ export class HouseInterior {
     const [ox, , oz] = HOUSE_INSIDE.origin;
     const y = this.floorY();
     const b = new MeshBuilder();
-    drawRoom(b, {
+    const tb = new HouseTexBuilder();
+    drawRoom(sinkOf(b, tb), {
       origin: [ox, y, oz],
       room,
       wall: HOUSE_INSIDE.wall,
@@ -148,36 +150,42 @@ export class HouseInterior {
       const [w, dd] = decorSize(d.kind, d.rot);
       drawDecor(host, d.kind, ox + d.x + w / 2, y, oz + d.z + dd / 2, d.rot, false, d.x * 31 + d.z);
     }
-    const mesh = (name: string, m: pc.Mesh | undefined, material: pc.Material) => {
-      if (!m) return undefined;
+    const mesh = (name: string, m: pc.Mesh | undefined, material: pc.Material, tex?: HouseTexBuilder) => {
+      // #861: with the painted pieces (wood, weave, coir) drawn in the same entity, each texture its own mesh
+      const list = m ? [new pc.MeshInstance(m, material)] : [];
+      for (const t of tex?.build(this.device) ?? []) list.push(new pc.MeshInstance(t.mesh, houseTexMaterial(this.device, t.name)));
+      if (!list.length) return undefined;
       const e = new pc.Entity(name);
-      e.addComponent('render', { meshInstances: [new pc.MeshInstance(m, material)], castShadows: false, receiveShadows: true });
+      e.addComponent('render', { meshInstances: list, castShadows: false, receiveShadows: true });
       this.root.addChild(e);
       this.parts.push(e);
       return e;
     };
-    mesh('house-room', b.build(this.device), vertexColourMaterial());
+    mesh('house-room', b.build(this.device), vertexColourMaterial(), tb);
     // #860: each stretch of inner wall its own entity: drawn a unit high and stretched to its height each frame
     for (const w of h.walls())
       for (const piece of innerWallPieces(w)) {
         const wb = new MeshBuilder();
-        drawInnerWall(wb, piece, [ox, piece.lintel ? y : 0, oz]);
-        const body = mesh('house-wall', wb.build(this.device), vertexColourMaterial());
+        const wt = new HouseTexBuilder();
+        drawInnerWall(sinkOf(wb, wt), piece, [ox, piece.lintel ? y : 0, oz]);
+        const body = mesh('house-wall', wb.build(this.device), vertexColourMaterial(), wt);
         if (!body) continue;
         if (!piece.lintel) body.setLocalPosition(0, y, 0);
         let cap: pc.Entity | undefined;
         if (!piece.lintel) {
           const cb = new MeshBuilder();
-          drawInnerWallCap(cb, piece, [ox, 0, oz]);
-          cap = mesh('house-wall-cap', cb.build(this.device), vertexColourMaterial());
+          const ct = new HouseTexBuilder();
+          drawInnerWallCap(sinkOf(cb, ct), piece, [ox, 0, oz]);
+          cap = mesh('house-wall-cap', cb.build(this.device), vertexColourMaterial(), ct);
         }
         this.walls.push({ piece, body, cap, h: HOUSE_INSIDE.wall });
       }
     // #861: the ceiling's beams, each its own entity so one between the camera and Bloombot can go out of sight
     for (const piece of ceilingBeams(h.level, room)) {
       const bb = new MeshBuilder();
-      drawCeilingBeam(bb, piece, [ox, y, oz]);
-      const body = mesh('house-beam', bb.build(this.device), vertexColourMaterial());
+      const bt = new HouseTexBuilder();
+      drawCeilingBeam(sinkOf(bb, bt), piece, [ox, y, oz]);
+      const body = mesh('house-beam', bb.build(this.device), vertexColourMaterial(), bt);
       if (body) this.walls.push({ piece, body, h: HOUSE_INSIDE.wall });
     }
     mesh('house-plants', fb.build(this.device), foliageMaterial());
@@ -208,4 +216,13 @@ export class HouseInterior {
     });
     this.lastT = 0; // the next update puts each wall straight at its height (no wall pops up and sinks again)
   }
+}
+
+/** #861: a sink drawing plain pieces into the vertex-coloured mesh and painted ones (wood, weave, coir) apart. */
+function sinkOf(b: MeshBuilder, t: HouseTexBuilder): HouseSink {
+  return {
+    add: (type, hex, p, s, glow) => b.add(type, hex, p, s, glow),
+    tri: (hex, a, c, d, n) => b.tri(hex, a, c, d, n),
+    tex: (name, hex, p, s) => t.box(name, hex, p, s),
+  };
 }

@@ -1,0 +1,28 @@
+{
+  "format": "klad/7",
+  "canvas": {
+    "width": 768,
+    "height": 768,
+    "background": "#ece2d1"
+  },
+  "timeline": {
+    "fps": 12,
+    "frames": 1
+  },
+  "layers": [
+    {
+      "id": "l1",
+      "name": "paint 1",
+      "kind": "paint",
+      "cels": [
+        {
+          "id": "c2",
+          "frame": 0
+        }
+      ],
+      "opacity": 1.0,
+      "blend": "normal",
+      "visible": true
+    }
+  ]
+}

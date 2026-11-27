@@ -1,5 +1,6 @@
 import { HOUSE_INSIDE, houseRugs, type HouseFurniture, type HouseRoom, type HouseWall } from '../data/oldcity';
 import { PALETTE } from './Palette';
+import type { HouseTexName } from './HouseTex';
 import type { VPrim } from './Shapes';
 
 type V3 = [number, number, number];
@@ -11,6 +12,14 @@ type V3 = [number, number, number];
 export interface HouseSink {
   add(type: VPrim, hex: string, p: V3, s: V3 | number, glow?: number): void;
   tri?(hex: string, a: V3, b: V3, c: V3, n: V3): void;
+  /** #861: a box wearing one of the house's painted textures (HouseTex), tinted `hex`; a plain box without it */
+  tex?(name: HouseTexName, hex: string, p: V3, s: V3): void;
+}
+
+/** #861: a box in a painted texture when the sink has them, else in plain colour. */
+function tbox(b: HouseSink, name: HouseTexName, hex: string, p: V3, s: V3) {
+  if (b.tex) b.tex(name, hex, p, s);
+  else b.add('box', hex, p, s);
 }
 
 /** The house's footprint on the ground: its north-west cell, its size (cells) and its door cell (in front of it). */
@@ -327,22 +336,22 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
   const tall = p.wall;
   b.add('box', H.wallIn, [ox + R / 2, y + tall / 2, oz - T / 2], [R + 2 * T, tall, T]);
   for (const s of [-1, 1]) b.add('box', s < 0 ? H.wallIn : H.wallInShade, [ox + (s < 0 ? -T / 2 : R + T / 2), y + tall / 2, oz + R / 2], [T, tall, R + T]);
-  for (const [x, z, w, d] of [[ox + R / 2, oz + 0.015, R, 0.03], [ox + 0.015, oz + R / 2, 0.03, R], [ox + R - 0.015, oz + R / 2, 0.03, R]] as [number, number, number, number][]) b.add('box', H.skirting, [x, y + 0.06, z], [w, 0.12, d]);
+  for (const [x, z, w, d] of [[ox + R / 2, oz + 0.015, R, 0.03], [ox + 0.015, oz + R / 2, 0.03, R], [ox + R - 0.015, oz + R / 2, 0.03, R]] as [number, number, number, number][]) tbox(b, 'wood', H.skirting, [x, y + 0.06, z], [w, 0.12, d]);
   // #861: a wall plate along the top of each tall wall, and the ends of the ceiling's joists along the back
-  b.add('box', H.beam, [ox + R / 2, y + tall - 0.08, oz + 0.03], [R, 0.12, 0.06]);
-  for (const s of [0, R]) b.add('box', H.beam, [ox + s + (s ? -0.03 : 0.03), y + tall - 0.08, oz + R / 2], [0.06, 0.12, R]);
-  for (let k = 0.75; k < R; k += 1.5) b.add('box', H.beam, [ox + k, y + tall - 0.2, oz + 0.08], [0.1, 0.12, 0.16]);
+  tbox(b, 'wood', H.beam, [ox + R / 2, y + tall - 0.08, oz + 0.03], [R, 0.12, 0.06]);
+  for (const s of [0, R]) tbox(b, 'wood', H.beam, [ox + s + (s ? -0.03 : 0.03), y + tall - 0.08, oz + R / 2], [0.06, 0.12, R]);
+  for (let k = 0.75; k < R; k += 1.5) tbox(b, 'wood', H.beam, [ox + k, y + tall - 0.2, oz + 0.08], [0.1, 0.12, 0.16]);
   const [dx] = p.door;
   const low = 0.45;
   if (dx > 0) b.add('box', H.wallIn, [ox + dx / 2 - T / 2, y + low / 2, oz + R + T / 2], [dx + T, low, T]);
   if (dx + 1 < R) b.add('box', H.wallIn, [ox + (dx + 1 + R) / 2 + T / 2, y + low / 2, oz + R + T / 2], [R - dx - 1 + T, low, T]);
-  for (const k of [dx, dx + 1]) b.add('box', H.beam, [ox + k, y + 0.5, oz + R + T / 2], [0.1, 1.0, T + 0.04]); // the door's posts
+  for (const k of [dx, dx + 1]) tbox(b, 'wood', H.beam, [ox + k, y + 0.5, oz + R + T / 2], [0.1, 1.0, T + 0.04]); // the door's posts
   // #861: skirting along the low front wall too, each side of the door
-  if (dx > 0) b.add('box', H.skirting, [ox + dx / 2, y + 0.06, oz + R - 0.015], [dx, 0.12, 0.03]);
-  if (dx + 1 < R) b.add('box', H.skirting, [ox + (dx + 1 + R) / 2, y + 0.06, oz + R - 0.015], [R - dx - 1, 0.12, 0.03]);
+  if (dx > 0) tbox(b, 'wood', H.skirting, [ox + dx / 2, y + 0.06, oz + R - 0.015], [dx, 0.12, 0.03]);
+  if (dx + 1 < R) tbox(b, 'wood', H.skirting, [ox + (dx + 1 + R) / 2, y + 0.06, oz + R - 0.015], [R - dx - 1, 0.12, 0.03]);
   // #861: a coir doormat inside the door, a dark band at each end (no higher than the rugs: below DecorArt's RUG.base)
-  b.add('box', H.doormat, [ox + dx + 0.5, y + 0.007, oz + R - 0.42], [0.82, 0.014, 0.56]);
-  for (const s of [-1, 1]) b.add('box', H.doormatDark, [ox + dx + 0.5, y + 0.008, oz + R - 0.42 + s * 0.22], [0.82, 0.014, 0.06]);
+  tbox(b, 'coir', H.doormat, [ox + dx + 0.5, y + 0.007, oz + R - 0.42], [0.82, 0.014, 0.56]);
+  for (const s of [-1, 1]) tbox(b, 'coir', H.doormatDark, [ox + dx + 0.5, y + 0.008, oz + R - 0.42 + s * 0.22], [0.82, 0.014, 0.06]);
   // windows, glowing with the day outside (#861: more of them as the room widens)
   for (const w of windowSpots(p)) {
     if (w.axis === 'z') roomWindow(b, 'z', ox + w.along, y, oz + w.at, 1);
@@ -351,15 +360,15 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
   // #861: the room's rugs, more as it grows (data/oldcity houseRugs; all below DecorArt's RUG.base)
   const RUGS = { red: H.rug, blue: H.rugBlue, green: H.rugGreen };
   for (const r of houseRugs(p.level)) {
-    b.add('box', H.rugEdge, [ox + r.x, y + 0.004, oz + r.z], [r.w, 0.008, r.d]);
-    b.add('box', RUGS[r.colour], [ox + r.x, y + 0.008, oz + r.z], [r.w - 0.2, 0.01, r.d - 0.2]);
+    tbox(b, 'weave', H.rugEdge, [ox + r.x, y + 0.004, oz + r.z], [r.w, 0.008, r.d]);
+    tbox(b, 'weave', RUGS[r.colour], [ox + r.x, y + 0.008, oz + r.z], [r.w - 0.2, 0.01, r.d - 0.2]);
   }
   // a lamp on the back wall, warm (the room's light, HouseInterior, hangs unseen over the rug); #861: one in each room,
   // the main room's moved out of the kitchen's corner once there is a kitchen
   const lamps: [number, number][] = [[p.rooms.some((r) => r.id === 'kitchen') ? 4.6 : 0.6, 0.05]];
   for (const r of p.rooms.slice(1)) lamps.push([r.x + r.w - 0.5, r.z + 0.05]);
   for (const [lx, lz] of lamps) {
-    b.add('box', H.beam, [ox + lx, y + 1.75, oz + lz], [0.12, 0.2, 0.08]);
+    tbox(b, 'wood', H.beam, [ox + lx, y + 1.75, oz + lz], [0.12, 0.2, 0.08]);
     b.add('sphere', H.lamp, [ox + lx, y + 1.9, oz + lz + 0.07], 0.1, 1);
   }
   // #860: skirting along both faces of each inner wall (the walls themselves are drawn apart: they sink for the camera)
@@ -369,8 +378,8 @@ export function drawRoom(b: HouseSink, p: RoomPlan) {
       const [x0, z0, x1, z1] = piece.line;
       for (const side of [-1, 1]) {
         const off = side * (INNER_WALL.thick / 2 + 0.015);
-        if (w.axis === 'x') b.add('box', H.skirting, [ox + (x0 + x1) / 2, y + 0.06, oz + z0 + off], [x1 - x0, 0.12, 0.03]);
-        else b.add('box', H.skirting, [ox + x0 + off, y + 0.06, oz + (z0 + z1) / 2], [0.03, 0.12, z1 - z0]);
+        if (w.axis === 'x') tbox(b, 'wood', H.skirting, [ox + (x0 + x1) / 2, y + 0.06, oz + z0 + off], [x1 - x0, 0.12, 0.03]);
+        else tbox(b, 'wood', H.skirting, [ox + x0 + off, y + 0.06, oz + (z0 + z1) / 2], [0.03, 0.12, z1 - z0]);
       }
     }
   for (const f of p.furniture) furniture(b, f, [ox, y, oz], y, p.keepsakes);
@@ -443,7 +452,7 @@ export function ceilingBeams(level: number, room: number): InnerWallPiece[] {
 /** #861: a ceiling beam, drawn at its height (just under the walls' top). */
 export function drawCeilingBeam(b: HouseSink, piece: InnerWallPiece, o: V3) {
   const [x0, z0, x1] = piece.line;
-  b.add('box', H.beam, [o[0] + (x0 + x1) / 2, o[1] + HOUSE_INSIDE.wall - 0.1, o[2] + z0], [x1 - x0, 0.16, 0.14]);
+  tbox(b, 'wood', H.beam, [o[0] + (x0 + x1) / 2, o[1] + HOUSE_INSIDE.wall - 0.1, o[2] + z0], [x1 - x0, 0.16, 0.14]);
 }
 
 /** #860: the inner walls' size: thinner than the outer ones; a doorway's top (the lintel) and how low a wall sinks. */
@@ -487,7 +496,7 @@ export function drawInnerWall(b: HouseSink, piece: InnerWallPiece, o: V3) {
   if (piece.lintel) {
     const h = HOUSE_INSIDE.wall - INNER_WALL.doorTop;
     b.add('box', H.wallIn, [cx, o[1] + INNER_WALL.doorTop + h / 2, cz], size(len, h, T));
-    b.add('box', H.beam, [cx, o[1] + INNER_WALL.doorTop + 0.04, cz], size(len + 0.1, 0.08, T + 0.04));
+    tbox(b, 'wood', H.beam, [cx, o[1] + INNER_WALL.doorTop + 0.04, cz], size(len + 0.1, 0.08, T + 0.04));
     return;
   }
   b.add('box', H.wallIn, [cx, o[1] + 0.5, cz], size(len, 1, T));
@@ -495,7 +504,7 @@ export function drawInnerWall(b: HouseSink, piece: InnerWallPiece, o: V3) {
   for (const e of [0, 1]) {
     const px = o[0] + (alongX ? (e ? x1 - 0.04 : x0 + 0.04) : x0);
     const pz = o[2] + (alongX ? z0 : e ? z1 - 0.04 : z0 + 0.04);
-    b.add('box', H.beam, [px, o[1] + 0.5, pz], alongX ? [0.08, 1, T + 0.04] : [T + 0.04, 1, 0.08]);
+    tbox(b, 'wood', H.beam, [px, o[1] + 0.5, pz], alongX ? [0.08, 1, T + 0.04] : [T + 0.04, 1, 0.08]);
   }
 }
 
@@ -504,7 +513,7 @@ export function drawInnerWallCap(b: HouseSink, piece: InnerWallPiece, o: V3) {
   const [x0, z0, x1, z1] = piece.line;
   const alongX = z0 === z1;
   const len = (alongX ? x1 - x0 : z1 - z0) + 0.04;
-  b.add('box', H.beam, [o[0] + (x0 + x1) / 2, o[1] + 0.03, o[2] + (z0 + z1) / 2], alongX ? [len, 0.06, INNER_WALL.thick + 0.05] : [INNER_WALL.thick + 0.05, 0.06, len]);
+  tbox(b, 'wood', H.beam, [o[0] + (x0 + x1) / 2, o[1] + 0.03, o[2] + (z0 + z1) / 2], alongX ? [len, 0.06, INNER_WALL.thick + 0.05] : [INNER_WALL.thick + 0.05, 0.06, len]);
 }
 
 /**

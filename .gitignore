@@ -16,3 +16,6 @@ dist-base/
 docs/audio/captures/*.webm
 # throwaway local probes
 tests/e2e/tmp-*
+
+# klad bundles: the render cache
+*.klad/.cache/
