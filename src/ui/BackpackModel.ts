@@ -55,6 +55,8 @@ export function materialSeen(sim: Sim, m: MaterialId): boolean {
 
 /** What needs a material next: the pinned request, the fountain's next step, then the first recipe open to build. */
 export function neededNext(sim: Sim, m: MaterialId): string {
+  // #874: a meal is for eating, or for a Keeper (every one of them loves a meal)
+  if (MATERIALS[m].meal) return 'Eat it for Charge, or give it to a Keeper: they all love a home-cooked meal';
   const pin = pinnedRequest(sim);
   const want = pin ? sim.keepers.wants(pin.id)?.[m] : undefined;
   if (pin && want) return `${sim.keepers.def(pin.id).name} asks for ${want}`;

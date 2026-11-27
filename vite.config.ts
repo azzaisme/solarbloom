@@ -78,7 +78,7 @@ const QUICK = [
   'tree-placement',
   'p7-terrain', 'tile-markers',
   // #782: the first decoration, a gift at the fountain's first step
-  'first-decor', 'house', 'house-rooms', 'house-grow-decor', 'house-dressing',
+  'first-decor', 'house', 'house-rooms', 'house-grow-decor', 'house-dressing', 'house-kitchen', 'cooking',
   // #787: the regions' works (power, water, drones) and the unlock-order walk
   'region-works', 'seasons',
   // #842: furnishing the house (#849 pieces bigger than one square, #847 the tray's order)

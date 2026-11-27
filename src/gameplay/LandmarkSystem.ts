@@ -142,13 +142,16 @@ export class LandmarkSystem {
     return true;
   }
 
-  /** Materials Tally can give (not the mainland's own: steel is only found there). */
+  /**
+   * Materials Tally can give (not the mainland's own: steel is only found there). #874: never a meal: a meal comes
+   * only from the stove, so trading can't get round cooking (and its hold on Charge).
+   */
   tradeTargets(): MaterialId[] {
-    return MATERIAL_IDS.filter((m) => !MATERIALS[m].mainlandOnly);
+    return MATERIAL_IDS.filter((m) => !MATERIALS[m].mainlandOnly && !MATERIALS[m].meal);
   }
 
-  /** Materials bloombot could trade away (at least 3 within reach). */
+  /** Materials bloombot could trade away (at least 3 within reach). #874: not meals (they're for eating and gifts). */
   tradable(): MaterialId[] {
-    return MATERIAL_IDS.filter((m) => this.sim.inventory.available(m) >= TRADE.give);
+    return MATERIAL_IDS.filter((m) => !MATERIALS[m].meal && this.sim.inventory.available(m) >= TRADE.give);
   }
 }

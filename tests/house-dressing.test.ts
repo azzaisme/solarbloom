@@ -225,7 +225,7 @@ describe('#861: the house’s painted textures (klad)', () => {
   it('with textures, the dressing is painted: rugs woven, the doormat coir, beams, plates, joists, posts and skirting wood', () => {
     for (const level of [1, 2, 3, 4]) {
       const plain: string[] = [];
-      const tex: Record<string, string[]> = { wood: [], weave: [], coir: [] };
+      const tex: Record<string, string[]> = { wood: [], weave: [], coir: [], cloth: [], tiles: [] };
       const sink: HouseSink = {
         add: (type, hex) => {
           if (type === 'box') plain.push(hex);

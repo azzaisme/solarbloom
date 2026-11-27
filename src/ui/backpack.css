@@ -5,6 +5,8 @@
   --mat-glass: #9adfe8; --mat-clay: #d08e6c; --mat-gears: #d2bc7c; --mat-sunstone: #f6d256; --mat-greens: #94e46e;
   --mat-food: #f2a24c; --mat-compost: #9c7552; --mat-fertiliser: #d8c27a; --mat-honey: #f4bc3c;
   --mat-steel: #a9b6c0;
+  /* #874: meals */
+  --mat-soup: #e0a050; --mat-salad: #8fcf6a; --mat-cornBake: #f2cc58; --mat-pie: #e8944a;
 }
 svg.mi { flex: none; display: block; }
 svg.mi > * { stroke: var(--glyph-ink-dark); stroke-width: 1.2; stroke-linejoin: round; }
@@ -35,6 +37,11 @@ svg.mi-food { fill: var(--mat-food); }
 svg.mi-compost { fill: var(--mat-compost); }
 svg.mi-fertiliser { fill: var(--mat-fertiliser); }
 svg.mi-honey { fill: var(--mat-honey); }
+/* #874: meals */
+svg.mi-soup { fill: var(--mat-soup); }
+svg.mi-salad { fill: var(--mat-salad); }
+svg.mi-cornBake { fill: var(--mat-cornBake); }
+svg.mi-pie { fill: var(--mat-pie); }
 svg.mi-unknown .mi-ghost { fill: var(--glass-hi-2); stroke: var(--text-soft); stroke-dasharray: 3 3; }
 svg.mi-unknown .mi-line { stroke: var(--text-strong); }
 

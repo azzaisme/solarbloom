@@ -2,6 +2,7 @@
 // building), a bench gives a clearly felt trickle of 2 a second, and the fountain a slower one of 1 a second (the
 // owner's numbers). A snack (Food) gives +25, Honey 40, Greens 8. The order Charger > bench > fountain must hold, with knacks and with
 // a Charger on one starting Solar Panel. And the player must see it charging, whatever it charges from.
+import { MEAL_IDS, RECIPES } from '../src/data/cooking';
 import { FRUIT_IDS } from '../src/data/fruit';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
@@ -134,7 +135,9 @@ describe('#784: the charging sources, in order', () => {
       expect(by[f], f).toBeGreaterThan(by.food);
       expect(by[f], f).toBeLessThan(by.honey);
     }
-    expect(by).toEqual({ honey: 40, food: 25, biomass: 8, ...fruit });
+    // #874: and the stove's meals, at their own Charge (data/cooking)
+    const meals = Object.fromEntries(MEAL_IDS.map((m) => [m, RECIPES[m].charge]));
+    expect(by).toEqual({ honey: 40, food: 25, biomass: 8, ...fruit, ...meals });
     expect(by.honey).toBeGreaterThan(by.food);
     expect(by.biomass).toBeLessThan(by.food);
     const sim = fresh();

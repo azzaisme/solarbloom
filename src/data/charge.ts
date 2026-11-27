@@ -2,6 +2,7 @@
 // A full charge lasts about 10 minutes of active play (the `active` profile below, checked by tests/charge.test.ts).
 // Walking is free; pulses, abilities and sprinting cost charge. At zero bloombot walks on, slower, and can't pulse.
 
+import { COOKING, MEAL_IDS, RECIPES, type MealId } from './cooking';
 import { FARM_USES } from './farm';
 import { FRUIT_IDS, FRUITS, type FruitId } from './fruit';
 
@@ -10,7 +11,7 @@ const FULL = 100;
 
 export interface EdibleDef {
   /** the backpack item eaten (E23.5.1's farm items) */
-  id: 'biomass' | 'food' | FruitId | 'honey';
+  id: 'biomass' | 'food' | FruitId | 'honey' | MealId;
   name: string;
   /** charge one unit gives back (from E23.5.1's FARM_USES: its share of a full battery) */
   charge: number;
@@ -45,6 +46,9 @@ export const CHARGE = {
     ...[...FRUIT_IDS].sort((a, b) => FRUITS[b].sweet - FRUITS[a].sweet).map((f): EdibleDef => ({ id: f, name: FRUITS[f].name, charge: FARM_USES[f].charge * FULL, seconds: 3 })),
     { id: 'food', name: 'Food', charge: FARM_USES.food.charge * FULL, seconds: 3 },
     { id: 'biomass', name: 'Greens', charge: FARM_USES.biomass.charge * FULL, seconds: 2 },
+    // #874: meals from the stove, last: a snack picked for you eats the raw food first and leaves the meals (for a
+    // Keeper, or to eat on purpose from the backpack)
+    ...MEAL_IDS.map((m): EdibleDef => ({ id: m, name: RECIPES[m].name, charge: RECIPES[m].charge, seconds: COOKING.eatSeconds })),
   ] as EdibleDef[],
   /**
    * #784: the charging sources, fastest first, and the order must hold (tests/charging-order.test.ts): a Charger

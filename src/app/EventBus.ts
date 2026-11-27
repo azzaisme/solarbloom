@@ -6,6 +6,8 @@ export interface GameEvents {
   'charge.empty': Record<string, never>;
   'charge.full': { source: import('../gameplay/Charge').ChargeSource };
   'charge.eat': { item: import('../data/charge').EdibleDef['id'] };
+  /** #874: a meal was cooked at the stove. */
+  'meal.cooked': { meal: import('../data/cooking').MealId };
   /** E23.2.2: the wheel picked a load; a load just ran out (the next pulse fires empty); a pulse's reveal ripple. */
   'pulse.load': { load: import('../data/pulse').PulseLoadId };
   'pulse.loadEmpty': { load: import('../data/pulse').PulseLoadId };

@@ -6,6 +6,7 @@ import type { TileData } from '../src/core/types';
 import { FARM_USES } from '../src/data/farm';
 import { FRUIT_IDS, isFruit, type FruitId } from '../src/data/fruit';
 import { CHARGE } from '../src/data/charge';
+import { MEAL_IDS, RECIPES } from '../src/data/cooking';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker } from '../src/gameplay/Walker';
 
@@ -91,7 +92,9 @@ describe('E23.2.1: bloombot\'s charge', () => {
     // #785: fruit from fruit trees, sweet snacks between honey and food, the sweetest first
     const fruits = CHARGE.edibles.filter((e) => isFruit(e.id)).map((e) => [e.id, FARM_USES[e.id as FruitId].charge * CHARGE.max]);
     expect(fruits.length).toBe(FRUIT_IDS.length);
-    expect(CHARGE.edibles.map((e) => [e.id, e.charge])).toEqual([['honey', honey], ...fruits, ['food', food], ['biomass', biomass]]);
+    // #874: then the stove's meals, last (a snack eats the raw food first; a meal is eaten on purpose or given away)
+    const meals = MEAL_IDS.map((m) => [m, RECIPES[m].charge]);
+    expect(CHARGE.edibles.map((e) => [e.id, e.charge])).toEqual([['honey', honey], ...fruits, ['food', food], ['biomass', biomass], ...meals]);
     // food first, from the backpack
     pack.food = 1;
     pack.biomass = 3;

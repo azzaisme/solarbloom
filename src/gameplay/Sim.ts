@@ -36,6 +36,7 @@ import { FountainSystem } from './FountainSystem';
 import { HouseSystem } from './HouseSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
+import { Cooking } from './Cooking';
 import { MainlandSystem } from './MainlandSystem';
 import { RegionWorks } from './RegionWorks';
 import { LandmarkSystem } from './LandmarkSystem';
@@ -113,6 +114,8 @@ export class Sim {
   readonly house: HouseSystem;
   /** E21.8: the Keepers and their requests. */
   readonly keepers: KeeperSystem;
+  /** #874: cooking meals at the house's stove. */
+  readonly cooking: Cooking;
   /** E23.8.3: the causeway and the endless mainland. */
   readonly mainland: MainlandSystem;
   /** E23.9.1: the maker's journal (pages on posts, his last page at the Great Bloom). */
@@ -233,6 +236,7 @@ export class Sim {
     this.house = new HouseSystem(this);
     this.house.sync(); // #782: the inside of a house already mended (its room and furniture)
     this.keepers = new KeeperSystem(this);
+    this.cooking = new Cooking(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
     this.parkGrowth = new ParkGrowth(this);

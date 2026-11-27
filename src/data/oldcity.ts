@@ -1145,10 +1145,10 @@ export const HOUSE_GROWTH = {
 
 /** #782: a piece of furniture inside the house (cells from the room's north-west corner; `w` × `d` cells). */
 export interface HouseFurniture {
-  id: 'bed' | 'chest' | 'radio' | 'shelf' | 'desk';
+  id: 'bed' | 'chest' | 'radio' | 'shelf' | 'desk' | 'stove' | 'counter' | 'table';
   name: string;
-  /** what {interact} does at it, as the prompt says it ("Sleep", "Open") */
-  verb: string;
+  /** what {interact} does at it, as the prompt says it ("Sleep", "Open"); none for a piece that is only there to look at */
+  verb?: string;
   /** the level it arrives at */
   level: number;
   x: number;
@@ -1217,6 +1217,10 @@ const FURNITURE: (Omit<HouseFurniture, 'x' | 'z'> & { at: ([number, number] | un
   { id: 'chest', name: 'the chest', verb: 'Open', level: 1, w: 1, d: 1, at: [[5, 0], [7, 0], [9, 0], [8, 0]] },
   { id: 'shelf', name: 'the keepsake shelf', verb: 'Look at', level: 2, w: 1, d: 2, at: [undefined, [7, 2], [9, 2], [11, 7]] },
   { id: 'desk', name: 'the journal desk', verb: 'Read', level: 2, w: 1, d: 1, at: [undefined, [0, 3], [0, 6], [0, 6]] },
+  // #858: the kitchen (the House on): a stove in its corner and a counter along its back wall, a table with four chairs
+  { id: 'stove', name: 'the stove', verb: 'Cook at', level: 3, w: 1, d: 1, at: [undefined, undefined, [0, 0], [0, 0]] },
+  { id: 'counter', name: 'the kitchen counter', level: 3, w: 2, d: 1, at: [undefined, undefined, [1, 0], [1, 0]] },
+  { id: 'table', name: 'the kitchen table', level: 3, w: 2, d: 2, at: [undefined, undefined, [0, 2], [0, 2]] },
 ];
 
 /** #782: the room's furniture at a level (each piece from the level it arrives at). */
@@ -1310,7 +1314,7 @@ export function houseDoorInside(level: number): [number, number] {
 export const HOUSE: HouseLevel[] = [
   { level: 1, name: 'Shed', delivery: { scrap: 15, timber: 10 }, room: 6, decor: 12, gives: ['A bed', 'A storage chest', 'A radio by the window'] },
   { level: 2, name: 'Cottage', delivery: { timber: 30, glass: 20, clay: 20 }, room: 8, decor: 40, gives: ['Keepsake shelf', 'Journal desk'] },
-  { level: 3, name: 'House', delivery: { gears: 40, copper: 40, glass: 30 }, room: 10, decor: 80, gives: ['A kitchen', 'A fenced garden outside'] },
+  { level: 3, name: 'House', delivery: { gears: 40, copper: 40, glass: 30 }, room: 10, decor: 80, gives: ['A kitchen with a stove for cooking', 'A kitchen counter', 'A table and four chairs', 'A fenced garden outside'] },
   { level: 4, name: 'Home', delivery: { sunstone: 40, timber: 60, clay: 40 }, room: 12, decor: 140, gives: ['A bedroom', 'Travel home from anywhere'] },
 ];
 
