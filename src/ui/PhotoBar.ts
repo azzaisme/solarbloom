@@ -1,6 +1,7 @@
 import type { Action } from '../app/Bindings';
 import type { PhotoState } from '../app/PhotoMode';
 import { PHOTO_FILTERS, PHOTO_WEATHER_NAMES } from '../data/photo';
+import { escHtml } from './OldCityPanel';
 import { fillGlyphs, glyph, icon } from './PanelShell';
 
 /**
@@ -14,6 +15,8 @@ export class PhotoBar {
   readonly el: HTMLElement;
   private flash: HTMLElement;
   private shown?: string;
+  private notice = '';
+  private state?: PhotoState;
 
   constructor(
     private act: (a: Action) => void,
@@ -44,11 +47,18 @@ export class PhotoBar {
     });
   }
 
+  sketchNotice(notice: string) {
+    this.notice = notice;
+    this.render(this.state);
+  }
+
   render(s: PhotoState | undefined) {
+    this.state = s;
     this.el.classList.toggle('on', !!s);
     this.el.classList.toggle('clean', !!s?.clean);
     if (!s) {
       this.shown = undefined;
+      this.notice = '';
       return;
     }
     // the button's key or pad button, drawn for the device in hand (none when the action has no button)
@@ -64,16 +74,19 @@ export class PhotoBar {
     const help = pad
       ? `Move with the left stick, turn and zoom with the right stick, and tilt with ${tilt}.`
       : `Move with ${move}, zoom with the mouse wheel, tilt with ${tilt}, and hold the right mouse button to turn.`;
-    const html =
-      `<div class="pb-row"><span class="pb-title"><span class="pn-badge sky" aria-hidden="true">${icon('camera')}</span>Photo mode</span>` +
-      `<button data-photo="pulse">${icon('camera', 's')}Save picture${k('pulse')}</button>` +
-      tog('interact', 'Hide bloombot', s.hideBot) +
-      tog('buildMenu', 'Freeze the garden', s.freeze) +
-      tog('eat', 'Blur the background', s.dof) +
-      `</div><div class="pb-row">${this.sceneHtml(s, k)}</div>` +
-      `<div class="pb-row"><button data-photo="backpack">Hide this bar${k('backpack')}</button>` +
-      `<button data-photo="cancel">${icon('door', 's')}Leave${k('cancel')}</button></div>` +
-      `<p class="pb-help">${help}</p>`;
+    const title = `<span class="pb-title"><span class="pn-badge sky" aria-hidden="true">${icon('camera')}</span>Photo mode</span>`;
+    const shutter = `<button data-photo="pulse">${icon('camera', 's')}Save picture${k('pulse')}</button>`;
+    const leave = `<button data-photo="cancel">${icon('door', 's')}Leave${k('cancel')}</button>`;
+    const notice = this.notice ? `<p class="pb-help" role="status">${escHtml(this.notice)}</p>` : '';
+    const html = s.tutorial
+      ? `<div class="pb-row">${title}${shutter}${leave}</div><p class="pb-help pb-tide"><b>Tide</b> “Frame us by the water and take a picture. I’ll draw this one.”</p>${notice}`
+      : `<div class="pb-row">${title}${shutter}` +
+        tog('interact', 'Hide bloombot', s.hideBot) +
+        tog('buildMenu', 'Freeze the garden', s.freeze) +
+        tog('eat', 'Blur the background', s.dof) +
+        `</div><div class="pb-row">${this.sceneHtml(s, k)}</div>` +
+        `<div class="pb-row"><button data-photo="backpack">Hide this bar${k('backpack')}</button>${leave}</div>${notice}` +
+        `<p class="pb-help">${help}</p>`;
     if (html !== this.shown) {
       const focused = document.activeElement?.closest?.('#photoBar') ? (document.activeElement as HTMLElement).dataset : undefined;
       this.el.innerHTML = html;

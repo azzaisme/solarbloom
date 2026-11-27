@@ -1,12 +1,12 @@
 import { Rng } from '../core/Rng';
 import { PALETTE } from './Palette';
-import { SKETCH_HEIGHT as H, SKETCH_WIDTH as W, type SketchCapture } from './SketchCapture';
+import { SKETCH_HEIGHT, SKETCH_WIDTH, type SketchCapture } from './SketchCapture';
 
 const clamp = (x: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
-const at = (x: number, y: number) => Math.round(y) * W + Math.round(x);
+const pixelAt = (width: number, x: number, y: number) => Math.round(y) * width + Math.round(x);
 type Point = [number, number];
 
-function soften(values: Float32Array, radius: number) {
+function soften(values: Float32Array, radius: number, W: number, H: number) {
   const rows = new Float32Array(values.length);
   const result = new Float32Array(values.length);
   const width = 2 * radius + 1;
@@ -44,6 +44,7 @@ function stroke(ctx: CanvasRenderingContext2D, points: Point[], pressure: number
 }
 
 function contours(ctx: CanvasRenderingContext2D, ids: Uint8Array, shade: Float32Array, rng: Rng) {
+  const { width: W, height: H } = ctx.canvas;
   for (const id of [2, 1]) {
     const mask = Float32Array.from(ids, (value) => Number(value === id));
     const edge: number[] = [];
@@ -52,7 +53,7 @@ function contours(ctx: CanvasRenderingContext2D, ids: Uint8Array, shade: Float32
     }
 
     for (const construction of [true, false]) {
-      const surface = soften(soften(mask, construction ? 4 : 2), construction ? 4 : 2);
+      const surface = soften(soften(mask, construction ? 4 : 2, W, H), construction ? 4 : 2, W, H);
       const markSpacing = construction ? 15 : 13;
       const occupied = new Uint8Array(ids.length);
       // Each mark starts at its own edge anchor. No stroke goes around the entire subject.
@@ -74,7 +75,7 @@ function contours(ctx: CanvasRenderingContext2D, ids: Uint8Array, shade: Float32
           const half: Point[] = [];
           for (let j = 0; j <= distance; j++) {
             if (px < 2 || px > W - 3 || py < 2 || py > H - 3) break;
-            const p = at(px, py);
+            const p = pixelAt(W, px, py);
             let nx = surface[p + 1] - surface[p - 1], ny = surface[p + W] - surface[p - W];
             const length = Math.hypot(nx, ny);
             if (length < 0.008) break;
@@ -105,8 +106,35 @@ function contours(ctx: CanvasRenderingContext2D, ids: Uint8Array, shade: Float32
   }
 }
 
+/** Sketch selected scene edges with a faint searching line and a shorter, darker accent. */
+function drawSceneEdges(ctx: CanvasRenderingContext2D, { strength, direction }: NonNullable<SketchCapture['sceneEdges']>, rng: Rng) {
+  const { width: W, height: H } = ctx.canvas;
+  const smoothed = soften(strength, 1, W, H);
+  for (const rough of [true, false]) {
+    const spacing = rough ? 7 : 5;
+    for (let y = 3; y < H - 3; y += spacing) for (let x = 3; x < W - 3; x += spacing) {
+      let i = pixelAt(W, x, y);
+      // Pick a nearby strong edge before jittering the mark. Thin silhouettes can fall between grid samples.
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const candidate = pixelAt(W, x + dx, y + dy);
+        if (strength[candidate] > strength[i]) i = candidate;
+      }
+      const px = i % W + rng.range(-1.6, 1.6);
+      const py = Math.floor(i / W) + rng.range(-1.6, 1.6);
+      const emphasis = Math.max(strength[i], smoothed[i] * 0.85);
+      if (emphasis < (rough ? 0.17 : 0.24) || rng.next() > emphasis * (rough ? 0.78 : 0.92)) continue;
+      const turn = direction[i] + rng.range(-0.35, 0.35);
+      const n = rough ? rng.range(5, 14) : rng.range(2, 6);
+      const dx = n * Math.cos(turn), dy = n * Math.sin(turn);
+      const drift = rough ? rng.range(-3, 3) : rng.range(-1, 1);
+      stroke(ctx, [[px - dx, py - dy], [px + drift, py], [px + dx, py + dy + drift]],
+        emphasis * (rough ? 0.17 : 0.59), rough ? 0.65 : 1);
+    }
+  }
+}
+
 /** Draw graphite from the current camera buffers and encode the actual page once for the Collection. */
-export function drawPencil({ geometry, colour }: SketchCapture, seed: number): string {
+export function drawPencil({ geometry, colour, width: W = SKETCH_WIDTH, height: H = SKETCH_HEIGHT, sceneEdges }: SketchCapture, seed: number): string {
   const rng = new Rng(seed);
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -119,14 +147,18 @@ export function drawPencil({ geometry, colour }: SketchCapture, seed: number): s
   const angle = new Float32Array(ids.length);
   const shade = new Float32Array(ids.length);
   const tone = new Float32Array(ids.length);
+  const luma = Float32Array.from(ids, (_, i) => {
+    const p = i * 4;
+    return (colour[p] * 0.2126 + colour[p + 1] * 0.7152 + colour[p + 2] * 0.0722) / 255;
+  });
+  const nearbyLuma = sceneEdges && soften(luma, 6, W, H);
   for (let i = 0; i < ids.length; i++) {
     const p = i * 4;
     const encoded = geometry[p + 3];
     const grain = rng.range(-4, 4);
     paper.data.set([247 + grain, 237 + grain, 215 + grain, 255], p);
     if (!encoded) continue;
-    const frog = encoded < 128;
-    ids[i] = frog ? 1 : 2;
+    ids[i] = sceneEdges || encoded < 128 ? 1 : 2;
     depth[i] = encoded;
     const nx = geometry[p] / 127.5 - 1, ny = 1 - geometry[p + 1] / 127.5, nz = geometry[p + 2] / 127.5 - 1;
     const tilt = clamp(Math.hypot(nx, ny) * 3);
@@ -134,11 +166,15 @@ export function drawPencil({ geometry, colour }: SketchCapture, seed: number): s
     angle[i] = Math.atan2(tilt * Math.sin(2 * direction) + (1 - tilt) * Math.sin(-1.1),
                          tilt * Math.cos(2 * direction) + (1 - tilt) * Math.cos(-1.1)) / 2;
     const light = clamp(-0.48 * nx - 0.62 * ny + 0.62 * nz);
-    const luma = (colour[p] * 0.2126 + colour[p + 1] * 0.7152 + colour[p + 2] * 0.0722) / 255;
-    shade[i] = clamp(0.38 * (1 - light) + 0.67 * clamp((0.65 - luma) / 0.51) + (frog ? 0 : 0.13));
+    const dark = clamp((0.65 - luma[i]) / 0.51);
+    if (sceneEdges && nearbyLuma) {
+      // Leave flat sky, sea and sand broadly open, with graphite collecting at local contrast.
+      const localShadow = clamp((nearbyLuma[i] - luma[i]) * 3.2);
+      shade[i] = clamp(0.11 * (1 - light) + dark * 0.22 + localShadow * 0.5 + sceneEdges.strength[i] * 0.69);
+    } else shade[i] = clamp(0.38 * (1 - light) + 0.67 * dark + (ids[i] === 2 ? 0.13 : 0));
     tone[i] = shade[i] ** 1.65;
   }
-  const wash = soften(tone, 4);
+  const wash = soften(tone, 4, W, H);
   for (let i = 0; i < ids.length; i++) {
     const p = i * 4;
     const ink = wash[i] * 0.32 * rng.range(0.82, 1.15);
@@ -156,7 +192,7 @@ export function drawPencil({ geometry, colour }: SketchCapture, seed: number): s
     for (let y = 2; y < H - 2; y += step) {
       for (let x = 2; x < W - 2; x += step) {
         let px = x + rng.range(-1.7, 1.7), py = y + rng.range(-1.7, 1.7);
-        const start = at(px, py);
+        const start = pixelAt(W, px, py);
         const id = ids[start];
         const value = shade[start];
         const patch = 0.75 + 0.30 * Math.sin(x * 0.11 + Math.sin(y * 0.16));
@@ -166,7 +202,7 @@ export function drawPencil({ geometry, colour }: SketchCapture, seed: number): s
         const drift = rng.range(-0.35, 0.35) + (cross ? 1.1 : 0);
         for (let j = 0, n = rng.int(4, 13); j < n; j++) {
           if (px < 1 || px > W - 2 || py < 1 || py > H - 2) break;
-          const i = at(px, py);
+          const i = pixelAt(W, px, py);
           if (ids[i] !== id || Math.abs(depth[i] - depth[start]) > 4) break;
           let a = angle[i] + drift;
           if (Math.cos(a - previous) < 0) a += Math.PI;
@@ -179,6 +215,7 @@ export function drawPencil({ geometry, colour }: SketchCapture, seed: number): s
       }
     }
   }
-  contours(ctx, ids, shade, rng);
+  if (sceneEdges) drawSceneEdges(ctx, sceneEdges, rng);
+  else contours(ctx, ids, shade, rng);
   return canvas.toDataURL('image/jpeg', 0.89);
 }

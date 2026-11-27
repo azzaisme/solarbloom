@@ -322,6 +322,7 @@ button.pp-opt:hover { border-color: var(--leaf); background: var(--leaf-soft); }
 #photoBar .pb-scene { display: contents; }
 #photoBar .pb-scene label { display: inline-flex; align-items: center; gap: 8px; }
 #photoBar .pb-scene input[type='range'] { width: 150px; accent-color: var(--leaf-btn); }
+#photoBar .pb-tide b { color: var(--leaf-ink); margin-right: 5px; }
 #photoBar .pb-help { margin: 0; font: 700 16px var(--font-ui); color: var(--ink-2); text-align: center; }
 #photoBar button .pn-ic.s { width: 18px; height: 18px; }
 #photoFlash { position: fixed; inset: 0; z-index: 39; pointer-events: none; background: var(--paper); opacity: 0; transition: opacity .35s; }
