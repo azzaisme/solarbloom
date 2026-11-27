@@ -72,7 +72,7 @@ export const LIGHTS: LightDef[] = [
  * #851: lamps made for a room. Kept out of LIGHTS (that list makes the outdoor lights' decorations and their recipes);
  * their decorations are in data/cozy with the other indoor pieces. `glow` power: no power line, so a lamp glows at full
  * brightness as night falls wherever it stands, inside the house or out. (The room's own wall lamp lights the room day
- * and night as before: rendering/HouseInterior.) Their `cost` is unused: how each is earned is data/crafting's (#852).
+ * and night as before: rendering/HouseInterior.) Their `cost` and `unlock` are unused: data/crafting says how each is earned (#852).
  */
 export const ROOM_LIGHTS: LightDef[] = [
   { id: 'floorlamp', name: 'Floor lamp', icon: '🪔', blurb: 'A tall lamp with a cloth shade that glows warm at night.', power: 'glow', brightness: 0.95, bulbY: 1.08, bulbSize: [0.36, 0.26, 0.36], tone: 'warm', solid: true, cost: {}, unlock: { start: true } },

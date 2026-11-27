@@ -306,7 +306,8 @@ export class BuildMenu extends HudPart {
     const chips = it.cost.length
       ? `<div class="bm-label">You need</div><div class="bm-chips">${it.cost.map((c) => `<span class="bm-chip ${c.have >= c.need ? 'ok' : 'need'}">${materialIcon(c.id as never, 18)}${esc(costWords(c))}</span>`).join('')}</div>`
       : `<div class="bm-label">You need</div><div class="bm-chips"><span class="bm-chip ok">Nothing: free to place</span></div>`;
-    const short = it.locked ? `<p class="bm-warn">${esc(it.lockText ?? '')} to build it.</p>` : !it.affordable ? `<p class="bm-warn">${esc(shortWords(it.cost))}</p>` : '';
+    // #852: a locked decoration says how to get it in a sentence of its own ("A gift when you wake Tock in Clock Plaza.")
+    const short = it.locked ? `<p class="bm-warn">${esc(it.lockText ?? '')}${it.tab === 'decorations' ? '.' : ' to build it.'}</p>` : !it.affordable ? `<p class="bm-warn">${esc(shortWords(it.cost))}</p>` : '';
     const slots = this.slots();
     const at = slots.indexOf(it.tool);
     let foot: string;
@@ -341,7 +342,7 @@ export class BuildMenu extends HudPart {
     pin.hidden = this.picking;
     pin.classList.toggle('dim', !it || it.locked);
     pin.setAttribute('aria-disabled', String(!it || it.locked));
-    take.title = !it ? '' : it.locked ? `${it.lockText} first` : !it.affordable ? shortWords(it.cost) : '';
+    take.title = !it ? '' : it.locked ? (it.tab === 'decorations' ? `${it.lockText}` : `${it.lockText} first`) : !it.affordable ? shortWords(it.cost) : '';
   }
 
   private click(e: MouseEvent) {

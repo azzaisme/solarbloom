@@ -148,7 +148,8 @@ describe('#851: lamps glow at night', () => {
       expect(LIGHT[id]?.power, id).toBe('glow');
       expect(LIGHTS.some((l) => l.id === id), id).toBe(false);
       expect(ROOM_LIGHTS.some((l) => l.id === id), id).toBe(true);
-      expect(DECOR_RECIPES.some((r) => r.id === id && JSON.stringify(r.cost) === '{}'), `${id} has no empty recipe from LIGHTS`).toBe(false);
+      // its recipe is the house's (#852), not one made from the outdoor lights' list
+      expect(DECOR_RECIPES.filter((r) => r.id === id).map((r) => 'house' in r.unlock), id).toEqual([true]);
     }
   });
 

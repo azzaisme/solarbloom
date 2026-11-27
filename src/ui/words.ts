@@ -198,6 +198,17 @@ export const WORDS = {
     /** the first decoration, a gift: what it is, then how to put it down (the key named) */
     gift: (icon: string, name: string) =>
       `${icon} A gift for the house: ${name}<small>Press {buildMenu} and find it under Decorations, then set it down on green ground by the house. Put down as many as you like: they’re free.</small>`,
+    /** #852: a piece for the room, given with a level of the house ("the cottage") */
+    houseGift: (icon: string, name: string, house: string) =>
+      `${icon} Something for the ${house}: ${name}<small>It’s under Decorations when you press {buildMenu}. Set it down inside, or anywhere you like. Put down as many as you like: they’re free.</small>`,
+    /** #852: a piece for the room, handed over by a Keeper as they wake */
+    keeperGift: (icon: string, name: string, keeper: string) =>
+      `${icon} ${keeper} gave you a ${String(name).toLowerCase()}<small>It’s under Decorations when you press {buildMenu}. Put down as many as you like: they’re free.</small>`,
+    /** #852: several at once (a save already past them): one toast names them all */
+    gifts: (list: readonly string[] | string) => {
+      const names = [list].flat().map(String);
+      return `🏡 New things for the house: ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]}<small>They’re under Decorations when you press {buildMenu}, free to place.</small>`;
+    },
   },
   /** #782: the house grows */
   house: {

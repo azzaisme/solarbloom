@@ -139,7 +139,7 @@ import type { OldCityPanel } from '../ui/OldCityPanel';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
-import { Cozy } from '../gameplay/Cozy';
+import { Cozy, type DecorGift } from '../gameplay/Cozy';
 import { decorAnchor, DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, decorSize, PLOT_OPTIONS, PLOT_WORK_TUNING, type DecorOption } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
 import { decorChunkKey, type Decoration } from '../core/Decor';
@@ -4417,6 +4417,9 @@ export class Game {
       this.decorGift(gift);
       this.houseHintAfter = this.clock + HOUSE_HINT_WAIT; // the gift's toast first, the house's after it
     }
+    // #852: a piece for the room with each level of the house, and a Keeper's piece as each wakes (a save past them, once)
+    const earned = this.onScreen ? this.cozy.giveEarnedDecor() : [];
+    if (earned.length) this.houseGifts(earned);
     // #782: once, when the house can first be mended: where to go and what to press
     const hs = this.sim.house;
     if (this.onScreen && this.clock >= this.houseHintAfter && hs.open() && hs.level === 0 && !this.sim.state.salvage?.seen?.includes(HOUSE_HINT)) {
@@ -4442,6 +4445,11 @@ export class Game {
   private decorGift(o: DecorOption) {
     const tool: Tool = `decor:${o.id}`;
     this.hud.toast(WORDS.decor.gift(o.icon, o.name), 'gold', 8);
+    this.offerDecor(tool);
+  }
+
+  /** A gift decoration: the build menu opens on it next time, and it goes on a free build bar button (if not there). */
+  private offerDecor(tool: Tool) {
     this.hud.buildMenu.showNext(tool);
     const slots = this.hud.buildBar.slots();
     const free = slots.indexOf('');
@@ -4451,6 +4459,24 @@ export class Game {
       this.hud.buildBar.render(this.hud.currentTool);
     }
     this.save();
+  }
+
+  /**
+   * #852: pieces for the room arrived made. One says what it is and who it's from; several (a save already past them)
+   * share one toast. Either way the build menu opens on the first next time and it goes on a free build bar button.
+   */
+  private houseGifts(gifts: DecorGift[]) {
+    const [g] = gifts;
+    const o = g.option;
+    const toast =
+      gifts.length > 1
+        ? WORDS.decor.gifts(gifts.map((x) => x.option.name))
+        : g.keeper
+          ? WORDS.decor.keeperGift(o.icon, o.name, g.keeper)
+          : WORDS.decor.houseGift(o.icon, o.name, (HOUSE[(g.level ?? 1) - 1]?.name ?? 'house').toLowerCase());
+    this.hud.toast(toast, 'gold', 8);
+    const tool: Tool = `decor:${o.id}`;
+    this.offerDecor(tool);
   }
 
   /** Look 6.10: the name of the stage a tile's transition is in (inspect panel). */

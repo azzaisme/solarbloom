@@ -220,10 +220,11 @@ function decorItem(sim: Sim, id: string): BuildItem | undefined {
   const o = DECOR_OPTION[id];
   if (!o) return undefined;
   const open = decorOpen(sim, o);
-  if (!open) {
-    const r = sim.crafting.decor(id);
-    if (!r || 'cat' in r.unlock || !sim.crafting.unlocked(r.unlock)) return undefined;
-  }
+  const r = sim.crafting.decor(id);
+  const known = !!r && sim.crafting.unlocked(r.unlock);
+  // A locked garden piece stays off the list until its recipe is known; #852: a piece for a room shows from the start,
+  // saying how to get it (a level of the house, a Keeper's gift, or the workbench).
+  if (!open && (!r || 'cat' in r.unlock || (!known && !o.indoor))) return undefined;
   return {
     tool: `decor:${id}`,
     tab: 'decorations',
@@ -233,7 +234,7 @@ function decorItem(sim: Sim, id: string): BuildItem | undefined {
     kind: o.solid ? 'Free to place · stands in the way' : 'Free to place · walk right over it',
     line: o.blurb,
     locked: !open,
-    lockText: open ? undefined : 'Make it at the workbench',
+    lockText: open ? undefined : known && !r!.gift ? 'Make it at the workbench' : sim.crafting.decorLock(id).replace('🔒 ', ''),
     cost: [],
     affordable: open,
     set: decorSet(o),

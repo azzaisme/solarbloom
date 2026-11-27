@@ -3,9 +3,9 @@ import { GROUND } from '../core/GameState';
 import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
 import { decorAnchor, decorCells, DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, FIRST_DECOR, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
-import { PARK_SET } from '../data/oldcity';
+import { KEEPERS, PARK_SET } from '../data/oldcity';
 import type { Sim } from './Sim';
-import type { DecorRecipe } from '../data/crafting';
+import { DECOR_RECIPES, type DecorRecipe } from '../data/crafting';
 
 /** E23.6.1: a decoration's crafting recipe (made once at the table, then free to place). */
 export function decorRecipe(sim: Sim, id: string): DecorRecipe | undefined {
@@ -24,6 +24,15 @@ export interface DecorChoice {
   unlocked: boolean;
   /** what it waits for, when locked */
   hint?: string;
+}
+
+/** #852: a decoration that arrived made: what it is, and who it is from (a house level, or a Keeper by name). */
+export interface DecorGift {
+  option: DecorOption;
+  /** the house level that brought it (1 Shed … 4 Home) */
+  level?: number;
+  /** the Keeper who handed it over */
+  keeper?: string;
 }
 
 export interface PlotChoice {
@@ -131,6 +140,7 @@ export class Cozy {
     if ('start' in u) return true;
     if ('parkStage' in u) return this.sim.progression.parkStage() >= u.parkStage;
     if ('cat' in u) return false; // E23.12.2: only a Lucky Cat gives these (data/crafting's `{ cat }` recipes)
+    if ('house' in u) return false; // #852: earned by its recipe (data/crafting), never by a cozy milestone
     if ('find' in u) return !!this.sim.state.salvage?.caches.includes(u.find);
     // E23.6.2's research (`sim.research`); until it lands, research-only styles stay locked
     if ('research' in u) return !!(this.sim as unknown as { research?: { done?: (id: string) => boolean } }).research?.done?.(u.research);
@@ -145,6 +155,7 @@ export class Cozy {
   hint(u: CozyUnlock): string {
     if ('start' in u) return '';
     if ('cat' in u) return 'it turns up somewhere'; // never names what leaves it (epic rule 8)
+    if ('house' in u) return 'the house grows';
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
     if ('find' in u) return 'you dig it out of a buried box';
     if ('research' in u) return 'you work it out at the workbench beside the house';
@@ -260,7 +271,7 @@ export class Cozy {
   private decorHint(o: DecorOption): string {
     const r = decorRecipe(this.sim, o.id);
     if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the workbench';
-    return r ? this.sim.crafting.unlockLabel(r.unlock).replace('🔒 ', '') : this.hint(o.unlock);
+    return r ? this.sim.crafting.decorLock(o.id).replace('🔒 ', '') : this.hint(o.unlock);
   }
 
   /** The tray's list: every decoration, unlocked or with what it waits for. */
@@ -284,6 +295,26 @@ export class Cozy {
     const s = this.write();
     if (!(s.decorUnlocked ??= []).includes(id)) s.decorUnlocked.push(id);
     return DECOR_OPTION[id];
+  }
+
+  /**
+   * #852: hands over every gift decoration whose unlock is met and that Bloombot doesn't have yet: a piece for the room
+   * with each level of the house, and a Keeper's piece as that Keeper wakes. Each comes made (free to place, as often
+   * as you like), once: a save already past a level or a Keeper gets it the first time this runs. It counts as
+   * announced, so the caller's toast is its only one. Returns what was given now, in data order.
+   */
+  giveEarnedDecor(): DecorGift[] {
+    const c = this.sim.crafting;
+    const out: DecorGift[] = [];
+    for (const r of DECOR_RECIPES) {
+      if (!r.gift || c.decorMade(r.id) || !c.unlocked(r.unlock) || !c.giveDecor(r.id)) continue;
+      const s = this.write();
+      if (!(s.decorUnlocked ??= []).includes(r.id)) s.decorUnlocked.push(r.id);
+      const u = r.unlock;
+      const keeper = 'keeper' in u ? KEEPERS.find((k) => k.region === u.keeper)?.name : undefined;
+      out.push({ option: DECOR_OPTION[r.id], level: 'house' in u ? u.house : undefined, keeper });
+    }
+    return out;
   }
 
   /** Unlocks every decoration whose milestone has been met, once each (saved). Returns the new ones. */

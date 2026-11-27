@@ -19,7 +19,9 @@ export type CozyUnlock =
   /** E23.3.5: a cache opened (data/oldcity caches) */
   | { find: string }
   /** E23.3.5: a research project finished (E23.6.2, `sim.research.done`) */
-  | { research: string };
+  | { research: string }
+  /** #852: a piece for a room, earned through the house (data/crafting's recipes say how: a level, a Keeper, the table) */
+  | { house: true };
 
 export interface PlotOption {
   id: string;
@@ -127,23 +129,24 @@ export const DECOR_OPTIONS: DecorOption[] = [
   { id: 'catfountain', name: 'Cat fountain', icon: '⛲', blurb: 'A stone bowl with a cat on top, spouting water.', solid: true, unlock: { cat: true } },
   { id: 'goldlantern', name: 'Golden lantern', icon: '🏮', blurb: 'A cat-eared lantern that glows gold all night.', solid: false, unlock: { cat: true } },
   { id: 'rainbowbunting', name: 'Rainbow bunting', icon: '🌈', blurb: 'A pole of bright flags, every colour of a Rainbow Cat.', solid: true, unlock: { cat: true } },
-  // #850: furniture made for a room (#847: the tray leads with these inside the house). How each is earned: #852.
-  { id: 'armchair', name: 'Armchair', icon: '🛋️', blurb: 'A deep, soft chair to sink into.', solid: true, unlock: { start: true }, indoor: true },
-  { id: 'stool', name: 'Stool', icon: '🥁', blurb: 'A little round stool on three legs.', solid: true, unlock: { start: true }, indoor: true },
-  { id: 'diningtable', name: 'Dining table', icon: '🍽️', blurb: 'A long table with room for friends. It takes two squares.', solid: true, unlock: { start: true }, indoor: true, size: [2, 1] },
-  { id: 'sidetable', name: 'Side table', icon: '🫖', blurb: 'A small round table for a teapot or a book.', solid: true, unlock: { start: true }, indoor: true },
-  { id: 'bookshelf', name: 'Bookshelf', icon: '📚', blurb: 'A tall shelf of well-read books.', solid: true, unlock: { start: true }, indoor: true },
-  { id: 'coatstand', name: 'Coat stand', icon: '🧥', blurb: 'Somewhere by the door for a coat and a hat.', solid: true, unlock: { start: true }, indoor: true },
+  // #850: furniture made for a room (#847: the tray leads with these inside the house). #852: data/crafting says how
+  // each is earned (a house level, a Keeper's gift or the workbench).
+  { id: 'armchair', name: 'Armchair', icon: '🛋️', blurb: 'A deep, soft chair to sink into.', solid: true, unlock: { house: true }, indoor: true },
+  { id: 'stool', name: 'Stool', icon: '🥁', blurb: 'A little round stool on three legs.', solid: true, unlock: { house: true }, indoor: true },
+  { id: 'diningtable', name: 'Dining table', icon: '🍽️', blurb: 'A long table with room for friends. It takes two squares.', solid: true, unlock: { house: true }, indoor: true, size: [2, 1] },
+  { id: 'sidetable', name: 'Side table', icon: '🫖', blurb: 'A small round table for a teapot or a book.', solid: true, unlock: { house: true }, indoor: true },
+  { id: 'bookshelf', name: 'Bookshelf', icon: '📚', blurb: 'A tall shelf of well-read books.', solid: true, unlock: { house: true }, indoor: true },
+  { id: 'coatstand', name: 'Coat stand', icon: '🧥', blurb: 'Somewhere by the door for a coat and a hat.', solid: true, unlock: { house: true }, indoor: true },
   // #851: soft furnishings. Rugs are flat: they lie under Bloombot's feet. Lamps are lights (data/lights ROOM_LIGHTS).
-  { id: 'roundrug', name: 'Round rug', icon: '🔘', blurb: 'A small round rug in soft green. Walk right over it.', solid: false, unlock: { start: true }, indoor: true },
-  { id: 'hallrunner', name: 'Hall runner', icon: '🎞️', blurb: 'A long, narrow blue rug for a hallway. Walk right over it.', solid: false, unlock: { start: true }, indoor: true, size: [1, 3] },
-  { id: 'bigrug', name: 'Big rug', icon: '🟥', blurb: 'A wide red rug with a cream border. Walk right over it.', solid: false, unlock: { start: true }, indoor: true, size: [2, 3] },
-  { id: 'patternrug', name: 'Patterned rug', icon: '🔶', blurb: 'A square rug of gold and teal checks. Walk right over it.', solid: false, unlock: { start: true }, indoor: true, size: [2, 2] },
-  ...ROOM_LIGHTS.map((l) => ({ id: l.id, name: l.name, icon: l.icon, blurb: l.blurb, solid: l.solid, unlock: l.unlock, indoor: true })),
-  { id: 'houseplant', name: 'Houseplant', icon: '🌵', blurb: 'A leafy plant in a pot. No two grow quite the same.', solid: true, unlock: { start: true }, indoor: true },
-  { id: 'pottedtree', name: 'Little potted tree', icon: '🌴', blurb: 'A small tree in a big pot, for a sunny corner.', solid: true, unlock: { start: true }, indoor: true },
-  { id: 'cushions', name: 'Cushion pile', icon: '🧸', blurb: 'A heap of soft cushions on the floor. Walk right over it.', solid: false, unlock: { start: true }, indoor: true },
-  { id: 'clock', name: 'Clock', icon: '🕰️', blurb: 'A tall clock with a brass pendulum.', solid: true, unlock: { start: true }, indoor: true },
+  { id: 'roundrug', name: 'Round rug', icon: '🔘', blurb: 'A small round rug in soft green. Walk right over it.', solid: false, unlock: { house: true }, indoor: true },
+  { id: 'hallrunner', name: 'Hall runner', icon: '🎞️', blurb: 'A long, narrow blue rug for a hallway. Walk right over it.', solid: false, unlock: { house: true }, indoor: true, size: [1, 3] },
+  { id: 'bigrug', name: 'Big rug', icon: '🟥', blurb: 'A wide red rug with a cream border. Walk right over it.', solid: false, unlock: { house: true }, indoor: true, size: [2, 3] },
+  { id: 'patternrug', name: 'Patterned rug', icon: '🔶', blurb: 'A square rug of gold and teal checks. Walk right over it.', solid: false, unlock: { house: true }, indoor: true, size: [2, 2] },
+  ...ROOM_LIGHTS.map((l) => ({ id: l.id, name: l.name, icon: l.icon, blurb: l.blurb, solid: l.solid, unlock: { house: true } as const, indoor: true })),
+  { id: 'houseplant', name: 'Houseplant', icon: '🌵', blurb: 'A leafy plant in a pot. No two grow quite the same.', solid: true, unlock: { house: true }, indoor: true },
+  { id: 'pottedtree', name: 'Little potted tree', icon: '🌴', blurb: 'A small tree in a big pot, for a sunny corner.', solid: true, unlock: { house: true }, indoor: true },
+  { id: 'cushions', name: 'Cushion pile', icon: '🧸', blurb: 'A heap of soft cushions on the floor. Walk right over it.', solid: false, unlock: { house: true }, indoor: true },
+  { id: 'clock', name: 'Clock', icon: '🕰️', blurb: 'A tall clock with a brass pendulum.', solid: true, unlock: { house: true }, indoor: true },
 ];
 
 export const DECOR_OPTION: Record<string, DecorOption> = Object.fromEntries(DECOR_OPTIONS.map((o) => [o.id, o]));
