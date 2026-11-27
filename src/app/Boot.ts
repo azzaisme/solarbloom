@@ -7,7 +7,7 @@ import { ControlsTable } from '../ui/ControlsTable';
 import type { PadStyle } from '../ui/Glyphs';
 import type { Settings } from '../ui/Hud';
 import { installIconDefs } from '../ui/Icons';
-import { Loading, type LoadSteps } from '../ui/Loading';
+import { Loading, preloadLoadingBot, type LoadSteps } from '../ui/Loading';
 import { settingsRows } from '../ui/SettingsRows';
 import { SettingsScreen } from '../ui/SettingsScreen';
 import { Title } from '../ui/Title';
@@ -58,11 +58,15 @@ export async function boot(canvas: HTMLCanvasElement) {
   const settings = loadSettings();
   applyTitleLook(settings);
   installIconDefs();
+  void preloadLoadingBot();
   let title: Title | undefined;
+  let starting = false;
 
   const start = async (slot: Slot, fresh: boolean, device: 'keys' | 'pad', realClock = false) => {
+    if (starting) return;
+    starting = true;
     const loading = new Loading(!!settings.reducedMotion);
-    loading.show();
+    await loading.show();
     title?.destroy();
     title = undefined;
     const saver = new SaveService(undefined, slot);
