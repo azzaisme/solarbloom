@@ -2549,7 +2549,10 @@ export class Game {
       this.hud.showFail(t.refused, sc?.x, sc?.y);
       return;
     }
-    const hold = holdFor(t, this.settings.holdToAct !== false);
+    const holdsOn = this.settings.holdToAct !== false;
+    const hold = holdFor(t, holdsOn);
+    // keep Interact down and the next hold starts as this one finishes (scrap, greens, fruit, …)
+    this.holdRepeat = holdsOn && (hold > 0 || !!t.ocHold);
     if (hold) {
       this.holding = { id: t.id, t: 0, need: hold };
       return;
@@ -2574,7 +2577,23 @@ export class Game {
     return [...pads].some((p) => p?.connected && p.buttons[btn]?.pressed);
   }
 
+  /** Set when Interact started a hold: while it stays down, the next hold starts once this one ends. */
+  private holdRepeat = false;
+
+  /** Holding Interact keeps collecting: a finished hold is followed by the next one on whatever is in front. */
+  private repeatHold(target: InteractTarget | undefined) {
+    if (!this.holdRepeat) return;
+    if (!this.interactHeld() || this.paused || this.settings.holdToAct === false) {
+      this.holdRepeat = false;
+      return;
+    }
+    if (this.holding || this.oc?.holdProgress() !== undefined || this.oc?.busy) return; // one still running
+    if (!target || target.refused || !(holdFor(target, true) || target.ocHold)) return; // nothing to hold for yet
+    this.botInteract();
+  }
+
   private updateHold(dt: number, target: InteractTarget | undefined) {
+    this.repeatHold(target);
     const h = this.holding;
     if (!h) return;
     if (!target || target.id !== h.id || !this.interactHeld() || this.paused) {
