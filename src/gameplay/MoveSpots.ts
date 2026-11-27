@@ -61,7 +61,7 @@ export class MoveSpots {
     if (this.opened(v.id)) return 'Already open';
     const lv = this.level('prune');
     if (lv === 0) return 'A heavy iron door, shut tight. Bloombot needs a pry bar for this, and the fountain comes first.';
-    if (lv === 1) return 'This door is too heavy to open by hand. The crafting table in the house can work out a pry bar.';
+    if (lv === 1) return 'This door is too heavy to open by hand. The workbench beside the house can work out a pry bar.';
     return this.outOfCharge('prune');
   }
 
@@ -114,7 +114,7 @@ export class MoveSpots {
     const lv = this.level(t.move);
     const name = ABILITIES[t.move].name;
     const learn = `Bloombot has to learn ${name} at the fountain first.`;
-    const workshop = `The crafting table in the house can work out ${name} II.`;
+    const workshop = `The workbench beside the house can work out ${name} II.`;
     if (t.move === 'hover') {
       if (lv === 0) return `Too far to wade. ${learn}`;
       if (lv === 1) return `Too far to hover yet. ${workshop}`;

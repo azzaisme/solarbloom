@@ -2,9 +2,10 @@ import { decoration, decorKey, decorKeyOf, decorOccupant, decorValue, type Decor
 import { GROUND } from '../core/GameState';
 import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
+import { decorAnchor, decorCells, DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, FIRST_DECOR, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
+import { KEEPERS, PARK_SET } from '../data/oldcity';
 import type { Sim } from './Sim';
-import type { DecorRecipe } from '../data/crafting';
+import { DECOR_RECIPES, type DecorRecipe } from '../data/crafting';
 
 /** E23.6.1: a decoration's crafting recipe (made once at the table, then free to place). */
 export function decorRecipe(sim: Sim, id: string): DecorRecipe | undefined {
@@ -23,6 +24,15 @@ export interface DecorChoice {
   unlocked: boolean;
   /** what it waits for, when locked */
   hint?: string;
+}
+
+/** #852: a decoration that arrived made: what it is, and who it is from (a house level, or a Keeper by name). */
+export interface DecorGift {
+  option: DecorOption;
+  /** the house level that brought it (1 Shed … 4 Home) */
+  level?: number;
+  /** the Keeper who handed it over */
+  keeper?: string;
 }
 
 export interface PlotChoice {
@@ -130,6 +140,7 @@ export class Cozy {
     if ('start' in u) return true;
     if ('parkStage' in u) return this.sim.progression.parkStage() >= u.parkStage;
     if ('cat' in u) return false; // E23.12.2: only a Lucky Cat gives these (data/crafting's `{ cat }` recipes)
+    if ('house' in u) return false; // #852: earned by its recipe (data/crafting), never by a cozy milestone
     if ('find' in u) return !!this.sim.state.salvage?.caches.includes(u.find);
     // E23.6.2's research (`sim.research`); until it lands, research-only styles stay locked
     if ('research' in u) return !!(this.sim as unknown as { research?: { done?: (id: string) => boolean } }).research?.done?.(u.research);
@@ -144,9 +155,10 @@ export class Cozy {
   hint(u: CozyUnlock): string {
     if ('start' in u) return '';
     if ('cat' in u) return 'it turns up somewhere'; // never names what leaves it (epic rule 8)
+    if ('house' in u) return 'the house grows';
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
     if ('find' in u) return 'you dig it out of a buried box';
-    if ('research' in u) return 'you work it out at the crafting table in the house';
+    if ('research' in u) return 'you work it out at the workbench beside the house';
     return `the fog lifts from ${u.areas} place${u.areas === 1 ? '' : 's'}`;
   }
 
@@ -219,13 +231,14 @@ export class Cozy {
 
   // ───────────── decorations (E19.2) ─────────────
 
-  /** The decoration on a tile, if any. */
+  /** The decoration on a tile, if any (#849: a big piece on any of its squares). */
   decorAt(roofId: string, x: number, z: number): Decoration | undefined {
     const d = this.st?.decor;
     if (!d) return undefined;
     const key = decorKey(roofId, x, z);
     const v = d[key];
-    return v ? decoration(key, v) : undefined;
+    if (v) return decoration(key, v);
+    return this.decorOf(this.sim.grid.peek(roofId, x, z)?.occupantId);
   }
 
   /** A decoration by its key (`<layer>|<x>|<z>`). */
@@ -257,13 +270,51 @@ export class Cozy {
   /** What a locked decoration waits for. */
   private decorHint(o: DecorOption): string {
     const r = decorRecipe(this.sim, o.id);
-    if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the crafting table';
-    return r ? this.sim.crafting.unlockLabel(r.unlock).replace('🔒 ', '') : this.hint(o.unlock);
+    if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the workbench';
+    return r ? this.sim.crafting.decorLock(o.id).replace('🔒 ', '') : this.hint(o.unlock);
   }
 
   /** The tray's list: every decoration, unlocked or with what it waits for. */
   decorChoices(): DecorChoice[] {
     return DECOR_OPTIONS.map((o) => ({ option: o, unlocked: this.isDecorUnlocked(o), hint: this.isDecorUnlocked(o) ? undefined : this.decorHint(o) }));
+  }
+
+  /**
+   * #782: the first decoration, a gift once the fountain reaches its first step. A save already past that step gets
+   * it too, once. It comes made (free to place, as often as you like) and counts as announced, so its own toast is
+   * the only one. If bloombot has made every gift already, the step is still remembered and nothing is given.
+   * Returns the gift when one was given now.
+   */
+  giveFirstDecor(): DecorOption | undefined {
+    const sv = this.sim.state.salvage;
+    if (!sv || sv.decorGift || sv.tier < FIRST_DECOR.step) return undefined;
+    const id = FIRST_DECOR.gifts.find((g) => !!decorRecipe(this.sim, g) && !this.sim.crafting.decorMade(g));
+    sv.decorGift = id ?? FIRST_DECOR.gifts[0];
+    if (!id) return undefined;
+    this.sim.crafting.giveDecor(id);
+    const s = this.write();
+    if (!(s.decorUnlocked ??= []).includes(id)) s.decorUnlocked.push(id);
+    return DECOR_OPTION[id];
+  }
+
+  /**
+   * #852: hands over every gift decoration whose unlock is met and that Bloombot doesn't have yet: a piece for the room
+   * with each level of the house, and a Keeper's piece as that Keeper wakes. Each comes made (free to place, as often
+   * as you like), once: a save already past a level or a Keeper gets it the first time this runs. It counts as
+   * announced, so the caller's toast is its only one. Returns what was given now, in data order.
+   */
+  giveEarnedDecor(): DecorGift[] {
+    const c = this.sim.crafting;
+    const out: DecorGift[] = [];
+    for (const r of DECOR_RECIPES) {
+      if (!r.gift || c.decorMade(r.id) || !c.unlocked(r.unlock) || !c.giveDecor(r.id)) continue;
+      const s = this.write();
+      if (!(s.decorUnlocked ??= []).includes(r.id)) s.decorUnlocked.push(r.id);
+      const u = r.unlock;
+      const keeper = 'keeper' in u ? KEEPERS.find((k) => k.region === u.keeper)?.name : undefined;
+      out.push({ option: DECOR_OPTION[r.id], level: 'house' in u ? u.house : undefined, keeper });
+    }
+    return out;
   }
 
   /** Unlocks every decoration whose milestone has been met, once each (saved). Returns the new ones. */
@@ -286,19 +337,85 @@ export class Cozy {
    * clear of fog, nothing standing there, no drone about to work it, not growing), plus: the city's ground only
    * (rooftops come later), not in water, and not on a plot whose look has been chosen.
    */
-  canDecorate(kind: string, roofId: string, x: number, z: number): string | undefined {
+  canDecorate(kind: string, roofId: string, x: number, z: number, rot = 0): string | undefined {
     const o = DECOR_OPTION[kind];
     if (!o) return 'There is no such decoration';
     if (!this.isDecorUnlocked(o)) return decorRecipe(this.sim, o.id) ? `Not made yet: ${this.decorHint(o)}` : `Unlocks when ${this.hint(o.unlock)}`;
-    if (this.groundOnly && roofId !== GROUND) return 'Decorations go on the city’s ground for now';
+    const inside = this.sim.house.isInside(roofId);
+    if (this.groundOnly && roofId !== GROUND && !inside) return 'Decorations go on the city’s ground for now';
     if (this.decorCount() >= DECOR_GEN.max) return `The city holds ${DECOR_GEN.max} decorations at most: remove one first`;
+    if (inside) {
+      // #782: the house holds as many as its level allows
+      const h = this.sim.house;
+      if (!h.hasInside()) return 'The house has no inside yet';
+      if (this.insideCount() >= h.decorMax()) return `The ${h.current()!.name.toLowerCase()} holds ${h.decorMax()} decorations: pick one up first, or grow the house`;
+    }
+    // #849: every square it covers follows the one-square rules
+    const cells = decorCells(kind, rot, x, z);
+    const big = cells.length > 1;
+    for (const c of cells) {
+      const why = this.cellProblem(roofId, c.x, c.z, inside);
+      if (why) return big && why === 'Nothing to stand it on here' ? 'It doesn’t fit here' : why;
+    }
+    return undefined;
+  }
+
+  /** Why one square can't take (part of) a decoration, or undefined. */
+  private cellProblem(roofId: string, x: number, z: number, inside: boolean): string | undefined {
+    if (inside) {
+      // #782: the door and the furniture stay clear
+      const h = this.sim.house;
+      const [dx, dz] = h.doorInside();
+      if (x === dx && z === dz) return 'Keep the door of the house clear';
+      const f = h.furnitureAt(x, z);
+      if (f) return `${f.name[0].toUpperCase()}${f.name.slice(1)} stands here`;
+    }
     const t = this.sim.grid.peek(roofId, x, z); // never loads a chunk (the sim decides that)
     if (!t) return 'Nothing to stand it on here';
     if (t.feature === 'water' && !t.blocked) return 'Not in the water';
     const why = this.sim.build.footprintProblem(roofId, x, z, 1, ['restored']);
     if (why) return why === 'Needs green or mossy ground: press {pulse} on it first' ? 'Press {pulse} to turn the ground here green first' : why;
     if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
+    if (this.atHouseDoor(roofId, x, z)) return 'Keep the door of the house clear';
+    // #782 × #783: the square in front of the workbench is where Bloombot stands to use it
+    const bf = roofId === GROUND ? this.sim.bench?.front() : undefined;
+    if (bf && bf.x === x && bf.z === z) return 'Keep the space in front of the workbench clear';
     return undefined;
+  }
+
+  /** #782: decorations inside the house. */
+  insideCount(): number {
+    const id = this.sim.house.layerId;
+    return this.decorations().filter((d) => d.roofId === id).length;
+  }
+
+  /**
+   * #782: the house grew and its furniture took these cells: a decoration standing on one moves to the nearest free
+   * floor (nothing placed is lost), or, with no free floor left, back into the build menu (it stays made).
+   */
+  clearCells(cells: { roofId: string; x: number; z: number }[]) {
+    for (const c of cells) {
+      const d = this.decorAt(c.roofId, c.x, c.z);
+      if (!d) continue;
+      this.removeDecor(c.roofId, c.x, c.z);
+      const free = this.sim.grid
+        .tilesOf(c.roofId)
+        .filter((t) => !t.blocked && !t.occupantId)
+        .sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z));
+      // #849: a big piece tries each free square as its middle, in both of its turns
+      const turns = [d.rot, (d.rot + 1) & 3];
+      place: for (const t of free)
+        for (const r of turns) {
+          const [ax, az] = decorAnchor(d.kind, r, t.x, t.z);
+          if (!this.placeDecor(d.kind, r, c.roofId, ax, az)) break place;
+        }
+    }
+  }
+
+  /** #782: the ground at the house's door (where the house stands): decorations go round it, never in the way in. */
+  private atHouseDoor(roofId: string, x: number, z: number): boolean {
+    const sh = PARK_SET.shed;
+    return roofId === GROUND && x === sh.door[0] && z === sh.door[1] && this.sim.grid.peek(GROUND, sh.x, sh.z)?.prop === 'shed';
   }
 
   /**
@@ -307,19 +424,23 @@ export class Cozy {
    * hiding on the tile hopping to another nook.
    */
   placeDecor(kind: string, rot: number, roofId: string, x: number, z: number): string | undefined {
-    const why = this.canDecorate(kind, roofId, x, z);
+    const why = this.canDecorate(kind, roofId, x, z, rot);
     if (why) return why;
     const s = this.write();
     const key = decorKey(roofId, x, z);
-    const decor = { ...(s.decor ?? {}), [key]: decorValue(kind, rot) };
+    const value = decorValue(kind, rot);
+    const decor = { ...(s.decor ?? {}), [key]: value };
     s.decor = Object.fromEntries(Object.keys(decor).sort().map((k) => [k, decor[k]])); // sorted: byte-identical saves
-    this.sim.grid.indexDecor(key);
-    this.sim.grid.peek(roofId, x, z)!.occupantId = decorOccupant(key);
+    this.sim.grid.indexDecor(key, value);
+    for (const c of decorCells(kind, rot, x, z)) this.sim.grid.peek(roofId, c.x, c.z)!.occupantId = decorOccupant(key);
     this.sim.cat.relocateIfBlocked();
     return undefined;
   }
 
-  /** Removes the decoration on a tile (free and instant; the tile stays restored). Returns what was removed. */
+  /**
+   * Removes the decoration on a tile (free and instant; the tile stays restored). #849: any square of a big piece
+   * takes the whole piece away. Returns what was removed.
+   */
   removeDecor(roofId: string, x: number, z: number): Decoration | undefined {
     const d = this.decorAt(roofId, x, z);
     const s = this.st;
@@ -327,8 +448,10 @@ export class Cozy {
     delete s.decor[d.key];
     if (!Object.keys(s.decor).length) delete s.decor;
     this.sim.grid.unindexDecor(d.key);
-    const t = this.sim.grid.peek(roofId, x, z);
-    if (t && t.occupantId === decorOccupant(d.key)) t.occupantId = undefined;
+    for (const c of decorCells(d.kind, d.rot, d.x, d.z)) {
+      const t = this.sim.grid.peek(d.roofId, c.x, c.z);
+      if (t && t.occupantId === decorOccupant(d.key)) t.occupantId = undefined;
+    }
     return d;
   }
 

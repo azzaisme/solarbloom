@@ -5,7 +5,7 @@ import { CAT_DECOR, DECOR_OPTION } from '../src/data/cozy';
 import { LIGHTS } from '../src/data/lights';
 import { ITEM_DEFS } from '../src/data/items';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
-import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { HOUSE, KEEPERS, REGIONS } from '../src/data/oldcity';
 import { GARDEN_REQUESTS } from '../src/data/farmExtras';
 import { PROJECTS } from '../src/data/research';
 import { HAND_JOBS } from '../src/data/automation';
@@ -35,6 +35,7 @@ function reachable(u: Unlock): boolean {
   if ('cat' in u) return CAT_DECOR.includes(u.cat); // E23.12.2: a cat-only decoration (a Lucky Cat leaves it)
   if ('hand' in u) return u.hand in HAND_JOBS; // E23.6.4: a job done by hand
   if ('all' in u) return u.all.every(reachable);
+  if ('house' in u) return u.house >= 1 && u.house <= HOUSE.length; // #852: a level of Bloombot's house
   return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
 }
 
@@ -194,7 +195,7 @@ describe('E23.6.1: the crafting table', () => {
     sim.inventory.add('wire', 3);
     const wire = itemCells(sim).find((c) => c.id === 'wire')!;
     expect(wire.label).toBe(`Wire, 3 of ${sim.inventory.stackLimit()} in backpack, 0 in store`);
-    expect(wire.from).toBe('Made at the crafting table');
+    expect(wire.from).toBe('Made at the workbench');
   });
 
   it('a decoration is made once at the table, then placed free; a found one waits for its cache', () => {
@@ -204,7 +205,7 @@ describe('E23.6.1: the crafting table', () => {
     t.ground = 'restored';
     t.pollution = 0;
     sim.grid.touch(t);
-    expect(cozy.canDecorate('bench', GROUND, 12, 12)).toBe('Not made yet: it is made at the crafting table');
+    expect(cozy.canDecorate('bench', GROUND, 12, 12)).toBe('Not made yet: it is made at the workbench');
     expect(sim.crafting.decorProblem('bench')).toBe('Needs Planks');
     sim.inventory.add('planks', 3);
     expect(sim.crafting.makeDecor('bench')).toBe(true);
@@ -220,7 +221,7 @@ describe('E23.6.1: the crafting table', () => {
     expect(sim.crafting.decorProblem('cratestack')).toBe('🔒 Still to be found');
     expect(cozy.decorChoices().find((c) => c.option.id === 'cratestack')!.unlocked).toBe(false);
     sim.state.salvage!.caches.push('c-saltwind-1');
-    expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBe('Not made yet: it is made at the crafting table');
+    expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBe('Not made yet: it is made at the workbench');
     sim.inventory.add('planks', 3);
     expect(sim.crafting.makeDecor('cratestack')).toBe(true);
     expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['cratestack']);
@@ -248,7 +249,7 @@ describe('E23.6.1: the crafting table', () => {
     // a found light: its cache alone no longer opens it (no fallback to the light's own unlock)
     sim.state.salvage!.caches.push('c-mastRow-1');
     expect(open('solarlamppost')).toBe(false);
-    expect(cozy.canDecorate('solarlamppost', GROUND, 12, 12)).toBe('Not made yet: it is made at the crafting table');
+    expect(cozy.canDecorate('solarlamppost', GROUND, 12, 12)).toBe('Not made yet: it is made at the workbench');
     sim.inventory.add('scrap', 3);
     sim.inventory.add('glassPane', 1);
     sim.inventory.add('sunCell', 1);
@@ -256,7 +257,7 @@ describe('E23.6.1: the crafting table', () => {
     expect(open('solarlamppost')).toBe(true);
     expect(cozy.canDecorate('solarlamppost', GROUND, 12, 12)).toBeUndefined();
     // a researched light waits for its research, whatever else is done
-    expect(sim.crafting.decorProblem('fairylights')).toBe('🔒 Research it at the crafting table');
+    expect(sim.crafting.decorProblem('fairylights')).toBe('🔒 Research it at the workbench');
   });
 
   it('every machine is built from a crafting-table recipe', () => {

@@ -226,6 +226,41 @@ export function fountainHtml(sim: Sim): string {
   );
 }
 
+// ───────────── the house's panel (#782) ─────────────
+
+/**
+ * #782: HTML of the house's panel: what it is now, what its next level needs as handed-in of needed ("6 of 15"), and
+ * what that level brings (its gifts and room for more decorations inside).
+ */
+export function houseHtml(sim: Sim): string {
+  const h = sim.house;
+  const now = h.current();
+  const title = now ? `The ${now.name.toLowerCase()}` : 'The old shed';
+  const n = h.next();
+  if (!n)
+    return (
+      cardHead({ icon: '🏡', title, mood: 'Bloombot’s house is a home now, with room for all it loves.', tone: 'leaf', badge: 'sky' }) +
+      `<div class="oc-content"><div class="oc-row"><button class="pn-btn" data-act="storage">${icon('pack', 's')}Storage</button></div></div>`
+    );
+  const mood = !h.open() ? 'It can be mended once the fountain flows again.' : now ? `Grow it into a ${n.name.toLowerCase()}` : 'Mend it into a little shed of your own';
+  const rows = h
+    .wants()
+    .map(({ id, given, need }) => {
+      const left = need - given;
+      const have = sim.inventory.available(id);
+      return `<li class="oc-need${left ? '' : ' done'}">${materialIcon(id, 28)}<span class="grow">${MATERIALS[id].name}<small>${left ? `You have ${have}` : 'All given'}</small></span><span class="pn-chip ${left ? 'need' : 'ok'}">${left ? '' : icon('check', 's')}${given} of ${need}</span></li>`;
+    })
+    .join('');
+  const gives = [...n.gives, `Room inside for ${n.decor} decorations`];
+  const canGive = h.open() && h.wants().some((w) => w.given < w.need && sim.inventory.available(w.id) > 0);
+  return (
+    cardHead({ icon: '🏡', title, mood, badge: 'sky', choose: 'Give' }) +
+    `<div class="oc-content"><h3 class="pn-label">Bring</h3><ul class="oc-needs">${rows}</ul>` +
+    `<h3 class="pn-label">The ${escHtml(n.name.toLowerCase())} brings</h3><ul class="oc-gives">${gives.map((g) => `<li>${icon('spark', 's')}${escHtml(g)}</li>`).join('')}</ul>` +
+    `<div class="oc-row"><button class="pn-btn primary" data-act="giveAll" ${canGive ? '' : 'disabled'}>Give all I have</button><button class="pn-btn" data-act="storage">${icon('pack', 's')}Storage</button></div></div>`
+  );
+}
+
 // ───────────── Keeper speech bubbles (E21.8) ─────────────
 
 /** A speech bubble that follows a point in the world for a few seconds (one to three lines, no voice, no choices). */

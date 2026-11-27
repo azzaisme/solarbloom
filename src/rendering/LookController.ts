@@ -128,6 +128,7 @@ export class LookController {
     const focus = (g.x - p.x) * fwd.x + (g.y - p.y) * fwd.y + (g.z - p.z) * fwd.z;
     this.post.follow(cam.viewHeight, focus);
     this.post.setNight(this.night);
+    this.post.tick(dt);
     const G = LOOK.grade;
     this.mood += (this.moodTarget - this.mood) * (1 - Math.exp(-dt / Math.max(0.01, G.follow)));
     if (this.highContrast) this.post.grade(G.contrast, G.contrast, 0, 0);

@@ -9,6 +9,9 @@ import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
 import { SLAB_TOP } from './SceneBuilder';
 import { group, shape } from './Shapes';
+import { ORCHARD } from '../data/farmExtras';
+import { foliageMaterial, treeMesh } from './Foliage';
+import { orchardGeo } from './TreeGen';
 
 /** Soil height inside the planter-bed model at its game scale (metres above the ground). */
 const SOIL = 0.37;
@@ -23,6 +26,12 @@ const SPOTS: [number, number][] = [
   [0, 0.15],
   [0.26, 0.15],
 ];
+
+/** #785: a fruit tree's size as it grows (0 just planted … 1 grown): a sapling at a third of full size. */
+export const orchardScale = (growth: number) => 0.34 + 0.66 * Math.max(0, Math.min(1, growth));
+
+/** #785: which of the tree variants a fruit tree is (and so its ripe colour), from where it stands. */
+export const orchardVariant = (m: Pick<MachineData, 'x' | 'z'>) => (((m.x * 7 + m.z * 13) % 10) + 10) % 10;
 
 /** The farm machines whose live state is drawn here. */
 const FARM_TYPES: MachineType[] = ['planter', 'compostBin', 'bioDigester', ...EXTRA_TYPES];
@@ -56,9 +65,14 @@ export class CropVisuals {
   private since = 0;
   reducedMotion = false;
 
+  /** #785: fruit trees on screen, by machine id: the tree, and the size it is drawn at (it grows up smoothly). */
+  private trees = new Map<string, { e: pc.Entity; shown: number }>();
+
   constructor(
     private sim: Sim,
     private parent: pc.Entity,
+    /** draws the fruit trees (TreeGen meshes); without it (tests) they show only their stone ring */
+    private device?: pc.GraphicsDevice,
   ) {
     sim.bus.on('planter.changed', ({ machineId }) => this.refresh(machineId));
     sim.bus.on('farm.machine', ({ machineId }) => this.refresh(machineId));
@@ -78,6 +92,7 @@ export class CropVisuals {
 
   private drop(id: string) {
     this.anims.delete(id);
+    this.trees.delete(id);
     this.views.get(id)?.root.destroy();
     this.views.delete(id);
   }
@@ -105,7 +120,7 @@ export class CropVisuals {
     const st = x.st(m);
     if (m.type === 'beehive') return `${x.hiveSettled(m) ? 1 : 0}|${Math.min(1, Math.floor(st.ready ?? 0))}`;
     if (m.type === 'fishPond') return `${x.pondFilled(m) ? 1 : 0}`;
-    if (m.type === 'orchard') return `${x.fruitReady(m) ? 1 : 0}|${x.overgrown(m) ? 1 : 0}|${(st.age ?? 0) >= 0.01 ? 1 : 0}`;
+    if (m.type === 'orchard') return `${x.fruitOf(m)}|${x.fruitLook(m)}|${x.overgrown(m) ? 1 : 0}`;
     if (m.type === 'mushroomLog') return `${(st.ready ?? 0) >= 1 ? 2 : x.logGrowing(m) ? 1 : 0}`;
     if (m.type === 'wormBin') return `${(st.fed ?? 0) > 0 ? 1 : 0}`;
     return `${x.creatureOut(m) ? 1 : 0}`;
@@ -148,8 +163,17 @@ export class CropVisuals {
         return;
       }
       case 'orchard': {
-        if (x.overgrown(m)) for (const [px, py, pz] of [[0.28, 0.98, 0.16], [-0.26, 1.02, 0.18], [0.05, 1.22, -0.2]] as const) shape(root, 'sphere', mat(PALETTE.shrubLeaf[0]), { pos: [px, py, pz], scale: 0.3 });
-        if (x.fruitReady(m)) for (const [px, py, pz] of [[0.2, 0.8, 0.26], [-0.22, 0.9, 0.22], [0.1, 1.1, 0.28], [-0.05, 0.75, -0.3], [0.28, 1.0, -0.12]] as const) shape(root, 'sphere', mat(PALETTE.flowerCosmos[3]), { pos: [px, py, pz], scale: 0.07 });
+        // #785: the tree itself (TreeGen's orchard tree): flowers, then fruit swelling and colouring up, bare once
+        // picked; shaggy when overgrown. A young tree is scaled up as it grows (every frame, see `update`)
+        if (!this.device) return;
+        const geo = orchardGeo({ variant: orchardVariant(m), kind: x.fruitOf(m), blossom: x.seasonRule(m).blossom, fruit: x.fruitShown(m), overgrown: x.overgrown(m), bareUntil: ORCHARD.bareUntil, blossomUntil: ORCHARD.blossomUntil });
+        const tree = new pc.Entity('fruit-tree');
+        tree.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, geo), foliageMaterial())], castShadows: true, receiveShadows: true });
+        tree.setLocalEulerAngles(0, ((m.x * 31 + m.z * 17) % 360) - 180, 0);
+        root.addChild(tree);
+        const k = orchardScale(x.treeGrowth(m));
+        tree.setLocalScale(k, k, k);
+        this.trees.set(m.id, { e: tree, shown: k });
         return;
       }
       case 'mushroomLog': {
@@ -340,6 +364,15 @@ export class CropVisuals {
         a.e.setLocalPosition(x, y, z);
         if (yaw !== undefined) a.e.setLocalEulerAngles(0, yaw, 0);
       }
+    // #785: a young fruit tree grows up a little every frame (it eases to its size, never jumps)
+    for (const [id, t] of this.trees) {
+      const m = this.sim.machine(id);
+      if (!m) continue;
+      const want = orchardScale(this.sim.farmExtras.treeGrowth(m));
+      if (Math.abs(want - t.shown) < 1e-4) continue;
+      t.shown = this.reducedMotion ? want : t.shown + (want - t.shown) * Math.min(1, dt * 2);
+      t.e.setLocalScale(t.shown, t.shown, t.shown);
+    }
     this.since += dt;
     if (this.since < 0.5) return;
     this.since = 0;

@@ -82,7 +82,7 @@ export const E23_MODELS: E23Model[] = [
     (c): E23Model => ({ name: `crop-${c}`, group: 'farm', route: 'text', tris: 1200, batch: 'B6', what: `${c}: growing and ripe stages` }),
   ),
   // Crafting and automation (#467)
-  { name: 'crafting-table', group: 'crafting', route: 'reuse', from: 'workbench', what: 'Crafting table in the house' },
+  { name: 'crafting-table', group: 'crafting', route: 'reuse', from: 'workbench', what: 'Workbench beside the house' },
   { name: 'chest', group: 'crafting', route: 'reuse', from: 'storage-chest', what: 'Storage chest' },
   { name: 'small-chest', group: 'crafting', route: 'reuse', from: 'crate', what: 'Small chest (courier and mulcher drop-offs)' },
   { name: 'research-station', group: 'crafting', route: 'image', tris: 4000, batch: 'B3', what: 'Research station' },

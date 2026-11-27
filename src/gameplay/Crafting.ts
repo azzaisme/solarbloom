@@ -1,6 +1,6 @@
 import type { BuildableType, ComponentId, SalvageState } from '../core/types';
 import { COMPONENT_RECIPES, CRAFT, DECOR_RECIPES, MACHINE_RECIPES, type ComponentRecipe, type DecorRecipe, type MachineRecipe, type Unlock } from '../data/crafting';
-import { KEEPERS, REGIONS } from '../data/oldcity';
+import { HOUSE, KEEPERS, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
 import { MACHINES } from '../data/machines';
 import { MAINLAND } from '../data/mainland';
@@ -30,6 +30,19 @@ export function fountainLock(tier: number): string {
   return t ? `🔒 Reach fountain step ${tier}: ${t.name}` : `🔒 Reach fountain step ${tier}`;
 }
 
+/**
+ * #852: what growing the house to a level takes, as the player would say it: "mend the old shed", "grow the shed into
+ * a cottage", "grow the cottage into a house", "grow the house into a home". Lower case, to go inside a sentence.
+ */
+export function houseStep(level: number): string {
+  if (level <= 1) return 'mend the old shed';
+  const from = HOUSE[level - 2]?.name.toLowerCase() ?? 'house';
+  const to = HOUSE[level - 1]?.name.toLowerCase() ?? 'home';
+  return `grow the ${from} into a ${to}`;
+}
+
+const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
+
 export class Crafting {
   constructor(private sim: Sim) {}
 
@@ -53,6 +66,7 @@ export class Crafting {
     if ('cat' in u) return !!sv.decorMade?.includes(u.cat); // E23.12.2: a Lucky Cat left it
     if ('hand' in u) return !!this.sim.automation?.handDone(u.hand);
     if ('all' in u) return u.all.every((x) => this.unlocked(x));
+    if ('house' in u) return (sv.house ?? 0) >= u.house; // #852: Bloombot's house grown that far
     return sv.caches.includes(u.find);
   }
 
@@ -64,7 +78,7 @@ export class Crafting {
       const r = REGIONS.find((x) => x.id === u.keeper);
       return `🔒 Wake ${k?.name ?? 'the Keeper'} in ${r?.name ?? u.keeper}`;
     }
-    if ('research' in u) return '🔒 Research it at the crafting table';
+    if ('research' in u) return '🔒 Research it at the workbench';
     if ('tier' in u) return fountainLock(u.tier);
     if ('gift' in u) return '🔒 A Keeper hands it over: grow what one asks for in their garden';
     if ('hand' in u) {
@@ -72,7 +86,22 @@ export class Crafting {
       return `🔒 ${job.name} (${this.sim.automation?.handCount(u.hand) ?? 0} of ${job.times})`;
     }
     if ('all' in u) return this.unlockLabel(u.all.find((x) => !this.unlocked(x)) ?? u.all[0]);
+    if ('house' in u) return `🔒 ${cap(houseStep(u.house))}`;
     return '🔒 Still to be found';
+  }
+
+  /**
+   * #852: words for where a locked decoration comes from. A gift says so ("A gift when you wake Tock in Clock Plaza",
+   * "A gift when you grow the shed into a cottage"); any other recipe reads as its unlock does.
+   */
+  decorLock(id: string): string {
+    const r = this.decor(id);
+    if (!r) return '🔒 Still to be found';
+    if (!r.gift) return this.unlockLabel(r.unlock);
+    const u = r.unlock;
+    if ('house' in u) return `🔒 A gift when you ${houseStep(u.house)}`;
+    if ('keeper' in u) return `🔒 A gift when you ${this.unlockLabel(u).replace('🔒 Wake', 'wake')}`;
+    return this.unlockLabel(u);
   }
 
   component(id: string): ComponentRecipe | undefined {
@@ -106,9 +135,9 @@ export class Crafting {
     return DECOR_RECIPES.find((r) => r.id === id);
   }
 
-  /** Decorations whose recipe is known now (made or not). */
+  /** Decorations whose recipe is known now (made or not). #852: a gift is never made here, so it isn't listed. */
   decorations(): DecorRecipe[] {
-    return DECOR_RECIPES.filter((r) => this.unlocked(r.unlock));
+    return DECOR_RECIPES.filter((r) => !r.gift && this.unlocked(r.unlock));
   }
 
   /** Has a decoration been made at the table? (Then placing copies of it is free.) */
@@ -121,6 +150,7 @@ export class Crafting {
     const r = this.decor(id);
     if (!r || !this.sv) return 'Unknown recipe';
     if (this.decorMade(id)) return 'Already made: place it from the build menu';
+    if (r.gift) return this.decorLock(id); // #852: it arrives made, never made here
     if (!this.unlocked(r.unlock)) return this.unlockLabel(r.unlock);
     const short = this.sim.inventory.shortfall(r.cost);
     if (short) return `Needs ${itemDef(short).name}`;

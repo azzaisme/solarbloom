@@ -4,6 +4,7 @@ import type { TreeGeo } from './TreeGen';
 import { LOOK } from '../data/look';
 import { WIND_GLSL } from './Wind';
 import { transitionMaterial } from './transitions/TransitionMaterial';
+import { SEASON_GLSL, seasonShading } from './SeasonLook';
 
 /**
  * Phase 5 visual overhaul: the foliage material (vertex colours + wind) and a builder that stamps cached tree
@@ -28,12 +29,20 @@ uniform float projectionFlipY;
 #endif
 ${WIND_GLSL}
 varying float vLeaf;
+varying float vSeasonLeaf;
+varying float vSpringGreen;
 varying vec3 vLeafP;
 vec4 evalWorldPosition(vec3 vertexPosition, mat4 modelMatrix) {
 	vec3 localPos = getLocalPosition(vertexPosition);
 	vec4 posW = modelMatrix * vec4(localPos, 1.0);
-	// flex carries LEAF_FLAG (2) on foliage clumps: leaves are drawn over those by the fragment shader
+	// #830: flex carries SEASON_FLAG (4) on a deciduous tree's leaves: they follow the seasons (SeasonLook)
 	float w = vertex_position.w;
+	// #785: SPRING_GREEN_FLAG (8) on top: a seasonal leaf that stays green in spring (a fruit tree's)
+	vSpringGreen = step(7.99, w);
+	w -= vSpringGreen * 8.0;
+	vSeasonLeaf = step(3.99, w);
+	w -= vSeasonLeaf * 4.0;
+	// flex carries LEAF_FLAG (2) on foliage clumps: leaves are drawn over those by the fragment shader
 	vLeaf = step(1.99, w);
 	vLeafP = posW.xyz; // before the wind, so the leaves don't swim over the clump
 	posW.xyz += windOffset(posW.xyz, w - vLeaf * 2.0);
@@ -70,7 +79,10 @@ vec3 getWorldPosition() {
  */
 const LEAF_DECL_PS = /* glsl */ `
 varying float vLeaf;
+varying float vSeasonLeaf;
+varying float vSpringGreen;
 varying vec3 vLeafP;
+${SEASON_GLSL}
 uniform vec4 uLeafParams; // strength, normal tilt, leaves per world unit, unused
 vec3 sbLeafBend;
 float sbLeafK;
@@ -78,11 +90,18 @@ float sbLeafK;
 
 const LEAF_DIFFUSE_PS = /* glsl */ `
 uniform vec3 material_diffuse;
+void sbLeafAlbedo();
+// #830: the season over the leaves (blossom, autumn colour) and over every green thing (tint, frost)
+void getAlbedo() {
+	sbLeafAlbedo();
+	if (vSeasonLeaf > 0.5) dAlbedo = sbSeasonLeafB(dAlbedo, vLeafP, 1.0 - vSpringGreen);
+	dAlbedo = sbSeasonColour(dAlbedo, normalize(vNormalW), vLeafP);
+}
 vec3 sbLeafHash(vec3 p) {
 	p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
 	return fract(sin(p) * 43758.5453);
 }
-void getAlbedo() {
+void sbLeafAlbedo() {
 	dAlbedo = material_diffuse.rgb;
 	#ifdef STD_DIFFUSE_VERTEX
 		dAlbedo *= saturate(vVertexColor.rgb);
@@ -213,6 +232,8 @@ float sbDapNoise(vec3 p) {
 }
 void getOpacity() {
 	dAlpha = 1.0;
+	// #830: a fallen leaf is gone in both passes (bare winter branches cast bare shadows)
+	if (vSeasonLeaf > 0.5 && sbSeasonBare(vLeafP, vLeaf)) discard;
 	#ifdef FORWARD_PASS
 		#ifdef STD_OPACITY_VERTEX
 		dAlpha = clamp(vVertexColor.{STD_OPACITY_VERTEX_CHANNEL}, 0.0, 1.0);
@@ -289,6 +310,7 @@ export function foliageMaterial(): pc.StandardMaterial {
   m.setParameter('uWindTime', 0);
   m.setParameter('uWindStrength', windStrength);
   m.setParameter('uBloomWave', [0, 0, 0, 0]);
+  seasonShading.register(m); // #830
   m.update();
   return (material = m);
 }

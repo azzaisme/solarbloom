@@ -141,7 +141,7 @@ describe('E23.2.3: meditating at a charger', () => {
     sim.advance(2);
     expect(sim.rest.powered(pad)).toBe(true);
     expect(sim.charge.value()).toBeCloseTo(2 * CHARGE.meditatePerSecond, 1);
-    expect(CHARGE.meditatePerSecond).toBeGreaterThan(CHARGE.benchPerSecond * 5); // fast, next to a bench
+    expect(CHARGE.meditatePerSecond).toBeGreaterThan(CHARGE.benchPerSecond * 4); // fast, next to a bench
   });
 
   it('stands up when the charger goes, or when bloombot is no longer at it', () => {

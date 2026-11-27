@@ -1,6 +1,6 @@
 import type * as pc from 'playcanvas';
 import { mat, PALETTE } from './Materials';
-import { shape } from './Shapes';
+import { shape, stoneShape } from './Shapes';
 
 /**
  * E23.5.3: the compost bin and the Bio Digester, built from primitives in the machines' Look 3.12 style (cream
@@ -64,11 +64,25 @@ export function fishPondBody(b: pc.Entity) {
   for (const [x, z] of [[0.3, 0.22], [-0.28, -0.2]] as const) shape(b, 'cone', mat(PALETTE.stemLeaf), { pos: [x, 0.16, z], scale: [0.05, 0.26, 0.05] });
 }
 
-/** E23.5.4: a young fruit tree in a stone ring (its fruit is drawn live). */
+/**
+ * E23.5.4 (#785): the ground a fruit tree stands in: a bed of dark mulch edged with faceted stones, warm grey
+ * and beige, of mixed sizes, flattened and bedded part way into the ground. The tree, its flowers and its fruit are
+ * drawn live (CropVisuals, TreeGen's orchard tree).
+ */
 export function orchardBody(b: pc.Entity) {
-  shape(b, 'torus', mat(PALETTE.stoneCream), { pos: [0, 0.04, 0], scale: [0.5, 0.12, 0.5] });
-  shape(b, 'cylinder', mat(PALETTE.trunk), { pos: [0, 0.4, 0], scale: [0.08, 0.8, 0.08], shadow: true });
-  for (const [x, y, z, s] of [[0, 0.95, 0, 0.62], [0.16, 0.82, 0.1, 0.4], [-0.15, 0.85, -0.08, 0.42]] as const) shape(b, 'sphere', mat(PALETTE.shrubLeaf[0]), { pos: [x, y, z], scale: s, shadow: true });
+  shape(b, 'cylinder', mat(PALETTE.orchard.mulch), { pos: [0, 0.015, 0], scale: [0.86, 0.03, 0.86] });
+  const stones = PALETTE.orchard.stone.map((c) => mat(c, { gloss: 0.12 })); // matte: a glossy stone mirrors the blue sky
+  // [angle (turns), distance, length, width, height]: an uneven ring of big and small stones, a few pairs side by side
+  const ring: [number, number, number, number, number][] = [
+    [0.0, 0.37, 0.15, 0.12, 0.085], [0.085, 0.39, 0.1, 0.085, 0.065], [0.16, 0.36, 0.14, 0.11, 0.08], [0.25, 0.38, 0.12, 0.1, 0.07],
+    [0.33, 0.37, 0.15, 0.12, 0.085], [0.42, 0.39, 0.095, 0.08, 0.06], [0.5, 0.36, 0.14, 0.115, 0.08], [0.59, 0.38, 0.125, 0.1, 0.075],
+    [0.67, 0.37, 0.15, 0.12, 0.085], [0.76, 0.39, 0.1, 0.085, 0.065], [0.84, 0.36, 0.135, 0.11, 0.075], [0.925, 0.38, 0.12, 0.095, 0.07],
+  ];
+  ring.forEach(([turn, d, l, w, h], i) => {
+    const a = turn * Math.PI * 2;
+    // faceted stones lying along the ring, each turned a little off it, their rounded tops above the mulch
+    stoneShape(b, stones[i % stones.length], i, { pos: [Math.cos(a) * d, 0.03 + h * 0.25, Math.sin(a) * d], rot: [0, -turn * 360 + 90 + ((i * 37) % 30) - 15, (i % 3) * 3 - 3], scale: [l, h * 1.4, w], shadow: true });
+  });
 }
 
 /** E23.5.4: a mossy log lying on the ground (its mushrooms are drawn live). */

@@ -20,10 +20,12 @@ import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
 import { fitOnGround, geoRadius, type GroundFit } from './GroundFit';
 import { LOOK } from '../data/look';
-import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
+import { GATE_MODELS, HOUSE_GARDEN, LANDING, PARK_SET } from '../data/oldcity';
+import { drawGardenFence, drawHouse, type HouseSink } from './HouseArt';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
+import { decorSize } from '../data/cozy';
 import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageBounds, foliageMaterial, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type TreeStage, type Lod } from './TreeGen';
@@ -485,6 +487,8 @@ const DEAD = PALETTE.ground.dead;
 /** E21.5: the gate models' length in metres (#379), so a gate model can be fitted to its cells. */
 const GATE_LENGTH: Record<string, number> = { 'bridge-broken': 14, 'bridge-repaired': 14, 'skybridge-collapsed': 12, 'lift-bridge': 6, 'glide-perch': 1.2 };
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+/** #783: the workbench model (1.42 m across, 0.86 m deep, 1.5 m to the top of its tool rack) at about Bloombot's size */
+const WORKBENCH_SCALE = 0.65;
 /**
  * Curved paths: the radius of the quarter circle that rounds a path's corner (half a tile: stepped tiles join into
  * one curve), segments per corner, how far the piece stands above the tile top (restored / not), and the width of
@@ -1359,6 +1363,12 @@ export class ChunkRenderer {
       const cx = sh.x + sh.size / 2;
       const cz = sh.z + sh.size / 2;
       const house = this.sim.state.salvage?.house ?? 0;
+      if (house >= 1) {
+        // #782: the house mended, level by level (HouseArt)
+        drawHouse(b as HouseSink, house, sh, y);
+        if (house >= HOUSE_GARDEN.level) drawGardenFence(b as HouseSink, HOUSE_GARDEN, y); // the garden is on the house's own terrace
+        return true;
+      }
       const W = sh.size - 0.3;
       const wall = house >= 1 ? PALETTE.wood.mid : PALETTE.wood.deep;
       // four walls (the front one broken until the shed is patched), a sagging roof
@@ -1371,6 +1381,33 @@ export class ChunkRenderer {
       return true;
     }
     return false;
+  }
+
+  /**
+   * #783: the workbench, outside beside the house: its model (a wooden table with a vice, a tool rack along the back
+   * and a drawer at the front) turned so its front faces the open square, or the same shape in boxes until it loads.
+   */
+  private workbench(b: Sink, x: number, y: number, z: number, [dx, dz]: [number, number]) {
+    const rot = Math.atan2(dx, dz); // the model's front is its +Z
+    if (this.batch?.add('workbench', x, y, z, rot, WORKBENCH_SCALE)) return;
+    const P = PALETTE.workbench;
+    // local (across, along the front) → world: `a` runs across the front, `f` toward it
+    const at = (a: number, f: number, up: number): [number, number, number] => [x + a * dz + f * dx, y + up, z - a * dx + f * dz];
+    const size = (w: number, hgt: number, d: number): [number, number, number] => (dx ? [d, hgt, w] : [w, hgt, d]);
+    b.add('box', P.top, at(0, 0, 0.56), size(0.92, 0.06, 0.56));
+    b.add('box', P.edge, at(0, 0.27, 0.51), size(0.92, 0.05, 0.03));
+    for (const a of [-0.4, 0.4]) for (const f of [-0.22, 0.22]) {
+      b.add('box', P.leg, at(a, f, 0.3), size(0.07, 0.42, 0.07));
+      b.add('box', P.foot, at(a, f, 0.05), size(0.08, 0.1, 0.08));
+    }
+    b.add('box', P.edge, at(0, 0.2, 0.36), size(0.3, 0.1, 0.12)); // the drawer
+    b.add('box', P.rack, at(0, -0.25, 0.75), size(0.9, 0.32, 0.04)); // the back board
+    b.add('box', P.rack, at(0.18, -0.2, 0.86), size(0.44, 0.04, 0.1)); // the tool rack
+    for (const a of [0.02, 0.12, 0.22, 0.32]) b.add('box', P.iron, at(a, -0.17, 0.76), size(0.02, 0.18, 0.02));
+    b.add('box', P.iron, at(-0.3, 0.05, 0.65), size(0.12, 0.12, 0.12)); // the vice
+    b.add('box', P.handle, at(-0.3, 0.13, 0.65), size(0.16, 0.02, 0.02));
+    b.add('box', P.iron, at(0.22, 0.1, 0.6), size(0.18, 0.03, 0.06)); // a hammer
+    b.add('box', P.handle, at(0.08, 0.1, 0.6), size(0.14, 0.02, 0.02));
   }
 
   /**
@@ -1982,7 +2019,17 @@ export class ChunkRenderer {
         model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
-      for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + 0.5, d.rot, !!v.far);
+      // #849: a big piece is drawn about the middle of its footprint
+      for (const d of decor) {
+        const [w, dd] = decorSize(d.kind, d.rot);
+        drawDecor(host, d.kind, d.x + w / 2, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + dd / 2, d.rot, !!v.far, d.x * 31 + d.z);
+      }
+    }
+    // #783: the workbench beside the house
+    const wb = s.bench?.at;
+    if (wb && Math.floor(wb.x / CHUNK) === v.cx && Math.floor(wb.z / CHUNK) === v.cz && fog !== 'hidden') {
+      b.grey = 0;
+      this.workbench(b, wb.x + 0.5, h + 0.08 + s.grid.groundOffset(GROUND, wb.x, wb.z), wb.z + 0.5, s.bench.facing());
     }
     this.fb = fb;
     this.sink = b;

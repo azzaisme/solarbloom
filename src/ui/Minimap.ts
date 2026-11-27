@@ -1,3 +1,5 @@
+import { SEASON_WORDS, seasonLine } from '../data/seasons';
+import { iconize } from './Icons';
 import { PARK_SET, REGIONS, type RegionDef } from '../data/oldcity';
 import { WAYMARK } from '../data/waymark';
 import { GROUND } from '../core/GameState';
@@ -88,7 +90,7 @@ export function shutRegions(sim: Sim): RegionDef[] {
 }
 
 /** Weather kinds to the rim's little icon. */
-const WX: Record<string, string> = { sunny: 'i-sun', cloudy: 'i-cloud', rain: 'i-rain', wind: 'i-wind', storm: 'i-storm', fog: 'i-fog' };
+const WX: Record<string, string> = { sunny: 'i-sun', cloudy: 'i-cloud', rain: 'i-rain', wind: 'i-wind', storm: 'i-storm', fog: 'i-fog', snow: 'i-snow' };
 
 export class Minimap {
   readonly el: HTMLElement;
@@ -107,6 +109,9 @@ export class Minimap {
   private wx: HTMLElement;
   private time: HTMLElement;
   private rimEl: HTMLElement;
+  /** #830: the season, in a pill on the map's top edge ("🌸 Spring, day 2 of 3") */
+  private seasonEl: HTMLElement;
+  private seasonText = '';
   private t = EVERY;
   private x0 = NaN;
   private z0 = NaN;
@@ -134,7 +139,8 @@ export class Minimap {
       `<path class="mm-fill" d="M0 -15 L14 12 L0 5 L-14 12 Z" fill="url(#mmArrow)" stroke-width="4" stroke-linejoin="round" paint-order="stroke"/>` +
       `<path class="mm-ink" d="M0 -15 L14 12 L0 5 L-14 12 Z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></div>` +
       `<span class="mm-n" aria-hidden="true">N</span>` +
-      `<span class="mm-rim" hidden><span class="sg-ic s mm-wx" aria-hidden="true"></span><span class="mm-time"></span></span>`;
+      `<span class="mm-rim" hidden><span class="sg-ic s mm-wx" aria-hidden="true"></span><span class="mm-time"></span></span>` +
+      `<span class="mm-season" hidden></span>`;
     parent.appendChild(el);
     this.el = el;
     this.canvas = el.querySelector('canvas')!;
@@ -146,6 +152,7 @@ export class Minimap {
     this.rimEl = el.querySelector('.mm-rim')!;
     this.wx = el.querySelector('.mm-wx')!;
     this.time = el.querySelector('.mm-time')!;
+    this.seasonEl = el.querySelector('.mm-season')!;
     this.pin = el.querySelector('.mm-goal')!;
     this.paint = readPaint();
     const p = this.paint;
@@ -615,6 +622,17 @@ export class Minimap {
     if (this.rimEl.hidden) this.rimEl.hidden = false;
     const icon = kind === 'sunny' && c.isNight() ? 'i-moon' : (WX[kind] ?? 'i-sun');
     if (!this.wx.classList.contains(icon)) this.wx.className = `sg-ic s mm-wx ${icon}`;
+    // #830: the season in plain words, with its little picture
+    const sn = this.sim.seasons.now();
+    const line = seasonLine(sn.season, sn.day);
+    const st = `${SEASON_WORDS[sn.season].icon} ${line}`;
+    if (this.seasonText !== st) {
+      this.seasonText = st;
+      this.seasonEl.innerHTML = iconize(st);
+      this.seasonEl.className = `mm-season ${sn.season}`;
+      this.seasonEl.setAttribute('aria-label', line);
+    }
+    if (this.seasonEl.hidden) this.seasonEl.hidden = false;
   }
 
   set visible(on: boolean) {

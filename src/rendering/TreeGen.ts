@@ -13,6 +13,7 @@
  * glass sun-petals on the Sun-Catcher Birch, and moss-jar lanterns on Radiant trees.
  */
 import { PALETTE } from './Palette';
+import { FRUITS, type FruitId } from '../data/fruit';
 
 export type Species = 'oak' | 'cherry' | 'birch' | 'pine' | 'willow';
 export const SPECIES: Species[] = ['oak', 'cherry', 'birch', 'pine', 'willow'];
@@ -203,6 +204,37 @@ interface PuffOpts {
  */
 export const LEAF_FLAG = 2;
 
+/**
+ * #830: added to a vertex's flex (on top of LEAF_FLAG, if any) to mark a leaf that follows the seasons: a deciduous
+ * tree's leaf cards and leafy clumps. The foliage shader turns these gold and red in autumn, blossoms them in spring
+ * and lets them fall in winter (rendering/SeasonLook). Evergreens (the Spire Pine), shrubs, grass and bark never
+ * carry it. `plainFlex` takes both flags off.
+ */
+export const SEASON_FLAG = 4;
+/**
+ * #785: added on top of SEASON_FLAG to a seasonal leaf that stays green in spring (a fruit tree's: it flowers with
+ * flowers of its own); it still turns in autumn and falls in winter. The foliage shader takes it off.
+ */
+export const SPRING_GREEN_FLAG = 8;
+/** A vertex's own flex, without LEAF_FLAG or SEASON_FLAG (flex itself is always below 2). */
+export const plainFlex = (w: number) => w % LEAF_FLAG;
+/** #830: species that lose their leaves in winter (everything but the Spire Pine). */
+export const DECIDUOUS: Record<Species, boolean> = { oak: true, cherry: true, birch: true, pine: false, willow: true };
+
+/** #830: marks a deciduous tree's leaves (cards and leafy clumps) with SEASON_FLAG. */
+function seasonal(g: TreeGeo, sp: Species): TreeGeo {
+  return DECIDUOUS[sp] ? markSeasonLeaves(g) : g;
+}
+
+/** #830: marks every leaf card and leafy clump of a geometry with SEASON_FLAG (giant trees use it too). */
+export function markSeasonLeaves<T extends TreeGeo>(g: T): T {
+  const n = g.pos.length / 4;
+  const mark = new Uint8Array(n);
+  for (const s of g.leafStarts ?? []) for (let j = 0; j < LEAF_CARD_VERTICES && s + j < n; j++) mark[s + j] = 1;
+  for (let i = 0; i < n; i++) if (mark[i] || g.pos[i * 4 + 3] >= LEAF_FLAG) g.pos[i * 4 + 3] += SEASON_FLAG;
+  return g;
+}
+
 /** A soft, lumpy foliage clump: an ellipsoid with low-frequency bumps and baked sun / sky / ambient shading. */
 function puff(B: Buf, o: PuffOpts) {
   const ico = icosphere(o.detail);
@@ -313,24 +345,46 @@ function rotateAxis(v: V, k: V, a: number): V {
 }
 
 /** A flat n-gon plate facing `nrm` (two-sided). */
-function plate(B: Buf, c: V, r: number, nrm: V, col: C, flex: number, sides = 6) {
+function plate(B: Buf, c: V, r: number, nrm: V, col: C, flex: number, sides = 6, backShade = 0.7, litBack = false) {
   const ax = norm(Math.abs(nrm[1]) < 0.9 ? cross(nrm, [0, 1, 0]) : cross(nrm, [1, 0, 0]));
   const ay = cross(nrm, ax);
-  const back = mul(nrm, -1);
+  // `litBack`: a thin thing the light shows through (a petal): its back is lit as its face is
+  const back = litBack ? nrm : mul(nrm, -1);
   const c0 = B.v(c, nrm, col, flex);
-  const c1 = B.v(c, back, scaleC(col, 0.7), flex);
+  const c1 = B.v(c, back, scaleC(col, backShade), flex);
   const ring: number[] = [];
   const ringB: number[] = [];
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * Math.PI * 2;
     const p = add(c, add(mul(ax, Math.cos(a) * r), mul(ay, Math.sin(a) * r)));
     ring.push(B.v(p, nrm, col, flex));
-    ringB.push(B.v(p, back, scaleC(col, 0.7), flex));
+    ringB.push(B.v(p, back, scaleC(col, backShade), flex));
   }
   for (let i = 0; i < sides; i++) {
     B.tri(c0, ring[i], ring[(i + 1) % sides]);
     B.tri(c1, ringB[(i + 1) % sides], ringB[i]);
   }
+}
+
+/**
+ * #785: one blossom flower: five flat, slightly cupped petals round a small golden heart, facing `nrm`. `r` is a
+ * petal's radius (the flower is about four of them across); `spin` turns the petals so neighbours differ.
+ */
+function flower(B: Buf, c: V, nrm: V, r: number, petal: C, centre: C, heart: C, spin: number) {
+  const ax = norm(Math.abs(nrm[1]) < 0.9 ? cross(nrm, [0, 1, 0]) : cross(nrm, [1, 0, 0]));
+  const ay = cross(nrm, ax);
+  for (let i = 0; i < 5; i++) {
+    const a = spin + (i / 5) * Math.PI * 2;
+    const d = add(mul(ax, Math.cos(a)), mul(ay, Math.sin(a)));
+    // each round petal sits out from the heart, tipped up a little toward the flower's face (a shallow cup); a paler
+    // patch where it meets the heart
+    const pc = add(add(c, mul(d, r * 0.95)), mul(nrm, r * 0.16));
+    const pn = norm(add(nrm, mul(d, -0.3)));
+    // (petals are thin: the light shows through, so their backs are nearly as bright as their faces)
+    plate(B, pc, r, pn, i % 2 ? petal : mix(petal, centre, 0.15), 0.85, 7, 0.95, true);
+    plate(B, add(add(c, mul(d, r * 0.45)), mul(nrm, r * 0.22)), r * 0.45, pn, mix(petal, centre, 0.6), 0.85, 5, 0.95, true);
+  }
+  plate(B, add(c, mul(nrm, r * 0.32)), r * 0.42, nrm, heart, 0.85, 6, 0.9, true);
 }
 
 /** A flat ring (torus-ish band) round the trunk: the brass irrigation collar. */
@@ -617,9 +671,9 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
   const pal = leafPalette(sp, R, sh);
   if (form !== 'standard') {
     formTree(B, form, R, S, form === 'fruit' ? leafPalette('oak', R, sh) : pal, bark, barkDark, stage, lod);
-    return proportion(B, sh, variant, stage).done();
+    return seasonal(proportion(B, sh, variant, stage).done(), sp);
   }
-  if (lod === 0) return proportion(farTree(B, sp, R, S, pal, bark), sh, variant, stage).done();
+  if (lod === 0) return seasonal(proportion(farTree(B, sp, R, S, pal, bark), sh, variant, stage).done(), sp);
 
   if (sp === 'pine') pine(B, R, S, pal, bark, det, big, lod);
   else if (sp === 'willow') willow(B, R, S, pal, bark, barkDark, det, big, lod);
@@ -634,7 +688,7 @@ export function buildTree(sp: Species, stage: TreeStage, variant: number, lod: L
   }
   // Radiant: moss-jar lanterns and golden sun-berries
   if (stage === 4 && lod > 0) radiant(B, R, sp, S);
-  return proportion(B, sh, variant, stage).done();
+  return seasonal(proportion(B, sh, variant, stage).done(), sp);
 }
 
 /**
@@ -986,7 +1040,245 @@ export function buildShrub(variant: number, lod: Lod = 1, flowering?: boolean, b
   return B.done();
 }
 
+/**
+ * #851: a houseplant, grown by the same code as the shrubs and trees (`limb`, `spray`) with the trunk shrunk right down
+ * and far more leaves. `seed` (its square in the room) sets everything about it: how many stems and how they splay,
+ * the green, leaf shape and size, upright or arching, and whether it trails over the pot's rim like the vines do, so
+ * no two in a room look alike. `tree`: a little potted tree instead, one short trunk forking into a dense round head.
+ * Units are tiles; the base sits at y = 0 (the soil's top). A plant is about 0.3 tall, a tree about 0.6.
+ */
+export function buildHouseplant(seed: number, lod: Lod = 1, tree = false): TreeGeo {
+  const B = new Buf();
+  const R = rng(seed * 7703 + (tree ? 911 : 17) + 5);
+  const [h0, h1] = PALETTE.leaf.hue.shrub;
+  const hue = h0 - 10 + R() * (h1 - h0 + 30);
+  const sat = 44 + R() * 22;
+  const lit = 26 + R() * 12;
+  const pal = { base: hsl(hue, sat, lit), light: hsl(hue - 8, sat + 6, lit + 18), dark: hsl(hue + 14, sat - 8, lit - 13) };
+  const [n, k] = LEAVES[lod];
+  const tips: Tip[] = [];
+  if (tree) {
+    const crown: Crown = { heart: [0, 0.42, 0], r: 0.2, pal };
+    const bark = BARK[(['oak', 'cherry', 'birch', 'willow'] as Species[])[Math.floor(R() * 4)]];
+    const o: LimbOpts = { upturn: 0.7, kids: [lod === 0 ? 2 : 3, lod === 0 ? 0 : 2], fork: 0.7 + R() * 0.25, shrink: 0.6, bark, sides: 4 };
+    limb(B, R, [0, 0, 0], norm([(R() - 0.5) * 0.25, 1, (R() - 0.5) * 0.25]), 0.2 + R() * 0.08, 0.02, 0, lod === 0 ? 1 : 2, 0.02, o, tips);
+    const per = Math.max(5, Math.round(n * (1 + R() * 0.3)));
+    for (const t of tips) spray(B, R, t, per, 0.14, (0.065 + R() * 0.025) * k, crown, 0.22, 0.5 + R() * 0.2, 0.1);
+    return B.done();
+  }
+  const crown: Crown = { heart: [0, 0.14, 0], r: 0.2, pal };
+  const stems = lod === 0 ? 4 : 6 + Math.floor(R() * 5);
+  const arch = R(); // 0 upright and spiky … 1 arching and spilling
+  const o: LimbOpts = { upturn: 0.7 - arch * 1.1, kids: [lod === 0 ? 0 : 1], fork: 0.5 + R() * 0.4, shrink: 0.7, bark: hex(PALETTE.twig[0]), sides: 3 };
+  for (let i = 0; i < stems; i++) {
+    const a = (i / stems) * Math.PI * 2 + R() * 0.8;
+    const splay = 0.3 + arch * 0.9 + R() * 0.3;
+    limb(B, R, [Math.cos(a) * 0.015, 0, Math.sin(a) * 0.015], norm([Math.cos(a) * splay, 1, Math.sin(a) * splay]), 0.09 + R() * 0.1, 0.008, 0, lod === 0 ? 0 : 1, 0.12, o, tips);
+  }
+  const narrow = 0.3 + R() * 0.5; // strappy to broad
+  const per = Math.max(3, Math.round(n * (0.55 + R() * 0.25)));
+  const size = 0.045 + R() * 0.035;
+  for (const t of tips) spray(B, R, t, per, 0.07, size * k, crown, 0.3, narrow, arch * 0.6);
+  // some trail over the pot's rim, as the ivy does: a strand down the side with leaves along it
+  if (lod > 0 && R() < 0.55) {
+    const strands = 2 + Math.floor(R() * 3);
+    for (let i = 0; i < strands; i++) {
+      const a = R() * Math.PI * 2;
+      const out: V = [Math.cos(a), 0, Math.sin(a)];
+      const L = 0.12 + R() * 0.14;
+      const pts: V[] = [mul(out, 0.11), add(mul(out, 0.16), [0, -L * 0.4, 0]), add(mul(out, 0.17), [0, -L, 0])];
+      tube(B, pts, [0.005, 0.004, 0.003], 3, [o.bark, o.bark, o.bark], [0.1, 0.35, 0.6], false);
+      const leaves = lod >= 2 ? 6 : 4;
+      for (let j = 0; j < leaves; j++) {
+        const t = (j + 0.5) / leaves;
+        const p = add(mul(out, 0.12 + t * 0.05), [0, -L * t, 0]);
+        const dir = norm(add(out, [(R() - 0.5) * 0.8, -0.2 + R() * 0.4, (R() - 0.5) * 0.8]));
+        const col = scaleC(pal.base, 0.85 + R() * 0.35);
+        card(B, p, dir, [0, 1, 0], size * 0.9, size * 0.75, col, pal.light, 0.15 + t * 0.4, 0.3 + t * 0.5, 0.4, 0.12);
+      }
+    }
+  }
+  return B.done();
+}
+
+const plantCache = new Map<string, TreeGeo>();
+/** #851: a houseplant's geometry, kept once per seed and detail (a room has at most a few hundred squares). */
+export function houseplantGeo(seed: number, lod: Lod = 1, tree = false): TreeGeo {
+  const key = `${tree ? 't' : 'p'}|${seed}|${lod}`;
+  let g = plantCache.get(key);
+  if (!g) plantCache.set(key, (g = buildHouseplant(seed, lod, tree)));
+  return g;
+}
+
 /** Template cache: one geometry per species / stage / variant / detail. */
+/**
+ * #785: a planted fruit tree's look. `fruit` is how far today's fruit has come (0 just picked … 1 ripe; undefined for
+ * a tree still growing up, which shows no flowers or fruit); `overgrown` a tree that wants pruning.
+ */
+export interface OrchardLook {
+  variant: number;
+  /** the fruit it bears (data/fruit): its ripe colour and its shape */
+  kind: FruitId;
+  /** whether the branches flower in the bare part of the day (the daily cycle, and spring); in summer and autumn
+   *  (#830) the fruit just sets again after picking */
+  blossom: boolean;
+  fruit?: number;
+  overgrown: boolean;
+  /** where in the ripening the branches flower, then the fruit sets (FarmExtras ORCHARD: bareUntil, blossomUntil) */
+  bareUntil: number;
+  blossomUntil: number;
+}
+
+/** How many fruit a grown tree carries, and how big (radius, tiles) they are when they set and when ripe. */
+export const ORCHARD_FRUIT = { count: 18, setR: 0.016, ripeR: 0.05 };
+/** Blossom: how many twig ends flower, how many tiny flowers bunch at each, and one petal's radius (tiles). */
+export const ORCHARD_BLOSSOM = { clusters: 26, perCluster: 4, petalR: 0.025, buds: 2, budR: 0.013 };
+
+const smooth = (a: number, b: number, k: number) => {
+  const t = clamp((k - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * #785: a fruit tree in the Phase 7 leafy style (P7-E29's fruit form, grown up): a short, flared trunk that opens
+ * into four scaffold limbs (an orchard tree's open centre), forking twigs, and a full, round crown of leaf sprays
+ * filling it in. Its fruit sits on the twigs on short stalks, round the outside of the crown where it can
+ * be seen: small and green when it sets, swelling and colouring up until ripe (each tree its own ripe colour, far
+ * from the leaves). Before that the twig ends flower; just after picking the branches are bare. An overgrown tree
+ * grows long upright shoots and a shaggier, wider crown; a pruned one is tidy. The canopy never changes with the
+ * fruit (its own random stream), so a tree keeps its shape all day. Built at full size: the renderer scales a young
+ * tree up as it grows.
+ */
+export function buildOrchardTree(look: OrchardLook, lod: Lod = 2): TreeGeo {
+  const B = new Buf(3, true);
+  const variant = ((look.variant % TREE_VARIANTS) + TREE_VARIANTS) % TREE_VARIANTS;
+  const R = rng((variant + 1) * 6151 + 41);
+  const sh = shapeOf(variant);
+  const S = 1.12;
+  const bark = BARK.cherry;
+  const barkDark = scaleC(bark, 0.68);
+  // a fresh, bright green (the oak's greens lifted toward their sunlit tone)
+  const oak = leafPalette('oak', R, sh);
+  const pal: Palette = { base: mix(oak.base, oak.light, 0.35), light: mix(oak.light, hex(PALETTE.orchard.leafLight), 0.3), dark: mix(oak.dark, oak.base, 0.35) };
+  const [n, k] = LEAVES[lod];
+  // the trunk, flared at the foot, opening into the scaffold limbs
+  const top = trunk(B, R, 0.34 * S, 0.078 * S, bark, barkDark, 4, 7);
+  const crown: Crown = { heart: [top[0], 0.8 * S, top[2]], r: 0.46 * S, pal };
+  const o: LimbOpts = { upturn: 0.32, kids: [3, 2], fork: 0.72, shrink: 0.62, bark, sides: 6 };
+  const tips: Tip[] = [];
+  const a0 = R() * Math.PI * 2;
+  const arms = 4;
+  const scaffold: { from: V; dir: V }[] = [];
+  for (let i = 0; i < arms; i++) {
+    const a = a0 + (i / arms) * Math.PI * 2 + (R() - 0.5) * 0.35;
+    const dir = norm([Math.cos(a) * 0.78, 0.82 + R() * 0.12, Math.sin(a) * 0.78]);
+    const from: V = [top[0], top[1] - (i % 2) * 0.04 * S, top[2]];
+    scaffold.push({ from, dir });
+    limb(B, R, from, dir, 0.4 * S * (0.9 + R() * 0.2), 0.078 * S * TRUNK_RADIUS_SCALE * 0.62, 0, 2, 0.1, o, tips, i);
+  }
+  // leaves only: a spray at every twig end, and another part way in along it, so the crown reads full without a
+  // solid clump in the middle
+  // broad, rounded leaves
+  for (const t of tips) spray(B, R, t, Math.round(n * 1.0), 0.2 * S, 0.13 * S * k, crown, 0.7, 0.78, 0.2);
+  for (const t of tips) {
+    const inner: V = add(crown.heart, mul(sub(t.p, crown.heart), 0.55));
+    spray(B, R, { p: inner, dir: norm(sub(t.p, crown.heart)), order: t.order, branch: t.branch }, Math.round(n * 0.7), 0.22 * S, 0.13 * S * k, crown, 0.6, 0.78, 0.15);
+  }
+  // the brass irrigation collar every grown tree wears, with its little status light
+  const tr = 0.078 * S * TRUNK_RADIUS_SCALE;
+  collar(B, 0.0, tr * 0.9, tr * 1.9, 0.045, BRASS);
+  puff(B, { c: [tr * 1.9, 0.035, 0], r: [0.014, 0.014, 0.014], base: CYAN, light: CYAN, dark: scaleC(CYAN, 0.8), flex: 0, seed: 1, detail: 0, lump: 0 });
+
+  // an overgrown tree: long whippy shoots straight up off the limbs, and a shaggier crown (its own random stream)
+  if (look.overgrown) {
+    const RO = rng(variant * 977 + 5);
+    const wild: Crown = { heart: crown.heart, r: crown.r * 1.15, pal };
+    const shoots: Tip[] = [];
+    for (let i = 0; i < 7; i++) {
+      const sc = scaffold[i % arms];
+      const from = add(sc.from, mul(sc.dir, (0.3 + RO() * 0.12) * S));
+      limb(B, RO, from, norm([(RO() - 0.5) * 0.3, 1, (RO() - 0.5) * 0.3]), (0.42 + RO() * 0.16) * S, 0.012 * S, 0, 0, 0.3, { ...o, upturn: 0.6, sides: 4 }, shoots, i);
+    }
+    for (const t of shoots) spray(B, RO, t, Math.round(n * 0.7), 0.16 * S, 0.1 * S * k, wild, 0.8, 0.55, 0.05);
+    for (const t of tips) spray(B, RO, t, Math.round(n * 0.5), 0.3 * S, 0.12 * S * k, wild, 0.75, 0.6, 0.35);
+  }
+
+  // flowers, then fruit, on the twig ends round the outside of the crown (their own random stream)
+  if (look.fruit !== undefined && look.fruit >= look.bareUntil) {
+    const RF = rng(variant * 389 + 17);
+    const ripeCol = hex(PALETTE.orchard.ripe[look.kind]);
+    const blushCol = hex(PALETTE.orchard.blush[look.kind]);
+    const [sw, sh2] = FRUITS[look.kind].shape;
+    const green = hex(PALETTE.orchard.unripe), greenDark = hex(PALETTE.orchard.unripeDark);
+    const stalk = hex(PALETTE.orchard.stalk);
+    const blossom = PALETTE.orchard.blossom.map(hex);
+    const order = tips.map((t, i) => ({ t, i, w: RF() })).sort((a, b) => a.w - b.w);
+    const flowering = look.fruit < look.blossomUntil;
+    const set = (look.fruit - look.blossomUntil) / (1 - look.blossomUntil);
+    const turning = hex(PALETTE.orchard.turning);
+    // flowers open on the twig ends round the top and outside of the crown, where they show; fruit sets anywhere
+    const bloomAt = (t: Tip) => t.p[1] + 0.6 * len(sub(t.p, crown.heart));
+    const list = flowering ? [...order].sort((a, b) => bloomAt(b.t) + a.w * 0.12 - (bloomAt(a.t) + b.w * 0.12)) : order;
+    const many = flowering ? (look.blossom ? Math.min(ORCHARD_BLOSSOM.clusters, list.length) : 0) : Math.min(ORCHARD_FRUIT.count, list.length);
+    for (let j = 0; j < many; j++) {
+      const t = list[j].t;
+      const out = norm(sub(t.p, crown.heart));
+      const jit: V = [(RF() - 0.5) * 0.08 * S, -0.03 * S - RF() * 0.04 * S, (RF() - 0.5) * 0.08 * S];
+      const seed = j * 13 + variant;
+      if (flowering) {
+        // a cluster of blossom on the outside of the crown, opening over the first part of the flowering (buds at the
+        // first step, wide open by the middle of it): three or four pink five-petalled flowers with golden hearts, and
+        // a few closed buds beside them
+        const open = 0.55 + 0.45 * smooth(look.bareUntil, (look.bareUntil + look.blossomUntil) / 2, look.fruit);
+        // out on the crown's surface, above the leaves round it
+        const c = add(add(t.p, mul(out, 0.13 * S)), [0, 0.04 * S, 0]);
+        const flowers = ORCHARD_BLOSSOM.perCluster - (RF() < 0.4 ? 1 : 0);
+        for (let f = 0; f < flowers; f++) {
+          const a = (f / flowers) * Math.PI * 2 + RF();
+          const fc = f === 0 ? c : add(c, [Math.cos(a) * 0.05 * S, (RF() - 0.4) * 0.03 * S, Math.sin(a) * 0.05 * S]);
+          const face = norm(add(add(out, [0, 0.45, 0]), [(RF() - 0.5) * 0.6, 0, (RF() - 0.5) * 0.6]));
+          flower(B, fc, face, ORCHARD_BLOSSOM.petalR * S * open * (0.85 + RF() * 0.3), blossom[(j + f) % blossom.length], hex(PALETTE.orchard.blossomCentre), hex(PALETTE.orchard.blossomHeart), RF() * Math.PI);
+        }
+        for (let b = 0; b < ORCHARD_BLOSSOM.buds; b++) {
+          const a = RF() * Math.PI * 2;
+          const bc = add(c, [Math.cos(a) * 0.065 * S, 0.01 * S + RF() * 0.02 * S, Math.sin(a) * 0.065 * S]);
+          const br = ORCHARD_BLOSSOM.budR * S;
+          puff(B, { c: bc, r: [br * 0.8, br, br * 0.8], base: hex(PALETTE.orchard.bud), light: blossom[1], dark: scaleC(hex(PALETTE.orchard.bud), 0.9), flex: 0.85, seed: seed + b, detail: 1, lump: 0 });
+        }
+        continue;
+      }
+      // the fruit: it swells from set to ripe, and its colour comes in over the second half
+      const r = lerp(ORCHARD_FRUIT.setR, ORCHARD_FRUIT.ripeR, smooth(0, 1, set) * 0.85 + set * 0.15) * S;
+      const colour = smooth(0.45, 1, set);
+      // green, warming to a golden blush, then the ripe colour
+      const base = colour < 0.5 ? mix(green, turning, colour * 2) : mix(turning, ripeCol, colour * 2 - 1);
+      // a blush on the sunny side once it colours up (a peach's red cheek, a pear's russet)
+      const light = mix(mix(base, blushCol, 0.35 * colour), hex(PALETTE.orchard.ripeLight), 0.25 + 0.1 * colour);
+      const c = add(add(t.p, mul(out, 0.04 * S + r * 0.6)), jit);
+      // a short stalk up to the twig, then the fruit hanging from it
+      const hang = add(c, [0, r * 0.9, 0]);
+      tube(B, [add(hang, [0, 0.03 * S, 0]), hang], [0.006 * S, 0.004 * S], 3, [stalk, stalk], [0.8, 0.85], false);
+      // its own shape: an apple round, a pear tall with a narrow neck, a lemon long, a peach plump
+      puff(B, { c, r: [r * sw, r * sh2, r * sw], base, light, dark: mix(greenDark, scaleC(ripeCol, 0.62), colour), flex: 0.85, seed, detail: 1, lump: 0 });
+      if (look.kind === 'pear') puff(B, { c: add(c, [0, r * sh2 * 0.75, 0]), r: [r * 0.55, r * 0.6, r * 0.55], base, light, dark: base, flex: 0.85, seed: seed + 1, detail: 1, lump: 0 });
+    }
+  }
+  // #830: its leaves follow the seasons (autumn colour, bare in winter), but stay green in spring: the tree flowers
+  // with flowers of its own (#785). Fruit and blossom never carry the flags
+  const g = markSeasonLeaves(proportion(B, sh, variant, 3).done());
+  for (let i = 3; i < g.pos.length; i += 4) if (g.pos[i] >= SEASON_FLAG) g.pos[i] += SPRING_GREEN_FLAG;
+  return g;
+}
+
+const orchardCache = new Map<string, TreeGeo>();
+/** #785: a fruit tree's geometry, cached by look (the fruit in `steps` steps). */
+export function orchardGeo(look: OrchardLook, lod: Lod = 2): TreeGeo {
+  const key = `${look.variant % TREE_VARIANTS}|${look.kind}|${look.blossom ? 1 : 0}|${look.fruit ?? 'young'}|${look.overgrown ? 1 : 0}|${lod}`;
+  let g = orchardCache.get(key);
+  if (!g) orchardCache.set(key, (g = buildOrchardTree(look, lod)));
+  return g;
+}
+
 const cache = new Map<string, TreeGeo>();
 /** P7-E29: six variants (proportions and greens, SHAPES), was four */
 export const TREE_VARIANTS = 6;

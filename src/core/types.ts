@@ -66,6 +66,11 @@ export interface TileTransition {
   dir?: number;
   from?: number;
   g?: 1;
+  /**
+   * VFX 1: a restore washed in by a pulse's wave: where the wave starts (x, z offset from the tile's centre), the
+   * radius it reaches and the seconds it takes from `t0`. The ground turns as the wave's rim passes over it.
+   */
+  w?: [number, number, number, number];
 }
 
 export interface TileData {
@@ -142,6 +147,11 @@ export interface LayerData {
   template?: string;
   /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */
   cluster?: string;
+  /**
+   * #782: the inside of Bloombot's house: a room of floorboards, not a rooftop (nothing grows, no machines, no fog;
+   * drawn by rendering/HouseInterior and shown only while Bloombot is inside).
+   */
+  interior?: boolean;
 }
 
 /** Kept as an alias while the rooftop-era code is ported (City 12 removes it). */
@@ -370,6 +380,8 @@ export interface LinkState {
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
 export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser' | 'honey'
+  // #785: picked from fruit trees (data/fruit FRUIT_IDS)
+  | 'apple' | 'pear' | 'peach' | 'lemon'
   // E23.8.3.2: from the mainland's industrial ruins only
   | 'steel';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
@@ -428,6 +440,8 @@ export interface SalvageState {
   blueprints: string[];
   /** E21.11: the house's level (0 = the ruined shed) */
   house: number;
+  /** #782: what has been handed in toward the house's next level (part deliveries; cleared when it grows) */
+  houseDelivered?: Partial<Record<MaterialId, number>>;
   /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
   /** E23.7.4: when each pile that isn't full last gained a unit (sim time), by pile id: it refills from there */
@@ -440,10 +454,14 @@ export interface SalvageState {
   works?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
-  /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
+  /** #783: where the workbench stands, beside the house (set on a new game, or on the first load of an older save) */
+  bench?: { x: number; z: number };
+  /** E23.6.1: the workbench's queue (recipe id, crafts left, seconds left on the one in hand) */
   craft?: { id: string; n: number; left: number }[];
   /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
   decorMade?: string[];
+  /** #782: the decoration given when the fountain reached its first step (set once; absent before then) */
+  decorGift?: string;
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
   /** E23.6.4: what each supply crate holds, by machine id */
@@ -610,6 +628,13 @@ export interface GameState {
   charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
+  /** #830: the seasons (optional: a save from before them starts a fresh spring on the day it first loads) */
+  seasons?: SeasonsState;
+}
+
+/** #830: the year began on this game day (spring's first day); the season is worked out from the game clock. */
+export interface SeasonsState {
+  startDay: number;
 }
 
 /**

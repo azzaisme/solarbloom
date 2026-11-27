@@ -34,6 +34,9 @@ export interface LightDef {
   bulbY: number;
   /** line lights: tiles between bulbs along a line */
   spacing?: number;
+  /** #851: where the glowing part sits off the tile's middle, facing its front (tiles), and its size (tiles) */
+  bulbAt?: [number, number];
+  bulbSize?: [number, number, number];
   /** the glow's colour, a PALETTE.light.lamps key */
   tone: 'warm' | 'amber' | 'rose' | 'cream' | 'green';
   /** walk-blocking, like any decoration */
@@ -60,11 +63,23 @@ export const LIGHTS: LightDef[] = [
   { id: 'solarstake', name: 'Solar garden light', icon: '🔆', blurb: 'A stake light with a tiny panel on top. It needs no power line.', power: 'solar', brightness: 0.5, bulbY: 0.3, tone: 'cream', solid: false, cost: { sunCell: 1, scrap: 1 }, unlock: { start: true } },
   { id: 'uplight', name: 'Uplight', icon: '🔦', blurb: 'A ground light that washes a tree or a landmark in light from below. It needs a power line.', power: 'grid', brightness: 0.85, bulbY: 0.08, tone: 'cream', solid: false, draw: 0.3, cost: { scrap: 1, wire: 1, glassPane: 1 }, unlock: { research: 'dc-lights' } },
   { id: 'porchlight', name: 'Wall light', icon: '💡', blurb: 'A bracket lamp on a stone post, for the house and the ruins. It needs a power line.', power: 'grid', brightness: 0.85, bulbY: 1.05, tone: 'warm', solid: true, draw: 0.3, cost: { scrap: 2, wire: 1, glassPane: 1 }, unlock: { find: 'c-saltwind-1' } },
-  { id: 'tablelight', name: 'Table lamp', icon: '💡', blurb: 'A little table with a lamp on it. It needs a power line.', power: 'grid', brightness: 0.7, bulbY: 0.62, tone: 'warm', solid: true, draw: 0.2, cost: { planks: 2, wire: 1, glassPane: 1 }, unlock: { research: 'dc-lights' } },
+  // #851: was "Table lamp"; renamed so it never sits in the tray beside the room's own Table lamp (same id: saves keep it)
+  { id: 'tablelight', name: 'Patio lamp', icon: '💡', blurb: 'A little table with a lamp on it. It needs a power line.', power: 'grid', brightness: 0.7, bulbY: 0.62, tone: 'warm', solid: true, draw: 0.2, cost: { planks: 2, wire: 1, glassPane: 1 }, unlock: { research: 'dc-lights' } },
   { id: 'glowpod', name: 'Glow-pods', icon: '🌱', blurb: 'A plant that glows softly at night all by itself, with no power at all.', power: 'glow', brightness: 0.55, bulbY: 0.25, tone: 'green', solid: false, cost: { seeds: 3 }, unlock: { start: true } },
 ];
 
-export const LIGHT: Record<string, LightDef> = Object.fromEntries(LIGHTS.map((l) => [l.id, l]));
+/**
+ * #851: lamps made for a room. Kept out of LIGHTS (that list makes the outdoor lights' decorations and their recipes);
+ * their decorations are in data/cozy with the other indoor pieces. `glow` power: no power line, so a lamp glows at full
+ * brightness as night falls wherever it stands, inside the house or out. (The room's own wall lamp lights the room day
+ * and night as before: rendering/HouseInterior.) Their `cost` and `unlock` are unused: data/crafting says how each is earned (#852).
+ */
+export const ROOM_LIGHTS: LightDef[] = [
+  { id: 'floorlamp', name: 'Floor lamp', icon: '🪔', blurb: 'A tall lamp with a cloth shade that glows warm at night.', power: 'glow', brightness: 0.95, bulbY: 1.08, bulbSize: [0.36, 0.26, 0.36], tone: 'warm', solid: true, cost: {}, unlock: { start: true } },
+  { id: 'tablelamp', name: 'Table lamp', icon: '🕯️', blurb: 'A little lamp on a little table, for reading by.', power: 'glow', brightness: 0.8, bulbY: 0.66, bulbAt: [0.06, -0.04], bulbSize: [0.24, 0.18, 0.24], tone: 'cream', solid: true, cost: {}, unlock: { start: true } },
+];
+
+export const LIGHT: Record<string, LightDef> = Object.fromEntries([...LIGHTS, ...ROOM_LIGHTS].map((l) => [l.id, l]));
 
 export const LIGHTING = {
   /**

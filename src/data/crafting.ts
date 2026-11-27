@@ -13,7 +13,7 @@ export type ItemCost = Partial<Record<ItemId, number>>;
 
 /**
  * Where a recipe is unlocked:
- * - `home`: known from the start (the table is in the house from the first day)
+ * - `home`: known from the start (#783: the workbench stands beside the house from the first day)
  * - `keeper`: handed over when that region's Keeper wakes (one region at a time)
  * - `research`: a finished research project (E23.6.2), by project id
  * - `find`: a cache opened, by cache id (data/oldcity caches)
@@ -22,6 +22,7 @@ export type ItemCost = Partial<Record<ItemId, number>>;
  * - `cat`: E23.12.2 (#529), a cat-only decoration, known once a Lucky Cat has left it (it comes made)
  * - `hand`: a job done by hand enough times (E23.6.4's automation; data/automation HAND_JOBS)
  * - `all`: every one of several (the Assembler: its Keeper, and crafting by hand)
+ * - `house`: #852, Bloombot's house grown to that level (1 Shed, 2 Cottage, 3 House, 4 Home)
  */
 export type Unlock =
   | { home: true }
@@ -33,6 +34,7 @@ export type Unlock =
   | { hand: import('./automation').HandJob }
   | { gift: string }
   | { all: Unlock[] }
+  | { house: number }
 
 export interface ComponentDef {
   id: ComponentId;
@@ -143,6 +145,8 @@ export interface DecorRecipe {
   id: string;
   cost: ItemCost;
   unlock: Unlock;
+  /** #852: never made at the table: it arrives made, once, the moment its unlock is met (a house level, a Keeper) */
+  gift?: true;
 }
 
 /**
@@ -172,6 +176,24 @@ export const DECOR_RECIPES: DecorRecipe[] = [
   { id: 'rainbowbunting', cost: { planks: 1, seeds: 3 }, unlock: { cat: 'rainbowbunting' } },
   // E23.3.5: every night light (data/lights) is made here too, at its own cost, known where its data says
   ...LIGHTS.map((l) => ({ id: l.id, cost: l.cost, unlock: lightUnlock(l) })),
+  // #852: the pieces made for a room. Each level of the house brings one, made; most are made here once the house
+  // is big enough for them; three are Keepers' gifts, handed over made when each wakes. Costs agreed with the owner.
+  { id: 'armchair', cost: {}, unlock: { house: 1 }, gift: true },
+  { id: 'stool', cost: { planks: 1 }, unlock: { house: 1 } },
+  { id: 'sidetable', cost: { planks: 2 }, unlock: { house: 1 } },
+  { id: 'cushions', cost: { seeds: 2 }, unlock: { house: 1 } },
+  { id: 'roundrug', cost: {}, unlock: { house: 2 }, gift: true },
+  { id: 'bookshelf', cost: { planks: 3 }, unlock: { house: 2 } },
+  { id: 'coatstand', cost: { planks: 1, scrap: 1 }, unlock: { house: 2 } },
+  { id: 'hallrunner', cost: { seeds: 3 }, unlock: { house: 2 } },
+  { id: 'floorlamp', cost: {}, unlock: { house: 3 }, gift: true },
+  { id: 'diningtable', cost: { planks: 4 }, unlock: { house: 3 } },
+  { id: 'tablelamp', cost: { planks: 1, glassPane: 1, wire: 1 }, unlock: { house: 3 } },
+  { id: 'houseplant', cost: { clay: 2, seeds: 1 }, unlock: { house: 3 } },
+  { id: 'bigrug', cost: {}, unlock: { house: 4 }, gift: true },
+  { id: 'clock', cost: {}, unlock: { keeper: 'clockPlaza' }, gift: true }, // Tock
+  { id: 'pottedtree', cost: {}, unlock: { keeper: 'elderGrove' }, gift: true }, // Moss
+  { id: 'patternrug', cost: {}, unlock: { keeper: 'oldMarket' }, gift: true }, // Tally
 ];
 
 /** Where a light's recipe is known: the starting set from home, a cache find, or Decor research. */

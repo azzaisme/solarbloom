@@ -58,10 +58,12 @@ const NULL_SINK: Sink & GeoSink = { add() {}, grey: 0 };
 
 type Win = [number, number];
 /** In/out windows (progress) for incoming props, outgoing props, per transition kind. */
-const WINDOWS: Record<TileTransition['k'] | 'wake' | 'edge', { in: Win; out: Win }> = {
+const WINDOWS: Record<TileTransition['k'] | 'wake' | 'edge' | 'wash', { in: Win; out: Win }> = {
   soften: { in: [0, 0], out: [2, 3] },
   moss: { in: [0.3, 1], out: [0.1, 0.6] },
   restore: { in: [0.7, 1], out: [0, 0.12] },
+  // VFX 1: a restore washed in by a pulse's wave: what was there goes as the wave passes, the new plants grow in after
+  wash: { in: [0.3, 0.9], out: [0, 0.2] },
   bloom: { in: [0, 0.75], out: [0.55, 0.95] },
   unblock: { in: [0.45, 1], out: [0, 0.6] },
   wake: { in: [0.3, 1], out: [0, 0.5] },
@@ -290,8 +292,9 @@ export class TransitionRenderer {
     tb.grey = B.b.grey;
     const kind = tr?.k;
     const decoLive = live && detailed && kind !== 'soften';
+    const rin = (tr?.w ? WINDOWS.wash : WINDOWS.restore).in[0];
     const treeTransition = live && tr?.k === 'restore'
-      ? { ...tr, t0: tr.t0 + tr.d * this.durScale * WINDOWS.restore.in[0], d: tr.d * (1 - WINDOWS.restore.in[0]) }
+      ? { ...tr, t0: tr.t0 + tr.d * this.durScale * rin, d: tr.d * (1 - rin) }
       : live && tr?.k === 'bloom' ? tr
       : !tr && !far ? host.treeGrow?.(t) : undefined;
     const treeBloom = treeTransition ? { transition: treeTransition, mesh: tb, staticFoliage: B.fb, reducedMotion: this.reducedMotion } : undefined;
@@ -310,7 +313,7 @@ export class TransitionRenderer {
       host.withLevel(0, () => host.tile(tb, t, h));
       end = t0 + d;
     } else if (decoLive && tr) {
-      const w = WINDOWS[tr.k];
+      const w = tr.w ? WINDOWS.wash : WINDOWS[tr.k];
       host.setFoliage(gAdapter);
       this.pen(tb, tr.t0, tr.d * this.durScale, 1, w.in, [2, 3], top);
       if (far) host.far(tb, t, h);
@@ -328,7 +331,7 @@ export class TransitionRenderer {
       const ft = fromTile(t, tr);
       if (ft) {
         if (decoLive) {
-          const w = WINDOWS[tr.k];
+          const w = tr.w ? WINDOWS.wash : WINDOWS[tr.k];
           this.pen(tb, tr.t0, tr.d * this.durScale, 1, [0, 0], w.out, top);
           host.tile(tb, ft, h);
         } else {
@@ -338,7 +341,7 @@ export class TransitionRenderer {
         }
         fromHex = (rec as typeof to)?.hex ?? fromHex;
       }
-      if (decoLive && tr.k === 'restore') this.restorePieces(tb, t, tr, h, fromHex ?? '#8a8a8a');
+      if (decoLive && tr.k === 'restore' && !tr.w) this.restorePieces(tb, t, tr, h, fromHex ?? '#8a8a8a');
       end = Math.max(end, this.endOf(tr));
     }
     host.slabCap = undefined;
@@ -353,16 +356,20 @@ export class TransitionRenderer {
     sb.pen.mode = 3;
     const now = this.time;
     const lush = t.lushUntil && t.lushUntil > now ? t.lushUntil : 0;
+    // VFX 1: a washed restore carries its wave in the surface: dir 16 + the start's offset (quarter tiles, +-32), the
+    // radius and seconds in the pollution slots (a restore doesn't use them)
+    const wave = live && tr?.k === 'restore' ? tr.w : undefined;
+    const q = (v: number) => Math.max(0, Math.min(255, Math.round(v * 4) + 128));
     sb.surf = {
       t0: live && tr ? tr.t0 : -1e6,
       d: live && tr ? tr.d : 1,
       from: packHex(fromHex ?? to.hex, sb.grey),
-      fromPol: live && tr && tr.from !== undefined && tr.k !== 'bloom' ? tr.from : t.pollution,
-      toPol: t.pollution,
+      fromPol: wave ? wave[2] : live && tr && tr.from !== undefined && tr.k !== 'bloom' ? tr.from : t.pollution,
+      toPol: wave ? wave[3] : t.pollution,
       code: (live && tr ? KIND[tr.k] : 0) * 8 + surfaceState(t),
       // Look 6.7: with no transition of its own, dead ground cracks from the side facing living ground, so hairline
       // cracks creep outward from restored tiles and connect across borders (shared edge points). Visual only.
-      dir: live && tr ? (tr.dir ?? 0) : t.ground === 'polluted' || t.ground === 'prepared' ? this.sim.transitions.livingEdge(t) : 0,
+      dir: wave ? 16 + q(wave[0]) + 256 * q(wave[1]) : live && tr ? (tr.dir ?? 0) : t.ground === 'polluted' || t.ground === 'prepared' ? this.sim.transitions.livingEdge(t) : 0,
       // E27.1 (#679): the open sea and its shallows are tinted by night (Water.seaTintAt); a surf tile being restored
       // has clear water as its target colour, so it keeps the water's own transition
       feature: SEA_HEXES.has(to.hex) ? FEATURE.sea : (FEATURE[t.feature ?? 'lawn'] ?? 0),

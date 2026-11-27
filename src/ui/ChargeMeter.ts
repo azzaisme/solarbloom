@@ -7,7 +7,7 @@ import { $, HudPart } from './HudPart';
  * (docs/art/ui-sunlit-glass/Walk.dc.html): a sun badge with a battery, "Charge", the percentage and a sun bar. Calm
  * when full (it fades after a few seconds unchanged); low, it gets an amber ring, reads "Low · 18%", the bar turns
  * orange and, when something edible is carried, the Eat button's picture shows under it (WalkPad.dc.html). At zero
- * the badge goes grey.
+ * the badge goes grey. #784: while anything charges it (a bench, the fountain, a Charger, a snack) it glows.
  */
 export class ChargeMeter extends HudPart {
   private el?: HTMLElement;
@@ -51,6 +51,8 @@ export class ChargeMeter extends HudPart {
     this.set('ch-low', el, 'cls', low ? '1' : '0', 'low');
     this.set('ch-empty', el, 'cls', c.empty ? '1' : '0', 'empty');
     this.set('ch-eat', el, 'cls', c.eating ? '1' : '0', 'eating');
+    // #784: charging from anything: the card glows and its badge breathes, so the rising bar reads as charging
+    this.set('ch-charging', el, 'cls', c.chargingFrom ? '1' : '0', 'charging');
     // running low with something to eat: the Eat button's picture, in the set the player is using
     const canEat = (low || c.empty) && !c.eating && CHARGE.edibles.some((e) => c.carried(e.id) > 0);
     this.set('ch-caneat', el, 'cls', canEat ? '1' : '0', 'can-eat');

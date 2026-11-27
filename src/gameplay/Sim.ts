@@ -1,5 +1,5 @@
 import { GROUND, machinesStamp } from '../core/GameState';
-import { decorOccupant, parseDecorKey } from '../core/Decor';
+import { decorCellsOf, decorOccupant } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Grid } from '../core/Grid';
 import { inRect } from '../core/OldCityLayout';
@@ -33,6 +33,7 @@ import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
 import { MoveSpots } from './MoveSpots';
 import { FountainSystem } from './FountainSystem';
+import { HouseSystem } from './HouseSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
@@ -52,6 +53,7 @@ import { BuriedSystem } from './Buried';
 import { DroneFuel } from './DroneFuel';
 import { Clock } from './Clock';
 import { TreeGrowth, stampGiants } from './TreeGrowth';
+import { CraftBench, stampBench } from './CraftBench';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
 import { PlotWork } from './PlotWork';
@@ -59,6 +61,7 @@ import { FarmSystem } from './FarmSystem';
 import { CompostSystem } from './CompostSystem';
 import { FarmExtras } from './FarmExtras';
 import { Weather } from './Weather';
+import { Seasons } from './Seasons';
 import { DecaySystem } from './DecaySystem';
 
 /**
@@ -106,6 +109,8 @@ export class Sim {
   readonly moves: MoveSpots;
   /** E21.6: the fountain's tiers and deliveries. */
   readonly fountain: FountainSystem;
+  /** #782: the house's levels (the ruined shed → the Home) and their deliveries. */
+  readonly house: HouseSystem;
   /** E21.8: the Keepers and their requests. */
   readonly keepers: KeeperSystem;
   /** E23.8.3: the causeway and the endless mainland. */
@@ -148,10 +153,14 @@ export class Sim {
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
+  /** #830: the seasons (spring, summer, autumn, winter) on the game clock. See gameplay/Seasons. */
+  readonly seasons: Seasons;
   /** E23.5.1: gathering biomass from restored ground. */
   readonly gather: GatherSystem;
   /** E27.2 (#680): gathering from and pruning the plant plots */
   readonly plotWork: PlotWork;
+  /** #783: the workbench beside the house, where Bloombot crafts. */
+  readonly bench: CraftBench;
   /** E23.5.2: planters and crops. */
   readonly farm: FarmSystem;
   /** E23.5.3: compost bins and Bio Digesters (old-city rules). */
@@ -176,7 +185,7 @@ export class Sim {
     delete state.tiles;
     for (const m of state.machines) this.grid.indexMachine(m);
     // E19.2: decorations occupy their tile as machines do (the game writes them; the sim only stamps occupancy).
-    for (const k of Object.keys(state.cozy?.decor ?? {})) this.grid.indexDecor(k);
+    for (const [k, v] of Object.entries(state.cozy?.decor ?? {})) this.grid.indexDecor(k, v);
     this.grid.onChunkCreated = (c) => {
       const p = this.grid.pending[c.key];
       delete this.grid.pending[c.key];
@@ -184,12 +193,15 @@ export class Sim {
       c.packed = p ?? '';
       if (p && this.transitions) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
       for (const m of this.grid.machinesInChunk(c.key)) for (const t of this.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t) t.occupantId = m.id;
+      // #849: every square of a big piece, whichever of its chunks this is
       for (const k of this.grid.decorInChunk(c.key)) {
-        const at = parseDecorKey(k)!;
-        const t = this.grid.peek(at.roofId, at.x, at.z);
-        if (t && !t.occupantId) t.occupantId = decorOccupant(k);
+        for (const at of decorCellsOf(k, this.state.cozy?.decor?.[k] ?? '')) {
+          const t = this.grid.peek(at.roofId, at.x, at.z);
+          if (t && !t.occupantId) t.occupantId = decorOccupant(k);
+        }
       }
-      // world giants: their trunk cells are solid, as a decoration's tile
+      // #783: the workbench's square, then world giants: their trunk cells are solid, as a decoration's tile
+      if (c.layer === GROUND) stampBench(this.state, c.tiles);
       if (c.layer === GROUND) stampGiants(this, c.tiles);
     };
     // The world travels with the state (for saving) but is never part of its JSON.
@@ -212,11 +224,14 @@ export class Sim {
     this.clock = new Clock(this);
     this.trees = new TreeGrowth(this);
     this.nightFinds = new NightFinds(this);
+    this.seasons = new Seasons(this);
     this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
     this.moves = new MoveSpots(this);
     this.fountain = new FountainSystem(this);
+    this.house = new HouseSystem(this);
+    this.house.sync(); // #782: the inside of a house already mended (its room and furniture)
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
@@ -257,6 +272,10 @@ export class Sim {
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
     this.mainland.wire(); // E23.8.3.2: after every system (the grid and water network) is built
+    // #783: the workbench beside the house (a new game, or an older save's first load), once machines, decorations
+    // and pipes are all in place so it only takes a free square
+    this.bench = new CraftBench(this);
+    this.bench.ensure();
   }
 
   get time() {
@@ -354,6 +373,7 @@ export class Sim {
     this.parkGrowth.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
+    this.seasons.tick();
     this.weather.tick();
     this.farm.tick(dt);
     this.compost.tick(dt);
@@ -404,10 +424,7 @@ export function dryOccupiedPonds(state: GameState) {
   }
   const cells: { x: number; z: number }[] = [];
   for (const m of state.machines) if (m.roofId === ground.id) for (let dx = 0; dx < m.size; dx++) for (let dz = 0; dz < m.size; dz++) cells.push({ x: m.x + dx, z: m.z + dz });
-  for (const k of Object.keys(state.cozy?.decor ?? {})) {
-    const at = parseDecorKey(k);
-    if (at && at.roofId === ground.id) cells.push(at);
-  }
+  for (const [k, v] of Object.entries(state.cozy?.decor ?? {})) for (const at of decorCellsOf(k, v)) if (at.roofId === ground.id) cells.push(at);
   for (const r of REGIONS) {
     if (ground.dryPonds?.includes(r.id)) continue;
     if (r.ponds?.some((q) => cells.some((c) => inRect(q, c.x, c.z)))) (ground.dryPonds ??= []).push(r.id);

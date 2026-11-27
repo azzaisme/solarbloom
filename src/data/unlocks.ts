@@ -31,7 +31,7 @@ export const REGION_UNLOCKS: Record<UnlockSource, UnlockDef[]> = {
     U('planter', 'Planter boxes', 'machine'),
     U('wateringCan', 'Watering can', 'tool'),
     U('compostBin', 'Compost bin', 'machine'),
-    U('craftingTable', 'Crafting table', 'machine'),
+    U('craftingTable', 'Workbench', 'machine'),
   ],
   // ── ring 1: none of these depend on another ring 1 region's ──
   mastRow: [

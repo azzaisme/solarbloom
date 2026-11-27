@@ -135,7 +135,7 @@ export class BuildSystem {
     if (!m) return undefined;
     if (m === 'biomass') return 'Needs more Greens 🌿: hold {interact} on flowering ground to gather them';
     // E23.6.1: a component is made at the crafting table (no region to name)
-    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon}: make it at the crafting table in the house`;
+    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon}: make it at the workbench beside the house`;
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 
@@ -178,6 +178,7 @@ export class BuildSystem {
       const names = def.regions.map((id) => regionById(id)?.name ?? id).join(' or ');
       return fail(`${def.name}: only grows in ${names}`);
     }
+    if (s.grid.layer(roofId)?.interior) return fail('Machines stand outside: inside the house is for decorations'); // #782
     const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround) ?? s.water.placeProblem(type, roofId, x, z); // E23.4.2: a pump on a bank
     if (why) return fail(why);
     if (!s.inventory.canPay(recipe)) return fail(this.missingLabel(type) ?? 'Missing materials', true);

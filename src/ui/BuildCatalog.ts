@@ -1,5 +1,5 @@
 import type { BuildableType, ItemId } from '../core/types';
-import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
+import { DECOR_OPTION, DECOR_OPTIONS, decorSet, type DecorSet } from '../data/cozy';
 import type { Unlock } from '../data/crafting';
 import { BUILDABLE, MACHINES } from '../data/machines';
 import { KEEPERS } from '../data/oldcity';
@@ -88,7 +88,7 @@ const LINES: Record<BuildableType | 'pipe', string> = {
   motherTree: 'Every patch you turn green nearby feeds it, until it bursts everything around it into flower at once.',
   beehive: 'Bees settle once flowers or herbs grow nearby. They make honey and speed up the crops around it.',
   fishPond: 'Kept filled from water nearby or a pipe. Its water feeds the planters it reaches, so they need no fertiliser.',
-  orchard: 'Planted once, it fruits every few days. Prune it now and then for timber.',
+  orchard: 'Planted once, it flowers in spring and fruits every day through summer and autumn: apples, pears, peaches or lemons, by where it grows. Prune it now and then for Timber.',
   giantTree: 'Starts as a young tree and grows over many days into a giant you can walk under. Only in Elder Grove.',
   mushroomLog: 'Feed it compost and keep it shaded: mushrooms come up at night and in fog.',
   wormBin: 'Feed the worms scraps and the compost bins beside it work twice as fast.',
@@ -148,7 +148,12 @@ export interface BuildItem {
   /** have-of-need, the store within reach counted (empty: free) */
   cost: BuildCost[];
   affordable: boolean;
+  /** #847: a decoration's set (made for a room, or for the garden) */
+  set?: DecorSet;
 }
+
+/** #847: the heading over each set of decorations in the build menu. */
+export const DECOR_SET_LABEL: Record<DecorSet, string> = { indoor: 'For the house', garden: 'For the garden' };
 
 /** "Wake Sluice": who to wake (or what to do) for a locked recipe. Never names a Lucky Cat. */
 export function unlockText(u: Unlock): string {
@@ -215,10 +220,11 @@ function decorItem(sim: Sim, id: string): BuildItem | undefined {
   const o = DECOR_OPTION[id];
   if (!o) return undefined;
   const open = decorOpen(sim, o);
-  if (!open) {
-    const r = sim.crafting.decor(id);
-    if (!r || 'cat' in r.unlock || !sim.crafting.unlocked(r.unlock)) return undefined;
-  }
+  const r = sim.crafting.decor(id);
+  const known = !!r && sim.crafting.unlocked(r.unlock);
+  // A locked garden piece stays off the list until its recipe is known; #852: a piece for a room shows from the start,
+  // saying how to get it (a level of the house, a Keeper's gift, or the workbench).
+  if (!open && (!r || 'cat' in r.unlock || (!known && !o.indoor))) return undefined;
   return {
     tool: `decor:${id}`,
     tab: 'decorations',
@@ -228,14 +234,19 @@ function decorItem(sim: Sim, id: string): BuildItem | undefined {
     kind: o.solid ? 'Free to place · stands in the way' : 'Free to place · walk right over it',
     line: o.blurb,
     locked: !open,
-    lockText: open ? undefined : 'Make it at the table',
+    lockText: open ? undefined : known && !r!.gift ? 'Make it at the workbench' : sim.crafting.decorLock(id).replace('🔒 ', ''),
     cost: [],
     affordable: open,
+    set: decorSet(o),
   };
 }
 
-/** Every piece the build menu lists, in tab order then data order. */
-export function buildItems(sim: Sim): BuildItem[] {
+/**
+ * Every piece the build menu lists, in tab order then data order. #847: decorations lead with the set that suits where
+ * Bloombot is (`inside` the house: the pieces made for a room; outside: the garden pieces), the other set after it.
+ * Either set can be placed anywhere; this is only the order.
+ */
+export function buildItems(sim: Sim, inside = false): BuildItem[] {
   const out: BuildItem[] = [];
   for (const t of BUILDABLE) {
     const it = machineItem(sim, t);
@@ -247,7 +258,9 @@ export function buildItems(sim: Sim): BuildItem[] {
     if (it) out.push(it);
   }
   const order = BUILD_TABS.map((t) => t.id);
-  return out.sort((a, b) => order.indexOf(a.tab) - order.indexOf(b.tab));
+  const lead: DecorSet = inside ? 'indoor' : 'garden';
+  const setRank = (i: BuildItem) => (i.set && i.set !== lead ? 1 : 0);
+  return out.sort((a, b) => order.indexOf(a.tab) - order.indexOf(b.tab) || setRank(a) - setRank(b)); // stable: data order within a set
 }
 
 /** One piece by its tool (undefined: not buildable now, or not a build tool). */
@@ -257,6 +270,15 @@ export function buildItem(sim: Sim, tool: Tool | string): BuildItem | undefined 
   if (tool.startsWith('decor:')) return decorItem(sim, tool.slice(6));
   if (tool in MACHINES && tool !== 'core') return machineItem(sim, tool as BuildableType);
   return undefined;
+}
+
+/**
+ * #847: the set heading to put before each piece of one tab's list (undefined: none). With both sets of decorations
+ * listed, each set opens with its heading, so the second set starts a row of its own; with one set, no headings.
+ */
+export function setHeads(items: readonly BuildItem[]): (DecorSet | undefined)[] {
+  const both = new Set(items.map((i) => i.set).filter(Boolean)).size > 1;
+  return items.map((i, n) => (both && i.set && i.set !== items[n - 1]?.set ? i.set : undefined));
 }
 
 /** The tabs that have something in them now. */

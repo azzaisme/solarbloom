@@ -94,6 +94,19 @@ export const EXPLORE = {
 };
 
 /**
+ * #782: the view inside the house: steeper than outdoors (it looks down into the room over the low front wall, so
+ * no sky and nothing of the world below shows) and closer (the room fills the screen, walls round it).
+ */
+const INDOOR = {
+  /** degrees down: the tilt range, and where it starts */
+  pitch: [42, 72] as [number, number],
+  startPitch: 56,
+  /** the zoom range (bigger is closer) and where it starts */
+  zoom: [1.15, 2.4] as [number, number],
+  startZoom: 1.45,
+};
+
+/**
  * Giant trees (GiantTrees.ts): what the follow camera keeps clear of. A trunk is a vertical post the boom pulls in
  * short of; a canopy is a ceiling the camera stays under (a smooth height field: the leaves' underside over the
  * canopy, rising beyond its reach), so the camera passes under the leaves and they never hide bloombot.
@@ -308,7 +321,39 @@ export class CameraController {
   /** Bloombot: turn the view around its target by some degrees (positive moves the camera to its right). */
   /** E21.22: tilts the view (degrees; positive looks down more), within 20°–60°. */
   pitchBy(degrees: number) {
-    this.pitchGoal = pc.math.clamp(this.pitchGoal + degrees, EXPLORE.pitchMin, EXPLORE.pitchMax);
+    const [lo, hi] = this.indoor ? INDOOR.pitch : [EXPLORE.pitchMin, EXPLORE.pitchMax];
+    this.pitchGoal = pc.math.clamp(this.pitchGoal + degrees, lo, hi);
+  }
+
+  /** #782: inside the house: a close view looking down into the room over its low front wall. */
+  private indoor = false;
+  private outdoor?: { pitch: number; minZoom: number; maxZoom: number };
+
+  get isIndoors(): boolean {
+    return this.indoor;
+  }
+
+  /**
+   * #782: in (or out of) the house. Inside, the view tilts down over the room and stays close enough that the walls
+   * frame it (the zoom keeps to INDOOR's range); outside again, the pitch and zoom range the player had come back.
+   */
+  indoors(on: boolean) {
+    if (on === this.indoor) return;
+    this.indoor = on;
+    if (on) {
+      this.outdoor = { pitch: this.pitchGoal, minZoom: this.minZoom, maxZoom: this.maxZoom };
+      [this.minZoom, this.maxZoom] = INDOOR.zoom;
+      this.zoomGoal = pc.math.clamp(INDOOR.startZoom, this.minZoom, this.maxZoom);
+      this.pitchGoal = this.explorePitch = INDOOR.startPitch;
+      return;
+    }
+    const o = this.outdoor;
+    this.outdoor = undefined;
+    if (!o) return;
+    this.minZoom = o.minZoom;
+    this.maxZoom = o.maxZoom;
+    this.zoomGoal = pc.math.clamp(this.zoomGoal, this.minZoom, this.maxZoom);
+    this.pitchGoal = this.explorePitch = o.pitch;
   }
 
   /** Third person: the mouse turns and tilts the view at once (degrees; positive pitch looks down more). */

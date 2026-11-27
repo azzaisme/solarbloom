@@ -66,16 +66,23 @@ export class Resting {
     this.h.bot.visuals.play('interact');
   }
 
-  /** Sits on a bench, facing out from it, at one end of the seat (room for a friend at the other). */
+  /**
+   * Sits on a bench, facing out from it, at one end of the seat (room for a friend at the other). From beside or
+   * behind it, bloombot first walks round to the cell in front of it; from there it steps up to the seat, turns round
+   * and sits back onto it (BotController.sitOn).
+   */
   sitBench(b: Bench) {
     const h = this.h;
+    const facing = b.facing;
+    const fx = Math.sin(facing);
+    const fz = Math.cos(facing);
+    const front = { x: b.x + Math.round(fx), z: b.z + Math.round(fz) };
+    const p = h.bot.pose;
+    if ((Math.floor(p.x) !== front.x || Math.floor(p.z) !== front.z) && h.bot.goToCell(p.roofId, front.x, front.z, { x: b.x, z: b.z }, () => this.sitBench(b))) return;
     if (!h.sim.rest.sitOnBench(b)) return;
     const [, by] = h.bot.world();
     const cx = b.x + 0.5;
     const cz = b.z + 0.5;
-    const facing = b.facing;
-    const fx = Math.sin(facing);
-    const fz = Math.cos(facing);
     // along the seat (the bench is long across its facing)
     const sx = Math.cos(facing);
     const sz = -Math.sin(facing);
@@ -85,8 +92,7 @@ export class Resting {
     const visitor = !friend && h.sim.wildlife.visits.some((v) => v.perch === 'beside');
     const { out, raise, friendOut, along, friend: other, visitorOut, visitorAlong } = REST.seat;
     const side = friend || visitor ? along : 0;
-    h.bot.seat = { x: cx + fx * out - sx * side, y: by, z: cz + fz * out - sz * side, facing };
-    h.bot.visuals.setPose('sit', REST.benchSeat + raise);
+    h.bot.sitOn({ x: cx + fx * out - sx * side, y: by, z: cz + fz * out - sz * side, facing, step: REST.onto.step }, () => h.bot.visuals.setPose('sit', REST.benchSeat + raise));
     // a Keeper who is a friend sits beside (only one already out and about: never in fog)
     if (friend && h.keepers) h.keepers.beside = { id: friend, x: cx + fx * friendOut + sx * other, y: by, z: cz + fz * friendOut + sz * other, facing, seat: REST.benchSeat };
     this.benchSpot = visitor ? { x: cx + fx * visitorOut + sx * visitorAlong, y: by + REST.benchSeat, z: cz + fz * visitorOut + sz * visitorAlong } : undefined;
@@ -118,8 +124,7 @@ export class Resting {
     h.sim.bot = { roofId: p.roofId, x: p.x, z: p.z };
     // seated on the pad's top, facing out toward the edge it came from
     const facing = Math.atan2(p.x - cx, p.z - cz);
-    h.bot.seat = { x: cx, y: y + REST.padTop, z: cz, facing };
-    h.bot.visuals.setPose('meditate');
+    h.bot.sitOn({ x: cx, y: y + REST.padTop, z: cz, facing }, () => h.bot.visuals.setPose('meditate'));
     this.calm();
   }
 
@@ -142,7 +147,7 @@ export class Resting {
   private settle() {
     const h = this.h;
     if (!h.bot.seat && !this.before) return;
-    h.bot.seat = undefined;
+    h.bot.leaveSeat();
     this.benchSpot = undefined;
     h.bot.visuals.setPose(undefined);
     if (h.keepers) h.keepers.beside = undefined;

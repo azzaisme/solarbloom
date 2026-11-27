@@ -86,7 +86,26 @@ export class PostFx {
   }
 
   private bloomIntensity(): number {
-    return glowIntensity(this.bloomOn, this.night, this.glow);
+    return glowIntensity(this.bloomOn, this.night, this.glow) * (1 + this.surgeNow);
+  }
+
+  /** VFX 1: a burst of light (a pulse's release) swells the bloom for a moment: `amount` extra (1 = double), over `seconds`. */
+  private surge = { amount: 0, life: 0, max: 1 };
+  private surgeNow = 0;
+  surgeBloom(amount: number, seconds: number) {
+    if (amount * Math.max(0, this.glow) < this.surgeNow) return;
+    this.surge = { amount: amount * Math.min(1, Math.max(0, this.glow)), life: 0, max: Math.max(0.05, seconds) };
+  }
+
+  /** Per frame: the surge rises fast and falls away. */
+  tick(dt: number) {
+    const s = this.surge;
+    if (s.amount <= 0) return;
+    s.life += dt;
+    const k = s.life / s.max;
+    this.surgeNow = k >= 1 ? 0 : s.amount * (k < 0.1 ? k / 0.1 : Math.pow(1 - (k - 0.1) / 0.9, 2));
+    if (k >= 1) s.amount = 0;
+    if (this.frame) this.frame.bloom.intensity = this.bloomIntensity();
   }
 
   /** #633: the Glow setting, at once (0 Off … 1 Normal … 1.6 Strong). */

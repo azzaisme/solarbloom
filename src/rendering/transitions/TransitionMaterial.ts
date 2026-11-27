@@ -1,5 +1,7 @@
 import * as pc from 'playcanvas';
 import { WIND_GLSL } from '../Wind';
+import { SEASON_GLSL, seasonShading } from '../SeasonLook';
+import { LOOK } from '../../data/look';
 
 /**
  * Look 6.12 (#181): the material every living transition is drawn with. Two kinds of geometry share it:
@@ -24,7 +26,8 @@ import { WIND_GLSL } from '../Wind';
  *   trC = deco: (anchor x, y, z, seed)                 · surface: (dir, feature, lushAt, lushUntil)
  *   Tree morph (mode 5) stores the starting vertex position in trB.xyz. Leaves follow the branch motion while
  *   their shape changes by trLeaf.xyz over their opening window (trA.w to trB.w). trC.w is the target tree stage.
- *   trLeaf.w carries wind flex for transitioning foliage.
+ *   trLeaf.w carries wind flex for transitioning foliage, with TreeGen's LEAF_FLAG (2) and SEASON_FLAG (4) on top
+ *   (#830: a deciduous tree's leaves follow the seasons while it grows, as they do once grown).
  * Surface kinds: 0 none · 1 soften · 2 moss · 3 restore · 4 bloom · 5 unblock. States: 0 concrete · 1 moss ·
  * 2 soil · 3 grass · 4 hard (water, clean paving: no cracks).
  */
@@ -42,6 +45,7 @@ attribute vec4 vertex_trLeaf;
 varying vec4 vTrA;
 varying vec4 vTrB;
 varying vec4 vTrC;
+varying vec4 vTrSeason;
 uniform float uTrTime;
 uniform float uTrDurScale;
 uniform float uTrMotion;
@@ -56,6 +60,17 @@ uniform vec4 screen_size;
 uniform float projectionFlipY;
 #endif
 ${WIND_GLSL}
+// #830: where a leaf rests (before the wind), its season flag and leaf-clump flag, for the fragment shader
+vec3 trRestW;
+float trSeasonF;
+float trClumpF;
+float trFlex() {
+	float w = vertex_trLeaf.w;
+	trSeasonF = step(3.99, w);
+	w -= trSeasonF * 4.0;
+	trClumpF = step(1.99, w);
+	return w - trClumpF * 2.0;
+}
 float trProgressAt(vec4 a, vec3 anchorW) {
 	float d = max(a.y * uTrDurScale, 0.001);
 	float p = (uTrTime - a.x) / d;
@@ -109,10 +124,12 @@ vec4 evalWorldPosition(vec3 vertexPosition, mat4 modelMatrix) {
 	vec4 posW = modelMatrix * vec4(localPos, 1.0);
 	vec3 rest = posW.xyz;
 	posW.xyz = trDisplace(rest);
-	if (vertex_trLeaf.w > 0.0) {
+	trRestW = posW.xyz;
+	float flex = trFlex();
+	if (flex > 0.0) {
 		vec3 anchor = vertex_trC.xyz;
 		float grown = clamp(length(posW.xyz - anchor) / max(length(rest - anchor), 0.001), 0.0, 1.0);
-		posW.xyz += windOffset(posW.xyz, vertex_trLeaf.w * grown);
+		posW.xyz += windOffset(posW.xyz, flex * grown);
 	}
 	return posW;
 }
@@ -142,15 +159,19 @@ const MAIN_END_VS = /* glsl */ `
 	vTrA = vertex_trA;
 	vTrB = vertex_trB;
 	vTrC = vertex_trC;
+	vTrSeason = vec4(trRestW, trSeasonF + trClumpF * 2.0);
 `;
 
 const DECL_PS = /* glsl */ `
 varying vec4 vTrA;
 varying vec4 vTrB;
 varying vec4 vTrC;
+varying vec4 vTrSeason;
+${SEASON_GLSL}
 uniform float uTrTime;
 uniform float uTrDurScale;
 uniform float uTrDetail;
+uniform vec2 uTrWave;
 uniform float uTrMotion;
 uniform vec3 uTrSea;
 uniform vec4 uTrScrub;
@@ -242,7 +263,16 @@ float trCreep(vec2 l, float dir, float p, float n) {
 float trWin(float p, vec2 w) {
 	return clamp((p - w.x) / max(w.y - w.x, 0.0001), 0.0, 1.0);
 }
+void trAlbedo();
+// #830: the seasons over growing trees and changing ground, as over the finished ones (Foliage, DetailTex)
 void getAlbedo() {
+	float leaf = mod(vTrSeason.w, 2.0);
+	if (leaf > 0.5 && sbSeasonBare(vTrSeason.xyz, step(1.5, vTrSeason.w))) discard;
+	trAlbedo();
+	if (leaf > 0.5) dAlbedo = sbSeasonLeaf(dAlbedo, vTrSeason.xyz);
+	dAlbedo = sbSeasonColour(dAlbedo, normalize(vNormalW), vPositionW);
+}
+void trAlbedo() {
 	dAlbedo = material_diffuse.rgb;
 	#ifdef STD_DIFFUSE_VERTEX
 		dAlbedo *= saturate(vVertexColor.rgb);
@@ -286,7 +316,25 @@ void getAlbedo() {
 	// pollution now (soften eases it in from the source edge)
 	float pol = kind > 0.5 && kind < 2.5 ? mix(vTrB.y, vTrB.z, creep) : vTrB.z;
 	float feat = vTrC.y;
-	if (kind > 2.5 && kind < 3.5 && feat > 2.5 && feat < 3.5) {
+	if (kind > 2.5 && kind < 3.5 && dir > 15.5) {
+		// -- VFX 1: washed in by a pulse's wave: the ground turns where the rim has passed, a lime glow along it --
+		float code = dir - 16.0;
+		vec2 off = (vec2(mod(code, 256.0), floor(code / 256.0)) - 128.0) * 0.25;
+		float R = vTrB.y;
+		float secs = max(vTrB.z * uTrDurScale, 0.001);
+		float k = clamp((uTrTime - vTrA.x) / secs, 0.0, 1.0);
+		float rad = uTrWave.x + (R - uTrWave.x) * (1.0 - pow(1.0 - k, uTrWave.y));
+		float dist = length(vPositionW.xz - (cell + 0.5 + off));
+		float n2 = detail > 0.5 ? trNoise(l * 13.0 + n * 7.0) : 0.5;
+		float edge = dist + (n - 0.5) * 0.22 + (n2 - 0.5) * 0.1;
+		// once started, where the rim has passed; and all of it by the end, whatever the rim did
+		float wet = (1.0 - smoothstep(rad - 0.18, rad + 0.04, edge)) * step(0.0001, uTrTime - vTrA.x);
+		wet = max(wet, smoothstep(0.9, 1.0, p));
+		col = mix(from, to, wet);
+		float fringe = wet * (1.0 - wet) * 4.0 * (1.0 - smoothstep(0.85, 1.0, k));
+		col = mix(col, vec3(0.42, 0.95, 0.05), fringe * 0.55);
+		glow = fringe * 1.4 + wet * (1.0 - smoothstep(0.0, 0.6, (uTrTime - vTrA.x) / secs - 1.0)) * 0.12;
+	} else if (kind > 2.5 && kind < 3.5 && feat > 2.5 && feat < 3.5) {
 		// ── water (Look 6.17): murky brown-grey clears to blue from the inflow side, with a shimmer at the front ──
 		float c = trCreep(l, dir, p, n);
 		col = mix(from, to, c);
@@ -382,6 +430,14 @@ void getAlbedo() {
 }
 `;
 
+/** #830: a fallen leaf casts no shadow either (the shadow pass runs this; the forward pass discards in getAlbedo). */
+const OPACITY_PS = /* glsl */ `
+void getOpacity() {
+	dAlpha = 1.0;
+	if (mod(vTrSeason.w, 2.0) > 0.5 && sbSeasonBare(vTrSeason.xyz, step(1.5, vTrSeason.w))) discard;
+}
+`;
+
 const EMISSIVE_PS = /* glsl */ `
 uniform float material_emissiveIntensity;
 void getEmission() {
@@ -407,6 +463,8 @@ export function transitionMaterial(): pc.StandardMaterial {
   m.setAttribute('vertex_trB', SEM_B);
   m.setAttribute('vertex_trC', SEM_C);
   m.setAttribute('vertex_trLeaf', SEM_LEAF);
+  // #830: the shadow pass runs the opacity chunk, so a winter tree's fallen leaves cast no shadow
+  m.opacityShadowDither = pc.DITHER_BAYER8;
   try {
     const chunks = m.getShaderChunks(pc.SHADERLANGUAGE_GLSL);
     chunks.set('litUserDeclarationVS', DECL_VS);
@@ -415,6 +473,7 @@ export function transitionMaterial(): pc.StandardMaterial {
     chunks.set('litUserDeclarationPS', DECL_PS);
     chunks.set('diffusePS', DIFFUSE_PS);
     chunks.set('emissivePS', EMISSIVE_PS);
+    chunks.set('opacityPS', OPACITY_PS);
   } catch {
     /* an engine without per-material chunks: tiles still draw in their end state */
   }
@@ -425,10 +484,12 @@ export function transitionMaterial(): pc.StandardMaterial {
   m.setParameter('uWindStrength', 0);
   m.setParameter('uBloomWave', [0, 0, 0, 0]);
   m.setParameter('uTrDetail', 1);
+  m.setParameter('uTrWave', [LOOK.pulseFx.front.r0, LOOK.pulseFx.front.ease]);
   m.setParameter('uTrScrub', [0, 0, 0, 0]);
   m.setParameter('uTrStages', [0.08, 0.3, 0.5, 0.7]);
   m.setParameter('uTrLush', [2.5, 10, 0]);
   for (const u of ['uTrSoil', 'uTrMoss', 'uTrCrack', 'uTrRust', 'uTrLife']) m.setParameter(u, [0.5, 0.5, 0.5]);
+  seasonShading.register(m); // #830
   m.update();
   return (material = m);
 }

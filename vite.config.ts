@@ -16,13 +16,13 @@ const QUICK = [
   'smoke', 'advisor', 'grid', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics',
   'relay-city', 'no-growing-prices', 'look', 'wall-edges', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
-  'bloombot-walk', 'bindings', 'padFocus', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glow-setting', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art', 'keeper-seat', 'model-wait', 'visitor-models', 'visitor-sit-shape', 'bloombot-settle',
+  'bloombot-walk', 'bindings', 'padFocus', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glow-setting', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'pulse-wash', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art', 'keeper-seat', 'model-wait', 'visitor-models', 'visitor-sit-shape', 'bloombot-settle', 'bench-sit',
   // giant trees, and trees that grow over game days (26 Nov 2026)
   'giant-trees',
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world
-  'crafting', 'research', 'drone-fuel', 'automation',
+  'crafting', 'crafting-bench', 'research', 'drone-fuel', 'automation',
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
@@ -37,7 +37,7 @@ const QUICK = [
   'water-levels', 'shoreline', 'fullscreen', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'water-surface', 'water-seams', 'water-disturbance', 'water-life', 'decay',
   'pipe-visuals', 'pipe-visuals-west',
   // E23.5: the farm
-  'farm-items', 'farm-planters', 'farm-compost', 'farm-extras',
+  'farm-items', 'farm-planters', 'farm-compost', 'farm-extras', 'fruit-trees',
   // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
   'lucky-cat-rewards', 'cat-decor', 'cat-secrecy', 'picker-internals', 'cat-sight-cpu', 'cat-sight-schedule',
   // E23.10: the proof
@@ -47,7 +47,7 @@ const QUICK = [
   // Phase 8: audio (the dead-to-living soundscape, mix, music, manifest)
   'audio',
   // E24: a clear path (the goal card, the guide's lines, the goal spot)
-  'clear-path', 'goal-reachable', 'bloombot-levels', 'bloombot-page', 'park-growth', 'knacks', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
+  'clear-path', 'goal-reachable', 'bloombot-levels', 'bloombot-page', 'park-growth', 'knacks', 'charging-order', 'bloombot-new-upgrades', 'bloombot-parts', 'move-levels',
   'first-time-text',
   // the load wheel takes the arrow keys and the d-pad (the Deck)
   'load-wheel-arrows',
@@ -77,8 +77,12 @@ const QUICK = [
   // P7-E29 (#715): tree placement by zone, and the tree shapes' budgets and silhouettes
   'tree-placement',
   'p7-terrain', 'tile-markers',
+  // #782: the first decoration, a gift at the fountain's first step
+  'first-decor', 'house',
   // #787: the regions' works (power, water, drones) and the unlock-order walk
-  'region-works',
+  'region-works', 'seasons',
+  // #842: furnishing the house (#849 pieces bigger than one square, #847 the tray's order)
+  'decor-footprint', 'decor-tray', 'decor-furniture', 'decor-soft', 'decor-unlocks',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

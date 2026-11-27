@@ -80,8 +80,11 @@ function fountainSpot(sim: Sim) {
   return { roofId: GROUND, x, z: z + 2, name: 'the fountain' };
 }
 
-/** The house, where the workshop is (its door). */
-const houseSpot = () => ({ roofId: GROUND, x: PARK_SET.shed.door[0], z: PARK_SET.shed.door[1], name: 'the house' });
+/** #783: the workbench beside the house, where research and upgrades are made (the square in front of it). */
+function benchSpot(sim: Sim) {
+  const f = sim.bench.front() ?? { x: PARK_SET.shed.door[0], z: PARK_SET.shed.door[1] };
+  return { roofId: GROUND, x: f.x, z: f.z, name: 'the workbench' };
+}
 
 /** The four moves, in the order the fountain teaches them. */
 export function moveRows(sim: Sim): BloombotRow[] {
@@ -109,16 +112,16 @@ export function moveRows(sim: Sim): BloombotRow[] {
 /** How to open an upgrade that research hasn't opened yet. */
 function openHow(sim: Sim, p: ProjectDef | undefined, move = false): string {
   const r = sim.research;
-  if (!p) return 'Research at the crafting table in the house opens it.';
+  if (!p) return 'Research at the workbench beside the house opens it.';
   const name = `“${p.name}”`;
-  if (!r.on) return `The crafting table in the house can work out how to ${move ? 'do' : 'make'} this. It starts once you wake another robot out in the city.`;
-  if (r.running(p.id)) return `The crafting table in the house is working out ${name} now. ${move ? 'Bloombot learns it' : 'You can make this'} once it's done.`;
-  if (r.isOpen(p)) return `Go to the crafting table in the house and start ${name} in its Research tab. Then ${move ? 'Bloombot learns it' : 'you can make this'}.`;
+  if (!r.on) return `The workbench beside the house can work out how to ${move ? 'do' : 'make'} this. It starts once you wake another robot out in the city.`;
+  if (r.running(p.id)) return `The workbench beside the house is working out ${name} now. ${move ? 'Bloombot learns it' : 'You can make this'} once it's done.`;
+  if (r.isOpen(p)) return `Go to the workbench beside the house and start ${name} in its Research tab. Then ${move ? 'Bloombot learns it' : 'you can make this'}.`;
   if ('project' in p.opens) {
     const before = r.project(p.opens.project);
-    return `The crafting table in the house has to work out “${before?.name ?? p.opens.project}” first, then ${name}.`;
+    return `The workbench beside the house has to work out “${before?.name ?? p.opens.project}” first, then ${name}.`;
   }
-  return `Take a close look at ${r.findName(p.opens)} at the crafting table in the house. That opens ${name} in its Research tab.`;
+  return `Take a close look at ${r.findName(p.opens)} at the workbench beside the house. That opens ${name} in its Research tab.`;
 }
 
 /** E25 (#626): where each second level is used, while something there is still shut (a cell to stand on). */
@@ -156,10 +159,10 @@ export function moveTwoRows(sim: Sim): BloombotRow[] {
       ? two.where
       : !r.moveLevel(gate)
         ? before
-          ? `Bloombot has to learn ${MOVES[gate].name} at the fountain first, and the crafting table in the house has to work out “${before.name}”. Then it can work out “${two.name}”.`
-          : `Bloombot has to learn ${MOVES[gate].name} at the fountain first. Then the crafting table in the house can work out “${two.name}”.`
+          ? `Bloombot has to learn ${MOVES[gate].name} at the fountain first, and the workbench beside the house has to work out “${before.name}”. Then it can work out “${two.name}”.`
+          : `Bloombot has to learn ${MOVES[gate].name} at the fountain first. Then the workbench beside the house can work out “${two.name}”.`
         : openHow(sim, p, true);
-    const where = have ? moveTwoSpot(sim, a) : !r.moveLevel(gate) ? fountainSpot(sim) : houseSpot();
+    const where = have ? moveTwoSpot(sim, a) : !r.moveLevel(gate) ? fountainSpot(sim) : benchSpot(sim);
     return { id: `${a}2`, kind: 'move2', name: two.name, does: two.does, state: have ? 'have' : ready ? 'next' : 'later', how, where, part: 'marks' }; // #629: the move's own mark lights up
   });
 }
@@ -178,7 +181,7 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
       ? 'As far as it goes.'
       : !isOpen
         ? openHow(sim, project)
-        : `Go to the crafting table in the house and make level ${level + 1} in its Upgrade tab. It takes ${costWords(u.levels[level].cost)}.`;
+        : `Go to the workbench beside the house and make level ${level + 1} in its Upgrade tab. It takes ${costWords(u.levels[level].cost)}.`;
     return {
       id: u.id,
       kind: 'upgrade',
@@ -190,7 +193,7 @@ export function bloombotUpgradeRows(sim: Sim): BloombotRow[] {
       next: top ? undefined : u.each,
       now: u.id === 'quickHands' ? pruneNow(sim) : undefined,
       how,
-      where: top ? undefined : houseSpot(),
+      where: top ? undefined : benchSpot(sim),
       part: UPGRADE_PART[u.id] ?? 'core',
     };
   });

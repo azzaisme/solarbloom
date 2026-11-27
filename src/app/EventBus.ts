@@ -27,6 +27,8 @@ export interface GameEvents {
   'clock.slept': { from: number; day: number; real: boolean };
   /** E23.7.1: "follow my clock" switched on or off. */
   'clock.mode': { real: boolean };
+  /** #830: a new season began (on the step it turned; never on loading). */
+  'season.changed': { season: import('../data/seasons').Season; from: import('../data/seasons').Season; year: number };
   /** E23.7.2: a new day's weather (or a held one, in tests and photo mode never). */
   'weather.changed': { kind: import('../data/weather').WeatherKind; day: number };
   /** E23.7.2.3: a storm blew in at dawn: fresh salvage (E23.7.4 refills the piles). */
@@ -97,6 +99,9 @@ export interface GameEvents {
   /** E21.6: something was handed in at the fountain; the fountain reached a tier. */
   'fountain.delivered': { material: import('../core/types').MaterialId; n: number };
   'fountain.tier': { tier: number };
+  /** #782: something was handed in at the house; the house grew a level (1 Shed … 4 Home). */
+  'house.delivered': { material: import('../core/types').MaterialId; n: number };
+  'house.level': { level: number };
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
   /** `then`: a second bubble once the first has been read (#625: a Keeper's knack and first request, after it wakes) */
   'keeper.said': { keeperId: string; lines: string[]; then?: string[] };

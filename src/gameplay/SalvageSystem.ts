@@ -231,6 +231,8 @@ export class SalvageSystem {
     if (t.roofId !== GROUND) return undefined;
     const sp = setPieceAt(t.x, t.z);
     if (t.blocked && t.feature === 'water' && !sp) return { title: 'The sea', detail: 'Open water: nothing crosses it.' };
+    // #783: the workbench beside the house
+    if (this.sim.bench?.isAt(GROUND, t.x, t.z)) return { title: '🛠 Workbench', detail: "Bloombot's workbench, with its tools laid out. Walk up to it and press {interact} to make things." };
     if (!sp) return undefined;
     if (sp.kind === 'pile' && this.left(sp.pile.id) > 0) {
       const m = MATERIALS[sp.pile.material];
