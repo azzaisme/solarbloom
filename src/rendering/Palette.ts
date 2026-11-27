@@ -920,7 +920,7 @@ export const PALETTE = {
     stalk: '#6b5a33',
     mulch: '#5a3e2b',
     /** the river stones round its bed: warm grey and beige */
-    stone: ['#b8ae9e', '#a39a8b', '#c9c0ae', '#9b948a'] as string[],
+    stone: ['#dcc9a6', '#cbb692', '#e5d6b8', '#c1ab88'] as string[],
   },
   /** Tide sketches: the pencil's graphite */
   sketchPencil: '#352f29',

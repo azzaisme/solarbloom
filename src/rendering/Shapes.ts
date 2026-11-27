@@ -145,3 +145,68 @@ export function assignBatch(root: pc.Entity, groupId: number) {
 export function setMaterial(e: pc.Entity, m: pc.Material) {
   if (e.render) e.render.material = m;
 }
+
+/**
+ * #785: a faceted stone: an icosahedron (radius 0.5, like the 'sphere' primitive) with each corner pushed in or out a
+ * little, its underside flattened to sit on the ground, and flat-shaded faces so each facet catches the light on its
+ * own. A handful of variants (by `seed`), cached.
+ */
+const stoneMeshes = new Map<number, pc.Mesh>();
+export function facetedStoneMesh(device: pc.GraphicsDevice, seed: number): pc.Mesh {
+  let m = stoneMeshes.get(seed);
+  if (m) return m;
+  let s = (seed + 1) * 2654435761;
+  const rnd = () => {
+    s = (s ^ (s << 13)) >>> 0;
+    s = (s ^ (s >>> 17)) >>> 0;
+    s = (s ^ (s << 5)) >>> 0;
+    return s / 4294967296;
+  };
+  const t = (1 + Math.sqrt(5)) / 2;
+  const base: [number, number, number][] = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]];
+  const faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
+  const pts = base.map(([x, y, z]) => {
+    const l = Math.hypot(x, y, z);
+    const k = (0.5 * (0.82 + rnd() * 0.3)) / l;
+    return [x * k, Math.max(-0.32, y * k), z * k] as [number, number, number];
+  });
+  const pos: number[] = [], nrm: number[] = [], idx: number[] = [];
+  for (const [a, b, c] of faces) {
+    const [pa, pb, pc2] = [pts[a], pts[b], pts[c]];
+    const u = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]], v = [pc2[0] - pa[0], pc2[1] - pa[1], pc2[2] - pa[2]];
+    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const nl = Math.hypot(n[0], n[1], n[2]) || 1;
+    n = n.map((x) => x / nl);
+    const i0 = pos.length / 3;
+    for (const p of [pa, pb, pc2]) {
+      pos.push(p[0], p[1], p[2]);
+      nrm.push(n[0], n[1], n[2]);
+    }
+    idx.push(i0, i0 + 1, i0 + 2);
+  }
+  m = new pc.Mesh(device);
+  m.setPositions(pos);
+  m.setNormals(nrm);
+  m.setIndices(idx);
+  m.update();
+  m.incRefCount();
+  stoneMeshes.set(seed, m);
+  return m;
+}
+
+/** #785: a faceted stone (see facetedStoneMesh) in a material, placed like `shape`. */
+export function stoneShape(parent: pc.Entity, material: pc.Material, seed: number, o: ShapeOpts = {}): pc.Entity {
+  const device = vcDevice ?? pc.Application.getApplication()?.graphicsDevice;
+  if (!device) return shape(parent, 'sphere', material, o);
+  const e = new pc.Entity(o.name ?? 'stone');
+  e.addComponent('render', { meshInstances: [new pc.MeshInstance(facetedStoneMesh(device, seed % 4), material)], castShadows: o.shadow ?? false, receiveShadows: o.receive ?? true });
+  if (o.pos) e.setLocalPosition(o.pos[0], o.pos[1], o.pos[2]);
+  if (o.scale !== undefined) {
+    const sc = o.scale;
+    if (typeof sc === 'number') e.setLocalScale(sc, sc, sc);
+    else e.setLocalScale(sc[0], sc[1], sc[2]);
+  }
+  if (o.rot) e.setLocalEulerAngles(o.rot[0], o.rot[1], o.rot[2]);
+  parent.addChild(e);
+  return e;
+}

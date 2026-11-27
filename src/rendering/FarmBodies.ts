@@ -1,6 +1,6 @@
 import type * as pc from 'playcanvas';
 import { mat, PALETTE } from './Materials';
-import { shape } from './Shapes';
+import { shape, stoneShape } from './Shapes';
 
 /**
  * E23.5.3: the compost bin and the Bio Digester, built from primitives in the machines' Look 3.12 style (cream
@@ -65,24 +65,23 @@ export function fishPondBody(b: pc.Entity) {
 }
 
 /**
- * E23.5.4 (#785): the ground a fruit tree stands in: a bed of dark mulch edged with smooth river stones, warm grey
+ * E23.5.4 (#785): the ground a fruit tree stands in: a bed of dark mulch edged with faceted stones, warm grey
  * and beige, of mixed sizes, flattened and bedded part way into the ground. The tree, its flowers and its fruit are
  * drawn live (CropVisuals, TreeGen's orchard tree).
  */
 export function orchardBody(b: pc.Entity) {
-  shape(b, 'cylinder', mat(PALETTE.orchard.mulch), { pos: [0, 0.015, 0], scale: [0.66, 0.03, 0.66] });
-  const stones = PALETTE.orchard.stone.map((c) => mat(c, { gloss: 0.35 }));
-  // [angle (turns), distance, length, width, height]: an uneven ring, larger and smaller stones mixed
+  shape(b, 'cylinder', mat(PALETTE.orchard.mulch), { pos: [0, 0.015, 0], scale: [0.86, 0.03, 0.86] });
+  const stones = PALETTE.orchard.stone.map((c) => mat(c, { gloss: 0.12 })); // matte: a glossy stone mirrors the blue sky
+  // [angle (turns), distance, length, width, height]: an uneven ring of big and small stones, a few pairs side by side
   const ring: [number, number, number, number, number][] = [
-    [0.0, 0.33, 0.12, 0.08, 0.06], [0.07, 0.35, 0.08, 0.06, 0.045], [0.15, 0.32, 0.13, 0.09, 0.065], [0.23, 0.34, 0.09, 0.07, 0.05],
-    [0.3, 0.33, 0.11, 0.08, 0.055], [0.39, 0.35, 0.07, 0.055, 0.04], [0.46, 0.32, 0.12, 0.085, 0.06], [0.55, 0.34, 0.1, 0.07, 0.05],
-    [0.63, 0.33, 0.13, 0.09, 0.065], [0.71, 0.35, 0.08, 0.06, 0.045], [0.79, 0.32, 0.11, 0.08, 0.055], [0.88, 0.34, 0.1, 0.075, 0.05],
-    [0.94, 0.355, 0.065, 0.05, 0.035],
+    [0.0, 0.37, 0.17, 0.12, 0.08], [0.085, 0.39, 0.11, 0.085, 0.06], [0.16, 0.36, 0.16, 0.11, 0.075], [0.25, 0.38, 0.13, 0.1, 0.065],
+    [0.33, 0.37, 0.18, 0.12, 0.08], [0.42, 0.39, 0.1, 0.08, 0.055], [0.5, 0.36, 0.16, 0.115, 0.075], [0.59, 0.38, 0.14, 0.1, 0.07],
+    [0.67, 0.37, 0.17, 0.12, 0.08], [0.76, 0.39, 0.11, 0.085, 0.06], [0.84, 0.36, 0.15, 0.11, 0.07], [0.925, 0.38, 0.13, 0.095, 0.065],
   ];
   ring.forEach(([turn, d, l, w, h], i) => {
     const a = turn * Math.PI * 2;
-    // each stone lies along the ring, turned a little off it, its lower half in the ground
-    shape(b, 'sphere', stones[i % stones.length], { pos: [Math.cos(a) * d, h * 0.25, Math.sin(a) * d], rot: [0, -turn * 360 + 90 + ((i * 37) % 30) - 15, (i % 3) * 4 - 4], scale: [l, h, w], shadow: true });
+    // faceted stones lying along the ring, each turned a little off it, their rounded tops above the mulch
+    stoneShape(b, stones[i % stones.length], i, { pos: [Math.cos(a) * d, 0.03 + h * 0.3, Math.sin(a) * d], rot: [0, -turn * 360 + 90 + ((i * 37) % 30) - 15, (i % 3) * 3 - 3], scale: [l, h * 1.15, w], shadow: true });
   });
 }
 
