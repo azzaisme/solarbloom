@@ -1,9 +1,8 @@
 {
   "format": "klad/7",
   "canvas": {
-    "width": 512,
-    "height": 512,
-    "wrap": true
+    "width": 1024,
+    "height": 1024
   },
   "timeline": {
     "fps": 12,

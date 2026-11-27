@@ -1,10 +1,10 @@
 """
 House floor and wall finishes for epic #846, painted with klad (https://github.com/klad-app/klad).
 
-Each finish is a seamless 512 px tile (`klad new --wrap`). This script writes the klad ops for one finish as JSON
-lines; `assets/tools/klad_house_textures.sh` pipes them into `klad apply`, checks the seam with
-`klad render --repeat 3` and exports the PNG to `assets/raw/textures/house/<name>.png`. The `.klad` bundle is kept
-next to the PNG so a finish can be opened in the klad editor and repainted by hand.
+Each finish is a seamless 512 px tile, painted in the middle of a 1024 px canvas (see out()). This script writes
+the klad ops for one finish as JSON lines; `assets/tools/klad_house_textures.sh` pipes them into `klad apply`,
+renders the middle 512 px to `assets/raw/textures/house/<name>.png`, and measures the seams. The `.klad` bundle is
+kept next to the PNG so a finish can be opened in the klad editor and repainted by hand.
 
     python assets/tools/klad_house_textures.py boards > ops.jsonl
 
@@ -13,31 +13,59 @@ Colours follow PALETTE.house (src/rendering/Palette.ts): warm boards, cream plas
 import json
 import math
 import random
+import re
 import sys
 
 S = 512  # the tile, px
+O = 256  # where the tile sits on the canvas: a margin all round, so marks over an edge are painted whole
+C = S + 2 * O  # the canvas, px
 L = 'l1'  # the paint layer `klad new` makes
 BOOST = {'pencil': 2.6, 'soft': 2.0, 'chalk': 1.4}
+_NUM = re.compile(r'-?\d+(?:\.\d+)?')
 
 
 def out(op):
+    """
+    Writes one op, in tile coordinates. klad's --wrap wraps a stroke's path but not the overhang of its dabs, so a
+    mark running along an edge leaves a seam (found by the #845 session). Instead the tile is painted in the middle
+    of a bigger canvas, and every mark that reaches past an edge is painted again a tile over, where it comes back
+    in; the .sh then renders only the middle. Copies fill the whole canvas, so the canvas repeats the tile and
+    the .sh can render it half a tile over to check the seams.
+    """
+    if op['op'] == 'fill':
+        pts = op['polygon']
+        for dx in (0, -S, S):
+            for dy in (0, -S, S):
+                if _area_on_tile([(x + dx, y + dy) for x, y in pts], -O, S + O) < 2:
+                    continue
+                _emit({**op, 'polygon': [[round(x + dx + O, 1), round(y + dy + O, 1)] for x, y in pts]})
+        return
+    nums = [float(n) for n in _NUM.findall(op['path'])]
+    xs, ys = nums[0::2], nums[1::2]
+    pad = op['size'] / 2 + 6
+    for dx in (0, -S, S):
+        for dy in (0, -S, S):
+            if max(xs) + dx < -O - pad or min(xs) + dx > S + O + pad or max(ys) + dy < -O - pad or min(ys) + dy > S + O + pad:
+                continue
+            k = iter(range(len(nums)))
+            path = _NUM.sub(lambda m: f'{float(m.group()) + (dx if next(k) % 2 == 0 else dy) + O:.1f}', op['path'])
+            _emit({**op, 'path': path})
+
+
+def _emit(op):
     sys.stdout.write(json.dumps(op) + '\n')
 
 
 def poly(points, color, opacity=None):
-    """A filled polygon. Fills don't wrap, so a shape over an edge is also drawn a tile over, where it comes back in."""
-    for dx in (0, -S, S):
-        for dy in (0, -S, S):
-            if _area_on_tile([(x + dx, y + dy) for x, y in points]) < 2:
-                continue
-            op = {'op': 'fill', 'layer': L, 'polygon': [[round(x + dx, 1), round(y + dy, 1)] for x, y in points], 'color': color}
-            if opacity is not None:
-                op['opacity'] = opacity
-            out(op)
+    """A filled polygon (out() paints it again wherever it comes back in over an edge)."""
+    op = {'op': 'fill', 'layer': L, 'polygon': [[x, y] for x, y in points], 'color': color}
+    if opacity is not None:
+        op['opacity'] = opacity
+    out(op)
 
 
-def _area_on_tile(pts):
-    """The area of a polygon inside the tile (Sutherland-Hodgman clip), so copies that only graze it are skipped."""
+def _area_on_tile(pts, lo=0, hi=S):
+    """The area of a polygon inside the square lo..hi (Sutherland-Hodgman clip), so copies that miss it are skipped."""
     def clip(ps, inside, cross):
         res = []
         for i, cur in enumerate(ps):
@@ -57,8 +85,8 @@ def _area_on_tile(pts):
         return lambda a, b: (a[0] + (b[0] - a[0]) * (v - a[1]) / (b[1] - a[1]), v)
 
     ps = list(pts)
-    for inside, cross in ((lambda p: p[0] >= 0, at_x(0)), (lambda p: p[0] <= S, at_x(S)),
-                          (lambda p: p[1] >= 0, at_y(0)), (lambda p: p[1] <= S, at_y(S))):
+    for inside, cross in ((lambda p: p[0] >= lo, at_x(lo)), (lambda p: p[0] <= hi, at_x(hi)),
+                          (lambda p: p[1] >= lo, at_y(lo)), (lambda p: p[1] <= hi, at_y(hi))):
         ps = clip(ps, inside, cross)
         if not ps:
             return 0
@@ -228,14 +256,15 @@ def floor_stone(r):
 
 
 def _wrapped_poly(pts, c):
-    """A polygon that may run past the right edge: drawn again a tile to the left so the seam closes."""
+    """A polygon that may run past an edge (out() paints it again where it comes back in)."""
     poly(pts, c)
 
 
 def _wrapped_line(x0, y0, x1, y1, c, size, brush, opacity):
-    for dx in (0, -S, S):
-        if -40 < min(x0, x1) + dx < S + 40:
-            line(x0 + dx, y0, x1 + dx, y1, c, size, brush, opacity)
+    """A line that may start or end past an edge: it is brought onto the tile, and out() repeats it over the edge."""
+    dx = -S if min(x0, x1) > S else (S if max(x0, x1) < 0 else 0)
+    dy = -S if min(y0, y1) > S else (S if max(y0, y1) < 0 else 0)
+    line(x0 + dx, y0 + dy, x1 + dx, y1 + dy, c, size, brush, opacity)
 
 
 def floor_matting(r):

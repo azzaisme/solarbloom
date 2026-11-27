@@ -32,5 +32,11 @@ bash assets/tools/klad_house_textures.sh floor-tile    # one
 
 This needs `klad` on the PATH, or `KLAD=/path/to/klad.exe`. Run it through `~/.solarbloom/heavy.sh`.
 
+Each `.klad` drawing is 1024 px with the tile in the middle (256 to 768), surrounded by its own repeats. klad's
+`--wrap` isn't used: it wraps a stroke's path but not the edge of its dabs, so marks along an edge left seams. The
+script paints every mark again one tile over, renders the middle 512 px, and runs `assets/tools/klad_tile_check.py`.
+That check renders the drawing half a tile over, compares it with the tile, and fails if a seam stands out. To
+repaint one by hand in the editor, paint inside the middle square and keep the edges matching.
+
 These sit in a subfolder on purpose: `GroundTex` only loads `assets/raw/textures/*.png`, so the house tiles never
 replace a ground texture.
