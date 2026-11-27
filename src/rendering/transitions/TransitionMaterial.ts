@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { WIND_GLSL } from '../Wind';
 import { SEASON_GLSL, seasonShading } from '../SeasonLook';
+import { LOOK } from '../../data/look';
 
 /**
  * Look 6.12 (#181): the material every living transition is drawn with. Two kinds of geometry share it:
@@ -170,6 +171,7 @@ ${SEASON_GLSL}
 uniform float uTrTime;
 uniform float uTrDurScale;
 uniform float uTrDetail;
+uniform vec2 uTrWave;
 uniform float uTrMotion;
 uniform vec3 uTrSea;
 uniform vec4 uTrScrub;
@@ -314,7 +316,25 @@ void trAlbedo() {
 	// pollution now (soften eases it in from the source edge)
 	float pol = kind > 0.5 && kind < 2.5 ? mix(vTrB.y, vTrB.z, creep) : vTrB.z;
 	float feat = vTrC.y;
-	if (kind > 2.5 && kind < 3.5 && feat > 2.5 && feat < 3.5) {
+	if (kind > 2.5 && kind < 3.5 && dir > 15.5) {
+		// -- VFX 1: washed in by a pulse's wave: the ground turns where the rim has passed, a lime glow along it --
+		float code = dir - 16.0;
+		vec2 off = (vec2(mod(code, 256.0), floor(code / 256.0)) - 128.0) * 0.25;
+		float R = vTrB.y;
+		float secs = max(vTrB.z * uTrDurScale, 0.001);
+		float k = clamp((uTrTime - vTrA.x) / secs, 0.0, 1.0);
+		float rad = uTrWave.x + (R - uTrWave.x) * (1.0 - pow(1.0 - k, uTrWave.y));
+		float dist = length(vPositionW.xz - (cell + 0.5 + off));
+		float n2 = detail > 0.5 ? trNoise(l * 13.0 + n * 7.0) : 0.5;
+		float edge = dist + (n - 0.5) * 0.22 + (n2 - 0.5) * 0.1;
+		// once started, where the rim has passed; and all of it by the end, whatever the rim did
+		float wet = (1.0 - smoothstep(rad - 0.18, rad + 0.04, edge)) * step(0.0001, uTrTime - vTrA.x);
+		wet = max(wet, smoothstep(0.9, 1.0, p));
+		col = mix(from, to, wet);
+		float fringe = wet * (1.0 - wet) * 4.0 * (1.0 - smoothstep(0.85, 1.0, k));
+		col = mix(col, vec3(0.42, 0.95, 0.05), fringe * 0.55);
+		glow = fringe * 1.4 + wet * (1.0 - smoothstep(0.0, 0.6, (uTrTime - vTrA.x) / secs - 1.0)) * 0.12;
+	} else if (kind > 2.5 && kind < 3.5 && feat > 2.5 && feat < 3.5) {
 		// ── water (Look 6.17): murky brown-grey clears to blue from the inflow side, with a shimmer at the front ──
 		float c = trCreep(l, dir, p, n);
 		col = mix(from, to, c);
@@ -464,6 +484,7 @@ export function transitionMaterial(): pc.StandardMaterial {
   m.setParameter('uWindStrength', 0);
   m.setParameter('uBloomWave', [0, 0, 0, 0]);
   m.setParameter('uTrDetail', 1);
+  m.setParameter('uTrWave', [LOOK.pulseFx.front.r0, LOOK.pulseFx.front.ease]);
   m.setParameter('uTrScrub', [0, 0, 0, 0]);
   m.setParameter('uTrStages', [0.08, 0.3, 0.5, 0.7]);
   m.setParameter('uTrLush', [2.5, 10, 0]);

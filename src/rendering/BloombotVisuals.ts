@@ -665,7 +665,7 @@ export class BloombotVisuals {
 
   /** Places bloombot (feet) and turns it to face `facing` (radians, 0 = +z). */
   place(x: number, y: number, z: number, facing: number) {
-    this.root.setPosition(x, y, z);
+    this.root.setPosition(x, y + this.levitate, z);
     this.root.setEulerAngles(0, (facing * 180) / Math.PI, 0);
   }
 
@@ -1157,8 +1157,27 @@ export class BloombotVisuals {
     return Math.min(l.getPosition().y, r.getPosition().y) - this.root.getPosition().y;
   }
 
+  /**
+   * VFX 1: how high it floats off the ground (a Mega Pulse lifts it while the power builds), and how high it is
+   * heading. It rises with the charge and settles back down over `settle` seconds or so.
+   */
+  levitate = 0;
+  private floatGoal = 0;
+  private floatSettle = 0.7;
+
+  /** Float `h` off the ground (0 to come down; `settle` how slowly it comes down). */
+  floatTo(h: number, settle = 0.7) {
+    this.floatGoal = Math.max(0, h);
+    this.floatSettle = Math.max(0.05, settle);
+  }
+
   update(dt: number) {
     this.clock += dt;
+    if (this.levitate !== this.floatGoal) {
+      const up = this.floatGoal > this.levitate;
+      this.levitate += (this.floatGoal - this.levitate) * Math.min(1, dt * (up ? 10 : 3 / this.floatSettle));
+      if (Math.abs(this.floatGoal - this.levitate) < 0.002) this.levitate = this.floatGoal;
+    }
     this.runAct(dt);
     this.drawBody(dt);
     this.placeGrowth();
