@@ -115,4 +115,4 @@ export const SNOW_BUILD = {
 export const SNOW_SHEET = { maxHeight: 0.22, bank: 0.45, reach: 1, reachLow: 1, sub: 4, subLow: 2, minDepth: 0.04 };
 
 /** The look's timing: the last `blend` of each season eases into the next; a winter dawn adds `dawnFrost`. */
-export const SEASON_LOOK_TIMING = { blend: 0.34, dawnFrost: 0.3 };
+export const SEASON_LOOK_TIMING = { blend: 0.16, dawnFrost: 0.3 };
