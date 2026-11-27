@@ -1,5 +1,5 @@
 import { type Bindings, SLOTS } from '../app/Bindings';
-import { buildItems, buildTabs, type BuildItem, type BuildTabId, costWords, HOTBAR_DEFAULT, shortWords } from './BuildCatalog';
+import { buildItems, buildTabs, type BuildItem, type BuildTabId, costWords, DECOR_SET_LABEL, HOTBAR_DEFAULT, setHeads, shortWords } from './BuildCatalog';
 import { actionGlyph, keyGlyph, padGlyph, type GlyphStyle } from './Glyphs';
 import { ICONS } from './Icons';
 import { $, esc, HudPart } from './HudPart';
@@ -96,15 +96,23 @@ export class BuildMenu extends HudPart {
     this.next = tool;
   }
 
-  /** Opens on a piece just given (once), else the tab of the piece in hand, else the tab last used, else the first. */
+  /** #847: is Bloombot in the house? Its decorations lead with the pieces made for a room. */
+  private inside = false;
+
+  /**
+   * Opens on a piece just given (once), else the tab of the piece in hand, else (#847: inside the house, where only
+   * decorations go) Decorations, else the tab last used, else the first.
+   */
   open(inHand?: Tool) {
     if (!this.el) return;
-    this.items = buildItems(this.sim);
+    this.inside = this.sim.house.isInside(this.sim.bot?.roofId);
+    this.items = buildItems(this.sim, this.inside);
     const tabs = buildTabs(this.items);
     const want = this.next && this.items.some((i) => i.tool === this.next) ? this.next : inHand;
     this.next = undefined;
     const held = this.items.find((i) => i.tool === want);
-    this.current = held?.tab ?? (tabs.some((t) => t.id === this.current) ? this.current : (tabs[0]?.id ?? 'machines'));
+    const home: BuildTabId | undefined = this.inside && tabs.some((t) => t.id === 'decorations') ? 'decorations' : undefined;
+    this.current = held?.tab ?? home ?? (tabs.some((t) => t.id === this.current) ? this.current : (tabs[0]?.id ?? 'machines'));
     this.sel = held?.tool;
     this.picking = false;
     this.el.hidden = false;
@@ -274,13 +282,17 @@ export class BuildMenu extends HudPart {
 
   private renderCells() {
     const slots = this.slots();
-    this.cells.innerHTML = this.items
-      .filter((i) => i.tab === this.current)
-      .map((i) => {
+    const inTab = this.items.filter((i) => i.tab === this.current);
+    // #847: with both sets of decorations listed, each starts its own row under a heading (the leading set first)
+    const heads = setHeads(inTab);
+    this.cells.innerHTML = inTab
+      .map((i, n) => {
+        const set = heads[n];
+        const head = set ? `<h3 class="bm-set" data-set="${set}">${DECOR_SET_LABEL[set]}</h3>` : '';
         const at = slots.indexOf(i.tool);
         const note = i.locked ? `<span class="bm-why">${esc(i.lockText ?? '')}</span>` : at >= 0 ? `<span class="bm-slot">Button ${at + 1}</span>` : '';
         const label = `${i.name}${i.locked ? `, locked: ${i.lockText}` : at >= 0 ? `, on build bar button ${at + 1}` : ''}${!i.locked && !i.affordable ? ', not enough yet' : ''}`;
-        return `<button class="bm-card t-${i.tab}${i.tool === this.sel ? ' sel' : ''}${i.locked ? ' locked' : ''}${!i.locked && !i.affordable ? ' short' : ''}" id="bm-${esc(i.tool.replace(':', '-'))}" data-tool="${esc(i.tool)}" aria-label="${esc(label)}"${i.locked ? ' aria-disabled="true"' : ''}><span class="bm-ic" aria-hidden="true">${i.locked ? ICONS.lock : i.icon}</span><span class="bm-nm">${esc(i.name)}</span>${note}</button>`;
+        return `${head}<button class="bm-card t-${i.tab}${i.tool === this.sel ? ' sel' : ''}${i.locked ? ' locked' : ''}${!i.locked && !i.affordable ? ' short' : ''}" id="bm-${esc(i.tool.replace(':', '-'))}" data-tool="${esc(i.tool)}" aria-label="${esc(label)}"${i.locked ? ' aria-disabled="true"' : ''}><span class="bm-ic" aria-hidden="true">${i.locked ? ICONS.lock : i.icon}</span><span class="bm-nm">${esc(i.name)}</span>${note}</button>`;
       })
       .join('');
   }

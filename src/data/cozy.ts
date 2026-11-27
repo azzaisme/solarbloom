@@ -131,6 +131,10 @@ export const DECOR_OPTIONS: DecorOption[] = [
 
 export const DECOR_OPTION: Record<string, DecorOption> = Object.fromEntries(DECOR_OPTIONS.map((o) => [o.id, o]));
 
+/** #847: the two sets the tray shows, made for a room or for the garden (every piece without `indoor`). */
+export type DecorSet = 'indoor' | 'garden';
+export const decorSet = (o: DecorOption): DecorSet => (o.indoor ? 'indoor' : 'garden');
+
 /** #849: the squares a decoration covers when turned `rot` quarter turns, [along x, along z]. */
 export function decorSize(kind: string, rot: number): [number, number] {
   const s = DECOR_OPTION[kind]?.size;
