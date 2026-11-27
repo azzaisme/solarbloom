@@ -482,25 +482,41 @@ export class Cozy {
     const id = h.layerId;
     const back: Decoration[] = [];
     const sides = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    for (let guard = 0; guard < 400 && h.cutOff(); guard++) {
+    const moved = new Set<string>(); // where pieces moved to: each moves once, so two pieces never trade places for ever
+    for (let guard = 0; guard < 400; guard++) {
+      const shut = h.cutOff();
+      if (!shut) break;
+      const room = h.rooms().find((r) => r.id === shut.id);
+      // whether Bloombot could get to what is shut off, walking on `reach`
+      const gets = (reach: Set<string>) =>
+        room
+          ? [...reach].some((k) => h.roomAt(...(k.split(',').map(Number) as [number, number]))?.id === room.id)
+          : Array.from({ length: shut.w * shut.d }, (_, i) => [shut.x + (i % shut.w), shut.z + Math.floor(i / shut.w)]).some(([x, z]) =>
+              sides.some(([sx, sz]) => reach.has(`${x + sx},${z + sz}`) && !h.wallBetween(x, z, x + sx, z + sz)),
+            );
       const reach = h.reach();
       const edge = this.decorations().filter(
         (d) =>
           d.roofId === id &&
+          !moved.has(d.key) &&
           DECOR_OPTION[d.kind]?.solid !== false &&
           decorCells(d.kind, d.rot, d.x, d.z).some((c) => sides.some(([sx, sz]) => reach.has(`${c.x + sx},${c.z + sz}`) && !h.wallBetween(c.x, c.z, c.x + sx, c.z + sz))),
       );
+      // first a piece whose moving lets Bloombot get there; else the one that opens the most floor
       let best: Decoration | undefined;
       let most = reach.size;
       for (const d of edge) {
-        const n = h.reach(undefined, new Set(decorCells(d.kind, d.rot, d.x, d.z).map((c) => `${c.x},${c.z}`))).size;
-        if (n > most) {
-          most = n;
+        const open = h.reach(undefined, new Set(decorCells(d.kind, d.rot, d.x, d.z).map((c) => `${c.x},${c.z}`)));
+        const score = (gets(open) ? 1e6 : 0) + open.size;
+        if (score > most) {
+          most = score;
           best = d;
         }
       }
       if (!best) break;
+      const before = new Set(this.decorations().map((d) => d.key));
       back.push(...this.clearCells([best], decorCells(best.kind, best.rot, best.x, best.z)));
+      for (const d of this.decorations()) if (!before.has(d.key)) moved.add(d.key);
     }
     return back;
   }

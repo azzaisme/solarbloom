@@ -159,14 +159,13 @@ describe('#862: an older save loads into the new rooms with nothing lost', () =>
 
   it('with no free floor left, a piece goes back to the build menu and the toast names it', () => {
     // a Shed whose every free square already holds a decoration, and one more on the chest's square
-    const { sim } = scene(1);
+    const shed = scene(1).sim;
     const decor: Record<string, string> = {};
-    const [dx, dz] = sim.house.doorInside();
-    for (const t of sim.grid.tilesOf(ID)) if (!t.blocked && !(t.x === dx && t.z === dz)) decor[`${ID}|${t.x}|${t.z}`] = 'flowerbed';
-    const chest = sim.house.furniture().find((f) => f.id === 'chest')!;
+    const [dx, dz] = shed.house.doorInside();
+    for (const t of shed.grid.tilesOf(ID)) if (!t.blocked && !(t.x === dx && t.z === dz)) decor[`${ID}|${t.x}|${t.z}`] = 'flowerbed';
+    const chest = shed.house.furniture().find((f) => f.id === 'chest')!;
     decor[`${ID}|${chest.x}|${chest.z}`] = 'pot';
-    sim.state.cozy = { ...(sim.state.cozy ?? {}), decor };
-    const cozy = new Cozy(sim);
+    const { sim, cozy } = oldSave(1, decor);
     const back = cozy.settleHouse();
     expect(back.map((d) => d.kind)).toEqual(['pot']);
     expect(cozy.decorations().some((d) => d.kind === 'pot')).toBe(false);
