@@ -93,8 +93,12 @@ export class BotController {
   claims?: (code: string) => boolean;
   /** Island release: the turn back at the closed causeway (gameplay/TurnBack). */
   readonly turnBack = new TurnBack();
-  /** Third person: aiming a build, bloombot faces the way the camera looks and strafes instead of turning */
-  strafe = false;
+  /**
+   * Third person: aiming a build, bloombot faces the way the camera looks and strafes instead of turning. Asked in
+   * each update, never kept from the frame before: a flag set after the update kept the last frame's tool for one
+   * frame, so putting a piece away and turning at once (Go home) lost the turn to the camera's way.
+   */
+  strafe: () => boolean = () => false;
   /** E22.1: sprint switched on by the toggle (left stick click); it ends when bloombot stops */
   sprintLatched = false;
   /** a menu that wants pad buttons first (G.7 focus navigation); true when it used the press */
@@ -522,7 +526,7 @@ export class BotController {
     }
     let moved = 0;
     const yr = (this.camera.yaw * Math.PI) / 180;
-    const strafing = this.strafe && !this.walk && !frozen;
+    const strafing = !this.walk && !frozen && this.strafe();
     // #670: where it wants to face: the camera's way while aiming, else the way it wants to go
     const t = this.turner;
     if (strafing) t.face(Math.atan2(-Math.sin(yr), -Math.cos(yr)));

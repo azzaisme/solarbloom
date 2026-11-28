@@ -152,6 +152,26 @@ try {
       g.camera.recentre?.();
     }, [sx, sz]);
     await wait(4000);
+    // The hologram aims where Bloombot faces, within reach: from the second spot it can land on the first pot, and
+    // with a pot in hand the key then picks that pot up to move it (E23.11; the prompt says "Pick up the Flower pot").
+    // Holding a piece, Bloombot faces the way the camera looks (it strafes), so turn the camera, as a player would,
+    // until the hologram is on free ground where a pot may go. Bloombot faces the heading h with the camera's yaw at h - π.
+    const aimFree = () =>
+      page.evaluate(() => {
+        const g = window.solarbloom;
+        const t = g.buildAim().p?.tile;
+        return !!t && t.roofId === 'g' && !g.cozy.decorAt('g', t.x, t.z) && g.cozy.canDecorate('pot', 'g', t.x, t.z) === undefined;
+      });
+    for (const heading of [null, Math.PI, Math.PI / 2, -Math.PI / 2, 0]) { // as it stands, then towards the house first
+      if (heading !== null) {
+        await page.evaluate((h) => window.solarbloom.camera.turnTo(((h - Math.PI) * 180) / Math.PI, true), heading);
+        await page
+          .waitForFunction((h) => { const d = window.solarbloom.bot.pose.facing - h; return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) < 0.05; }, heading, { timeout: 60_000, polling: 200 })
+          .catch(() => {});
+        await wait(1500);
+      }
+      if (await aimFree()) break;
+    }
     const before = await page.evaluate(() => window.solarbloom.cozy.decorations().map((d) => d.key));
     await press(page, placeKey);
     await page.waitForFunction((n) => window.solarbloom.cozy.decorCount() > n, before.length, { timeout: 60_000, polling: 300 }).catch(() => {});

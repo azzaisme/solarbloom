@@ -30,25 +30,50 @@ const check = (ok, what) => {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const keyOf = (page, action) => page.evaluate((a) => window.solarbloom.bindings.keys[a].find((k) => !/^Mouse/.test(k)), action);
 const press = async (page, code) => page.keyboard.press(code.replace(/^Key/, '').replace(/^Digit/, ''));
-const prompt = (page) => page.evaluate(() => document.getElementById('prompt')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
+const prompt = async (page) => {
+  const p = await page.evaluate(() => document.getElementById('prompt')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
+  // an empty prompt: say where Bloombot stands and faces, and what would hide the prompt
+  if (!p) console.log('  no prompt:', JSON.stringify(await page.evaluate(() => { const g = window.solarbloom; return { cine: !!g.cinematic, panel: g.panelOpen?.(), tool: g.hud.currentTool, pose: g.bot.pose, front: g.bot.front() }; })));
+  return p;
+};
 const toasts = (page) => page.evaluate(() => [...document.querySelectorAll('#toasts .toast')].map((t) => t.innerText.replace(/\s+/g, ' ').trim()).join(' | '));
 
-/** Stand at a cell (centre) facing an angle (0 = south, π = north) and settle the camera. */
-const stand = (page, roofId, x, z, facing, ms = 2500) =>
-  page
-    .evaluate(
-      ([roofId, x, z, facing]) => {
-        const g = window.solarbloom;
-        g.bot.teleport(roofId, x, z);
-        g.bot.turnTo(facing);
-        g.bot.following = true;
-        g.bot.lastInput = 'keys';
-        g.pointer.inside = false;
-        g.camera.recentre?.();
+/**
+ * Stand at a cell (centre) facing an angle (0 = south, π = north) and settle the camera. Bloombot turns smoothly
+ * (#670), and in a software-rendered browser a big turn can take longer than any fixed wait: this waits until it
+ * faces the way asked (the square in front is the one the prompt reads), then gives the camera `ms` to settle.
+ */
+const stand = async (page, roofId, x, z, facing, ms = 2500) => {
+  await page.evaluate(
+    ([roofId, x, z, facing]) => {
+      const g = window.solarbloom;
+      g.bot.teleport(roofId, x, z);
+      g.bot.turnTo(facing);
+      g.bot.following = true;
+      g.bot.lastInput = 'keys';
+      g.pointer.inside = false;
+      g.camera.recentre?.();
+    },
+    [roofId, x, z, facing],
+  );
+  await page
+    .waitForFunction(
+      (facing) => {
+        const d = window.solarbloom.bot.pose.facing - facing;
+        return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) < 0.05;
       },
-      [roofId, x, z, facing],
+      facing,
+      { timeout: 60_000, polling: 200 },
     )
-    .then(() => wait(ms));
+    .catch(async () => {
+      const why = await page.evaluate(() => {
+        const g = window.solarbloom;
+        return { pose: g.bot.pose, goal: g.bot.turner?.goal, strafe: g.bot.strafe(), paused: g.pause.list(), tool: g.hud.currentTool };
+      });
+      console.log(`  Bloombot did not finish turning to ${facing.toFixed(2)}:`, JSON.stringify(why));
+    });
+  await wait(ms);
+};
 
 /** A view of the house from the park, just south of its door, looking down at its front and roof. */
 const view = async (page, file, v) => {
