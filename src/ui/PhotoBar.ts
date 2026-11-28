@@ -208,34 +208,43 @@ export class PhotoBar {
 }
 
 /**
- * Saves a canvas as a PNG download. Call it right after a frame is drawn (the WebGL drawing buffer is only
- * readable then). Where the canvas is see-through (no post-processing), `background` fills in behind it. `crop`
- * (canvas pixels) keeps only that part of it.
+ * The picture a canvas shows, as its own canvas. Call it right after a frame is drawn (the WebGL drawing buffer is
+ * only readable then). Where the canvas is see-through (no post-processing), `background` fills in behind it;
+ * `filter` is photo mode's filter, as the view showed it; `crop` (canvas pixels) keeps only the frame's shape.
  */
-export function saveCanvasPng(src: HTMLCanvasElement, background: string, filter = '', crop?: { x: number; y: number; w: number; h: number }) {
+export function pictureCanvas(src: HTMLCanvasElement, background: string, filter = '', crop?: { x: number; y: number; w: number; h: number }): HTMLCanvasElement | undefined {
   const out = document.createElement('canvas');
   const c = crop ?? { x: 0, y: 0, w: src.width, h: src.height };
   out.width = c.w;
   out.height = c.h;
   const g = out.getContext('2d');
-  if (!g) return;
+  if (!g) return undefined;
   g.fillStyle = background;
   g.fillRect(0, 0, out.width, out.height);
-  // E23.7.3: the picture gets photo mode's filter, as the view showed it
   if (filter) g.filter = filter;
-  // #photo-2: only the frame's shape is kept
   g.drawImage(src, c.x, c.y, c.w, c.h, 0, 0, c.w, c.h);
   g.filter = 'none';
-  out.toBlob((blob) => {
-    if (!blob) return;
-    const a = document.createElement('a');
-    const d = new Date();
-    const two = (n: number) => String(n).padStart(2, '0');
-    a.download = `solarbloom-${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}.png`;
-    a.href = URL.createObjectURL(blob);
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  }, 'image/png');
+  return out;
+}
+
+/** The file name a picture taken at `d` is saved under. */
+export function pictureName(d = new Date(), ext = 'png'): string {
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `solarbloom-${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}.${ext}`;
+}
+
+/** Downloads a picture as a file. */
+export function downloadBlob(blob: Blob, name: string) {
+  const a = document.createElement('a');
+  a.download = name;
+  a.href = URL.createObjectURL(blob);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/** Downloads a picture's canvas as a PNG. */
+export function downloadCanvas(picture: HTMLCanvasElement, name = pictureName()) {
+  picture.toBlob((blob) => blob && downloadBlob(blob, name), 'image/png');
 }

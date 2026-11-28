@@ -2,8 +2,9 @@
 // `npm run build` first (or this runs on whatever dist/ holds), then `node tests/e2e/photo-shots.mjs [outDir]`
 // (`npm run shots:photo` does both). A new game on the high tier at desktop size, and at Steam Deck size
 // (1280 × 800, ?gfx=deck): every tab of the panel, worked with the real keys and mouse (arrow keys walk the rows,
-// a slider is dragged, "Pick a spot" is pressed on the picture), a square double-size picture saved and measured,
-// and the view, the look and the HUD checked back as they were after leaving.
+// a slider is dragged, "Pick a spot" is pressed on the picture), the shutter's Save or Dismiss card, a square
+// double-size file measured, the picture saved to the album and found in the Collection, and the view, the look
+// and the HUD checked back as they were after leaving.
 // CHROME_PATH: a Chromium to use in place of Playwright's own.
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -39,7 +40,13 @@ try {
     page.on('pageerror', (e) => errors.push(String(e)));
     page.setDefaultTimeout(300_000);
     await page.goto(`http://localhost:4239/?slot=1${size.query}`);
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(async () => {
+      localStorage.clear();
+      await new Promise((done) => {
+        const r = indexedDB.deleteDatabase('solarbloom.photos'); // the photo album
+        r.onsuccess = r.onerror = r.onblocked = done;
+      });
+    });
     await page.reload();
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
     await page.waitForFunction(() => window.solarbloom.bot.visuals.busy !== 'assemble', null, { timeout: 120_000 }).catch(() => {});
@@ -59,6 +66,11 @@ try {
         camFov: g.camera.cam.fov, gain: g.dayNight.exposureGain, vignette: g.look.photoVignette, hud: !document.body.classList.contains('photo'), canvas: [c.width, c.height],
         view: JSON.stringify(g.camera.snapshot()),
       };
+    });
+    const album = () => page.evaluate(() => {
+      const a = window.solarbloom.photoAlbum;
+      const p = a.best[0];
+      return { best: a.best.length, small: a.others.length, type: p?.blob.type, side: p ? Math.max(p.w, p.h) : 0, bytes: p?.blob.size ?? 0 };
     });
     const before = await state();
 
@@ -138,16 +150,35 @@ try {
       p.setTab('frame');
     });
     await shot('7-frame');
-    const down = page.waitForEvent('download', { timeout: 180_000 });
+    // the shutter keeps nothing by itself: the picture is shown, with Save and Dismiss
     await page.keyboard.press('Space');
-    const file = `${dir}/8-saved-square-double-${size.name}.png`;
+    await page.waitForSelector('#photoShot.on', { timeout: 180_000 });
+    await shot('8-save-or-dismiss', 800);
+    check(saved === 0 && (await album()).best === 0, 'the shutter shows the picture and keeps nothing yet');
+    check(await page.evaluate(() => document.activeElement?.dataset.shot === 'keep'), 'Save is in focus');
+    // "Save as a file": the square alone, at twice the screen's pixels
+    const down = page.waitForEvent('download', { timeout: 180_000 });
+    await page.locator('[data-shot="file"]').click();
+    const file = `${dir}/9-file-square-double-${size.name}.png`;
     await (await down).saveAs(file);
     const [pw, ph] = pngSize(file);
     const side = Math.min(before.canvas[0], before.canvas[1]) * 2;
-    check(pw === ph && Math.abs(pw - side) <= 2, `the saved picture is a ${pw} × ${ph} square (the screen draws ${before.canvas.join(' × ')})`);
-    await page.waitForTimeout(1500);
+    check(pw === ph && Math.abs(pw - side) <= 2, `the file is a ${pw} × ${ph} square (the screen draws ${before.canvas.join(' × ')})`);
     s = await state();
     check(s.canvas[0] === before.canvas[0] && s.canvas[1] === before.canvas[1], 'the screen is back at its own size after the big picture');
+    // Save (Enter on the button in focus): one good picture in the album, no bigger than the album's good size
+    await page.locator('[data-shot="keep"]').focus();
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#photoShot:not(.on)', { state: 'attached' });
+    let al = await album();
+    check(al.best === 1 && al.small === 0 && al.type === 'image/jpeg' && al.side <= 1920, `Save keeps it in the album at good quality (${al.side} px on its longest side, ${Math.round(al.bytes / 1024)} KB)`);
+    // Dismiss (Esc) keeps nothing, and photo mode is still open
+    await page.keyboard.press('Space');
+    await page.waitForSelector('#photoShot.on', { timeout: 180_000 });
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#photoShot:not(.on)', { state: 'attached' });
+    al = await album();
+    check(al.best === 1 && al.small === 0 && (await state()).active, 'Dismiss keeps nothing and stays in photo mode');
 
     // out: the view, the look and the HUD are exactly as they were
     await page.keyboard.press('Escape');
@@ -162,6 +193,11 @@ try {
       p.grid = 'none';
       p.size = 'screen';
     });
+    // the album is in Backpack › Collection
+    await page.evaluate(() => window.solarbloom.hud.backpack.open('collection'));
+    check((await page.locator('[data-album]').count()) === 1, 'the saved picture is in Backpack › Collection');
+    await shot('10-collection', 1200);
+    await page.evaluate(() => window.solarbloom.hud.backpack.close());
     check(errors.length === 0, `no page errors${errors.length ? ':\n' + [...new Set(errors)].slice(0, 5).join('\n') : ''}`);
     await page.close();
   }
