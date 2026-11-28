@@ -19,12 +19,14 @@ const QUICK = [
   'bloombot-walk', 'bindings', 'padFocus', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glow-setting', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'pulse-wash', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art', 'keeper-seat', 'model-wait', 'visitor-models', 'visitor-sit-shape', 'bloombot-settle', 'bench-sit',
   // giant trees, and trees that grow over game days (26 Nov 2026)
   'giant-trees',
+  // build mode from above: drag to lay a run or fill a patch, and footpaths and roads to lay (28 Nov 2026)
+  'build-shape', 'laid-paths',
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world
   'crafting', 'crafting-bench', 'research', 'drone-fuel', 'automation',
   // E23.7: time, weather and salvage
-  'clock', 'timers', 'photo-scene', 'weather',
+  'clock', 'timers', 'photo-scene', 'photo-lens', 'photo-album', 'weather',
   // E23.3: the power grid
   'power-grid', 'power-helpers', 'power-lights', 'moonlit-night', 'sun-moon', 'twilight-sky', 'sunlit-look',
   // E23.8: regions and the mainland
@@ -78,7 +80,7 @@ const QUICK = [
   'tree-placement',
   'p7-terrain', 'tile-markers',
   // #782: the first decoration, a gift at the fountain's first step
-  'first-decor', 'house', 'house-rooms', 'house-grow-decor', 'house-dressing', 'house-kitchen', 'house-fireplace', 'house-move-furniture', 'house-decor-reload', 'bot-strafe-turn', 'cooking',
+  'first-decor', 'house', 'house-rooms', 'house-grow-decor', 'house-dressing', 'house-kitchen', 'house-fireplace', 'house-move-furniture', 'house-decor-reload', 'build-drag', 'cooking',
   // #787: the regions' works (power, water, drones) and the unlock-order walk
   'region-works', 'seasons',
   // #842: furnishing the house (#849 pieces bigger than one square, #847 the tray's order)

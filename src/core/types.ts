@@ -73,6 +73,9 @@ export interface TileTransition {
   w?: [number, number, number, number];
 }
 
+/** What Bloombot can lay on the ground in build mode: a paved footpath, or a road. */
+export type LaidKind = 'footpath' | 'road' | 'grass';
+
 export interface TileData {
   id: string;
   roofId: string;
@@ -96,6 +99,11 @@ export interface TileData {
   tr?: TileTransition;
   /** City ground: what the tile is made of (generated, not saved). */
   feature?: import('../data/city').TileFeature;
+  /**
+   * A footpath or road Bloombot laid here (gameplay/LaidPaths): it overrides `feature`. Stamped from the save's
+   * `laid` lists as the chunk loads; never packed with the tile.
+   */
+  laid?: LaidKind;
   /** City ground obstacles: which prop stands here (bench, stall, stump…), for the renderer. */
   prop?: string;
   /** A generated obstacle was cleared so a fogged area stays reachable (saved). */
@@ -584,6 +592,8 @@ export interface GameState {
    * the lamp). false: asleep. Unset (gardens saved before it could sleep) counts as awake, so no drone falls asleep.
    */
   oldDroneAwake?: boolean;
+  /** Tide's Photo Mode introduction and the number of eligible shots since the last sketch. */
+  tidePhoto?: { introPending: boolean; misses: number };
   upgrades: Record<string, number>;
   buffs: Buff[];
   /** City areas that have been revealed (frontier or further). Static area data comes from the seed. */
@@ -614,6 +624,11 @@ export interface GameState {
     /** E23.4.2.2: pipe tiles on the ground, `x,z`, sorted */
     pipes?: string[];
   };
+  /**
+   * Footpaths and roads Bloombot laid on the ground (gameplay/LaidPaths): `x,z` lists, sorted. Optional and absent
+   * when nothing is laid, so no save version change.
+   */
+  laid?: Partial<Record<LaidKind, string[]>>;
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };
   /**

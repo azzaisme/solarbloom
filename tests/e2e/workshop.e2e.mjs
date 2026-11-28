@@ -85,10 +85,10 @@ async function pick(page, dev, tool) {
 }
 
 /**
- * Places what is in hand on (x, z) (a machine's corner, or a decoration's tile), aimed as in third person (#542):
- * build mode places under the crosshair, which rests a little ahead of bloombot, so bloombot steps until the ghost
- * sits on the spot (as a player walks the ghost over it), then Space or A places. The steps are moves to where
- * bloombot stands next (walking is not under test here). Returns what the game said if nothing was placed.
+ * Places what is in hand on (x, z) (a machine's corner, or a decoration's tile). Build mode looks down on the ground
+ * and places on the build cursor's square (the pointer's with a mouse; here the cursor the pad's right stick moves,
+ * set straight onto the spot), so bloombot stands two squares off, the cursor goes on the spot, then Space or A
+ * places. Returns what the game said if nothing was placed.
  */
 async function placeAt(page, dev, x, z) {
   await page.waitForFunction(() => window.solarbloom.bot.visuals.busy !== 'assemble', null, { timeout: 90000 }).catch(() => {});
@@ -99,33 +99,21 @@ async function placeAt(page, dev, x, z) {
     const machine = !tool.startsWith('decor:');
     const size = machine ? ({ condenser: 1 }[tool] ?? 1) : 1;
     const cx = x + size / 2, cz = z + size / 2;
-    const on = () => {
-      const p = g.crosshairPick();
-      if (!p) return { ok: false };
-      const a = machine ? g.sim.build.anchorFor(tool, p.fx, p.fz) : { x: Math.floor(p.fx), z: Math.floor(p.fz) };
-      return { ok: a.x === x && a.z === z, p };
-    };
     for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
       const sx = cx + dx * 2, sz = cz + dz * 2;
       g.bot.cancelWalk();
       g.bot.teleport('g', sx, sz);
       if (Math.hypot(g.bot.pose.x - sx, g.bot.pose.z - sz) < 0.05) break;
     }
-    for (let i = 0; i < 12; i++) {
-      for (let f = 0; f < 3; f++) await frame();
-      const st = on();
-      if (st.ok) {
-        await frame();
-        if (on().ok) return true;
-        continue;
-      }
-      if (!st.p) break;
-      g.bot.cancelWalk();
-      g.bot.teleport('g', g.bot.pose.x + (cx - st.p.fx), g.bot.pose.z + (cz - st.p.fz));
-    }
-    return false;
+    g.pointer.inside = false; // no mouse: the build cursor aims
+    g.cursor = { x: cx - g.bot.pose.x, z: cz - g.bot.pose.z };
+    for (let f = 0; f < 3; f++) await frame();
+    const p = g.buildAim().p;
+    if (!p) return false;
+    const a = machine ? g.sim.build.anchorFor(tool, p.fx, p.fz) : { x: Math.floor(p.fx), z: Math.floor(p.fz) };
+    return a.x === x && a.z === z;
   }, { x, z });
-  if (!aimed) return 'the crosshair never rested on it';
+  if (!aimed) return 'the build cursor never rested on it';
   await page.evaluate(() => {
     const g = window.solarbloom;
     window.__fails = [];

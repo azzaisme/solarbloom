@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Tide’s photo capture</title>
+<canvas width="960" height="600" style="width: 960px; height: 600px"></canvas>
+<script type="module">
+import * as pc from 'playcanvas';
+import { capturePhotoSketch } from '/src/rendering/PhotoSketch.ts';
+import { drawPencil } from '/src/rendering/SketchPencil.ts';
+import { SaveService } from '/src/app/SaveService.ts';
+import tideUrl from '/assets/raw/models/final/keeper-tide.glb?url';
+import botUrl from '/assets/raw/bloombot/bloombot.glb?url';
+
+const canvas = document.querySelector('canvas');
+const app = new pc.Application(canvas, { graphicsDeviceOptions: { alpha: true } });
+app.scene.ambientLight.set(0.45, 0.45, 0.45);
+const camera = new pc.Entity();
+camera.addComponent('camera', { nearClip: 0.1, farClip: 25, fov: 37, clearColor: new pc.Color(0.70, 0.82, 0.88, 1) });
+camera.setPosition(0, 1.27, 3.15);
+camera.lookAt(0, 0.55, 0);
+app.root.addChild(camera);
+
+const sun = new pc.Entity();
+sun.addComponent('light', { type: 'directional', intensity: 1.8, castShadows: true, shadowResolution: 1024, shadowBias: 0.35, normalOffsetBias: 0.04 });
+sun.setEulerAngles(48, -27, 0);
+app.root.addChild(sun);
+
+function shape(type, xyz, size, tint) {
+  const entity = new pc.Entity(type);
+  const material = new pc.StandardMaterial();
+  material.diffuse.fromString(tint);
+  material.update();
+  entity.addComponent('render', { type, material });
+  entity.setLocalPosition(...xyz);
+  entity.setLocalScale(...size);
+  app.root.addChild(entity);
+  return entity;
+}
+shape('box', [0, -0.15, 0], [12, 0.25, 3.8], '#ceaf81');
+shape('box', [0, -0.38, -4], [23, 0.3, 10], '#63b4b8');
+for (let i = 0; i < 7; i++) {
+  shape('box', [0.9 * Math.sin(i * 2), -0.22 - i * 0.015, -1.97 - i * 0.42], [8 + i, 0.018, 0.035], '#c1dfd4');
+}
+for (let i = 0; i < 8; i++) {
+  shape('sphere', [-1.9 + i * 0.52, -0.04, -1.45 + Math.sin(i * 4) * 0.13], [0.28, 0.15, 0.24], i % 2 ? '#aa947c' : '#bfa57e');
+}
+
+async function addModel(url, x, yaw) {
+  const asset = await new Promise((resolve, reject) => app.assets.loadFromUrl(url, 'container', (error, loaded) => error ? reject(error) : resolve(loaded)));
+  const model = asset.resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+  const holder = new pc.Entity();
+  holder.addChild(model);
+  holder.setLocalScale(0.95, 0.95, 0.95);
+  holder.setLocalPosition(x, 0, 0);
+  holder.setLocalEulerAngles(0, yaw, 0);
+  app.root.addChild(holder);
+  const idle = asset.resource.animations.find(clip => clip.resource.name === 'idle');
+  model.addComponent('anim', { activate: true });
+  model.anim.assignAnimation('idle', idle.resource);
+  model.anim.baseLayer.transition('idle', 0);
+}
+await Promise.all([addModel(tideUrl, -0.60, -15), addModel(botUrl, 0.62, 18)]);
+app.start();
+
+window.shoot = async (usePost, pan = 0) => {
+  camera.setPosition(pan, 1.27, 3.15);
+  camera.lookAt(pan, 0.55, 0);
+  const post = usePost ? new pc.CameraFrame(app, camera.camera) : undefined;
+  const photo = new Promise(resolve => app.once('frameend', () => {
+    const copy = document.createElement('canvas');
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    copy.getContext('2d').drawImage(canvas, 0, 0);
+    resolve(copy.toDataURL('image/png'));
+  }));
+  const capture = await capturePhotoSketch(app, camera.camera, post, '#b2d1e0', '');
+  const geometry = capture.geometry;
+  const normals = new Set(geometry.filter((value, i) => i % 4 === 0 && value !== 0));
+  const depthValues = new Set(geometry.filter((value, i) => i % 4 === 3 && value !== 0));
+  post?.destroy();
+  return { image: drawPencil(capture, 14), photo: await photo, normals: normals.size, depth: depthValues.size };
+};
+
+window.keep = (image) => new SaveService().keepSketch({
+  image, seed: 14, title: 'Our first picture', note: 'My first page since waking.', photo: 'first',
+});
+window.saved = () => new SaveService().sketches()[0];
+</script>
+</html>

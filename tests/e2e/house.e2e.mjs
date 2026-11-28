@@ -68,7 +68,7 @@ const stand = async (page, roofId, x, z, facing, ms = 2500) => {
     .catch(async () => {
       const why = await page.evaluate(() => {
         const g = window.solarbloom;
-        return { pose: g.bot.pose, goal: g.bot.turner?.goal, strafe: g.bot.strafe(), paused: g.pause.list(), tool: g.hud.currentTool };
+        return { pose: g.bot.pose, goal: g.bot.turner?.goal, paused: g.pause.list(), tool: g.hud.currentTool };
       });
       console.log(`  Bloombot did not finish turning to ${facing.toFixed(2)}:`, JSON.stringify(why));
     });

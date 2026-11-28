@@ -25,19 +25,54 @@ export class TideSketchbook {
     private draw: (seed: number) => Promise<string>,
   ) {}
 
-  open(talk: () => void, talkLabel: string) {
+  open(talk: () => void, talkLabel: string, firstPhoto?: () => void) {
     this.visit++;
-    const backToTide = () => this.open(talk, talkLabel);
+    const backToTide = () => this.open(talk, talkLabel, firstPhoto);
     this.panel.open(() => cardHead({ icon: icon('book', 'l'), title: 'Tide' }) +
       `<div class="oc-content oc-row"><button class="pn-btn" data-act="talk">${escHtml(talkLabel)}</button>
-       <button class="pn-btn primary" data-act="sketch">Show me your sketches</button></div>`,
+       <button class="pn-btn primary" data-act="sketch">Show me your sketches</button>
+       ${firstPhoto ? '<button class="pn-btn" data-act="photo">Take our first picture</button>' : ''}</div>`,
     (action) => {
-      if (action === 'sketch') this.page(backToTide);
+      if (action === 'sketch') this.browse(backToTide);
+      if (action === 'photo') {
+        this.panel.close();
+        firstPhoto?.();
+      }
       if (action === 'talk') {
         this.panel.close();
         talk();
       }
     });
+  }
+
+  /** A photo is already kept when Tide shows it, so its viewer reads the recorded image. */
+  showFirstPhoto(page: SavedSketch) {
+    this.visit++;
+    this.showPhoto(page, () => this.panel.close());
+  }
+
+  private browse(backToTide: () => void) {
+    const pages = this.saves.sketches().filter((page) => page.photo);
+    const back = () => {
+      backToTide();
+      this.panel.el.querySelector<HTMLElement>('[data-act="sketch"]')?.focus();
+    };
+    const next = (i: number) => {
+      if (pages[i]) this.showPhoto(pages[i], back, () => next(i + 1));
+      else this.page(backToTide);
+    };
+    next(0);
+  }
+
+  private showPhoto(page: SavedSketch, back: () => void, next?: () => void) {
+    this.panel.open(() => cardHead({ icon: icon('book', 'l'), title: 'Tide’s sketchbook', mood: page.title, dock: 'sheet' }) +
+      `<div class="oc-content tide-photo-page">${sketchPage(page)}
+       <p role="status">Saved to Backpack → Collection</p>
+       <div class="oc-row">${next ? '<button class="pn-btn" data-act="another">Show another</button>' : ''}
+       <button class="pn-btn primary" data-act="tide">Back to Tide</button></div></div>`, (action) => {
+      if (action === 'tide') back();
+      if (action === 'another') next?.();
+    }, back);
   }
 
   private page(backToTide: () => void) {

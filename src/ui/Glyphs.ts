@@ -145,6 +145,16 @@ export function actionGlyph(b: Bindings, a: Action, style: GlyphStyle): string {
   return btn === undefined ? svg('Not bound', text('—')) : padGlyph(style, btn);
 }
 
+/**
+ * The glyphs of several actions side by side (Turn: back, then forward), leaving out any that has nothing bound, so a
+ * prompt never shows a dash for an input the player doesn't have (on keys Turn back has no key: R alone turns).
+ * Only when none of them is bound does it fall back to the dash.
+ */
+export function actionGlyphs(b: Bindings, actions: readonly Action[], style: GlyphStyle): string {
+  const bound = actions.filter((a) => (style === 'keys' ? b.keys[a].length > 0 : b.pad[a] !== undefined));
+  return bound.length ? bound.map((a) => actionGlyph(b, a, style)).join('') : actionGlyph(b, actions[0], style);
+}
+
 /** A short text name for a pad button in a style (the hotbar's small badges, hints in sentences). */
 export function padName(style: PadStyle, button: number | undefined): string {
   return button === undefined ? '' : (PAD_NAMES[style][button] ?? `Button ${button}`);
