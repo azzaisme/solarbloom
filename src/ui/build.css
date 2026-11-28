@@ -1,5 +1,5 @@
 /* ───────── E23.11: build mode, Sunlit Glass ─────────
-   The build dock (#buildbar, src/ui/Hotbar.ts BuildBar), "Stop building" (#buildStop), the build crosshair and the
+   The build dock (#buildbar, src/ui/Hotbar.ts BuildBar), "Stop building" (#buildStop), the Fill button and the
    build menu sheet (#buildMenu, src/ui/BuildMenu.ts). Boards: docs/art/ui-sunlit-glass/Build.dc.html (keyboard),
    BuildPad.dc.html (gamepad, a decoration in hand) and BuildMenu.dc.html. Every colour is a token from the first
    :root of styles.css. Dock labels are 14 px bold; the menu's text is 16 px or more. */
@@ -68,11 +68,6 @@ body.building #hud.dock-wide #minimap { visibility: hidden; }
 body.building #hud #prompt { bottom: calc(150px + var(--safe-b)); }
 body.building #hud #dock { display: none; }
 
-/* ── the build crosshair: a white ring with a dot (only while aiming a build) ── */
-#hud > .crosshair { position: fixed; left: 50%; top: 50%; width: 30px; height: 30px; margin: 0; transform: translate(-50%, -50%); border-radius: 50%; border: 2.5px solid var(--on); box-shadow: 0 0 0 1.5px var(--shade), inset 0 0 0 1.5px var(--shade); pointer-events: none; display: none; }
-#hud.aiming > .crosshair { display: block; }
-#hud > .crosshair::before { content: none; }
-#hud > .crosshair::after { content: ''; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--on); box-shadow: 0 0 0 1px var(--shade); }
 
 /* ── the build menu: a sheet over the paused world ── */
 #buildMenu { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; font-family: var(--font-ui); color: var(--ink); }

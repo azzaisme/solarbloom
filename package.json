@@ -38,6 +38,7 @@
     "test:backpack": "vite build && node tests/e2e/backpack.e2e.mjs",
     "test:e23models": "vite build && node tests/e2e/e23-models.e2e.mjs",
     "test:workshop": "vite build && node tests/e2e/workshop.e2e.mjs",
+    "test:build-view": "vite build && node tests/e2e/build-view.e2e.mjs",
     "test:drone-fuel": "vite build && node tests/e2e/drone-fuel.e2e.mjs",
     "test:audio": "vite build && node tests/e2e/audio.e2e.mjs",
     "test:mouse": "vite build && node tests/e2e/mouse-hold.e2e.mjs",

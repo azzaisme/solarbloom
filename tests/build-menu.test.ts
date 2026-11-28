@@ -36,6 +36,18 @@ describe('E23.11: the build menu catalogue', () => {
     for (const c of open.cost) expect(costWords(c)).toMatch(/^\d+ of \d+ \S/);
   });
 
+  it('footpaths, roads and grass are under Ground: open from the start and free; the two paths are in the first hotbar', () => {
+    const sim = makeSim(); // a new game: nothing unlocked
+    const items = buildItems(sim);
+    expect(buildTabs(items).map((t) => t.label)).toContain('Ground');
+    for (const tool of ['footpath', 'road', 'grass'] as const) {
+      const i = buildItem(sim, tool)!;
+      expect([i.tab, i.locked, i.cost], tool).toEqual(['paths', false, []]);
+      if (tool !== 'grass') expect(HOTBAR_DEFAULT).toContain(tool);
+      expect(items.some((q) => q.tool === tool)).toBe(true);
+    }
+  });
+
   it('says what is short in plain words, never with a slash', () => {
     const cost = [
       { id: 'copper' as const, name: 'Copper', have: 1, need: 2 },

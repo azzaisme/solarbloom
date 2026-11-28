@@ -32,7 +32,9 @@ design's stylesheet). The owner reviewed them on the design canvas before the bu
 
 | Button | Building / decorating |
 |---|---|
-| A | place; aimed at a placed decoration, pick it up |
+| A | place; aimed at a placed decoration, pick it up. Hold and move the right stick to lay a run |
+| Right stick | moves the build cursor over the ground (build mode looks down from above) |
+| Click right stick | Fill: a drag covers the whole patch (on / off) |
 | LB / RB | turn the piece |
 | D-pad left / right | previous / next hotbar slot |
 | D-pad up | view: off → power → water |
