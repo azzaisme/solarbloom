@@ -22,6 +22,7 @@ export interface SavedSketch {
   title: string;
   note: string;
   image: string;
+  photo?: 'first' | 'photo';
 }
 
 /** E22.12: what the title screen shows for a slot. */

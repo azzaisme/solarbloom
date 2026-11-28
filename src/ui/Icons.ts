@@ -164,6 +164,8 @@ const BODIES = {
   vase: P('M9 3h6v2.2c0 1.2 3.8 2.6 3.8 7.6 0 4.4-2.8 8.2-6.8 8.2s-6.8-3.8-6.8-8.2c0-5 3.8-6.4 3.8-7.6z', 'orange') + L('M6.4 11.6h11.2', '#fff3d6', 1.2),
   building: R(5, 3.5, 14, 17.5, 1.6, 'steel') + `<g fill="#ffe7a3">${[6.5, 10.5, 14.5].flatMap((y) => [8, 11.2, 14.4].map((x) => `<rect x="${x}" y="${y}" width="1.8" height="2.2" rx=".4"/>`)).join('')}</g>` + R(10.6, 17.5, 2.8, 3.5, .6, 'wood'),
   road: P('M8.5 3h7L21 21H3z', 'stone') + L('M12 5v2.6M12 10.4v3M12 16.4v3', '#ffe7a3', 1.6),
+  // a footpath: paving stones laid in a staggered run
+  footpath: P('M4 15.2h7.2v5H4zM12.8 15.2H20v5h-7.2zM8.4 9h7.2v5H8.4zM4 2.8h7.2v5H4zM12.8 2.8H20v5h-7.2z', 'stone'),
   boat: P('M2.5 12.5h19l-3.4 5.6H5.9z', 'wood') + L('M14.5 3.5 9 17', '#3a2a1a', 1.6) + P('M8.2 19.4l1.6-3.8 2 .8-1.6 3.8z', 'wood'),
   // E18: drone roles (Scout, Courier)
   telescope: L('M9 14l-3.5 7M12 14v7M15 14l3.5 7', '#3a2a1a', 1.6) + P('M3.5 11.2l13.8-6.4 1.6 3.4-13.8 6.4z', 'cream') + P('M16.6 4.2l3.2-1.5 2 4.3-3.2 1.5z', 'gold') + C(5, 13.4, 1.6, 'dark'),
@@ -184,6 +186,24 @@ const BODIES = {
   clipboard: R(4.5, 4, 15, 17.5, 2.2, 'wood') + R(6.5, 6.5, 11, 13, 1.2, 'cream') + R(9, 2.5, 6, 3, 1, 'steel') + L('M8.6 10.5h6.8M8.6 13.5h6.8M8.6 16.5h4.4', '#a39d90', 1.2),
   broom: L('M18.5 3.5 11 11', '#3a2a1a', 2.6) + L('M18.5 3.5 11 11', '#d79a55', 1.4) + P('M10.2 9.4l4.4 4.4-3.4 3.4c-1.6 1.6-4.4 2.6-7.6 3.2.6-3.2 1.6-6 3.2-7.6z', 'gold'),
   bench: P('M3.5 9.5h17v3h-17z', 'wood') + P('M3.5 13.8h17v2.4h-17z', 'wood') + L('M6 16.2V20M18 16.2V20M6 9.5V6M18 9.5V6', '#3a2a1a', 2),
+  // #850: furniture for the house
+  armchair: P('M5 6.5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6H5z', 'orange') + R(2.5, 10, 4, 7.5, 1.6, 'orange') + R(17.5, 10, 4, 7.5, 1.6, 'orange') + R(6.5, 12, 11, 4, 1.2, 'cream') + L('M4.5 17.5V20M19.5 17.5V20', '#3a2a1a', 2),
+  stool: E(12, 8, 7, 2.6, 'wood') + L('M7.5 9.8 6 20M16.5 9.8 18 20M12 10.6V20M7.2 15.5h9.6', '#3a2a1a', 1.8),
+  diningTable: R(2, 8, 20, 3, 1, 'wood') + L('M4.5 11v9M19.5 11v9', '#3a2a1a', 2) + E(8, 7, 2.6, 0.9, 'cream') + E(16, 7, 2.6, 0.9, 'cream'),
+  sideTable: E(12, 10, 7.5, 2.4, 'wood') + L('M12 12.4V20M8.5 20.5h7', '#3a2a1a', 2) + P('M9.5 8.6c0-2.6 1.1-4 2.5-4s2.5 1.4 2.5 4z', 'teal'),
+  bookshelf: R(4, 2.5, 16, 19, 1.4, 'wood') + L('M4 9h16M4 15.2h16', '#3a2a1a', 1.6) + R(6, 4.2, 2, 4.4, 0.4, 'red') + R(8.4, 4.2, 2, 4.4, 0.4, 'water') + R(10.8, 4.6, 2, 4, 0.4, 'sun') + R(6.5, 10.4, 2, 4.4, 0.4, 'leaf') + R(9, 10.4, 2.4, 4.4, 0.4, 'pink') + R(14, 16.6, 4, 4.2, 0.4, 'teal'),
+  coatStand: L('M12 4v15.5M7.5 21h9M12 6l-3.5-2M12 6l3.5-2', '#3a2a1a', 1.8) + P('M9 7.5h6l1.5 8h-9z', 'teal') + E(12, 3.8, 2.6, 1.2, 'dark'),
+  // #851: soft furnishings
+  rugRound: E(12, 13, 9.5, 6, 'leaf') + E(12, 13, 6, 3.6, 'cream'),
+  rugRunner: P('M8 2.5h8l1 19H7z', 'water') + L('M9.5 5.5h5M9.2 18.5h5.6', '#fff', 1.4) + L('M7.5 21.5v1.5M10 21.5v1.5M12 21.5v1.5M14 21.5v1.5M16.5 21.5v1.5', '#fff', 1.2),
+  rugBig: R(2.5, 5, 19, 14, 1.2, 'red') + R(5, 7.5, 14, 9, 0.8, 'cream') + E(12, 12, 3.4, 2.2, 'red'),
+  rugPattern: R(3, 3, 18, 18, 1.2, 'teal') + R(5.5, 5.5, 4, 4, 0.4, 'gold') + R(14.5, 5.5, 4, 4, 0.4, 'gold') + R(5.5, 14.5, 4, 4, 0.4, 'gold') + R(14.5, 14.5, 4, 4, 0.4, 'gold') + R(9.5, 9.5, 5, 5, 0.6, 'gold'),
+  floorLamp: P('M7.5 3h9l2 6.5h-13z', 'sun') + L('M12 9.5v10.5M8.5 21h7', '#3a2a1a', 1.8),
+  tableLamp: P('M8.5 4h7l1.6 5h-10.2z', 'sun') + L('M12 9v4', '#3a2a1a', 1.6) + E(12, 14.2, 7, 1.8, 'wood') + L('M12 16v4.5M8.5 21h7', '#3a2a1a', 1.8),
+  houseplant: P('M7.5 14h9l-1.4 7H8.9z', 'orange') + P('M12 14c-.5-4-3.5-6.5-7.5-6 .4 3.8 3.4 6 7.5 6z', 'leaf') + P('M12 14c.3-4.6 3.4-7.6 7.6-7.2-.2 4.2-3.4 7-7.6 7.2z', 'leaf') + P('M12 13.5c-1-3.6-.4-7.6 1.6-10 1.4 3 1 7-1.6 10z', 'leaf'),
+  pottedTree: P('M7 15.5h10l-1.6 6H8.6z', 'orange') + L('M12 15.5v-4', '#3a2a1a', 1.8) + C(12, 8, 5.6, 'leaf'),
+  cushions: E(12, 17.5, 8, 3, 'red') + E(10, 13.5, 6, 2.6, 'water') + E(13.5, 10, 5, 2.3, 'sun'),
+  clock: R(7, 2.5, 10, 19, 1.4, 'wood') + C(12, 8, 3.4, 'cream') + L('M12 8V6M12 8l1.5 1', '#3a2a1a', 1.4) + L('M12 13v4', '#3a2a1a', 1.4) + C(12, 17.6, 1.4, 'gold'),
   bulb: P('M12 2.5a6.5 6.5 0 0 0-3.8 11.8c.8.6 1.3 1.6 1.3 2.6h5c0-1 .5-2 1.3-2.6A6.5 6.5 0 0 0 12 2.5z', 'sun') + R(9.4, 17, 5.2, 4.2, 1.4, 'steel') + HI('M9.4 6.8a3.6 3.6 0 0 1 2.4-1.6'),
   coins: P('M8 6.5h8l-1.4-3h-5.2zM12 6.5c5 0 8 4.2 8 8.2 0 3.6-3 5.8-8 5.8s-8-2.2-8-5.8c0-4 3-8.2 8-8.2z', 'gold') + L('M12 10v7.4M10 11.6h3.2a1.4 1.4 0 0 1 0 2.8h-2.4a1.4 1.4 0 0 0 0 2.8H14', '#9a5f08', 1.4),
   puzzle: P('M4 8h4a2.2 2.2 0 1 1 4 0h4v4a2.2 2.2 0 1 1 0 4v4H4z', 'leaf'),
@@ -332,6 +352,10 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🛠': 'wrench',
   // E23.5.4 beyond planters (the bee and the hedgehog are the visitors' icons above)
   '🍄': 'sprout', '🪱': 'sprout', '🦇': 'moon',
+  // #850: furniture for the house
+  '🛋': 'armchair', '🥁': 'stool', '🍽': 'diningTable', '🫖': 'sideTable', '📚': 'bookshelf', '🧥': 'coatStand',
+  // #851: soft furnishings
+  '🔘': 'rugRound', '🎞': 'rugRunner', '🟥': 'rugBig', '🔶': 'rugPattern', '🪔': 'floorLamp', '🕯': 'tableLamp', '🌵': 'houseplant', '🌴': 'pottedTree', '🧸': 'cushions', '🕰': 'clock',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

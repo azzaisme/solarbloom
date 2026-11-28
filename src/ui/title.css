@@ -194,6 +194,7 @@ body.reduced #loading .ld-bar i, #loading.still .ld-bar i { transition: none; }
 /* reduced motion: it stands in the middle, facing us */
 #loading.still .ld-walker, body.reduced #loading .ld-walker, #loading.still .ld-flip, body.reduced #loading .ld-flip, #loading.still .ld-frame img, body.reduced #loading .ld-frame img { animation: none; }
 #loading.still .ld-walk, body.reduced #loading .ld-walk { opacity: 0; }
+#loading.still .ld-walk:only-child { opacity: 1; }
 #loading.still .ld-turn, body.reduced #loading .ld-turn { opacity: 1; transform: translateX(-600px); }
 body.contrast #loading .ld-foot { background: var(--paper); border: 2px solid var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
 body.contrast #loading .ld-bar { outline: 1.5px solid var(--ink-2); }

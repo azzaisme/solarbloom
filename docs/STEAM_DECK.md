@@ -50,7 +50,7 @@ The map is E22's (docs/E22_CONTROLS_UI.md):
 | Turn the view | Right stick; click it to recentre |
 | Interact (the prompt at the bottom says what it does) | A |
 | Pulse, use the tool in hand | X |
-| Build menu | Y; in build mode A places, L1 / R1 turn the piece, R2 is remove mode |
+| Build menu | Y; build mode looks down from above: the right stick moves the build cursor, A places (hold it and move to lay a run), a click of the right stick turns Fill on or off, L1 / R1 turn the piece, R2 is remove mode |
 | Zoom the camera | D-pad down (cycles) |
 | Backpack | D-pad up |
 | Harvest Sunlight | D-pad left |

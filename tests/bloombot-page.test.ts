@@ -22,7 +22,7 @@ describe('#620: Bloombot\'s page', () => {
   it('a new game: four moves, Pry next, every upgrade at level 0', () => {
     const sim = fresh();
     const moves = moveRows(sim);
-    expect(moves.map((m) => `${m.name} ${m.state}`)).toEqual(['Pry next', 'Hover later', 'Climb later', 'Glide later']);
+    expect(moves.map((m) => `${m.name} ${m.state}`)).toEqual(['Prune next', 'Hover later', 'Climb later', 'Glide later']);
     expect(moves[0].how).toBe('Bring the fountain what it asks for and it teaches this. The goal card at the top left lists what that is.');
     expect(moves[1].how).toBe("The fountain teaches this once you've brought it what it asks for twice more.");
     expect(moves[0].where?.name).toBe('the fountain');
@@ -38,7 +38,7 @@ describe('#620: Bloombot\'s page', () => {
 
   it('as Bloombot learns: learned moves say so, and the next is the next', () => {
     const sim = fresh();
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
     const moves = moveRows(sim);
     expect(moves.map((m) => m.state)).toEqual(['have', 'next', 'later', 'later']);
     expect(moves[0]).toMatchObject({ how: 'The fountain taught Bloombot this.', where: undefined });
@@ -105,20 +105,20 @@ describe('#620: Bloombot\'s page', () => {
     const { TIERS } = await import('../src/data/salvage');
     const sim = fresh();
     const names = moveRows(sim).map((m) => m.name);
-    expect(objectiveSentence(sim)?.why).toBe('Bloombot learns to pry open rubble');
+    expect(objectiveSentence(sim)?.why).toBe('Bloombot learns to prune through the dead hedges');
     for (const [i, t] of TIERS.filter((x) => x.ability).entries()) expect(WORDS.objective.why[t.ability!]).toContain(`learns to ${names[i].toLowerCase()} `);
   });
 
   it('each row names the part of Bloombot it changes (E25\'s turntable lights it)', () => {
     const parts = Object.fromEntries(bloombotRows(fresh()).map((r) => [r.id, r.part]));
-    expect(parts).toMatchObject({ pry: 'marks', glide: 'marks', chargeCells: 'cells', backpack: 'pockets', pulseRadius: 'leaves', lantern: 'lamp' });
+    expect(parts).toMatchObject({ prune: 'marks', glide: 'marks', chargeCells: 'cells', backpack: 'pockets', pulseRadius: 'leaves', lantern: 'lamp' });
   });
 });
 
 describe('#663: the page and the crafting table use the same plain words', () => {
   it('a learned row never just repeats its heading', () => {
     const sim = fresh();
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
     for (const r of bloombotRows(sim).filter((x) => x.state === 'have')) expect(r.how.replace(/\.$/, ''), r.name).not.toBe(howHeading(r));
   });
 

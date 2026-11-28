@@ -95,11 +95,11 @@ export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'inter
       return { text: `Bring the fountain what it asks for: walk up to it and press ${keyFor('interact')} · still ${s} Scrap, ${e} Seeds`, target: '#obj' };
     }
     case 5:
-      return { text: `Water flows again, and three beacons glow through the fog. Hold ${keyFor('interact')} beside the rubble at the edge of the park to pry it open` };
+      return { text: `Water flows again, and three beacons glow through the fog. Hold ${keyFor('interact')} at the green glow in a hedge round the park to prune a way through` };
     case 6: {
       const r = REGIONS.find((q) => q.ring === 1 && sim.gates.isOpen(q.gate.id) && q.gate.opensRegion !== false);
       const k = r ? sim.keepers.def(r.keeper) : undefined;
-      return { text: k ? `A robot sleeps in ${r!.name}. Press ${keyFor('pulse')} beside ${k.name} to stir it, then press ${keyFor('interact')} to give it any 5 things` : 'A robot sleeps behind each pile of rubble: pry one open and wake it' };
+      return { text: k ? `A robot sleeps in ${r!.name}. Press ${keyFor('pulse')} beside ${k.name} to stir it, then press ${keyFor('interact')} to give it any 5 things` : 'A robot sleeps behind each dead hedge: prune a way through and wake it' };
     }
     default:
       // E23.1.5: after the first fifteen minutes the hint line carries the advisor's next step in the loop

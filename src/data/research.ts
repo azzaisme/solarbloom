@@ -101,7 +101,7 @@ export const RESEARCH = {
   pulseTilesPerLateLevel: 1,
   /** #623: the widest a pulse ever reaches, every bonus counted (Radiant's 7.1 and a tile) */
   pulseMaxRadius: 8.1,
-  /** #624: the shortest a salvage or pry hold ever gets (seconds), whatever shortens it */
+  /** #624: the shortest a salvage, prune or pry hold ever gets (seconds), whatever shortens it */
   minHold: 0.33,
   /** #624 "Keen eye": at this level the piles and caches show on the minimap too */
   keenEyeMapLevel: 3,
@@ -120,10 +120,10 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   { id: 'pulseRadius', branch: 'bloombot', name: 'Wider pulse', each: 'Each pulse brings back a little more ground', per: 1, needs: 'always', levels: [{ cost: { seeds: 10, copper: 6 } }, { cost: { seeds: 16, glassPane: 4 } }, { cost: { seeds: 24, sunCell: 2 } }, { cost: { sunCell: 3, sunstone: 10 } }, { cost: { sunCell: 5, sunstone: 16 } }] },
   { id: 'backpack', branch: 'bloombot', name: 'Roomier backpack', each: 'Bloombot carries 20 more of each thing', per: 20, needs: 'always', levels: [{ cost: { planks: 6, scrap: 10 } }, { cost: { planks: 10, clay: 10 } }, { cost: { planks: 14, gears: 10 } }, { cost: { motor: 2, sunstone: 8 } }, { cost: { motor: 3, sunCell: 3 } }] },
   // #624 (E25): five more for Bloombot, each on a system that was already there
-  /** a share off how long Interact is held to dig out a pile or pry rubble (UpgradeSystem.salvageHold / pryHold) */
-  { id: 'quickHands', branch: 'bloombot', name: 'Quick hands', each: 'Prying rubble and old vault doors open takes less time', per: 0.2, needs: 'always', levels: [{ cost: { gears: 4, scrap: 8 } }, { cost: { gears: 6, wire: 4 } }, { cost: { motor: 1, copper: 10 } }] },
+  /** a share off how long Interact is held to dig out a pile, prune a hedge or pry a vault (UpgradeSystem.salvageHold / pruneHold) */
+  { id: 'quickHands', branch: 'bloombot', name: 'Quick hands', each: 'Pruning through hedges and prying vault doors open takes less time', per: 0.2, needs: 'always', levels: [{ cost: { gears: 4, scrap: 8 } }, { cost: { gears: 6, wire: 4 } }, { cost: { motor: 1, copper: 10 } }] },
   /** tiles added to the pulse's ripple (what it lights up) and to how far the piles the fountain wants glint */
-  { id: 'keenEye', branch: 'bloombot', name: 'Keen eye', each: 'Each pulse lights up piles and hidden things from further away. At level 3 they show on the map too', per: 4, needs: 'always', levels: [{ cost: { glassPane: 2, copper: 4 } }, { cost: { glassPane: 4, wire: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }] },
+  { id: 'keenEye', branch: 'bloombot', name: 'Keen eye', each: 'Sensing lights up piles and hidden things from further away. At level 3 they show on the map too', per: 4, needs: 'always', levels: [{ cost: { glassPane: 2, copper: 4 } }, { cost: { glassPane: 4, wire: 4 } }, { cost: { glassPane: 6, sunstone: 4 } }] },
   /** charge a second back in full sun, standing still (times the sun's strength now) */
   { id: 'sunSoak', branch: 'bloombot', name: 'Sun soak', each: 'Bloombot slowly charges standing still in the sun', per: 0.12, needs: 'charge', levels: [{ cost: { glassPane: 2, sunstone: 2 } }, { cost: { sunstone: 6, wire: 4 } }, { cost: { sunCell: 2, sunstone: 6 } }] },
   /** how far Bloombot's own light reaches at night (tiles) */
@@ -164,7 +164,7 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'rb-lantern', branch: 'bloombot', name: 'A little lamp', about: 'A light of its own for dark streets.', cost: { glass: 6, copper: 6 }, days: 0.15, opens: { project: 'rb-eye' }, gives: { upgrade: 'lantern' } },
   { id: 'rb-lucky', branch: 'bloombot', name: 'Lucky dirt', about: 'What turns up when old ground wakes.', cost: { seeds: 12, scrap: 10 }, days: 0.15, opens: { project: 'rb-pulse' }, gives: { upgrade: 'luckyPulse' } },
   // E25 (#626): each move's second level, one fountain step after the move itself (Glide II after Climb II)
-  { id: 'rb-pry2', branch: 'bloombot', name: 'Pry II', about: 'A longer bar and firmer feet, for the heavy iron doors of old vaults.', cost: { copper: 20, gears: 12, scrap: 10 }, days: 0.2, opens: { move: 'hover' }, gives: { move: 'pry' } },
+  { id: 'rb-pry2', branch: 'bloombot', name: 'Pry bar', about: 'A long iron bar and firmer feet, for the heavy doors of old vaults.', cost: { copper: 20, gears: 12, scrap: 10 }, days: 0.2, opens: { move: 'hover' }, gives: { move: 'prune' } },
   { id: 'rb-hover2', branch: 'bloombot', name: 'Hover II', about: 'A steadier hover that goes much further over the sea.', cost: { glass: 20, copper: 16, sunstone: 6 }, days: 0.25, opens: { move: 'climb' }, gives: { move: 'hover' } },
   { id: 'rb-climb2', branch: 'bloombot', name: 'Climb II', about: 'A surer grip, to climb straight up a low wall with no ladder.', cost: { gears: 20, clay: 16, timber: 10 }, days: 0.25, opens: { move: 'glide' }, gives: { move: 'climb' } },
   { id: 'rb-glide2', branch: 'bloombot', name: 'Glide II', about: 'Wider wings that carry a lot further from a high edge.', cost: { sunstone: 16, glass: 16, gears: 10 }, days: 0.3, opens: { project: 'rb-climb2' }, gives: { move: 'glide' } },

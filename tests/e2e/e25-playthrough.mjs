@@ -224,7 +224,7 @@ try {
       const sv = s.state.salvage;
       s.pulseLoad.introduced();
       sv.tier = 4;
-      for (const a of ['pry', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
+      for (const a of ['prune', 'hover', 'climb', 'glide']) if (!sv.abilities.includes(a)) sv.abilities.push(a);
       for (const r of ['mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory', 'spireHeights']) s.gates.openRegion(r);
       for (const [x, z] of [[22, 47], [29, 21], [24, -10], [8, 48], [8, 55], [22, 54], [-8, 27]]) {
         const id = s.areas.map.areaOfCell(x, z);
@@ -291,7 +291,7 @@ try {
       const p = await besidePile(page, 8, 24);
       await page.waitForTimeout(1800);
       if (p) measures.salvageHoldQuick3 = await holdE(page, `${dir}/b03-hold-salvage-quick.png`);
-      measures.holdSeconds = await page.evaluate(() => ({ salvage: window.solarbloom.sim.upgrades.salvageHold, pry: window.solarbloom.sim.upgrades.pryHold, vault: window.solarbloom.sim.upgrades.vaultHold }));
+      measures.holdSeconds = await page.evaluate(() => ({ salvage: window.solarbloom.sim.upgrades.salvageHold, pry: window.solarbloom.sim.upgrades.pruneHold, vault: window.solarbloom.sim.upgrades.vaultHold }));
 
       // ── Keen eye: a pulse lights up piles from further off ──
       await stand(page, 10.5, 14.5, 0);
@@ -431,7 +431,7 @@ try {
       await ride('b13-climb-roof');
       await stand(page, 24.5, -9.5, Math.PI);
       texts.push({ where: 'vault, no Pry II', kind: 'prompt', text: await prompt(page) });
-      await level2('pry');
+      await level2('prune');
       await page.waitForTimeout(400);
       measures.vaultHold = await holdE(page, `${dir}/b14-hold-pry-vault.png`, () => window.__done > 0 || !document.querySelector('#prompt')?.textContent?.includes('vault'));
       await page.waitForTimeout(1500);

@@ -283,7 +283,7 @@ export const TUNING = {
   autosaveSeconds: 10,
 
   /** The starting park's Core (the fountain): replaces TUNING.core when the game starts in the city. */
-  /** Taps build a charge, then a held pulse releases it across the ground ahead. */
+  /** Taps build a charge, then a held pulse releases it across the ground all round Bloombot. */
   mega: {
     cooldown: 0.45,
     holdSeconds: 1.6,
@@ -357,6 +357,12 @@ export const TUNING = {
     moss: 6,
     /** moss/concrete → growing → restored, by who restored it (the sim still restores at its own moment) */
     restore: { pulse: 12, broad: 10, auto: 8, fast: 5 },
+    /**
+     * VFX 1: a pulse's own ground is washed in by its wave instead: green as the rim passes, its new plants growing
+     * in over the rest of `wash` seconds (at least `washAfter` past the wave)
+     */
+    wash: 2.6,
+    washAfter: 1.4,
     /** stages of the restore sequence, as shares of its duration: [start, end] */
     restoreStages: { fracture: [0, 0.08], heave: [0.08, 0.34], crumble: [0.34, 0.52], sprout: [0.46, 0.7], knit: [0.7, 1] },
     /** bloom grow-in, by the level reached (index 2..4); automatic nurtures play at `autoMult` */

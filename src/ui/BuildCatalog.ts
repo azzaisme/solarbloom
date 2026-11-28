@@ -1,10 +1,11 @@
-import type { BuildableType, ItemId } from '../core/types';
-import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
+import type { BuildableType, ItemId, LaidKind } from '../core/types';
+import { DECOR_OPTION, DECOR_OPTIONS, decorSet, type DecorSet } from '../data/cozy';
 import type { Unlock } from '../data/crafting';
 import { BUILDABLE, MACHINES } from '../data/machines';
 import { KEEPERS } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import { decorOpen } from '../gameplay/Cozy';
+import { LAID_KINDS, LAID_NAME } from '../gameplay/LaidPaths';
 import type { Sim } from '../gameplay/Sim';
 import type { Tool } from './Hud';
 import { ICONS, iconize, MACHINE_ICONS } from './Icons';
@@ -16,7 +17,7 @@ import type { IconName } from './Icons';
  * it is locked, who to wake for it. Read from the real data (machines, the crafting table's recipes, the
  * decorations), so a new machine appears with no change here beyond its tab and line.
  */
-export type BuildTabId = 'machines' | 'power' | 'water' | 'farm' | 'storage' | 'decorations';
+export type BuildTabId = 'machines' | 'power' | 'water' | 'farm' | 'storage' | 'paths' | 'decorations';
 
 export const BUILD_TABS: readonly { id: BuildTabId; label: string; icon: IconName }[] = [
   { id: 'machines', label: 'Machines', icon: 'wrench' },
@@ -24,11 +25,12 @@ export const BUILD_TABS: readonly { id: BuildTabId; label: string; icon: IconNam
   { id: 'water', label: 'Water', icon: 'water' },
   { id: 'farm', label: 'Farm', icon: 'sprout' },
   { id: 'storage', label: 'Storage', icon: 'parcel' },
+  { id: 'paths', label: 'Ground', icon: 'road' },
   { id: 'decorations', label: 'Decorations', icon: 'flower' },
 ];
 
 /** E23.11: the build bar's default buttons 1–9 (the build board's row; the build menu pins others). */
-export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'battery', 'relay', 'planter', 'compostBin', 'pump', 'pipe', '', ''];
+export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'battery', 'relay', 'planter', 'compostBin', 'pump', 'pipe', 'footpath', 'road'];
 
 /** Which tab each machine sits under (and the pipe, which is laid from the Water tab). */
 export const BUILD_TAB: Record<BuildableType | 'pipe', BuildTabId> = {
@@ -148,7 +150,12 @@ export interface BuildItem {
   /** have-of-need, the store within reach counted (empty: free) */
   cost: BuildCost[];
   affordable: boolean;
+  /** #847: a decoration's set (made for a room, or for the garden) */
+  set?: DecorSet;
 }
+
+/** #847: the heading over each set of decorations in the build menu. */
+export const DECOR_SET_LABEL: Record<DecorSet, string> = { indoor: 'For the house', garden: 'For the garden' };
 
 /** "Wake Sluice": who to wake (or what to do) for a locked recipe. Never names a Lucky Cat. */
 export function unlockText(u: Unlock): string {
@@ -210,15 +217,38 @@ function pipeItem(sim: Sim): BuildItem {
   };
 }
 
+const LAID_LINE: Record<LaidKind, string> = {
+  footpath: 'Paving stones for a garden walk. Hold and drag to lay a whole run at once, or turn Fill on to pave a patch.',
+  road: 'A smooth road across open ground. Hold and drag to lay a whole run at once, or turn Fill on to pave a patch.',
+  grass: 'Turn paving and bare ground into lawn: a market floor, a plaza, a walk. Hold and drag for a strip, or turn Fill on to green a whole patch. Then pulse it to bring it to life.',
+};
+
+/** A footpath, a road or grass: the ground itself, free to lay and to lift, there from the first time Bloombot builds. */
+function laidItem(kind: LaidKind): BuildItem {
+  return {
+    tool: kind,
+    tab: 'paths',
+    name: LAID_NAME[kind],
+    short: kind === 'footpath' ? 'Path' : LAID_NAME[kind],
+    icon: kind === 'footpath' ? ICONS.footpath : kind === 'grass' ? ICONS.sprout : ICONS.road,
+    kind: 'Free to lay · hold and drag for a run',
+    line: LAID_LINE[kind],
+    locked: false,
+    cost: [],
+    affordable: true,
+  };
+}
+
 /** A decoration: open ones are free to place; one the table can make shows as locked with that; finds stay hidden. */
 function decorItem(sim: Sim, id: string): BuildItem | undefined {
   const o = DECOR_OPTION[id];
   if (!o) return undefined;
   const open = decorOpen(sim, o);
-  if (!open) {
-    const r = sim.crafting.decor(id);
-    if (!r || 'cat' in r.unlock || !sim.crafting.unlocked(r.unlock)) return undefined;
-  }
+  const r = sim.crafting.decor(id);
+  const known = !!r && sim.crafting.unlocked(r.unlock);
+  // A locked garden piece stays off the list until its recipe is known; #852: a piece for a room shows from the start,
+  // saying how to get it (a level of the house, a Keeper's gift, or the workbench).
+  if (!open && (!r || 'cat' in r.unlock || (!known && !o.indoor))) return undefined;
   return {
     tool: `decor:${id}`,
     tab: 'decorations',
@@ -228,35 +258,53 @@ function decorItem(sim: Sim, id: string): BuildItem | undefined {
     kind: o.solid ? 'Free to place · stands in the way' : 'Free to place · walk right over it',
     line: o.blurb,
     locked: !open,
-    lockText: open ? undefined : 'Make it at the workbench',
+    lockText: open ? undefined : known && !r!.gift ? 'Make it at the workbench' : sim.crafting.decorLock(id).replace('🔒 ', ''),
     cost: [],
     affordable: open,
+    set: decorSet(o),
   };
 }
 
-/** Every piece the build menu lists, in tab order then data order. */
-export function buildItems(sim: Sim): BuildItem[] {
+/**
+ * Every piece the build menu lists, in tab order then data order. #847: decorations lead with the set that suits where
+ * Bloombot is (`inside` the house: the pieces made for a room; outside: the garden pieces), the other set after it.
+ * Either set can be placed anywhere; this is only the order.
+ */
+export function buildItems(sim: Sim, inside = false): BuildItem[] {
   const out: BuildItem[] = [];
   for (const t of BUILDABLE) {
     const it = machineItem(sim, t);
     if (it) out.push(it);
     if (t === 'pump') out.push(pipeItem(sim)); // the pipe sits after the pump
   }
+  for (const k of LAID_KINDS) out.push(laidItem(k));
   for (const o of DECOR_OPTIONS) {
     const it = decorItem(sim, o.id);
     if (it) out.push(it);
   }
   const order = BUILD_TABS.map((t) => t.id);
-  return out.sort((a, b) => order.indexOf(a.tab) - order.indexOf(b.tab));
+  const lead: DecorSet = inside ? 'indoor' : 'garden';
+  const setRank = (i: BuildItem) => (i.set && i.set !== lead ? 1 : 0);
+  return out.sort((a, b) => order.indexOf(a.tab) - order.indexOf(b.tab) || setRank(a) - setRank(b)); // stable: data order within a set
 }
 
 /** One piece by its tool (undefined: not buildable now, or not a build tool). */
 export function buildItem(sim: Sim, tool: Tool | string): BuildItem | undefined {
   if (!tool) return undefined;
   if (tool === 'pipe') return pipeItem(sim);
+  if (tool === 'footpath' || tool === 'road' || tool === 'grass') return laidItem(tool);
   if (tool.startsWith('decor:')) return decorItem(sim, tool.slice(6));
   if (tool in MACHINES && tool !== 'core') return machineItem(sim, tool as BuildableType);
   return undefined;
+}
+
+/**
+ * #847: the set heading to put before each piece of one tab's list (undefined: none). With both sets of decorations
+ * listed, each set opens with its heading, so the second set starts a row of its own; with one set, no headings.
+ */
+export function setHeads(items: readonly BuildItem[]): (DecorSet | undefined)[] {
+  const both = new Set(items.map((i) => i.set).filter(Boolean)).size > 1;
+  return items.map((i, n) => (both && i.set && i.set !== items[n - 1]?.set ? i.set : undefined));
 }
 
 /** The tabs that have something in them now. */

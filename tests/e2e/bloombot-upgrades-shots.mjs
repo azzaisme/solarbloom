@@ -110,7 +110,7 @@ try {
   });
   await page.waitForTimeout(400);
   const now = await page.evaluate(() => document.querySelector('#bpScreen .bb-detail .bb-now')?.textContent ?? '');
-  check(now === 'Right now prying rubble open takes 1.2 seconds.', `Quick hands shows how long prying takes at level 2 ("${now}")`);
+  check(now === 'Right now pruning through a hedge takes 1.2 seconds.', `Quick hands shows how long prying takes at level 2 ("${now}")`);
   await page.evaluate(() => {
     for (const e of document.querySelectorAll('#bpScreen .bb-detail, #bpScreen .bb-detail *')) e.scrollTop = 0;
     let e = document.querySelector('#bpScreen .bb-detail');

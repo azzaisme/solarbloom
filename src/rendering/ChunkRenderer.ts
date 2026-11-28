@@ -25,6 +25,7 @@ import { drawGardenFence, drawHouse, type HouseSink } from './HouseArt';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
+import { decorSize } from '../data/cozy';
 import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageBounds, foliageMaterial, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type TreeStage, type Lod } from './TreeGen';
@@ -484,7 +485,7 @@ export class MeshBuilder {
 /** Ground colours per material, dead → alive (Look 2: PALETTE.ground / PALETTE.lawn). */
 const DEAD = PALETTE.ground.dead;
 /** E21.5: the gate models' length in metres (#379), so a gate model can be fitted to its cells. */
-const GATE_LENGTH: Record<string, number> = { barricade: 4, 'bridge-broken': 14, 'bridge-repaired': 14, 'skybridge-collapsed': 12, 'lift-bridge': 6, 'glide-perch': 1.2 };
+const GATE_LENGTH: Record<string, number> = { 'bridge-broken': 14, 'bridge-repaired': 14, 'skybridge-collapsed': 12, 'lift-bridge': 6, 'glide-perch': 1.2 };
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 /** #783: the workbench model (1.42 m across, 0.86 m deep, 1.5 m to the top of its tool rack) at about Bloombot's size */
 const WORKBENCH_SCALE = 0.65;
@@ -827,6 +828,8 @@ export class ChunkRenderer {
   parkStage = -1;
   /** Called when the park's stage rises (Game shows a line and a sparkle). */
   onParkStage?: (stage: number, prev: number) => void;
+  /** #830: a chunk was just rebuilt (its snow layer is built again: something may stand where snow lay) */
+  onChunkBuilt?: (cx: number, cz: number) => void;
 
   update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1, wind = 0) {
     this.time += dt;
@@ -1301,10 +1304,11 @@ export class ChunkRenderer {
     }
     if (prop.startsWith('gate:')) {
       // E21.5: a gate is one model over all its cells (drawn from its first cell), fitted to the gate's length
-      // and turned along its long side: the barricade (4 m), the bridges (14 m, along +X) and the skybridge (12 m)
+      // and turned along its long side: the bridges (14 m, along +X) and the skybridge (12 m)
       const sp = setPieceAt(t.x, t.z);
       if (sp?.kind !== 'gate') return true;
       const g = sp.gate;
+      if (g.kind === 'hedge') return true; // #hedge-line: HedgeLine draws the hedge and its forcefield
       const xs = g.cells.map((c) => c[0]);
       const zs = g.cells.map((c) => c[1]);
       const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
@@ -1315,12 +1319,12 @@ export class ChunkRenderer {
       const spanZ = z1 - z0 + 1;
       const alongX = spanX >= spanZ;
       const length = GATE_LENGTH[name] ?? 4;
-      // a barricade fills the opening across the avenue; a bridge spans the gap along its length
-      const across = name === 'barricade' ? Math.max(spanX, spanZ) : alongX ? spanX : spanZ;
+      // a bridge spans the gap along its length
+      const across = alongX ? spanX : spanZ;
       const sc = across / length;
       const cx = (x0 + x1 + 1) / 2;
       const cz = (z0 + z1 + 1) / 2;
-      if (!model || !this.batch?.add(model, cx, y, cz, alongX ? 0 : Math.PI / 2, sc, sc, sc, !!model && model === 'barricade' ? true : false))
+      if (!model || !this.batch?.add(model, cx, y, cz, alongX ? 0 : Math.PI / 2, sc, sc, sc, false))
         for (const [gx, gz] of g.cells) b.add('sphere', PALETTE.stone.dark, [gx + 0.5, y + 0.15, gz + 0.5], [0.95, 0.45, 0.9]);
       return true;
     }
@@ -2017,7 +2021,11 @@ export class ChunkRenderer {
         model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
-      for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + 0.5, d.rot, !!v.far);
+      // #849: a big piece is drawn about the middle of its footprint
+      for (const d of decor) {
+        const [w, dd] = decorSize(d.kind, d.rot);
+        drawDecor(host, d.kind, d.x + w / 2, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + dd / 2, d.rot, !!v.far, d.x * 31 + d.z);
+      }
     }
     // #783: the workbench beside the house
     const wb = s.bench?.at;
@@ -2038,6 +2046,7 @@ export class ChunkRenderer {
     }
     // E23.12.3: everything this build drew solid, the facades included, into the per-tile index
     this.solids.setChunk(v.key, solids.boxes);
+    this.onChunkBuilt?.(v.cx, v.cz);
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
     this.treeTris.set(v.key, fb.tris);

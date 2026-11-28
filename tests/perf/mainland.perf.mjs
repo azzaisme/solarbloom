@@ -64,7 +64,7 @@ try {
     const s = g.sim;
     const sv = s.state.salvage;
     sv.tier = 5;
-    sv.abilities = ['pry', 'hover', 'climb', 'glide'];
+    sv.abilities = ['prune', 'hover', 'climb', 'glide'];
     s.mainland.open();
     // restore districts outward from the landing, breadth first
     const land = s.areas.map.areaOfChunk(9, 0);

@@ -66,7 +66,15 @@ export interface TileTransition {
   dir?: number;
   from?: number;
   g?: 1;
+  /**
+   * VFX 1: a restore washed in by a pulse's wave: where the wave starts (x, z offset from the tile's centre), the
+   * radius it reaches and the seconds it takes from `t0`. The ground turns as the wave's rim passes over it.
+   */
+  w?: [number, number, number, number];
 }
+
+/** What Bloombot can lay on the ground in build mode: a paved footpath, or a road. */
+export type LaidKind = 'footpath' | 'road' | 'grass';
 
 export interface TileData {
   id: string;
@@ -91,6 +99,11 @@ export interface TileData {
   tr?: TileTransition;
   /** City ground: what the tile is made of (generated, not saved). */
   feature?: import('../data/city').TileFeature;
+  /**
+   * A footpath or road Bloombot laid here (gameplay/LaidPaths): it overrides `feature`. Stamped from the save's
+   * `laid` lists as the chunk loads; never packed with the tile.
+   */
+  laid?: LaidKind;
   /** City ground obstacles: which prop stands here (bench, stall, stump…), for the renderer. */
   prop?: string;
   /** A generated obstacle was cleared so a fogged area stays reachable (saved). */
@@ -384,7 +397,7 @@ export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | '
 /** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
 export type ItemId = MaterialId | ComponentId;
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
-export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
+export type AbilityId = 'prune' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
 export type KeeperStep = 'asleep' | 'request1' | 'request2' | 'landmark' | 'settled';
 
@@ -417,7 +430,7 @@ export interface SalvageState {
   store: Partial<Record<ItemId, number>>;
   /** E21.2: units left in each pile bloombot has touched (pile id → left); untouched piles are full */
   piles: Record<string, number>;
-  /** E21.5: gates opened for good (barricades pried, bridges repaired), by gate id */
+  /** E21.5: gates opened for good (hedges pruned through, bridges repaired), by gate id */
   opened: string[];
   /** E21.6: fountain tier reached (0 = dry) */
   tier: number;
@@ -572,6 +585,8 @@ export interface GameState {
    * the lamp). false: asleep. Unset (gardens saved before it could sleep) counts as awake, so no drone falls asleep.
    */
   oldDroneAwake?: boolean;
+  /** Tide's Photo Mode introduction and the number of eligible shots since the last sketch. */
+  tidePhoto?: { introPending: boolean; misses: number };
   upgrades: Record<string, number>;
   buffs: Buff[];
   /** City areas that have been revealed (frontier or further). Static area data comes from the seed. */
@@ -602,6 +617,11 @@ export interface GameState {
     /** E23.4.2.2: pipe tiles on the ground, `x,z`, sorted */
     pipes?: string[];
   };
+  /**
+   * Footpaths and roads Bloombot laid on the ground (gameplay/LaidPaths): `x,z` lists, sorted. Optional and absent
+   * when nothing is laid, so no save version change.
+   */
+  laid?: Partial<Record<LaidKind, string[]>>;
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };
   /**

@@ -95,11 +95,9 @@ export class RestorationSystem {
       this.sim.bus.emit('pulse.fired', { tileId, extra: [], overcharged: false });
       return true;
     }
-    // E23.2.2: the pulse uses one unit of its load (or fires empty) and sends out its reveal ripple
+    // E23.2.2: the pulse uses one unit of its load (or fires empty). VFX 1: it no longer lights up what is nearby:
+    // sensing does that (PulseLoad.sense, its own control)
     const load = this.sim.pulseLoad.take();
-    const ripple = this.sim.pulseLoad.ripple(t);
-    this.sim.buried.reveal(ripple.filter((g) => g.kind === 'buried')); // found: a mound marks each until it is dug up
-    this.sim.bus.emit('pulse.ripple', { tileId, targets: ripple });
     if (mega) return this.releaseMega(t, mega, load);
     this.chargeMega();
     if (t.ground === 'restored') {
@@ -247,30 +245,34 @@ export class RestorationSystem {
     return !t.occupantId && this.isEligible(t);
   }
 
-  /** The reachable tiles in the forward fan, ordered outward from the aim point. */
-  megaTargets(origin: TileData, facing: number): MegaTarget[] {
+  /**
+   * VFX 1: the tiles a Mega Pulse from `origin` (where Bloombot stands) heals: a circle all the way round it, nearest
+   * first, up to the budget. It spreads over dead ground and through green ground (never through walls, water or
+   * fog), and each target's depth is its distance in whole tiles, so the restore wave rolls out as a ring.
+   */
+  megaTargets(origin: TileData): MegaTarget[] {
     const budget = this.megaBudget();
-    const reach = Math.ceil(Math.sqrt(budget) * 1.7);
-    const fx = Math.sin(facing), fz = Math.cos(facing);
-    const targets: MegaTarget[] = [];
+    const reach = Math.ceil(Math.sqrt(budget / Math.PI) * 1.8) + 1;
+    const r2 = reach * reach;
+    const found: { tile: TileData; d2: number }[] = [];
     const seen = new Set([origin.id]);
-    const queue = [{ tile: origin, depth: 0 }];
-    for (let i = 0; i < queue.length && targets.length < budget; i++) {
-      const { tile, depth } = queue[i];
-      if (this.megaEligible(tile)) targets.push({ tile, depth });
-      if (depth >= reach) continue;
+    const queue = [origin];
+    for (let i = 0; i < queue.length; i++) {
+      const tile = queue[i];
+      const d2 = (tile.x - origin.x) ** 2 + (tile.z - origin.z) ** 2;
+      if (this.megaEligible(tile)) found.push({ tile, d2 });
       for (const next of this.sim.grid.neighbors(tile)) {
         if (seen.has(next.id)) continue;
         seen.add(next.id);
-        const dx = next.x - origin.x, dz = next.z - origin.z;
-        const forward = dx * fx + dz * fz;
-        const side = Math.abs(dx * fz - dz * fx);
-        if (forward < -0.001 || side > 1.5 + 0.7 * forward) continue;
+        if ((next.x - origin.x) ** 2 + (next.z - origin.z) ** 2 > r2) continue;
         const green = next.ground === 'restored' && !next.blocked && !next.occupantId && next.feature !== 'water' && this.sim.areas.canTouch(next);
-        if (green || this.megaEligible(next)) queue.push({ tile: next, depth: depth + 1 });
+        if (green || this.megaEligible(next)) queue.push(next);
       }
     }
-    return targets;
+    return found
+      .sort((a, b) => a.d2 - b.d2 || a.tile.id.localeCompare(b.tile.id))
+      .slice(0, budget)
+      .map(({ tile, d2 }) => ({ tile, depth: Math.round(Math.sqrt(d2)) }));
   }
 
   /** The Mega Pulse is the city's tool: it starts charging once the fountain is awake. */

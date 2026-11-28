@@ -92,7 +92,7 @@ try {
     sv.delivered.scrap = 20;
     sv.delivered.seeds = 6;
     sv.tier = 1;
-    if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+    if (!sv.abilities.includes('prune')) sv.abilities.push('prune');
     sv.delivered.timber = 30;
   });
   await stand(8.5, 9.5, Math.PI);

@@ -1,5 +1,5 @@
 import { GROUND, machinesStamp } from '../core/GameState';
-import { decorOccupant, parseDecorKey } from '../core/Decor';
+import { decorCellsOf, decorOccupant } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Grid } from '../core/Grid';
 import { inRect } from '../core/OldCityLayout';
@@ -63,6 +63,7 @@ import { FarmExtras } from './FarmExtras';
 import { Weather } from './Weather';
 import { Seasons } from './Seasons';
 import { DecaySystem } from './DecaySystem';
+import { LaidPaths } from './LaidPaths';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -121,6 +122,8 @@ export class Sim {
   readonly landmarks: LandmarkSystem;
   /** #787: each region's works (power, water or drones) its landmark waits on. */
   readonly works: RegionWorks;
+  /** Footpaths and roads Bloombot laid (build mode's drag and fill). */
+  readonly paths: LaidPaths;
   /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
   readonly water: WaterSystem;
   /** E23.6.1: the crafting table (components; machine and decoration recipes). */
@@ -185,7 +188,7 @@ export class Sim {
     delete state.tiles;
     for (const m of state.machines) this.grid.indexMachine(m);
     // E19.2: decorations occupy their tile as machines do (the game writes them; the sim only stamps occupancy).
-    for (const k of Object.keys(state.cozy?.decor ?? {})) this.grid.indexDecor(k);
+    for (const [k, v] of Object.entries(state.cozy?.decor ?? {})) this.grid.indexDecor(k, v);
     this.grid.onChunkCreated = (c) => {
       const p = this.grid.pending[c.key];
       delete this.grid.pending[c.key];
@@ -193,14 +196,17 @@ export class Sim {
       c.packed = p ?? '';
       if (p && this.transitions) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
       for (const m of this.grid.machinesInChunk(c.key)) for (const t of this.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t) t.occupantId = m.id;
+      // #849: every square of a big piece, whichever of its chunks this is
       for (const k of this.grid.decorInChunk(c.key)) {
-        const at = parseDecorKey(k)!;
-        const t = this.grid.peek(at.roofId, at.x, at.z);
-        if (t && !t.occupantId) t.occupantId = decorOccupant(k);
+        for (const at of decorCellsOf(k, this.state.cozy?.decor?.[k] ?? '')) {
+          const t = this.grid.peek(at.roofId, at.x, at.z);
+          if (t && !t.occupantId) t.occupantId = decorOccupant(k);
+        }
       }
       // #783: the workbench's square, then world giants: their trunk cells are solid, as a decoration's tile
       if (c.layer === GROUND) stampBench(this.state, c.tiles);
       if (c.layer === GROUND) stampGiants(this, c.tiles);
+      this.paths?.stampChunk(c); // laid footpaths and roads are the ground itself
     };
     // The world travels with the state (for saving) but is never part of its JSON.
     Object.defineProperty(state, 'world', { value: this.grid, enumerable: false, configurable: true, writable: true });
@@ -213,6 +219,7 @@ export class Sim {
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
     this.inventory = new Inventory(this);
+    this.paths = new LaidPaths(this);
     this.charge = new ChargeSystem(this);
     this.pulseLoad = new PulseLoad(this);
     this.rest = new RestSystem(this);
@@ -422,10 +429,7 @@ export function dryOccupiedPonds(state: GameState) {
   }
   const cells: { x: number; z: number }[] = [];
   for (const m of state.machines) if (m.roofId === ground.id) for (let dx = 0; dx < m.size; dx++) for (let dz = 0; dz < m.size; dz++) cells.push({ x: m.x + dx, z: m.z + dz });
-  for (const k of Object.keys(state.cozy?.decor ?? {})) {
-    const at = parseDecorKey(k);
-    if (at && at.roofId === ground.id) cells.push(at);
-  }
+  for (const [k, v] of Object.entries(state.cozy?.decor ?? {})) for (const at of decorCellsOf(k, v)) if (at.roofId === ground.id) cells.push(at);
   for (const r of REGIONS) {
     if (ground.dryPonds?.includes(r.id)) continue;
     if (r.ponds?.some((q) => cells.some((c) => inRect(q, c.x, c.z)))) (ground.dryPonds ??= []).push(r.id);

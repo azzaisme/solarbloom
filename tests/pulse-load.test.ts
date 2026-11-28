@@ -204,7 +204,7 @@ describe('E23.2.2.2: what grows from each load', () => {
       const seen = watch(sim);
       sim.inventory.add('seeds', 3);
       sim.pulseLoad.choose('seeds');
-      const targets = [0, Math.PI / 2, Math.PI, -Math.PI / 2].map(facing => sim.restoration.megaTargets(t, facing)).sort((a, b) => b.length - a.length)[0];
+      const targets = sim.restoration.megaTargets(t);
       expect(sim.restoration.playerPulse(t.id, targets)).toBe(true);
       expect(sim.restoration.megaReady()).toBe(false); // released
       sim.advance(20);
@@ -244,11 +244,18 @@ describe('E23.2.2.3: the reveal ripple', () => {
     expect(sim.pulseLoad.ripple({ roofId: GROUND, x: page.x, z: page.z }).some((g) => g.kind === 'page' && g.id === page.id)).toBe(true);
     const cache = REGIONS[0].caches[0];
     expect(sim.pulseLoad.ripple({ roofId: GROUND, x: cache.x, z: cache.z }).some((g) => g.kind === 'cache' && g.id === cache.id)).toBe(true);
-    // a pulse sends it
+    // VFX 1: sensing sends it (with a short wait between); a pulse doesn't
     const fired: number[] = [];
     sim.bus.on('pulse.ripple', (e) => fired.push(e.targets.length));
-    sim.restoration.pulse(deadTiles(sim, 1)[0].id);
+    const [t] = deadTiles(sim, 1);
+    sim.restoration.pulse(t.id);
+    expect(fired.length).toBe(0);
+    expect(sim.pulseLoad.sense(t)).toBe(true);
     expect(fired.length).toBe(1);
+    expect(sim.pulseLoad.sense(t)).toBe(false);
+    sim.advance(RIPPLE.senseCooldown + 0.1);
+    expect(sim.pulseLoad.sense(t)).toBe(true);
+    expect(fired.length).toBe(2);
   });
 
   it('never reveals a Lucky Cat: no target is a cat, and cats change nothing it shows', () => {
@@ -293,7 +300,7 @@ describe('E23.2.2.3: buried seeds and salvage', () => {
     expect(new Set(a.map((f) => f.material))).toEqual(new Set(['seeds', 'scrap']));
   });
 
-  it('a pulse reveals the ones in reach; a mound shows; Interact digs them up into the backpack (saved)', () => {
+  it('sensing reveals the ones in reach; a mound shows; Interact digs them up into the backpack (saved)', () => {
     const sim = oldSim(7);
     const f = finds(sim).find((q) => deadTiles(sim, 400).some((t) => Math.hypot(t.x - q.x, t.z - q.z) <= RIPPLE.radius))!;
     expect(f).toBeTruthy();
@@ -302,7 +309,7 @@ describe('E23.2.2.3: buried seeds and salvage', () => {
     const t = deadTiles(sim, 400).find((q) => Math.hypot(q.x - f.x, q.z - f.z) <= RIPPLE.radius)!;
     let targets: string[] = [];
     sim.bus.on('pulse.ripple', (e) => (targets = e.targets.map((g) => g.id)));
-    sim.restoration.pulse(t.id);
+    sim.pulseLoad.sense(t);
     expect(targets).toContain(f.id);
     expect(sim.buried.known(f.x, f.z)?.id).toBe(f.id);
     const before = sim.inventory.count(f.material);

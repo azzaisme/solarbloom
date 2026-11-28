@@ -30,12 +30,16 @@ uniform float projectionFlipY;
 ${WIND_GLSL}
 varying float vLeaf;
 varying float vSeasonLeaf;
+varying float vSpringGreen;
 varying vec3 vLeafP;
 vec4 evalWorldPosition(vec3 vertexPosition, mat4 modelMatrix) {
 	vec3 localPos = getLocalPosition(vertexPosition);
 	vec4 posW = modelMatrix * vec4(localPos, 1.0);
 	// #830: flex carries SEASON_FLAG (4) on a deciduous tree's leaves: they follow the seasons (SeasonLook)
 	float w = vertex_position.w;
+	// #785: SPRING_GREEN_FLAG (8) on top: a seasonal leaf that stays green in spring (a fruit tree's)
+	vSpringGreen = step(7.99, w);
+	w -= vSpringGreen * 8.0;
 	vSeasonLeaf = step(3.99, w);
 	w -= vSeasonLeaf * 4.0;
 	// flex carries LEAF_FLAG (2) on foliage clumps: leaves are drawn over those by the fragment shader
@@ -76,6 +80,7 @@ vec3 getWorldPosition() {
 const LEAF_DECL_PS = /* glsl */ `
 varying float vLeaf;
 varying float vSeasonLeaf;
+varying float vSpringGreen;
 varying vec3 vLeafP;
 ${SEASON_GLSL}
 uniform vec4 uLeafParams; // strength, normal tilt, leaves per world unit, unused
@@ -89,7 +94,7 @@ void sbLeafAlbedo();
 // #830: the season over the leaves (blossom, autumn colour) and over every green thing (tint, frost)
 void getAlbedo() {
 	sbLeafAlbedo();
-	if (vSeasonLeaf > 0.5) dAlbedo = sbSeasonLeaf(dAlbedo, vLeafP);
+	if (vSeasonLeaf > 0.5) dAlbedo = sbSeasonLeafB(dAlbedo, vLeafP, 1.0 - vSpringGreen);
 	dAlbedo = sbSeasonColour(dAlbedo, normalize(vNormalW), vLeafP);
 }
 vec3 sbLeafHash(vec3 p) {
@@ -149,6 +154,7 @@ const LEAF_NORMAL_PS = /* glsl */ `
 void getNormal() {
 	dNormalW = dVertexNormalW;
 	if (sbLeafK > 0.001) dNormalW = normalize(dNormalW + sbLeafBend * uLeafParams.y * sbLeafK);
+	dNormalW = normalize(dNormalW + sbSnowBend); // #830: lumps in lying snow
 }
 `;
 
@@ -380,6 +386,8 @@ export class FoliageBuilder {
   private idx = new Grow(new Uint32Array(1 << 14));
   /** 0 = full colour … 1 = grey (fog), as in the chunk builder */
   grey = 0;
+  /** 0 = as grown … 1 = dead: leaves turned straw-brown (each keeps its light and dark), e.g. the sealed-area hedge */
+  dry = 0;
   tris = 0;
 
   /**
@@ -401,6 +409,7 @@ export class FoliageBuilder {
     let p = this.pos.n, n = this.nrm.n, k = this.col.n, q4 = this.tree.n;
     const th = fade ? g.height * scale : 0;
     const grey = this.grey;
+    const dry = this.dry;
     for (let i = 0; i < nv; i++) {
       const px = g.pos[i * 4], py = g.pos[i * 4 + 1], pz = g.pos[i * 4 + 2];
       P[p++] = x + (px * c - pz * s) * scale;
@@ -412,6 +421,13 @@ export class FoliageBuilder {
       N[n++] = g.nrm[i * 3 + 1];
       N[n++] = nx * s + nz * c;
       let r = g.col[i * 4], gg = g.col[i * 4 + 1], b = g.col[i * 4 + 2];
+      if (dry > 0) {
+        const l = 0.3 * r + 0.59 * gg + 0.11 * b;
+        // a dead, darker brown (leaves are pale greens, so the brown sits well under their luminance)
+        r = r + (l * 0.82 - r) * dry;
+        gg = gg + (l * 0.6 - gg) * dry;
+        b = b + (l * 0.4 - b) * dry;
+      }
       if (grey > 0) {
         const l = 0.3 * r + 0.59 * gg + 0.11 * b;
         r = r + (l * 0.85 - r) * grey;

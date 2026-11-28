@@ -31,7 +31,7 @@ export interface PartPiece {
 
 /** What Bloombot has grown into: everything its parts are drawn from. */
 export interface BotGrowth {
-  /** the moves learned, in the order the fountain teaches them (pry, hover, climb, glide) */
+  /** the moves learned, in the order the fountain teaches them (prune, hover, climb, glide) */
   moves: readonly string[];
   /** research upgrade levels by id (data/research RESEARCH_UPGRADES) */
   levels: Readonly<Record<string, number>>;
@@ -57,12 +57,12 @@ export const UPGRADE_PART: Record<string, PartId> = {
 
 /** Each move's mark on the back of the pack, in a row: a shape that says the move. */
 const MOVE_MARK: Record<string, Pick<PartPiece, 'shape' | 'euler' | 'scale'>> = {
-  pry: { shape: 'box', euler: [0, 0, 45], scale: [0.026, 0.026, 0.012] }, // a diamond: a wedge's point
+  prune: { shape: 'box', euler: [0, 0, 45], scale: [0.026, 0.026, 0.012] }, // a diamond: a wedge's point
   hover: { shape: 'cylinder', euler: [90, 0, 0], scale: [0.032, 0.01, 0.032] }, // a disc: a ripple on water
   climb: { shape: 'cone', euler: [-90, 0, 0], scale: [0.03, 0.03, 0.012] }, // a peak: upward
   glide: { shape: 'sphere', euler: [0, 0, 0], scale: [0.046, 0.018, 0.012] }, // a wing
 };
-export const MOVE_ORDER = ['pry', 'hover', 'climb', 'glide'] as const;
+export const MOVE_ORDER = ['prune', 'hover', 'climb', 'glide'] as const;
 
 /** where the pack's back face is, from Spine02 (Bloombot's frame) */
 const BACK = -0.305;

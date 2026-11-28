@@ -34,9 +34,10 @@ export interface OldCityHost {
   openStorage?(title: string): void;
   /** E23.9.1: opens the backpack's journal at a page */
   openPage?(id: string): void;
-  talkToTide?(panel: OldCityPanel, talk: () => void): void;
+  talkToTide?(talk: () => void): void;
+  onTideWake?(): void;
   /** plays a sound by name, if the game has it */
-  sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
+  sound(name: 'click' | 'salvage' | 'prune' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
   /** redraws the ground tile at a cell */
   markTile(x: number, z: number): void;
   /** E21.8: where a Keeper's head is on screen (undefined: not drawn) */
@@ -49,7 +50,7 @@ export interface OldCityHost {
 }
 
 /**
- * E21: the game side of the Old City — opening its panels, holding Interact at piles and barricades, keeping the
+ * E21: the game side of the Old City — opening its panels, holding Interact at piles and hedges, keeping the
  * sim told where bloombot stands. Everything that changes the game goes through the Sim; this only reads input
  * and draws panels.
  */
@@ -58,7 +59,7 @@ export class OldCityController {
   /** E21.8: what the last Keeper to speak said */
   readonly bubble: SpeechBubble;
   private speaker?: string;
-  /** a held Interact in progress (salvage, pry): what, how long so far, how long it needs */
+  /** a held Interact in progress (salvage, prune, pry): what, how long so far, how long it needs */
   private hold?: { kind: string; t: number; need: number; done: () => void; padHeld: boolean };
   private keysDown = new Set<string>();
 
@@ -227,9 +228,10 @@ export class OldCityController {
         const r = this.sim.keepers.interact(keeper.id);
         if (r === 'gave' || r === 'done' || r === 'woke') this.host.sound('deliver');
         this.host.bot.visuals.play('interact');
+        if (keeper.id === 'tide' && r === 'woke') this.host.onTideWake?.();
       };
       if (keeper.id === 'tide' && this.sim.keepers.step(keeper.id) !== 'asleep' && this.host.talkToTide) {
-        this.host.talkToTide(this.panel, talk);
+        this.host.talkToTide(talk);
       } else talk();
       return true;
     }
@@ -252,14 +254,14 @@ export class OldCityController {
       });
       return true;
     }
-    // E21.5: a gate: Pry a barricade (hold 2 s), repair a bridge, or hear what it needs
+    // E21.5: a gate: prune through a dead hedge (hold 2 s), repair a bridge, or hear what it needs
     const gate = onGround ? this.sim.gates.gateAt(front.x, front.z) : undefined;
     if (gate) {
       const why = this.sim.gates.problem(gate);
       const sc = this.host.screenOf(front.x, front.z);
       if (why) this.host.hud.showFail(why, sc.x, sc.y);
-      else if (gate.kind === 'barricade')
-        this.startHold('pry', this.sim.upgrades.pryHold, () => {
+      else if (gate.kind === 'hedge')
+        this.startHold('prune', this.sim.upgrades.pruneHold, () => {
           if (this.sim.gates.open(gate.id)) {
             this.host.sound('pry');
             for (const [x, z] of gate.cells) this.host.markTile(x, z);
@@ -271,7 +273,7 @@ export class OldCityController {
       }
       return true;
     }
-    // E25 (#626): a sealed vault (Pry II holds Interact to force it), a stash, a trip a level II move takes
+    // E25 (#626): a sealed vault (the pry bar holds Interact to force it), a stash, a trip a level II move takes
     const vault = onGround ? this.sim.moves.vaultAt(front.x, front.z) : undefined;
     if (vault) {
       const why = this.sim.moves.vaultProblem(vault);

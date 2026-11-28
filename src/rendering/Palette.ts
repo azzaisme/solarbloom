@@ -650,6 +650,18 @@ export const PALETTE = {
     apron: '#5e8f4a', apronEdge: '#4d7a3c', rail: '#e8dcc4',
   },
   /**
+   * #842: decorations made for a room (rendering/DecorArt), in the room's own woods (PALETTE.house) plus soft
+   * furnishings: a rust armchair with cream cushions, a sage coat, a brass knob.
+   */
+  furnish: {
+    fabric: '#c7795e', fabricDark: '#a35f48', cushion: '#f3e6cc', seat: '#d9a35f', coat: '#6f9a7c', hat: '#5b4a3a',
+    brass: '#c9a14a', cloth: '#efe4cc', clothEdge: '#c86f5a', plate: '#f6f1e6', iron: '#4b4741',
+    // #851: rugs (a few colours), lamp shades, pots, cushions, the clock
+    rugGreen: '#8fae7a', rugGreenEdge: '#e9dfc3', rugBlue: '#5f86a8', rugBlueEdge: '#e8d3a0', rugRed: '#b4533f', rugCream: '#efdfbd',
+    rugGold: '#d9a648', rugTeal: '#3f8a86', shade: '#efe2c2', pot: '#c06b45', potRim: '#d98a5c', potWhite: '#e9e3d6', soil: '#5f4733',
+    cushions: ['#c86f5a', '#7fa7c9', '#e1b54a', '#8fae7a'] as string[], clockWood: '#7d5a3e', clockFace: '#f6f0e2',
+  },
+  /**
    * #830: the seasons (rendering/SeasonLook). `grass`: the colour green grass, lawns, shrubs and leaves drift toward in
    * each season (summer is the world's own green). `autumn`: deciduous leaves turning gold, orange and russet. `blossom`:
    * spring's soft pink and white blossom. `frost`: winter's frost and light snow; `snow`: falling snowflakes.
@@ -661,6 +673,8 @@ export const PALETTE = {
     withered: '#8c6a45',
     blossom: ['#f6b9cf', '#fbeef2'],
     frost: '#e9f1f6',
+    /** #830: the cool blue in the hollows between lumps of lying snow */
+    snowShade: '#b9cce2',
     snow: '#f4f8fb',
   },
   /**
@@ -790,6 +804,10 @@ export const PALETTE = {
   /** ivy: stem, leaf, leaf tip (dry: the same, dead) */
   vine: ['#4e7a34', '#468f2d', '#82ce3b'],
   vineDry: ['#6b5a45', '#8f7c4d', '#ac8053'],
+  /** #hedge-line: the dead laid hedge round ground Bloombot can't enter yet (bare wood, no leaves) */
+  hedge: { bark: '#6e5039', barkDark: '#3f2c20', stake: '#8a6b4d', whip: '#82644a', cane: '#6b4032' },
+  /** #hedge-line: the locked forcefield at an entrance: its glow, rim, lock, and the brass posts' gems */
+  forcefield: { field: '#3fe06a', rim: '#9dffb0', lock: '#e8ffe8', post: '#c9a14a', gem: '#5dff8a' },
   vineFlower: ['#ff7eb6', '#ffffff', '#ff9fd0', '#ffd23f'],
   banner: ['#f2b13a', '#f5c04a', '#eaa233'],
   bannerFaded: '#a89a80',
@@ -910,10 +928,17 @@ export const PALETTE = {
     /** a ripe pear's russet blush and a peach's red cheek, on the sunny side */
     blush: { apple: '#c9302f', pear: '#c98a3a', peach: '#e0513f', lemon: '#f2c21e' } as Record<string, string>,
     ripeLight: '#ffd0a8',
-    blossom: ['#fdf1f4', '#f9cddb', '#e7a9bf'] as string[],
-    blossomHeart: '#f6d36b',
+    /** spring blossom: pink petals (a few shades), paler where they meet the golden heart, and pink buds */
+    blossom: ['#ffbfcf', '#ffcfdb', '#fbaec3'] as string[],
+    blossomCentre: '#fff1f4',
+    blossomHeart: '#f5bd3a',
+    bud: '#f59fb8',
+    /** the bright fresh green its leaves are lifted toward */
+    leafLight: '#a8d95a',
     stalk: '#6b5a33',
-    mulch: '#6b4a32',
+    mulch: '#5a3e2b',
+    /** the river stones round its bed: warm grey and beige */
+    stone: ['#dcc9a6', '#cbb692', '#e5d6b8', '#c1ab88'] as string[],
   },
   /** Tide sketches: the pencil's graphite */
   sketchPencil: '#352f29',

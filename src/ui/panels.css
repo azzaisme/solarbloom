@@ -307,23 +307,88 @@ button.pp-opt:hover { border-color: var(--leaf); background: var(--leaf-soft); }
 #cine button { position: absolute; right: 18px; bottom: calc(9vh + 14px); display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; pointer-events: auto; border-radius: 999px; border: 1px solid var(--line); background: var(--paper-a); box-shadow: var(--shadow-sm); font: 800 16px var(--font-ui); color: var(--ink); }
 #cine button .icon { width: 18px; height: 18px; }
 
-/* ───────── photo mode's bar (outside the HUD, never in the picture) ───────── */
-#photoBar { position: fixed; left: 50%; bottom: calc(16px + var(--safe-b)); transform: translateX(-50%); z-index: 40; display: none; flex-direction: column; gap: 8px; width: max-content; max-width: calc(100vw - 24px); padding: 12px 16px; border-radius: var(--r); background: var(--paper-a); font: 800 16px var(--font-ui); color: var(--ink); }
+/* ───────── photo mode's panel (outside the HUD, never in the picture) ───────── */
+/* #photo-2: a panel in the bottom left corner, so the middle of the picture stays clear; Tide's lesson keeps the small centred card */
+#photoBar { position: fixed; left: calc(16px + var(--safe-l, 0px)); bottom: calc(16px + var(--safe-b)); z-index: 40; display: none; flex-direction: column; gap: 8px; width: 432px; max-width: calc(100vw - 24px); max-height: calc(100vh - 32px); overflow-y: auto; padding: 12px 14px; border-radius: var(--r); background: var(--paper-a); font: 800 16px var(--font-ui); color: var(--ink); }
+#photoBar.lesson { left: 50%; transform: translateX(-50%); width: max-content; padding: 12px 16px; }
 #photoBar.on { display: flex; }
 #photoBar.on.clean { display: none; }
 #photoBar .pb-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+#photoBar .pb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 #photoBar .pb-title { display: inline-flex; align-items: center; gap: 8px; margin-right: 4px; font: 900 18px var(--font-ui); color: var(--ink); }
 #photoBar .pb-title .pn-badge { width: 36px; height: 36px; }
-#photoBar button { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 12px 0 14px; border-radius: 12px; border: 1.5px solid var(--line-2); background: var(--key-bg); color: var(--ink); font: 800 16px var(--font-ui); cursor: pointer; }
-#photoBar button:hover { background: var(--leaf-soft); border-color: var(--leaf); }
+#photoBar button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 12px 0 14px; border-radius: 12px; border: 1.5px solid var(--line-2); background: var(--key-bg); color: var(--ink); font: 800 16px var(--font-ui); cursor: pointer; }
+#photoBar button:hover:not(:disabled) { background: var(--leaf-soft); border-color: var(--leaf); }
 #photoBar button[aria-pressed="true"] { background: var(--leaf-soft); border-color: var(--leaf-ink); }
+#photoBar button:disabled { cursor: default; }
 #photoBar button .pn-g { min-width: 0; }
 #photoBar button svg.glyph { width: 32px; height: 24px; }
-#photoBar .pb-scene { display: contents; }
-#photoBar .pb-scene label { display: inline-flex; align-items: center; gap: 8px; }
-#photoBar .pb-scene input[type='range'] { width: 150px; accent-color: var(--leaf-btn); }
-#photoBar .pb-help { margin: 0; font: 700 16px var(--font-ui); color: var(--ink-2); text-align: center; }
+#photoBar .pb-tabline { display: flex; align-items: center; gap: 4px; }
+#photoBar .pb-tabline svg.glyph { flex: none; width: 28px; height: 22px; }
+#photoBar .pb-tabs { flex: 1 1 auto; min-width: 0; display: flex; gap: 2px; padding: 3px; border-radius: 14px; background: var(--paper-3); }
+#photoBar .pb-tabs [role=tab] { flex: 1 1 auto; min-height: 36px; padding: 0 4px; border-color: transparent; background: transparent; color: var(--ink-2); }
+#photoBar .pb-tabs [role=tab][aria-selected="true"] { background: var(--key-bg); border-color: var(--line-2); color: var(--ink); }
+#photoBar .pb-tabs [role=tab].sel { border-color: var(--leaf-ink); box-shadow: 0 0 0 2px var(--leaf); }
+#photoBar .pb-rows { display: flex; flex-direction: column; gap: 2px; min-height: 228px; }
+#photoBar .pb-item { display: grid; grid-template-columns: 118px 1fr; align-items: center; gap: 8px; min-height: 44px; padding: 0 6px; border-radius: 12px; border: 1.5px solid transparent; }
+#photoBar .pb-item.sel { border-color: var(--leaf-ink); background: var(--leaf-soft); }
+#photoBar .pb-item.off { opacity: .5; }
+#photoBar .pb-l { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+#photoBar .pb-l svg.glyph { width: 30px; height: 22px; }
+#photoBar .pb-c { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#photoBar .pb-item.slider .pb-v { flex: none; min-width: 84px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#photoBar .pb-item.slider input[type='range'] { flex: 1 1 0; min-width: 0; height: 28px; accent-color: var(--leaf-btn); cursor: pointer; }
+#photoBar .pb-item.choice .pb-v { flex: 1 1 0; text-align: center; white-space: nowrap; }
+#photoBar .pb-step { flex: none; width: 40px; padding: 0; font: 900 22px/1 var(--font-ui); }
+#photoBar .pb-press { flex: 1 1 0; }
+#photoBar .pb-now { flex: none; min-height: 32px; padding: 0 10px; }
+#photoBar .pb-shutter { min-height: 48px; border-color: var(--leaf-btn-2); background: var(--leaf-btn); color: var(--on); font-size: 17px; }
+#photoBar .pb-shutter:hover:not(:disabled) { background: var(--leaf-btn-2); border-color: var(--leaf-btn-2); }
+#photoBar.lesson .pb-shutter { min-height: 42px; border-color: var(--line-2); background: var(--key-bg); color: var(--ink); font-size: 16px; }
+#photoBar .pb-leave { min-height: 36px; }
+#photoBar .pb-tip { margin: 0; padding: 0 4px; font: 700 16px var(--font-ui); color: var(--sun-ink, var(--ink)); }
+#photoBar .pb-tide b { color: var(--leaf-ink); margin-right: 5px; }
+#photoBar .pb-help { margin: 0; font: 700 15px var(--font-ui); color: var(--ink-2); text-align: left; }
+#photoBar.lesson .pb-help { font-size: 16px; text-align: center; }
 #photoBar button .pn-ic.s { width: 18px; height: 18px; }
+/* #photo-2: the picture's shape (all outside it darkened) and the guide lines: over the view, never in the picture */
+#photoFrame { position: fixed; inset: 0; z-index: 38; display: none; place-items: center; overflow: hidden; pointer-events: none; }
+#photoFrame.on { display: grid; }
+#photoFrame .pf-box { position: relative; width: 100%; height: 100%; }
+#photoFrame.shaped .pf-box { width: min(100vw, calc(100vh * var(--r))); height: min(100vh, calc(100vw / var(--r))); box-shadow: 0 0 0 200vmax rgba(10, 12, 14, .78); outline: 1.5px solid rgba(255, 255, 255, .55); }
+#photoFrame svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#photoFrame path { fill: none; vector-effect: non-scaling-stroke; }
+#photoFrame .pf-under { stroke: rgba(0, 0, 0, .35); stroke-width: 3px; }
+#photoFrame .pf-over { stroke: rgba(255, 255, 255, .8); stroke-width: 1px; }
+body.photo-pick canvas { cursor: crosshair !important; }
+/* #photo-2: the picture just taken, before anything is kept: Save or Dismiss */
+#photoShot { position: fixed; inset: 0; z-index: 60; display: none; place-items: center; padding: 16px; background: var(--scrim); font-family: var(--font-ui); color: var(--ink); }
+#photoShot.on { display: grid; }
+#photoShot .ps-card { display: flex; flex-direction: column; gap: 12px; max-width: min(920px, 100%); max-height: 100%; padding: 14px; border-radius: var(--r); background: var(--paper); overflow-y: auto; }
+#photoShot .ps-pic { display: grid; place-items: center; flex: none; }
+#photoShot .ps-card.picking .ps-pic canvas { max-height: min(30vh, 320px); }
+#photoShot .ps-pic canvas { display: block; width: auto; height: auto; max-width: 100%; max-height: min(56vh, 620px); border-radius: 8px; box-shadow: var(--shadow-sm); }
+#photoShot .ps-body { display: flex; flex-direction: column; flex: none; gap: 10px; }
+#photoShot .ps-msg { margin: 0; font: 700 17px/1.35 var(--font-ui); color: var(--ink-2); text-align: center; }
+#photoShot .ps-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+#photoShot .ps-row .pn-btn svg.glyph { width: 32px; height: 24px; }
+#photoShot .ps-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+#photoShot .ps-grid button { aspect-ratio: 4 / 3; padding: 0; overflow: hidden; border-radius: 10px; border: 2px solid var(--line-2); background: var(--paper-3); cursor: pointer; }
+#photoShot .ps-grid button:hover, #photoShot .ps-grid button:focus-visible { border-color: var(--leaf-ink); outline: none; box-shadow: var(--focus-ring); }
+#photoShot .ps-grid img { display: block; width: 100%; height: 100%; object-fit: cover; }
+#photoShot .pn-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+@media (max-width: 720px) { #photoShot .ps-grid { grid-template-columns: repeat(4, 1fr); } }
+/* the album in Backpack › Collection */
+.bp-photos { grid-column: 1 / -1; }
+.bp-groups .bp-group.bp-photos ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.bp-photos li { padding: 0; }
+.bp-photos .bp-shot { display: block; width: 100%; aspect-ratio: 4 / 3; padding: 0; overflow: hidden; border-radius: 10px; border: 2px solid var(--line-2); background: var(--paper-3); cursor: pointer; }
+.bp-photos .bp-shot:hover, .bp-photos .bp-shot:focus-visible { border-color: var(--leaf-ink); }
+.bp-photos .bp-shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bp-photos .bp-sub { margin: 10px 0 6px; font: 800 16px var(--font-ui); color: var(--ink-2); }
+.bp-photo-view { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.bp-photo-view img { display: block; max-width: 100%; max-height: 58vh; border-radius: 8px; box-shadow: var(--shadow-sm); }
+.bp-photo-view .bp-photo-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 #photoFlash { position: fixed; inset: 0; z-index: 39; pointer-events: none; background: var(--paper); opacity: 0; transition: opacity .35s; }
 #photoFlash.on { opacity: .55; transition: none; }
 body.reduced #photoFlash { display: none; }

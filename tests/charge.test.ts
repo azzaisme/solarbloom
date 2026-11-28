@@ -64,8 +64,8 @@ describe('E23.2.1: bloombot\'s charge', () => {
     expect(chk.reason).toMatch(/charge/i);
     expect(sim.restoration.pulse(t3.id)).toBe(false);
     // abilities wait for charge too (a barricade with Pry)
-    sim.state.salvage!.abilities.push('pry');
-    expect(sim.gates.problem({ id: 'g-mastRow', kind: 'barricade', cells: [[7, -1]], needs: { ability: 'pry' }, blocked: 'x', how: 'y' })).toMatch(/charge/i);
+    sim.state.salvage!.abilities.push('prune');
+    expect(sim.gates.problem({ id: 'g-mastRow', kind: 'hedge', cells: [[7, -1]], needs: { ability: 'prune' }, blocked: 'x', how: 'y' })).toMatch(/charge/i);
     // never stranded: the low-power walk still moves, and every walkable cell is still reachable
     expect(BOT.walk * CHARGE.lowPowerWalk).toBeGreaterThan(1);
     const w = new Walker(sim);

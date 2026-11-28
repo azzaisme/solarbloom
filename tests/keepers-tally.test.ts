@@ -1,3 +1,4 @@
+import { hedgeReady } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { FRIENDSHIP } from '../src/data/keepers';
@@ -9,7 +10,7 @@ function marketAwake() {
   const sim = new Sim(createInitialState(7));
   const sv = sim.state.salvage!;
   sv.tier = 1;
-  sv.abilities.push('pry');
+  sv.abilities.push('prune');
   sim.areas.clear('park', true);
   sim.gates.open('g-oldMarket', true);
   sv.keepers.tally = { step: 'landmark' };
@@ -55,7 +56,8 @@ describe('E23.9.2 → E23.2.3: a friend walks over to a bench', () => {
   it('pathTo gives a Keeper a walk to beside a seat, over ground bloombot could walk', () => {
     const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
-    sim.state.salvage!.abilities.push('pry');
+    sim.state.salvage!.abilities.push('prune');
+    hedgeReady(sim);
     sim.areas.clear('park', true);
     sim.gates.open('g-mastRow');
     const seat = { x: 12, z: -10 };

@@ -41,6 +41,16 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 const TAB_ICON: Record<TabId, string> = { items: 'pack', bloombot: 'sprout', requests: 'list', journal: 'book', collection: 'star', blueprints: 'hammer' };
 
+/** #photo-2: what the Collection needs of photo mode's album. */
+export interface BackpackAlbum {
+  best(): readonly { id: string; best: boolean; w: number; h: number }[];
+  others(): readonly { id: string; best: boolean; w: number; h: number }[];
+  bestMax: number;
+  url(id: string): string;
+  remove(id: string): Promise<boolean>;
+  exportFile(id: string): void;
+}
+
 export class Backpack {
   readonly el: HTMLElement;
   private body: HTMLElement;
@@ -55,6 +65,10 @@ export class Backpack {
   private selPage?: string;
   private selectedSketch?: SavedSketch;
   savedSketches?: () => SavedSketch[];
+  /** #photo-2: photo mode's album (the game's PhotoAlbum): the twelve good pictures and the small copies */
+  album?: BackpackAlbum;
+  private selectedPhoto?: string;
+  private deleting = false;
   /** #620: the Bloombot row in focus */
   private selBot?: string;
   /**
@@ -173,7 +187,12 @@ export class Backpack {
   }
 
   back() {
-    if (this.current === 'collection' && this.selectedSketch) {
+    if (this.current === 'collection' && this.selectedPhoto) {
+      const id = this.selectedPhoto;
+      this.selectedPhoto = undefined;
+      this.show('collection');
+      this.body.querySelector<HTMLElement>(`[data-album="${id}"]`)?.focus();
+    } else if (this.current === 'collection' && this.selectedSketch) {
       const seed = this.selectedSketch.seed;
       this.selectedSketch = undefined;
       this.show('collection');
@@ -183,6 +202,7 @@ export class Backpack {
 
   close() {
     this.selectedSketch = undefined;
+    this.selectedPhoto = undefined;
     if (!this.isOpen) return;
     this.botView?.(undefined, undefined);
     this.el.hidden = true;
@@ -196,7 +216,7 @@ export class Backpack {
   }
 
   show(tab: TabId, focusTab = false) {
-    if (tab !== 'collection') this.selectedSketch = undefined;
+    if (tab !== 'collection') this.selectedSketch = this.selectedPhoto = undefined;
     this.current = tab;
     for (const b of this.tabs.querySelectorAll<HTMLElement>('[data-tab]')) {
       const on = b.dataset.tab === tab;
@@ -436,11 +456,29 @@ export class Backpack {
     if (this.selectedSketch) return `<div class="bp-group"><h3>${esc(this.selectedSketch.title)}</h3>
       ${sketchPage(this.selectedSketch)}
       <button class="pn-btn" data-sketch-back>Back to Collection</button></div>`;
+    const shown = this.selectedPhoto ? [...(this.album?.best() ?? []), ...(this.album?.others() ?? [])].find((p) => p.id === this.selectedPhoto) : undefined;
+    if (shown && this.album)
+      return `<div class="bp-group bp-photo-view"><h3>${shown.best ? 'One of your best' : 'A small copy'} <span class="bp-gcount">${shown.w} × ${shown.h}</span></h3>
+      <img src="${esc(this.album.url(shown.id))}" alt="A picture you took">
+      <div class="bp-photo-row"><button class="pn-btn" data-album-back>Back to Collection</button>
+      <button class="pn-btn" data-album-file>Save as a file</button>
+      <button class="pn-btn" data-album-delete>${this.deleting ? 'Yes, delete it' : 'Delete'}</button></div></div>`;
+    this.selectedPhoto = undefined;
     const pages = this.savedSketches?.() ?? [];
+    const thumbs = (list: readonly { id: string }[]) => `<ul>${list.map((p, i) => `<li><button class="bp-shot" data-album="${esc(p.id)}" aria-label="Picture ${i + 1}"><img src="${esc(this.album!.url(p.id))}" alt="" loading="lazy"></button></li>`).join('')}</ul>`;
+    const best = this.album?.best() ?? [];
+    const others = this.album?.others() ?? [];
+    const photos = this.album
+      ? `<section class="bp-group bp-photos" aria-labelledby="bp-photo-title"><h3 id="bp-photo-title">Your photos <span class="bp-gcount">${best.length + others.length}</span></h3>` +
+        (best.length + others.length
+          ? (best.length ? `<p class="bp-sub">Your best: ${best.length} of ${this.album.bestMax}</p>${thumbs(best)}` : '') + (others.length ? `<p class="bp-sub">Small copies: ${others.length}</p>${thumbs(others)}` : '')
+          : `<p class="pn-empty bp-empty">Pictures you save in photo mode are kept here.</p>`) +
+        `</section>`
+      : '';
     const sketches = pages.length ? `<section class="bp-group bp-sketches" aria-labelledby="bp-sketch-title">
       <h3 id="bp-sketch-title">Tide’s sketches <span class="bp-gcount">${pages.length}</span></h3>
       <ul>${pages.map((page) => `<li><button class="pn-btn" id="bp-sketch-${page.seed}" data-sketch="${page.seed}">${esc(page.title)}<small>${esc(page.note)}</small></button></li>`).join('')}</ul></section>` : '';
-    return `<div class="bp-groups">${sketches}${collection(this.host.sim)
+    return `<div class="bp-groups">${photos}${sketches}${collection(this.host.sim)
       .map(
         (g, i) =>
           `<section class="bp-group" tabindex="0" role="group" aria-labelledby="bpg-${i}"><h3 id="bpg-${i}">${esc(g.title)} <span class="bp-gcount">${esc(g.count)}</span></h3>` +
@@ -458,6 +496,30 @@ export class Backpack {
   }
 
   private click(t: HTMLElement) {
+    // #photo-2: the album: open a picture, save it as a file, delete it (asked twice)
+    if (t.closest('[data-album-back]')) return this.back();
+    if (t.closest('[data-album-file]') && this.selectedPhoto) return this.album?.exportFile(this.selectedPhoto);
+    if (t.closest('[data-album-delete]') && this.selectedPhoto) {
+      if (!this.deleting) {
+        this.deleting = true;
+        this.show('collection');
+        this.body.querySelector<HTMLElement>('[data-album-delete]')?.focus();
+        return;
+      }
+      const id = this.selectedPhoto;
+      this.deleting = false;
+      this.selectedPhoto = undefined;
+      void this.album?.remove(id).then(() => this.isOpen && this.current === 'collection' && this.show('collection'));
+      return;
+    }
+    const shot = t.closest<HTMLElement>('[data-album]');
+    if (shot) {
+      this.selectedPhoto = shot.dataset.album;
+      this.deleting = false;
+      this.show('collection');
+      this.body.querySelector<HTMLElement>('[data-album-back]')?.focus();
+      return;
+    }
     if (t.closest('[data-sketch-back]')) return this.back();
     const sketch = t.closest<HTMLElement>('[data-sketch]');
     if (sketch) {

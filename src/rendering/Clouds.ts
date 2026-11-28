@@ -1,364 +1,67 @@
 import * as pc from 'playcanvas';
-import { group, shape } from './Shapes';
-import { color, mat, PALETTE } from './Materials';
-
-interface Rain {
-  drops: pc.Entity[];
-  phase: number[];
-  /** 0…1, ramps in and out */
-  amount: number;
-  raining: boolean;
-  timer: number;
-}
-
-interface Cloud {
-  root: pc.Entity;
-  shadow: pc.Entity;
-  rain?: Rain;
-  /** home in the layer, in units of the layer's half-size (−1…1 across, −1…1 in depth) */
-  u: number;
-  w: number;
-  /** height offset (layer units) and size (fraction of the view height) */
-  y: number;
-  size: number;
-  bob: number;
-}
+import { group } from './Shapes';
+import { color, PALETTE } from './Materials';
+import { layerCloudMaterial, setCloudLayer, shadowCloudMaterial } from './PaintedClouds';
 
 const smooth = (a: number, b: number, x: number) => {
   const t = pc.math.clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 };
-const wrap = (v: number) => ((((v + 1) % 2) + 2) % 2) - 1;
-
-interface Puff {
-  pos: [number, number, number];
-  /** radii (an ellipsoid) */
-  r: [number, number, number];
-}
-
-/**
- * One cloud: a wide soft base with round puffs bunched around and on top of it, front to back, so it is a real
- * 3D blob. Local frame: +z faces the camera (horizontally), +y up.
- *
- * P7-E32.6 (#760): a cumulus bank rather than a ball: a long flat-bottomed base (every puff is cut off at
- * CLOUD_FLOOR, so the cloud sits on one level, shaded underside), lobes of different sizes and heights along it and a
- * crown off-centre. The first 8 make a whole bank on their own (the cloud walls use only those).
- */
-const PUFFS: Puff[] = [
-  { pos: [0, 0.12, 0], r: [1.5, 0.42, 0.85] }, // base
-  { pos: [0.1, 0.5, 0.16], r: [0.7, 0.6, 0.62] }, // the big front lobe
-  { pos: [-0.28, 0.82, -0.18], r: [0.6, 0.56, 0.55] }, // crown, off-centre and behind
-  { pos: [-0.88, 0.4, 0.04], r: [0.52, 0.44, 0.46] },
-  { pos: [0.84, 0.46, -0.04], r: [0.56, 0.5, 0.5] },
-  { pos: [0.48, 0.76, -0.26], r: [0.42, 0.38, 0.38] },
-  { pos: [-1.34, 0.22, -0.04], r: [0.4, 0.3, 0.34] },
-  { pos: [1.4, 0.24, 0.0], r: [0.38, 0.3, 0.32] },
-  { pos: [-0.56, 0.62, -0.5], r: [0.46, 0.42, 0.42] },
-  { pos: [0.76, 0.4, -0.56], r: [0.44, 0.4, 0.4] },
-  { pos: [0.32, 0.28, 0.6], r: [0.4, 0.34, 0.36] },
-  { pos: [-0.42, 0.26, 0.58], r: [0.38, 0.32, 0.34] },
-  { pos: [1.06, 0.66, 0.22], r: [0.32, 0.3, 0.3] },
-];
-/** P7-E32.6: the level (cloud frame) every puff is cut off at: one flat, shaded underside for the whole bank */
-const CLOUD_FLOOR = 0.02;
-
-const hexLin = (hex: string) => {
-  const c = new pc.Color();
-  c.fromString(hex);
-  return [c.r, c.g, c.b];
-};
-const mix = (a: number[], b: number[], t: number) => a.map((v, i) => v + (b[i] - v) * t);
-
-/**
- * A smooth puff whose soft "animated film" shading is baked into its vertex colours: a wrapped sun term (warm
- * cream where the sun hits, lavender-blue in the shade, never black), cooler toward the cloud's belly, and a bright
- * silver rim where the surface turns away from the camera. The camera's yaw never changes and its pitch only
- * moves 25–40°, so view-dependent terms bake fine.
- */
-function puffMesh(device: pc.GraphicsDevice, p: Puff, sunWorld: pc.Vec3, bands: [number, number] = [18, 26]): pc.Mesh {
-  const g = new pc.SphereGeometry({ radius: 1, latitudeBands: bands[0], longitudeBands: bands[1] });
-  const pos = g.positions!;
-  const n = pos.length / 3;
-  // Into the cloud's frame (rotated by the camera yaw, 45°): to-sun and to-camera directions.
-  const yr = (45 * Math.PI) / 180;
-  const sx = sunWorld.x * Math.cos(yr) - sunWorld.z * Math.sin(yr);
-  const sz = sunWorld.x * Math.sin(yr) + sunWorld.z * Math.cos(yr);
-  const sun = new pc.Vec3(sx, Math.max(0.35, sunWorld.y), sz).normalize();
-  const view = new pc.Vec3(0, Math.sin((36 * Math.PI) / 180), Math.cos((36 * Math.PI) / 180));
-  const cSun = hexLin(PALETTE.sky.cloudSun);
-  const cLit = hexLin(PALETTE.sky.cloud);
-  const cShade = hexLin(PALETTE.sky.cloudShade);
-  const cBelly = hexLin(PALETTE.sky.cloudBelly);
-  const cRim = hexLin(PALETTE.sky.cloudRim);
-  const colors: number[] = new Array(n * 4);
-  const nrm = new pc.Vec3();
-  for (let i = 0; i < n; i++) {
-    const x = pos[i * 3];
-    const y = pos[i * 3 + 1];
-    const z = pos[i * 3 + 2];
-    pos[i * 3] = x * p.r[0];
-    pos[i * 3 + 1] = y * p.r[1];
-    pos[i * 3 + 2] = z * p.r[2];
-    nrm.set(x / p.r[0], y / p.r[1], z / p.r[2]).normalize();
-    // P7-E32.6: cut off flat at the bank's floor, and shaded as a downward face there
-    if (p.pos[1] + pos[i * 3 + 1] < CLOUD_FLOOR) {
-      pos[i * 3 + 1] = CLOUD_FLOOR - p.pos[1];
-      nrm.set(nrm.x * 0.35, -1, nrm.z * 0.35).normalize();
-    }
-    const d = nrm.dot(sun);
-    const lit = smooth(-0.55, 0.85, d);
-    // Height in the cloud: bellies are cool, crowns bright.
-    const h = pc.math.clamp((p.pos[1] + pos[i * 3 + 1] + 0.25) / 1.6, 0, 1);
-    let c = mix(cShade, cLit, pc.math.clamp(lit * 0.8 + h * 0.35, 0, 1));
-    c = mix(c, cSun, smooth(0.45, 1, d) * 0.55);
-    c = mix(c, cBelly, smooth(-0.2, -0.85, nrm.y) * 0.6);
-    const rim = Math.pow(1 - Math.max(0, nrm.dot(view)), 3);
-    c = mix(c, cRim, rim * 0.55);
-    // sRGB → linear bytes, as vcMesh does for every vertex-coloured mesh.
-    for (let k = 0; k < 3; k++) colors[i * 4 + k] = Math.round(Math.pow(pc.math.clamp(c[k], 0, 1), 2.2) * 255);
-    colors[i * 4 + 3] = 255;
-  }
-  g.positions = pos;
-  g.colors = colors;
-  const m = pc.Mesh.fromGeometry(device, g);
-  m.incRefCount();
-  return m;
-}
-
-/**
- * Region unlocks' cloud wall: the same soft puffs at a lower resolution (the wall has many clouds), the first
- * `count` of them (base, front puff, crown and the biggest sides), with the shared unlit material.
- */
-export function wallCloudParts(device: pc.GraphicsDevice, sunWorld: pc.Vec3, count = 8): { meshes: { mesh: pc.Mesh; pos: [number, number, number] }[]; material: pc.Material } {
-  return { meshes: PUFFS.slice(0, count).map((p) => ({ mesh: puffMesh(device, p, sunWorld, [9, 14]), pos: p.pos })), material: softMaterial() };
-}
-
-/** Unlit: the shading is all in the vertex colours, so the clouds stay soft and bright whatever the scene light. */
-let softMat: pc.StandardMaterial | undefined;
-function softMaterial(): pc.StandardMaterial {
-  if (softMat) return softMat;
-  const m = new pc.StandardMaterial();
-  m.useLighting = false;
-  m.diffuse = new pc.Color(0, 0, 0);
-  m.emissive = new pc.Color(1, 1, 1);
-  m.emissiveVertexColor = true;
-  m.update();
-  softMat = m;
-  return m;
-}
-
-/**
- * E23.7.1: tints every soft cloud (the sky's clouds and the cloud walls) by the time of day: warm at dusk, a dim
- * blue at night. The clouds are unlit, so the light alone can't do it. Cheap: one shared material.
- */
-export function tintClouds(r: number, g: number, b: number) {
-  const m = softMaterial();
-  const e = m.emissive;
-  if (Math.abs(e.r - r) + Math.abs(e.g - g) + Math.abs(e.b - b) < 0.004) return;
-  m.emissive = new pc.Color(r, g, b);
-  m.update();
-}
-
-/** A soft top-down footprint of the puffs (blurred), used as the cloud's shadow. */
-function shadowTexture(device: pc.GraphicsDevice): pc.Texture {
-  const N = 128;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = N;
-  const g = cv.getContext('2d')!;
-  g.filter = 'blur(7px)';
-  g.fillStyle = PALETTE.pure.white;
-  // Footprint space: x and z in −2…2 across the canvas.
-  const k = N / 4;
-  for (const p of PUFFS) {
-    g.beginPath();
-    g.ellipse(N / 2 + p.pos[0] * k, N / 2 + p.pos[2] * k, p.r[0] * k * 0.92, p.r[2] * k * 0.92, 0, 0, Math.PI * 2);
-    g.fill();
-  }
-  const t = new pc.Texture(device, { width: N, height: N, format: pc.PIXELFORMAT_RGBA8, mipmaps: true, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_CLAMP_TO_EDGE });
-  t.setSource(cv);
-  return t;
-}
 
 const SHADOW_Y = 0.35; // just over the ground slabs: flat ground and low props darken, buildings stand out of it
-const RAIN_FALL = 2.8; // how far (cloud units) a drop falls before it is gone
-const RAINY = [2, 4];
 
 /**
- * A few puffy clouds that drift between the camera and the city when the view is zoomed out (gone close up).
- * They live in a layer a little in front of the target, sized from the view height so they read the same at any
- * zoom, anchored to the world (panning slides them with a touch of parallax) and wrapping around the view; each
- * one puffs up from nothing as you zoom out and shrinks away near the layer's edges, so nothing ever pops.
+ * #painted-clouds: the clouds over the zoomed-out view. Seen from high up the sky is out of shot, so the painted
+ * cloud field (PaintedClouds) is laid as a thin sheet high over the city, between the camera and the ground, and
+ * casts its soft shadow on the ground below (offset along the sun). It follows the view, anchored to the world, so
+ * panning slides under it; it fades in as you zoom out and is gone close up. One draw each, nothing per cloud.
  *
- * - Shadows: the clouds float far above the city (near the camera), so a true sun shadow would land well off
- *   screen. Each cloud instead lays a soft shadow of its own footprint on the ground just below it on screen.
- * - Rain: two clouds now and then sprinkle a short shower of little drops.
- *
- * Purely cosmetic: never picked, made once, no per-frame allocation; still (no drift, rain or blinking) with
- * reduced motion.
+ * (It replaced a handful of puffy 3D clouds with their own little showers, which read as props over the city.)
+ * Purely cosmetic: never picked; still with reduced motion (the drift is the sky's).
  */
 export class Clouds {
   private root: pc.Entity;
-  private clouds: Cloud[] = [];
-  private wind = 0;
-  /** E23.7.2: the weather's wind, 0 … 1 (the clouds drift faster) */
-  gust = 0;
-  private t = 0;
-  private right = new pc.Vec3();
-  private back = new pc.Vec3();
+  private sheet: pc.Entity;
+  private shadow: pc.Entity;
+  private device: pc.GraphicsDevice;
   private center = new pc.Vec3();
-  private pos = new pc.Vec3();
-  private ray = new pc.Vec3();
+  /** E23.7.2: the weather's wind, 0 … 1 (kept for Game; the sky's drift carries the wind) */
+  gust = 0;
   reducedMotion = false;
-  /** zoom at/above which there are no clouds, and at/below which they are full size */
+  /** zoom at/above which there are no clouds, and at/below which they are full */
   showBelow = 0.62;
   fullBelow = 0.34;
 
-  /** `sunUp`: the sun light's up vector (the direction toward the sun); the camera yaw is fixed, so it is baked. */
-  constructor(parent: pc.Entity, device: pc.GraphicsDevice, sunUp: pc.Vec3) {
+  constructor(parent: pc.Entity, device: pc.GraphicsDevice, _sunUp: pc.Vec3) {
+    this.device = device;
     this.root = group(parent, 'clouds');
     this.root.enabled = false;
-    const drop = mat(PALETTE.sky.cloudRain, { unlit: true });
-    const soft = softMaterial();
-    const shadowMat = new pc.StandardMaterial();
-    shadowMat.useLighting = false;
-    shadowMat.diffuse = new pc.Color(0, 0, 0);
-    shadowMat.emissive = color(PALETTE.sky.cloudShadow);
-    shadowMat.opacityMap = shadowTexture(device);
-    shadowMat.opacityMapChannel = 'a';
-    shadowMat.opacity = 0.42;
-    shadowMat.blendType = pc.BLEND_NORMAL;
-    shadowMat.depthWrite = false;
-    shadowMat.update();
-    // Each puff's shading is baked into its own smooth mesh (shared by every cloud).
-    const puffs = PUFFS.map((p) => ({ p, mesh: puffMesh(device, p, sunUp) }));
-    // Hand-placed so the view never has a clump or a hole.
-    const homes: [number, number, number, number][] = [
-      [-0.72, 0.38, 0.2, 0.3],
-      [0.05, 0.62, -0.1, 0.24],
-      [0.68, 0.18, 0.15, 0.34],
-      [-0.25, -0.05, 0.0, 0.22],
-      [0.4, -0.45, -0.2, 0.28],
-      [-0.9, -0.55, 0.1, 0.25],
-      [0.95, 0.85, 0.0, 0.2],
-    ];
-    homes.forEach(([u, w, y, size], i) => {
-      const r = group(this.root, 'cloud');
-      const body = group(r, 'body');
-      for (const { p, mesh } of puffs) {
-        const e = new pc.Entity('puff');
-        e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, soft)], castShadows: false, receiveShadows: false });
-        e.setLocalPosition(p.pos[0], p.pos[1], p.pos[2]);
-        body.addChild(e);
-      }
-      const shadow = shape(this.root, 'plane', shadowMat, { name: 'cloudShadow', receive: false });
-      const c: Cloud = { root: r, shadow, u, w, y, size, bob: i * 1.7 };
-      if (RAINY.includes(i)) {
-        const drops: pc.Entity[] = [];
-        const phase: number[] = [];
-        for (let d = 0; d < 14; d++) {
-          // A little teardrop: a round drop with a pointed top.
-          const g = group(r, 'drop');
-          shape(g, 'sphere', drop, { scale: [0.11, 0.13, 0.11] });
-          shape(g, 'cone', drop, { pos: [0, 0.09, 0], scale: [0.095, 0.1, 0.095] });
-          g.setLocalPosition(((d * 0.618) % 1) * 2.2 - 1.1, -0.3, ((d * 0.382) % 1) * 1.1 - 0.55);
-          g.enabled = false;
-          drops.push(g);
-          phase.push(((d * 0.7548) % 1) * RAIN_FALL);
-        }
-        c.rain = { drops, phase, amount: 0, raining: false, timer: 4 + i * 3 };
-      }
-      this.clouds.push(c);
-    });
+    this.sheet = new pc.Entity('cloudSheet');
+    this.sheet.addComponent('render', { type: 'plane', material: layerCloudMaterial(device), castShadows: false, receiveShadows: false });
+    this.root.addChild(this.sheet);
+    this.shadow = new pc.Entity('cloudSheetShadow');
+    this.shadow.addComponent('render', { type: 'plane', material: shadowCloudMaterial(device, color(PALETTE.sky.cloudShadow)), castShadows: false, receiveShadows: false });
+    this.root.addChild(this.shadow);
   }
 
   /** Follows the camera: `zoom`, its position and forward, the distance to the target and the view height there. */
-  update(dt: number, cam: { zoom: number; yaw: number; dist: number; viewHeight: number; aspect: number; position: pc.Vec3; forward: pc.Vec3 }) {
+  update(_dt: number, cam: { zoom: number; yaw: number; dist: number; viewHeight: number; aspect: number; position: pc.Vec3; forward: pc.Vec3 }) {
     const k = 1 - smooth(this.fullBelow, this.showBelow, cam.zoom);
     if (k <= 0.001) {
       this.root.enabled = false;
       return;
     }
     this.root.enabled = true;
-    const still = this.reducedMotion;
-    if (!still) {
-      this.wind += dt * 0.012 * (1 + this.gust * 4);
-      this.t += dt;
-    }
     const vh = cam.viewHeight;
-    // The layer: a little in front of the target (well past the near clip, which sits ~2.2 view heights closer).
+    // the sheet: level, a little in front of the target (well past the near clip), wide enough to fill the view
     const depth = cam.dist - vh * 1.25;
     this.center.copy(cam.forward).mulScalar(depth).add(cam.position);
-    const yr = (cam.yaw * Math.PI) / 180;
-    this.right.set(Math.cos(yr), 0, -Math.sin(yr));
-    this.back.set(Math.sin(yr), 0, Math.cos(yr));
-    const wx = vh * Math.max(1, cam.aspect) * 1.35;
-    const wz = vh * 1.05;
-    const cu = this.center.dot(this.right) / wx;
-    const cw = this.center.dot(this.back) / wz;
-    const cp = cam.position;
-    for (const c of this.clouds) {
-      const u = wrap(c.u + this.wind - cu);
-      const w = wrap(c.w + this.wind * 0.25 - cw);
-      const edge = (1 - smooth(0.72, 1, Math.abs(u))) * (1 - smooth(0.66, 1, Math.abs(w)));
-      const s = vh * c.size * 0.7 * k * edge;
-      if (s < 1e-3) {
-        c.root.enabled = false;
-        c.shadow.enabled = false;
-        continue;
-      }
-      c.root.enabled = true;
-      const bob = Math.sin(this.t * 0.6 + c.bob) * 0.04;
-      this.pos.set(
-        this.center.x + this.right.x * u * wx + this.back.x * w * wz,
-        this.center.y + (c.y + bob) * vh * 0.3,
-        this.center.z + this.right.z * u * wx + this.back.z * w * wz,
-      );
-      c.root.setPosition(this.pos);
-      c.root.setLocalEulerAngles(0, cam.yaw, 0);
-      c.root.setLocalScale(s * 1.3, s * 0.85, s); // P7-E32.6: drawn out into a low bank, not a ball
-
-      // Shadow: where the cloud sits over the ground on screen, nudged toward the camera (down the screen) and a
-      // little to the side, so it peeks out below the cloud like the shadow of something floating overhead.
-      this.ray.copy(this.pos).sub(cp);
-      const cloudDist = this.ray.length();
-      const tHit = (SHADOW_Y - cp.y) / (this.ray.y / cloudDist);
-      const sg = (s * tHit) / cloudDist; // the cloud's size, seen at the ground
-      c.shadow.enabled = tHit > 0;
-      c.shadow.setPosition(
-        cp.x + (this.ray.x / cloudDist) * tHit + this.back.x * sg * 1.9 + this.right.x * sg * 0.45,
-        SHADOW_Y,
-        cp.z + (this.ray.z / cloudDist) * tHit + this.back.z * sg * 1.9 + this.right.z * sg * 0.45,
-      );
-      c.shadow.setLocalEulerAngles(0, cam.yaw, 0);
-      c.shadow.setLocalScale(sg * 4, 1, sg * 4);
-
-      if (c.rain) this.updateRain(c.rain, dt, still);
-    }
-  }
-
-  private updateRain(r: Rain, dt: number, still: boolean) {
-    if (still) {
-      r.amount = 0;
-    } else {
-      r.timer -= dt;
-      if (r.timer <= 0) {
-        r.raining = !r.raining;
-        r.timer = r.raining ? 8 + Math.random() * 7 : 18 + Math.random() * 24;
-      }
-      r.amount = pc.math.clamp(r.amount + (r.raining ? dt : -dt) * 0.6, 0, 1);
-    }
-    const n = Math.round(r.drops.length * r.amount);
-    for (let i = 0; i < r.drops.length; i++) {
-      const d = r.drops[i];
-      // A drop finishes its fall even as the shower thins out, so none vanish mid-air.
-      const fall = (this.t * 2.4 + r.phase[i]) % RAIN_FALL;
-      const active = i < n || (d.enabled && fall > 0.15);
-      d.enabled = !still && active;
-      if (!d.enabled) continue;
-      const p = d.getLocalPosition();
-      d.setLocalPosition(p.x, -0.3 - fall, p.z);
-      const sc = (1 - smooth(RAIN_FALL * 0.7, RAIN_FALL, fall)) * smooth(0, 0.25, fall);
-      d.setLocalScale(sc, sc, sc);
-    }
+    const span = vh * Math.max(1, cam.aspect) * 6;
+    this.sheet.setPosition(this.center.x, this.center.y, this.center.z);
+    this.sheet.setLocalScale(span, 1, span);
+    // its shadow on the ground, under the whole view
+    this.shadow.setPosition(this.center.x, SHADOW_Y, this.center.z);
+    this.shadow.setLocalScale(span * 1.5, 1, span * 1.5);
+    setCloudLayer(this.device, k, Math.max(0, this.center.y - SHADOW_Y));
   }
 }

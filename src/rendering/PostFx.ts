@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { glowIntensity, LOOK, type TierSpec } from '../data/look';
+import { PHOTO_LENS } from '../data/photo';
 
 export interface GradeValues {
   brightness: number;
@@ -75,18 +76,67 @@ export class PostFx {
     f.ssao.minAngle = A.minAngle;
     f.ssao.samples = A.samples;
     f.ssao.blurEnabled = true;
-    const D = LOOK.dof;
-    f.dof.enabled = spec.dof;
-    f.dof.nearBlur = false;
-    f.dof.highQuality = false;
-    f.dof.blurRadius = D.blurRadius;
-    f.dof.blurRings = D.blurRings;
-    f.dof.blurRingPoints = D.blurRingPoints;
+    this.dofOn = spec.dof;
+    this.applyDof();
     f.update();
   }
 
+  private dofOn = false;
+  /**
+   * #photo-2: photo mode's lens: where the picture is sharp (a distance from the camera; undefined: on what the
+   * camera looks at) and how strongly the rest blurs (0 … 1). With it the blur is a real lens's: in front of the
+   * sharp plane as well as behind, and drawn with the better kernel. Undefined: the game's own far haze blur.
+   */
+  private lens?: { focus?: number; blur: number };
+  setLens(lens: { focus?: number; blur: number } | undefined) {
+    this.lens = lens;
+    this.applyDof();
+  }
+
+  /**
+   * #photo-2: the blur disc is measured in pixels, so a picture drawn at twice the size needs it twice as wide to
+   * look as the screen did. 1 on screen.
+   */
+  private lensScale = 1;
+  setLensScale(scale: number) {
+    this.lensScale = scale;
+    this.applyDof();
+  }
+
+  private applyDof() {
+    const f = this.frame;
+    if (!f) return;
+    const D = LOOK.dof;
+    const L = this.lens;
+    f.dof.enabled = this.dofOn;
+    f.dof.nearBlur = !!L;
+    f.dof.highQuality = !!L;
+    f.dof.blurRadius = L ? (PHOTO_LENS.blur[0] + (PHOTO_LENS.blur[1] - PHOTO_LENS.blur[0]) * L.blur) * this.lensScale : D.blurRadius;
+    f.dof.blurRings = L ? D.blurRings + 1 : D.blurRings;
+    f.dof.blurRingPoints = L ? D.blurRingPoints + 1 : D.blurRingPoints;
+  }
+
   private bloomIntensity(): number {
-    return glowIntensity(this.bloomOn, this.night, this.glow);
+    return glowIntensity(this.bloomOn, this.night, this.glow) * (1 + this.surgeNow);
+  }
+
+  /** VFX 1: a burst of light (a pulse's release) swells the bloom for a moment: `amount` extra (1 = double), over `seconds`. */
+  private surge = { amount: 0, life: 0, max: 1 };
+  private surgeNow = 0;
+  surgeBloom(amount: number, seconds: number) {
+    if (amount * Math.max(0, this.glow) < this.surgeNow) return;
+    this.surge = { amount: amount * Math.min(1, Math.max(0, this.glow)), life: 0, max: Math.max(0.05, seconds) };
+  }
+
+  /** Per frame: the surge rises fast and falls away. */
+  tick(dt: number) {
+    const s = this.surge;
+    if (s.amount <= 0) return;
+    s.life += dt;
+    const k = s.life / s.max;
+    this.surgeNow = k >= 1 ? 0 : s.amount * (k < 0.1 ? k / 0.1 : Math.pow(1 - (k - 0.1) / 0.9, 2));
+    if (k >= 1) s.amount = 0;
+    if (this.frame) this.frame.bloom.intensity = this.bloomIntensity();
   }
 
   /** #633: the Glow setting, at once (0 Off … 1 Normal … 1.6 Strong). */
@@ -124,7 +174,13 @@ export class PostFx {
       const A = LOOK.ssao;
       f.ssao.radius = Math.min(A.maxRadius, Math.max(A.minRadius, A.radiusPerView * viewHeight));
     }
-    if (f.dof.enabled) {
+    if (f.dof.enabled && this.lens) {
+      // #photo-2: sharp around the chosen distance; the band is a share of it, thinner as the blur strengthens
+      const P = PHOTO_LENS;
+      const at = this.lens.focus ?? Math.max(P.focusMin, focus);
+      f.dof.focusDistance = at;
+      f.dof.focusRange = Math.max(P.minDepth, at * (P.depth[0] + (P.depth[1] - P.depth[0]) * this.lens.blur));
+    } else if (f.dof.enabled) {
       // CameraFrame's far blur starts at focus + range / 2 and is full by focus + 1.5 × range.
       const D = LOOK.dof;
       const range = D.blurRamp;
@@ -140,9 +196,10 @@ export class PostFx {
 
   /**
    * Look 1.7: the grade (contrast, saturation, tint, and HDR-aware shadows / highlights / vibrance) blended
-   * between two looks by `k` (0 = a, 1 = b), and the vignette. Both run in the compose pass.
+   * between two looks by `k` (0 = a, 1 = b), and the vignette (LOOK.vignette's shape unless one is given). Both run
+   * in the compose pass.
    */
-  grade(a: GradeValues, b: GradeValues, k: number, vignette: number) {
+  grade(a: GradeValues, b: GradeValues, k: number, vignette: number, shape: { inner: number; outer: number; curvature: number; color: string } = LOOK.vignette) {
     const f = this.frame;
     if (!f) return;
     const m = (x: number, y: number) => x + (y - x) * k;
@@ -158,7 +215,7 @@ export class PostFx {
     f.colorEnhance.shadows = m(a.shadows, b.shadows);
     f.colorEnhance.highlights = m(a.highlights, b.highlights);
     f.colorEnhance.vibrance = m(a.vibrance, b.vibrance);
-    const V = LOOK.vignette;
+    const V = shape; // #photo-2: photo mode's vignette has its own shape
     f.vignette.intensity = vignette;
     f.vignette.inner = V.inner;
     f.vignette.outer = V.outer;

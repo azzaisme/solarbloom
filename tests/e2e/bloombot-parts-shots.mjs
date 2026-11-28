@@ -26,9 +26,9 @@ const check = (ok, what) => {
 
 /** The three Bloombots: what each has grown into. */
 const STAGES = {
-  early: { moves: ['pry'], levels: { chargeCells: 1, pulseRadius: 1, backpack: 1 }, park: 1 },
-  mid: { moves: ['pry', 'hover'], levels: { chargeCells: 3, chargeEfficiency: 2, sprint: 2, pulseRadius: 3, backpack: 2, quickHands: 1, keenEye: 1, sunSoak: 1, lantern: 1, luckyPulse: 1 }, park: 2 },
-  late: { moves: ['pry', 'hover', 'climb', 'glide'], levels: { chargeCells: 5, chargeEfficiency: 5, sprint: 5, pulseRadius: 5, backpack: 5, quickHands: 3, keenEye: 3, sunSoak: 3, lantern: 2, luckyPulse: 3 }, park: 3 },
+  early: { moves: ['prune'], levels: { chargeCells: 1, pulseRadius: 1, backpack: 1 }, park: 1 },
+  mid: { moves: ['prune', 'hover'], levels: { chargeCells: 3, chargeEfficiency: 2, sprint: 2, pulseRadius: 3, backpack: 2, quickHands: 1, keenEye: 1, sunSoak: 1, lantern: 1, luckyPulse: 1 }, park: 2 },
+  late: { moves: ['prune', 'hover', 'climb', 'glide'], levels: { chargeCells: 5, chargeEfficiency: 5, sprint: 5, pulseRadius: 5, backpack: 5, quickHands: 3, keenEye: 3, sunSoak: 3, lantern: 2, luckyPulse: 3 }, park: 3 },
 };
 
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });

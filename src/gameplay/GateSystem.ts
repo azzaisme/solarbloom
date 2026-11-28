@@ -1,14 +1,15 @@
 import { GROUND } from '../core/GameState';
 import { regionById, setPieceAt } from '../core/OldCityLayout';
 import type { GateDef, RegionDef } from '../data/oldcity';
-import { REGIONS, gateText } from '../data/oldcity';
+import { REGIONS, aliveText, gateText } from '../data/oldcity';
+import { PARK } from '../core/Areas';
 import { itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
 /**
  * E21.5 (§6, §7): what is in the way. A region opens because bloombot cleared its gate, never
  * because something was bought. Gates open for good (`salvage.opened`):
- * - a barricade needs Pry (held Interact, 2 s);
+ * - a dead hedge needs Prune (held Interact, 2 s);
  * - deep water needs Hover (Walker refuses gate water without it);
  * - the lock bridge rises when the Sea Lock wakes (Hover also crosses);
  * - the broken bridge is a repair delivery;
@@ -40,7 +41,7 @@ export class GateSystem {
   }
 
   private has(ability: string | undefined): boolean {
-    return !!ability && !!this.sim.state.salvage?.abilities.includes(ability as 'pry');
+    return !!ability && !!this.sim.state.salvage?.abilities.includes(ability as 'prune');
   }
 
   /** Why a gate can't be opened now (its prompt), or undefined. */
@@ -50,9 +51,44 @@ export class GateSystem {
     if (g.kind === 'lockBridge') return n.landmark && this.sim.areas.fog(n.landmark) === 'cleared' ? undefined : this.has('hover') ? undefined : gateText(g);
     if (n.repair) return this.sim.inventory.canPay(n.repair) ? undefined : `${gateText(g)}${this.missing(n.repair)}`;
     if (n.ability && !this.has(n.ability)) return gateText(g);
+    if (n.alive) {
+      const have = this.aliveShare(g);
+      if (have < n.alive) return aliveText(n.alive, have, this.placeName(this.aliveArea(g)));
+    }
     // E23.2.1: abilities cost charge; at zero bloombot can't use them (it walks on, nothing is lost)
-    if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of Charge: press {eat} for a snack, or stand still by the fountain for a while.';
+    if (n.ability && !this.sim.charge.canUse(n.ability as 'prune')) return 'Out of Charge: press {eat} for a snack, or stand still by the fountain for a while.';
     return undefined;
+  }
+
+  /**
+   * #hedge-line: the area whose ground a gate's `alive` counts: the one on Bloombot's side of it (the park, for the
+   * hedges round it), or its own region when the gate stands inside open ground (Saltwind's boardwalk).
+   */
+  aliveArea(g: GateDef): string {
+    const s = this.sim;
+    const own = this.regionOf(g).id;
+    const map = s.areas.map;
+    for (const [x, z] of g.cells)
+      for (const [dx, dz] of [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ]) {
+        const a = map.areaOfCell(x + dx, z + dz);
+        if (a !== own && s.areas.fog(a) !== 'hidden') return a;
+      }
+    return own;
+  }
+
+  /** #hedge-line: how much of that area is no longer dead (0 … 1). */
+  aliveShare(g: GateDef): number {
+    return this.sim.areas.share(this.aliveArea(g));
+  }
+
+  /** How the player knows an area: the park, or a region by its name. */
+  placeName(area: string): string {
+    return area === PARK ? 'the park' : (regionById(area)?.name ?? 'this place');
   }
 
   private missing(cost: Record<string, number | undefined>): string {
@@ -73,7 +109,7 @@ export class GateSystem {
         return false;
       }
       if (g.needs.repair && !s.inventory.pay(g.needs.repair)) return false;
-      if (g.needs.ability) s.charge.use(g.needs.ability as 'pry');
+      if (g.needs.ability) s.charge.use(g.needs.ability as 'prune');
     }
     s.state.salvage!.opened.push(id);
     // its rubble or bridge deck becomes open ground (saved as an entry fix)

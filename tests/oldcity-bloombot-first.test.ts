@@ -1,3 +1,4 @@
+import { hedgeReady } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -12,7 +13,8 @@ const MAST = REGIONS[0];
 function mastRow(seed = 7) {
   const sim = new Sim(createInitialState(seed));
   sim.state.salvage!.tier = 2;
-  sim.state.salvage!.abilities.push('pry', 'hover');
+  sim.state.salvage!.abilities.push('prune', 'hover');
+  hedgeReady(sim);
   sim.areas.clear('park', true);
   sim.gates.open('g-mastRow');
   return sim;

@@ -15,6 +15,10 @@ const TONES = Object.keys(TONE) as OverlayTone[];
 type FrameTone = Exclude<OverlayTone, 'mega'> | 'restore';
 const FRAME: Record<FrameTone, TileMarkerKind> = { hover: 'hover', ok: 'valid', bad: 'invalid', info: 'selected', restore: 'restore' };
 
+/** #849: a footprint's size: squares a side, or [across, deep]. */
+export type FootSize = number | [number, number];
+const footDims = (s: FootSize): [number, number] => (typeof s === 'number' ? [s, s] : s);
+
 /**
  * Hover frame, placement ghost and radius tiles. (E24 #609: the old first-tile arrow is retired; rendering/Waymark marks the goal.) Look 3.14: the frame and the radius / pulse-preview tiles are
  * glowing tile outlines with a soft inner fill (shared meshes, one shared material per tone and use).
@@ -40,6 +44,8 @@ export class Overlays {
   private radiusRoot: pc.Entity;
   private time = 0;
   private frameSize = 1;
+  /** #849: the frame's depth (z), when the footprint isn't square */
+  private frameDepth = 1;
   private gridLines: pc.Entity;
   /** E19: the build hologram (replaces the plain ghost box when given a shape). */
   readonly holo: Hologram;
@@ -89,22 +95,26 @@ export class Overlays {
     }
   }
 
-  private footprintCenter(roofId: string, x: number, z: number, size: number): pc.Vec3 {
+  private footprintCenter(roofId: string, x: number, z: number, size: FootSize): pc.Vec3 {
     const r = this.sim.grid.roof(roofId)!;
+    const [w, d] = footDims(size);
     // E21.24: on its terrace
-    return new pc.Vec3(r.origin[0] + x + size / 2, r.origin[1] + r.height + SLAB_TOP + 0.02 + this.sim.grid.groundOffset(roofId, x, z), r.origin[2] + z + size / 2);
+    return new pc.Vec3(r.origin[0] + x + w / 2, r.origin[1] + r.height + SLAB_TOP + 0.02 + this.sim.grid.groundOffset(roofId, x, z), r.origin[2] + z + d / 2);
   }
 
-  showFrame(roofId: string, x: number, z: number, size: number, tone: FrameTone) {
-    if (this.frameTone !== tone || this.frameSize !== size) {
+  /** `size`: squares a side, or (#849) [across, deep] for a footprint that isn't square. */
+  showFrame(roofId: string, x: number, z: number, size: FootSize, tone: FrameTone) {
+    const [w, d] = footDims(size);
+    if (this.frameTone !== tone || this.frameSize !== w || this.frameDepth !== d) {
       this.frameTone = tone;
-      this.frameSize = size;
-      this.frameMi.mesh = tileMarkerMesh(this.device, FRAME[tone], size);
+      this.frameSize = w;
+      this.frameDepth = d;
+      this.frameMi.mesh = tileMarkerMesh(this.device, FRAME[tone], w, d);
     }
     const p = this.footprintCenter(roofId, x, z, size);
     let lift = 0;
-    for (let dx = 0; dx < size; dx++) {
-      for (let dz = 0; dz < size; dz++) {
+    for (let dx = 0; dx < w; dx++) {
+      for (let dz = 0; dz < d; dz++) {
         lift = Math.max(lift, pavingOverlayLift(this.sim.grid, this.sim.grid.peek(roofId, x + dx, z + dz)));
       }
     }
@@ -117,7 +127,7 @@ export class Overlays {
   framesTile(tile: TileData): boolean {
     const at = this.frameAt;
     return !!at && this.frame.enabled && tile.roofId === at.roofId && tile.x >= at.x && tile.z >= at.z
-      && tile.x < at.x + this.frameSize && tile.z < at.z + this.frameSize;
+      && tile.x < at.x + this.frameSize && tile.z < at.z + this.frameDepth;
   }
 
   showGrid(on: boolean) {
@@ -128,18 +138,19 @@ export class Overlays {
     this.frame.enabled = false;
   }
 
-  showGhost(roofId: string, x: number, z: number, size: number, ok: boolean, height = 0.5, shape?: HoloShape) {
+  showGhost(roofId: string, x: number, z: number, size: FootSize, ok: boolean, height = 0.5, shape?: HoloShape) {
     const p = this.footprintCenter(roofId, x, z, size);
+    const [w, d] = footDims(size);
     if (shape) {
       // E19: a hologram of the real thing, projected from bloombot's eyes
       this.ghost.enabled = false;
-      this.holo.show(shape, p.x, p.y, p.z, size, ok ? 'ok' : 'bad');
+      this.holo.show(shape, p.x, p.y, p.z, w, ok ? 'ok' : 'bad', d);
       this.showFrame(roofId, x, z, size, ok ? 'ok' : 'bad');
       return;
     }
     this.holo.hide();
     this.ghost.setPosition(p.x, p.y + height / 2, p.z);
-    this.ghostBox.setLocalScale(size * 0.92, height, size * 0.92);
+    this.ghostBox.setLocalScale(w - (w === d ? w * 0.08 : 0.08), height, d - (w === d ? d * 0.08 : 0.08));
     this.ghostBox.render!.material = mat(ok ? TONE.ok : TONE.bad, { opacity: 0.5, unlit: true });
     this.ghost.enabled = true;
     this.showFrame(roofId, x, z, size, ok ? 'ok' : 'bad');
@@ -168,8 +179,85 @@ export class Overlays {
     });
   }
 
+  /** VFX 1: the outline of an area (a Mega Pulse's): glowing edges where its tiles meet ground outside it */
+  private edges: pc.Entity[] = [];
+
+  /**
+   * VFX 1: shows the perimeter of `tiles` (one outline round the whole area) instead of a frame on every tile: a
+   * glowing edge wherever a tile in it borders one that isn't. Replaces any radius tiles shown.
+   */
+  showOutline(tiles: TileData[], tone: OverlayTone = 'mega') {
+    for (const e of this.radius) e.enabled = false;
+    const key = (roofId: string, x: number, z: number) => `${roofId}|${x}|${z}`;
+    const inside = new Set(tiles.map((t) => key(t.roofId, t.x, t.z)));
+    const m = this.radiusMats[tone];
+    this.radiusTone = tone;
+    let n = 0;
+    for (const t of tiles) {
+      const [x, y0, z] = this.sim.grid.tileWorld(t);
+      const y = y0 + SLAB_TOP + pavingOverlayLift(this.sim.grid, t) + 0.03;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        if (inside.has(key(t.roofId, t.x + dx, t.z + dz))) continue;
+        let e = this.edges[n];
+        if (!e) {
+          e = shape(this.radiusRoot, 'box', m, { receive: false });
+          e.render!.castShadows = false;
+          this.edges.push(e);
+        }
+        e.render!.meshInstances[0].material = m;
+        e.setPosition(x + dx * 0.5, y, z + dz * 0.5);
+        // a little over a tile long, so the corners meet
+        e.setLocalScale(dx ? 0.07 : 1.07, 0.014, dx ? 1.07 : 0.07);
+        e.enabled = true;
+        n++;
+      }
+    }
+    for (let i = n; i < this.edges.length; i++) this.edges[i].enabled = false;
+  }
+
   hideRadius() {
     for (const e of this.radius) e.enabled = false;
+    for (const e of this.edges) e.enabled = false;
+  }
+
+  /** Build mode's drag: the squares a drag will lay (green) and the ones it can't (red), each its own tile glow. */
+  private drag: { e: pc.Entity; mi: pc.MeshInstance }[] = [];
+  private dragMats = { ok: glowMaterial(TONE.ok, 1.1), bad: glowMaterial(TONE.bad, 1.1) };
+
+  /**
+   * Shows a drag's squares: `ok` ones in the placing green, `bad` ones in red. They stay until `hideDrag` (the
+   * radius tiles and the frame are separate, and keep working beside them).
+   */
+  showDrag(ok: readonly TileData[], bad: readonly TileData[]) {
+    const n = ok.length + bad.length;
+    const mesh = glowTileMesh(this.device, 1);
+    while (this.drag.length < n) {
+      const e = group(this.radiusRoot, 'dragTile');
+      const mi = new pc.MeshInstance(mesh, this.dragMats.ok);
+      e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false });
+      e.enabled = false;
+      this.drag.push({ e, mi });
+    }
+    this.drag.forEach(({ e, mi }, i) => {
+      const t = i < ok.length ? ok[i] : bad[i - ok.length];
+      if (!t) {
+        e.enabled = false;
+        return;
+      }
+      const [x, y, z] = this.sim.grid.tileWorld(t);
+      e.setPosition(x, y + SLAB_TOP + pavingOverlayLift(this.sim.grid, t) + 0.03, z);
+      mi.material = i < ok.length ? this.dragMats.ok : this.dragMats.bad;
+      e.enabled = true;
+    });
+  }
+
+  hideDrag() {
+    for (const d of this.drag) d.e.enabled = false;
+  }
+
+  /** How many drag squares are showing (tests and the review shots read it). */
+  get dragShown(): number {
+    return this.drag.filter((d) => d.e.enabled).length;
   }
 
   update(dt: number, view?: MarkerView) {
@@ -186,7 +274,7 @@ export class Overlays {
         this.shimmerMat.update();
       }
     }
-    if (this.radiusTone && this.radius[0]?.enabled) {
+    if (this.radiusTone && (this.radius[0]?.enabled || this.edges[0]?.enabled)) {
       // The preview tiles breathe softly together, a little out of step with the hover frame.
       const m = this.radiusMats[this.radiusTone];
       m.opacity = this.radiusTone === 'mega' ? 0.4 + 0.6 * this.megaCharge : this.reducedMotion ? 0.69 : 0.62 + 0.18 * Math.sin(this.time * 3.2);

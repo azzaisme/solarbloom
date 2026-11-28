@@ -85,6 +85,11 @@ export class BotController {
   onZoom?: (factor: number) => void;
   /** gamepad right stick turn, in degrees for this frame */
   onTurn?: (degrees: number) => void;
+  /**
+   * Build mode: the right stick as it is (x right, y up, each -1…1, dead zone taken off) for this frame. True when
+   * the game used it (it moves the build cursor); the stick then neither turns nor zooms the view.
+   */
+  onAim?: (x: number, y: number, dt: number) => boolean;
   /** a gamepad button was pressed (the game resolves it to an action for the context in effect) */
   onPad?: (button: number) => void;
   /** Island release: bloombot headed into the closed causeway and turns back; the game shows the card (once per approach). */
@@ -93,8 +98,6 @@ export class BotController {
   claims?: (code: string) => boolean;
   /** Island release: the turn back at the closed causeway (gameplay/TurnBack). */
   readonly turnBack = new TurnBack();
-  /** Third person: aiming a build, bloombot faces the way the camera looks and strafes instead of turning */
-  strafe = false;
   /** E22.1: sprint switched on by the toggle (left stick click); it ends when bloombot stops */
   sprintLatched = false;
   /** a menu that wants pad buttons first (G.7 focus navigation); true when it used the press */
@@ -318,7 +321,7 @@ export class BotController {
     this.walk = undefined;
   }
 
-  private readPad(): { x: number; y: number; sprint: boolean; zoom: number; turn: number } | undefined {
+  private readPad(): { x: number; y: number; sprint: boolean; zoom: number; turn: number; rx: number; ry: number } | undefined {
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
     const gp = [...pads].find((p) => p && p.connected);
     if (!gp) return undefined;
@@ -342,13 +345,14 @@ export class BotController {
     });
     if (x || y || rx || ry) this.lastInput = 'pad'; // either stick means the pad is in hand
     const sb = this.bindings.pad.sprint;
-    return { x, y, sprint: sb !== undefined && (gp.buttons[sb]?.value ?? 0) > 0.4, zoom, turn };
+    return { x, y, sprint: sb !== undefined && (gp.buttons[sb]?.value ?? 0) > 0.4, zoom, turn, rx, ry };
   }
 
   update(dt: number) {
     const pad = this.readPad();
-    if (pad?.zoom) this.onZoom?.(Math.pow(1.8, pad.zoom * dt));
-    if (pad?.turn) this.onTurn?.(-pad.turn * TURN_SPEED * dt);
+    const aimed = !!pad && !!this.onAim?.(pad.rx, pad.ry, dt); // build mode: the right stick is the build cursor
+    if (pad?.zoom && !aimed) this.onZoom?.(Math.pow(1.8, pad.zoom * dt));
+    if (pad?.turn && !aimed) this.onTurn?.(-pad.turn * TURN_SPEED * dt);
     let ix = 0;
     let iy = 0;
     for (const [a, mx, my] of MOVES)
@@ -521,21 +525,18 @@ export class BotController {
       }
     }
     let moved = 0;
-    const yr = (this.camera.yaw * Math.PI) / 180;
-    const strafing = this.strafe && !this.walk && !frozen;
-    // #670: where it wants to face: the camera's way while aiming, else the way it wants to go
+    // #670: it wants to face the way it wants to go
     const t = this.turner;
-    if (strafing) t.face(Math.atan2(-Math.sin(yr), -Math.cos(yr)));
-    else if (want > 0) t.face(Math.atan2(dirX, dirZ));
+    if (want > 0) t.face(Math.atan2(dirX, dirZ));
     t.update(dt);
-    // how far it faces off the way it wants to go: a big change stops it to pivot first (aiming, it strafes instead)
-    const off = !strafing && want > 0 ? t.left : 0;
+    // how far it faces off the way it wants to go: a big change stops it to pivot first
+    const off = want > 0 ? t.left : 0;
     const pace = this.stride.step(dt, want, off);
     if (pace > 0) {
       let mx = this.lastDir.x;
       let mz = this.lastDir.z;
       let dist = pace * dt;
-      if (this.stride.pivoting && !strafing) {
+      if (this.stride.pivoting) {
         // braking to pivot: it carries on along the way it was going, never sliding toward the new way
       } else if (want > 0 && this.walk) {
         // along a path: straight at the next point, never past it
@@ -543,14 +544,11 @@ export class BotController {
         mz = dirZ;
         const next = this.walk.path[0];
         if (next) dist = Math.min(dist, Math.hypot(next.x - p.x, next.z - p.z));
-      } else if (want > 0 && !strafing) {
+      } else if (want > 0) {
         // steering: it turns into the new way, moving at most TURN.slide off the way it faces (no crabbing sideways)
         const h = p.facing + Math.max(-TURN.slide, Math.min(TURN.slide, off));
         mx = Math.sin(h);
         mz = Math.cos(h);
-      } else if (want > 0) {
-        mx = dirX;
-        mz = dirZ;
       }
       moved = w.move(p, mx * dist, mz * dist);
       this.lastDir = { x: mx, z: mz };
@@ -563,7 +561,7 @@ export class BotController {
       if (moved < dist * 0.1 && want <= 0) this.stride.stop(); // braking into a wall: stopped
       // #671: steering head-on into a wall: a small recoil (once while it holds into it), then it stands there facing
       // the wall rather than running in place
-      if (want > 0 && !this.walk && !strafing && !this.stride.pivoting && moved < dist * 0.15) {
+      if (want > 0 && !this.walk && !this.stride.pivoting && moved < dist * 0.15) {
         if (pace > 0.8) this.visuals.bump();
         this.stride.stop();
       }
@@ -571,9 +569,8 @@ export class BotController {
     if (want > 0 && !back && p.roofId === GROUND && this.turnBack.bump(p.x, p.z, dirX, dirZ)) this.onMainlandClosed?.(); // island release: heading into the closed causeway turns bloombot back
     this.speed = dt > 0 ? moved / dt : 0;
     if (this.sprinting && moved > 0.001) {
-      // E23.6.7: sprinting along a laid path costs less (e23-craft's sim.paths, once it lands)
-      const paths = (this.sim as unknown as { paths?: { onPath?(x: number, z: number): boolean; sprintChargeShare?: number } }).paths;
-      const k = paths?.onPath?.(this.pose.x, this.pose.z) ? (paths.sprintChargeShare ?? CHARGE.pathSprintShare) : 1;
+      // E23.6.7: sprinting along a footpath or road bloombot laid costs less (gameplay/LaidPaths)
+      const k = this.sim.paths.onPath(this.pose.x, this.pose.z) ? CHARGE.pathSprintShare : 1;
       this.sim.charge.use('sprint', dt * k);
     }
     // A machine built or a plot turned solid under bloombot: step aside.

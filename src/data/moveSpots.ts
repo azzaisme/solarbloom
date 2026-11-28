@@ -56,7 +56,7 @@ export const MOVE_TRIPS: MoveTripDef[] = [
   { id: 'pier-sandbar', move: 'glide', from: { x: 21, z: 53, w: 1, d: 3 }, at: { x: 20, z: 53, w: 1, d: 3 }, to: [10, 55], verb: 'Glide down to', name: 'the sandbar', back: true },
 ];
 
-/** A heavy door sealed shut: Pry II holds Interact this long to force it, and it gives what is inside, once. */
+/** A heavy door sealed shut: the pry bar holds Interact this long to force it, and it gives what is inside, once. */
 export interface VaultDef {
   id: string;
   x: number;
@@ -86,7 +86,7 @@ export const STASHES: StashDef[] = [
 ];
 
 export const MOVE_LEVELS = {
-  /** seconds to hold Interact to force a vault door (a barricade takes SALVAGE.pryHoldSeconds) */
+  /** seconds to hold Interact to force a vault door (a dead hedge takes SALVAGE.pruneHoldSeconds) */
   vaultHoldSeconds: 3,
   /** a trip's length in seconds: a base and a little more for each tile it covers */
   tripSeconds: 0.6,
@@ -97,7 +97,7 @@ export const MOVE_LEVELS = {
 
 /** What each move's second level does, for the Bloombot page. */
 export const MOVE_LEVEL_TWO: Record<AbilityId, { name: string; does: string; where: string }> = {
-  pry: { name: 'Pry II', does: 'Forces open the heavy iron doors of old vaults.', where: 'There are old vaults to open in Mast Row, the Old Market and Saltwind.' },
+  prune: { name: 'Pry bar', does: 'Forces open the heavy iron doors of old vaults.', where: 'There are old vaults to open in Mast Row, the Old Market and Saltwind.' },
   hover: { name: 'Hover II', does: 'Hovers much further over the sea.', where: 'From the end of the jetty, Bloombot can hover out to the sandbar.' },
   climb: { name: 'Climb II', does: 'Climbs straight up a low wall, with no ladder.', where: 'There are old roofs to climb in the Old Market and in Saltwind.' },
   glide: { name: 'Glide II', does: 'Glides a lot further from a high edge.', where: 'From the cliff east of the beach, Bloombot can glide out to the old pier.' },

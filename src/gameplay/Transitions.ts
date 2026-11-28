@@ -108,6 +108,21 @@ export class Transitions {
     this.begin(t, 'restore', this.restoreSeconds(t, source, o.quiet), { from: look, dir, delay: o.delay, g: o.g });
   }
 
+  /**
+   * VFX 1: a restore that has just started is washed in by a pulse's wave instead: the wave leaves (ox, oz) (world
+   * offset from the tile's centre) after `delay` seconds and reaches `radius` in `seconds`. Visual only.
+   */
+  wash(t: TileData, ox: number, oz: number, radius: number, seconds: number, delay = 0) {
+    const tr = t.tr;
+    if (!tr || tr.k !== 'restore' || tr.g) return;
+    const W = TUNING.transitions;
+    tr.t0 = r3(this.now + delay);
+    tr.d = r3(Math.max(W.wash, seconds + W.washAfter));
+    tr.w = [r3(ox), r3(oz), r3(radius), r3(seconds)];
+    delete tr.dir;
+    this.sim.grid.touch(t);
+  }
+
   /** One nurture step, starting from the tree's current age if another step is still playing. */
   bloom(t: TileData, level: number, auto: boolean, before = level - 1) {
     const tr = t.tr;
