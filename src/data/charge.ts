@@ -29,7 +29,7 @@ export const CHARGE = {
   pulse: 1,
   /** charge a second of sprinting (hovering) uses, while moving */
   sprintPerSecond: 1 / 6,
-  /** E23.6.7: sprinting on a laid path uses this share (until e23-craft's PATHS.sprintChargeShare is on sim.paths) */
+  /** E23.6.7: sprinting on a laid path uses this share (a footpath or road laid in build mode: gameplay/LaidPaths) */
   pathSprintShare: 0.6,
   /** charge each use of an ability costs */
   ability: { prune: 3, hover: 0, climb: 2, glide: 2 } as Record<string, number>,

@@ -19,6 +19,8 @@ const QUICK = [
   'bloombot-walk', 'bindings', 'padFocus', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glow-setting', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'pulse-wash', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art', 'keeper-seat', 'model-wait', 'visitor-models', 'visitor-sit-shape', 'bloombot-settle', 'bench-sit',
   // giant trees, and trees that grow over game days (26 Nov 2026)
   'giant-trees',
+  // build mode from above: drag to lay a run or fill a patch, and footpaths and roads to lay (28 Nov 2026)
+  'build-shape', 'laid-paths',
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world

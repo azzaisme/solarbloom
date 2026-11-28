@@ -410,8 +410,8 @@ export function treeZone(x: number, z: number, areaType: string, w: TreeWorld, r
  * The tree this tile grows, if any (ignores its current growth). `w`: the world of the tile's seed
  * (`treeWorldOf(sim)`). A tile blocked now shows no tree, but where trees stand comes from generation alone.
  */
-export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'blocked'> & { roofId?: string }, areaType: string, w: TreeWorld): TreeSpot | undefined {
-  if (t.blocked) return undefined;
+export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'blocked' | 'laid'> & { roofId?: string }, areaType: string, w: TreeWorld): TreeSpot | undefined {
+  if (t.blocked || (t.laid && t.laid !== 'grass')) return undefined; // nothing grows through a footpath or road Bloombot laid
   const roof = t.roofId !== undefined && t.roofId !== 'g';
   const key = (t.x + 0x8000) * 0x10000 + (t.z + 0x8000);
   let z: ReturnType<typeof treeZone> | null | undefined = roof ? undefined : w.memo.get(key);

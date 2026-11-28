@@ -1,10 +1,11 @@
-import type { BuildableType, ItemId } from '../core/types';
+import type { BuildableType, ItemId, LaidKind } from '../core/types';
 import { DECOR_OPTION, DECOR_OPTIONS, decorSet, type DecorSet } from '../data/cozy';
 import type { Unlock } from '../data/crafting';
 import { BUILDABLE, MACHINES } from '../data/machines';
 import { KEEPERS } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import { decorOpen } from '../gameplay/Cozy';
+import { LAID_KINDS, LAID_NAME } from '../gameplay/LaidPaths';
 import type { Sim } from '../gameplay/Sim';
 import type { Tool } from './Hud';
 import { ICONS, iconize, MACHINE_ICONS } from './Icons';
@@ -16,7 +17,7 @@ import type { IconName } from './Icons';
  * it is locked, who to wake for it. Read from the real data (machines, the crafting table's recipes, the
  * decorations), so a new machine appears with no change here beyond its tab and line.
  */
-export type BuildTabId = 'machines' | 'power' | 'water' | 'farm' | 'storage' | 'decorations';
+export type BuildTabId = 'machines' | 'power' | 'water' | 'farm' | 'storage' | 'paths' | 'decorations';
 
 export const BUILD_TABS: readonly { id: BuildTabId; label: string; icon: IconName }[] = [
   { id: 'machines', label: 'Machines', icon: 'wrench' },
@@ -24,11 +25,12 @@ export const BUILD_TABS: readonly { id: BuildTabId; label: string; icon: IconNam
   { id: 'water', label: 'Water', icon: 'water' },
   { id: 'farm', label: 'Farm', icon: 'sprout' },
   { id: 'storage', label: 'Storage', icon: 'parcel' },
+  { id: 'paths', label: 'Ground', icon: 'road' },
   { id: 'decorations', label: 'Decorations', icon: 'flower' },
 ];
 
 /** E23.11: the build bar's default buttons 1–9 (the build board's row; the build menu pins others). */
-export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'battery', 'relay', 'planter', 'compostBin', 'pump', 'pipe', '', ''];
+export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'battery', 'relay', 'planter', 'compostBin', 'pump', 'pipe', 'footpath', 'road'];
 
 /** Which tab each machine sits under (and the pipe, which is laid from the Water tab). */
 export const BUILD_TAB: Record<BuildableType | 'pipe', BuildTabId> = {
@@ -215,6 +217,28 @@ function pipeItem(sim: Sim): BuildItem {
   };
 }
 
+const LAID_LINE: Record<LaidKind, string> = {
+  footpath: 'Paving stones for a garden walk. Hold and drag to lay a whole run at once, or turn Fill on to pave a patch.',
+  road: 'A smooth road across open ground. Hold and drag to lay a whole run at once, or turn Fill on to pave a patch.',
+  grass: 'Turn paving and bare ground into lawn: a market floor, a plaza, a walk. Hold and drag for a strip, or turn Fill on to green a whole patch. Then pulse it to bring it to life.',
+};
+
+/** A footpath, a road or grass: the ground itself, free to lay and to lift, there from the first time Bloombot builds. */
+function laidItem(kind: LaidKind): BuildItem {
+  return {
+    tool: kind,
+    tab: 'paths',
+    name: LAID_NAME[kind],
+    short: kind === 'footpath' ? 'Path' : LAID_NAME[kind],
+    icon: kind === 'footpath' ? ICONS.footpath : kind === 'grass' ? ICONS.sprout : ICONS.road,
+    kind: 'Free to lay · hold and drag for a run',
+    line: LAID_LINE[kind],
+    locked: false,
+    cost: [],
+    affordable: true,
+  };
+}
+
 /** A decoration: open ones are free to place; one the table can make shows as locked with that; finds stay hidden. */
 function decorItem(sim: Sim, id: string): BuildItem | undefined {
   const o = DECOR_OPTION[id];
@@ -253,6 +277,7 @@ export function buildItems(sim: Sim, inside = false): BuildItem[] {
     if (it) out.push(it);
     if (t === 'pump') out.push(pipeItem(sim)); // the pipe sits after the pump
   }
+  for (const k of LAID_KINDS) out.push(laidItem(k));
   for (const o of DECOR_OPTIONS) {
     const it = decorItem(sim, o.id);
     if (it) out.push(it);
@@ -267,6 +292,7 @@ export function buildItems(sim: Sim, inside = false): BuildItem[] {
 export function buildItem(sim: Sim, tool: Tool | string): BuildItem | undefined {
   if (!tool) return undefined;
   if (tool === 'pipe') return pipeItem(sim);
+  if (tool === 'footpath' || tool === 'road' || tool === 'grass') return laidItem(tool);
   if (tool.startsWith('decor:')) return decorItem(sim, tool.slice(6));
   if (tool in MACHINES && tool !== 'core') return machineItem(sim, tool as BuildableType);
   return undefined;

@@ -54,6 +54,9 @@ export class Hotbar extends HudPart {
 
 export { HOTBAR_DEFAULT };
 
+/** The Fill button's mark: a patch of squares, filled in. */
+const FILL_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="currentColor"/></svg>`;
+
 /** The view shown in build mode: none, the Power view or the Water view (one at a time). */
 export type BuildView = 'off' | 'power' | 'water';
 
@@ -71,6 +74,8 @@ export class BuildBar extends HudPart {
   powerOn = false;
   /** E23.4.5: the Water view is on (the game sets it). */
   waterOn = false;
+  /** Build mode's drag fills the whole patch between its ends (the game sets it); off, it lays a run. */
+  fillOn = false;
   private tool: Tool = 'pulse';
 
   static template(): string {
@@ -179,7 +184,7 @@ export class BuildBar extends HudPart {
       })
       .join('');
     const edge = (a: Action) => (pad ? `<span class="bedge" aria-hidden="true">${this.glyph(a)}</span>` : '');
-    const right = mode('removeMode', ICONS.broom, 'Remove', tool === 'remove', 'remove', `Remove ${tool === 'remove' ? 'on' : 'off'}`) + mode('buildMenu', ICONS.build, 'All', false, 'all', 'The build menu: everything you can build');
+    const right = mode('fillMode', FILL_ICON, 'Fill', this.fillOn, 'fill', `Fill a whole patch when you drag: ${this.fillOn ? 'on' : 'off'}`) + mode('removeMode', ICONS.broom, 'Remove', tool === 'remove', 'remove', `Remove ${tool === 'remove' ? 'on' : 'off'}`) + mode('buildMenu', ICONS.build, 'All', false, 'all', 'The build menu: everything you can build');
     const html = `${left}${left ? '<span class="vsep" aria-hidden="true"></span>' : ''}${edge('slotPrev')}${slots}${edge('slotNext')}<span class="vsep" aria-hidden="true"></span>${right}`;
     el.classList.toggle('pad', pad);
     this.set('buildbar', el, 'html', html);
