@@ -2,6 +2,22 @@
 
 Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solarbloom/` folder) with its full history.
 
+# Photo mode 2 (#photo-2)
+
+Photo mode is a camera now, not only a freed view. Code: `app/PhotoMode.ts` (the model: tabs of rows, tested in `tests/photo-lens.test.ts`), `ui/PhotoBar.ts` (the panel, the frame's matte and the guides), `data/photo.ts` (the lens's ranges, shapes, poses). Review shots and checks: `npm run shots:photo` → `docs/review/photo-2/`.
+
+| Part | Status |
+|---|---|
+| The panel | 🟡 A panel in the bottom left corner in place of the card across the bottom middle (which sat on the subject): five tabs (View, Focus, Light, Bloombot, Frame), one setting a row. The mouse drags sliders and presses buttons; the **arrow keys** and the pad's **d-pad** walk it (up and down choose a row, left and right change it; on the tabs they change tab). The old shortcuts still work from any tab (E hide bloombot, Q freeze, F blur, G hour, M weather, X filter, Tab hide the panel, C reset). On a pad the d-pad's old photo shortcuts (hide the bar, zoom, blur, hour) are the panel's rows now; any d-pad press brings a hidden panel back. Tide's first-picture lesson keeps its small centred card |
+| View | 🟡 **Lens** from wide to long (14°–92° field of view, shown as a focal length: the camera stays put, so a long lens flattens and a wide one opens up), **Lean** (the horizon rolled up to 45° either way), Tilt as a slider, Reset. `CameraController.fovOverride` and `roll`, both in the snapshot leaving restores |
+| Focus | 🟡 The blur is a real lens's while photo mode is open: sharp at a chosen distance, blurred in front as well as behind, with the better kernel (`PostFx.setLens`). **Sharp at**: the middle of the view (the default), a slider, or **Pick a spot** (the next press on the picture focuses on bloombot or the ground there instead of saving). **Strength** sets the blur disc and how thin the sharp band is. Needs post-processing (Medium and up): on Low the rows say so |
+| Light | 🟡 Time, weather and filter as before, plus **Brightness** (±2 stops, the scene's exposure, every tier) and **Dark corners** (a vignette with its own shape) |
+| Bloombot | 🟡 Hidden or not, a **pose** (cheer, wave, pulse: its own clips on the spot), a held **face** (happy, surprised, wink, eyes closed), **Looks at you** (turns to the camera, and back the way it faced on leaving), the garden frozen. No pose while sitting |
+| Frame | 🟡 **Shape** (whole screen, 16:9, 3:2, 4:3, square, 4:5, 9:16, 21:9): everything outside it is darkened on screen and the saved picture is cut to it. **Guides** (thirds, centre lines, diagonals), never in the picture. **Double size**: the picture is drawn once at twice the pixels each way (no side past 4096) for the shutter, the blur scaled to match, then the screen goes back to its own size |
+| What stays | The lens, lean, focus, brightness, vignette, pose and face are for one visit, like the time and weather; the shape, guides, picture size, blur strength and open tab are kept for the session. Nothing reaches the game: leaving restores the camera snapshot, the look and the HUD exactly (tested) |
+
+Open: a pad can't reach "Pick a spot" on a point (it has no pointer: the focus slider does the job); focus picks bloombot or the ground, not walls and roofs; the double-size picture was checked in headless software rendering only; saved pictures are downloads (no in-game gallery beyond Tide's sketches).
+
 # E20: One game — bloombot first (#283)
 
 Direction audit, 17 Nov 2026: Solarbloom is a cozy restoration game where bloombot does the work; the idle engine stays underneath as bloombot's helpers.

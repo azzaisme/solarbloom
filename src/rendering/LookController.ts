@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { type GfxTier, LOOK } from '../data/look';
+import { PHOTO_LENS } from '../data/photo';
 import { CLOUDS, DAY_LIGHT, HAZE, NIGHT_SKY, SKY, SKY_BANDS, TWILIGHT } from '../data/sky';
 import type { CameraController } from './CameraController';
 import { Atmosphere } from './Atmosphere';
@@ -97,6 +98,13 @@ export class LookController {
     this.setTier(this.tier);
   }
 
+  /** #photo-2: photo mode's lens for the blur (PostFx.setLens) and its vignette, 0 … 1 (undefined: the game's own). */
+  photoVignette?: number;
+  setPhotoLens(lens: { focus?: number; blur: number } | undefined, vignette?: number) {
+    this.post.setLens(lens);
+    this.photoVignette = vignette;
+  }
+
   applyAtmosphere() {
     const A = LOOK.atmosphere;
     const tier = this.tier;
@@ -131,8 +139,10 @@ export class LookController {
     this.post.tick(dt);
     const G = LOOK.grade;
     this.mood += (this.moodTarget - this.mood) * (1 - Math.exp(-dt / Math.max(0.01, G.follow)));
-    if (this.highContrast) this.post.grade(G.contrast, G.contrast, 0, 0);
-    else this.post.grade(G.dead, G.warm, this.mood, LOOK.vignette.intensity);
+    // #photo-2: photo mode's own vignette (a player's choice, so it shows in high contrast too)
+    const pv = this.photoVignette !== undefined ? { ...PHOTO_LENS.vignette, intensity: this.photoVignette * PHOTO_LENS.vignette.intensity } : undefined;
+    if (this.highContrast) this.post.grade(G.contrast, G.contrast, 0, pv?.intensity ?? 0, pv);
+    else this.post.grade(G.dead, G.warm, this.mood, pv?.intensity ?? LOOK.vignette.intensity, pv);
     this.atmosphere.update(dt, g, Math.max(6, cam.viewHeight * 1.2), this.toSun, fwd);
     const R = LOOK.rim;
     this.rimNow.lerp(this.rimColour, this.rimTwilight, Math.min(1, Math.max(0, this.twilight)));
