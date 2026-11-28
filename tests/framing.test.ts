@@ -157,6 +157,18 @@ describe('E19.4.1: photo mode', () => {
     expect([photo.active, hud.hidden, hud.dof, bot.following, bot.visible, hud.bar]).toEqual([false, false, false, true, true, undefined]);
   });
 
+  it('#photo-2: the lens and the lean are part of the view that leaving puts back', () => {
+    const { cam, photo } = setup();
+    const before = cam.snapshot();
+    photo.enter();
+    photo.setValue('lens', 80);
+    photo.setValue('roll', -20);
+    expect([cam.snapshot().fovOverride, cam.snapshot().roll]).toEqual([26, -20]);
+    photo.exit();
+    expect(cam.snapshot()).toEqual(before);
+    expect(cam.fovOverride).toBeUndefined();
+  });
+
   it('freezes the game while framing only when asked, and saves a picture', () => {
     const { hud, photo } = setup();
     photo.enter();

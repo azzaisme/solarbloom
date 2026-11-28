@@ -235,13 +235,228 @@ try {
   const firePrompt = await prompt(page);
   check(fire.ok && /Sit by the fire/.test(firePrompt) && !/Move/.test(firePrompt), `the fireplace is built in: no Move on its prompt ("${firePrompt}")`);
 
+  // ── the top-down build view, inside the Home: the mouse, a drag, a decoration's press and the pad ──
+  const camNow = () => page.evaluate(() => {
+    const c = window.solarbloom.camera;
+    return { building: c.building, indoors: c.isIndoors, pitch: c.pitch, dist: c.dist, shown: !!window.solarbloom.houseInside?.visible };
+  });
+  /** Where a square of the house's floor is on screen, and whether it is well inside the window (clear of the HUD). */
+  const screenOf = (x, z) => page.evaluate(([x, z]) => {
+    const g = window.solarbloom;
+    const v = g.camera.toScreen(g.tileVec(g.sim.grid.get('house', x, z), 0.05));
+    return { x: v.x, y: v.y, ok: v.x > 60 && v.x < innerWidth - 60 && v.y > 80 && v.y < innerHeight - 140 };
+  }, [x, z]);
+  const aimedAt = () => page.evaluate(() => { const t = window.solarbloom.buildAim().p?.tile; return t ? [t.x, t.z] : null; });
+  const inHand = () => page.evaluate(() => window.solarbloom.hud.currentTool);
+  const counts = () => page.evaluate(() => ({ decor: window.solarbloom.cozy.decorCount(), laid: ['footpath', 'road', 'grass'].reduce((n, k) => n + window.solarbloom.sim.paths.count(k), 0) }));
+  /** Squares of room `rid` where piece `id` (as turned now) would fit whole, on screen, nearest Bloombot first. */
+  const fitsIn = (id, rid) => page.evaluate(([id, rid]) => {
+    const g = window.solarbloom;
+    const h = g.sim.house;
+    const b = g.bot.pose;
+    const out = [];
+    for (let x = 0; x < h.room(); x++)
+      for (let z = 0; z < h.room(); z++) {
+        const to = g.pieceAnchor(id, { x, z });
+        if (!to || g.furnitureProblem('house', to)) continue;
+        let inside = true;
+        for (let i = to.x; i < to.x + to.w; i++) for (let j = to.z; j < to.z + to.d; j++) inside &&= h.roomAt(i, j)?.id === rid;
+        if (!inside) continue;
+        const v = g.camera.toScreen(g.tileVec(g.sim.grid.get('house', x, z), 0.05));
+        if (v.x > 60 && v.x < innerWidth - 60 && v.y > 80 && v.y < innerHeight - 140) out.push({ x, z, to: { x: to.x, z: to.z, rot: to.rot }, d: Math.hypot(x + 0.5 - b.x, z + 0.5 - b.z) });
+      }
+    return out.sort((a, c) => a.d - c.d);
+  }, [id, rid]);
+  /** The real mouse over a square of the floor (it aims there once it has moved). */
+  const pointAt = async (x, z) => {
+    const s = await screenOf(x, z);
+    await page.mouse.move(s.x - 6, s.y - 6);
+    await page.mouse.move(s.x, s.y, { steps: 3 });
+    await wait(700);
+    return s;
+  };
+
+  /** Bloombot has finished what it was doing (putting a piece down plays a short build move, and a press waits for it). */
+  const idle = () => page.waitForFunction(() => !window.solarbloom.bot.visuals.busy, null, { timeout: 60_000, polling: 100 });
+  /** What the prompt shows now: the glyphs on its Turn line, and whether it is free of any dash or unbound input. */
+  const promptGlyphs = () =>
+    page.evaluate(() => {
+      const el = document.getElementById('prompt');
+      const html = el?.innerHTML ?? '';
+      const text = el?.innerText ?? '';
+      const turn = [...(el?.querySelectorAll('.pr-glyph') ?? [])]
+        .filter((g) => /Turn/.test(g.nextElementSibling?.textContent ?? ''))
+        .flatMap((g) => [...g.querySelectorAll('svg[aria-label]')].map((s) => s.getAttribute('aria-label')));
+      return { ok: !!el && !text.includes('—') && !html.includes('Not bound') && !html.includes('—'), turn };
+    });
+
+  // picked up, the camera looks down into the room from the room's own view: no higher, the room still drawn
+  const camBefore = await camNow();
+  check(await pickUp(page, 'radio'), 'the radio picked up for the build view');
+  await wait(1500);
+  const camUp = await camNow();
+  check(camUp.building && camUp.indoors && camUp.pitch > 65, `with a piece in hand the view looks down into the room (pitch ${camUp.pitch.toFixed(0)}°, still the indoor view)`);
+  check(Math.abs(camUp.dist - camBefore.dist) < 0.6 && camUp.shown, `and keeps the room's distance, so it never lifts through the roof (${camBefore.dist.toFixed(1)} → ${camUp.dist.toFixed(1)}), the room still drawn`);
+  const centre = await page.evaluate(() => window.solarbloom.pick(innerWidth / 2, innerHeight / 2)?.roofId);
+  check(centre === 'house', `the middle of the screen is the room's floor, not a wall or the roof (${centre})`);
+  await shot(page, '5-build-view-in-the-home.png');
+
+  // the mouse: the radio put down in every room of the Home, each where the pointer is
+  const rooms = await page.evaluate(() => window.solarbloom.sim.house.rooms().map((r) => r.id));
+  for (const [i, rid] of rooms.entries()) {
+    if (i > 0) check(await pickUp(page, 'radio'), `the radio picked up again (for the ${rid})`);
+    const st = (await standsIn(page, rid))[0];
+    if (st) await walkTo(page, ...st);
+    await wait(800);
+    const spots = (await fitsIn('radio', rid)).filter((s) => !(s.x === Math.floor(st?.[0]) && s.z === Math.floor(st?.[1])));
+    const spot = spots[Math.min(2, spots.length - 1)];
+    if (!spot) {
+      check(false, `a free square on screen in the ${rid} for the radio`);
+      continue;
+    }
+    await pointAt(spot.x, spot.z);
+    const at = await aimedAt();
+    const tip = await page.evaluate(() => document.getElementById('tip')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
+    check(JSON.stringify(at) === JSON.stringify([spot.x, spot.z]) && /to put it here/.test(tip), `in the ${rid}, the hologram is under the mouse pointer (${JSON.stringify(at)}): "${tip}"`);
+    // the prompt shows only inputs the player has: on keys Turn back has no key, so R alone, never a dash
+    const pr = await promptGlyphs();
+    check(pr.ok && pr.turn.length === 1 && /^R( key)?$/.test(pr.turn[0]), `in the ${rid}, the prompt's Turn line shows R alone, no dash (${JSON.stringify(pr)})`);
+    await shot(page, `5-mouse-${rid}.png`);
+    await idle();
+  await page.mouse.down();
+    await page.mouse.up();
+    await wait(1200);
+    const r = await piece(page, 'radio');
+    const room = await page.evaluate((r) => window.solarbloom.sim.house.roomAt(r.x, r.z)?.id, r);
+    check(r?.x === spot.to.x && r?.z === spot.to.z && room === rid && (await inHand()) === 'pulse', `a click puts it down there, in the ${rid} (${JSON.stringify(r)}), hands free again`);
+  }
+  const tuneThere = await visit(page, 'radio');
+  check(tuneThere.ok && /Listen to the radio/.test(tuneThere.text), `the radio's prompt works where the mouse put it: "${tuneThere.text}"`);
+
+  // a press held and moved across the floor puts a piece down whole where it was pressed: never a run, Fill or not
+  for (const fill of [false, true]) {
+    check(await pickUp(page, 'chest'), `the chest picked up (Fill ${fill ? 'on' : 'off'})`);
+    if (fill) await press(page, await keyOf(page, 'fillMode'));
+    await wait(400);
+    check((await page.evaluate(() => window.solarbloom.fillOn)) === fill, `Fill is ${fill ? 'on' : 'off'}`);
+    const st = (await standsIn(page, 'main'))[0];
+    await walkTo(page, ...st);
+    await wait(800);
+    const spots = await fitsIn('chest', 'main');
+    const from = spots[1];
+    const far = spots.find((s) => Math.abs(s.x - from.x) + Math.abs(s.z - from.z) >= 3);
+    const before = await counts();
+    await pointAt(from.x, from.z);
+    await idle();
+  await page.mouse.down();
+    const end = await screenOf(far.x, far.z);
+    await page.mouse.move(end.x, end.y, { steps: 8 });
+    await wait(500);
+    await page.mouse.up();
+    await wait(1200);
+    const c = await piece(page, 'chest');
+    const after = await counts();
+    check(c?.x === from.to.x && c?.z === from.to.z && (await inHand()) === 'pulse', `pressed at ${JSON.stringify([from.x, from.z])} and dragged to ${JSON.stringify([far.x, far.z])}, the chest goes down whole where it was pressed (${JSON.stringify(c)})`);
+    check(after.decor === before.decor && after.laid === before.laid, 'and nothing else is laid along the way');
+    if (fill) {
+      await page.evaluate(() => window.solarbloom.selectTool('decor:pot'));
+      await wait(300);
+      await press(page, await keyOf(page, 'fillMode'));
+      await page.evaluate(() => window.solarbloom.selectTool('pulse'));
+      await wait(300);
+    }
+  }
+  await shot(page, '5-chest-dragged.png');
+
+  // a houseplant in hand pressed on a piece and moved: the piece comes up to move, no run of houseplants
+  await page.evaluate(() => {
+    const sv = window.solarbloom.sim.state.salvage;
+    sv.decorMade = [...new Set([...(sv.decorMade ?? []), 'houseplant'])].sort();
+    window.solarbloom.selectTool('decor:houseplant');
+  });
+  await wait(1200);
+  const ch = await piece(page, 'chest');
+  const beforePlant = await counts();
+  await pointAt(ch.x, ch.z);
+  const onChest = await page.evaluate(() => document.getElementById('tip')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
+  check(/pick it up and move it/.test(onChest), `a houseplant in hand, pointed at the chest: "${onChest}"`);
+  await idle();
+  await page.mouse.down();
+  const sideways = await screenOf(Math.min(ch.x + 3, 11), ch.z);
+  await page.mouse.move(sideways.x, sideways.y, { steps: 8 });
+  await wait(400);
+  await page.mouse.up();
+  await wait(1000);
+  check((await inHand()) === 'furniture:chest' && (await counts()).decor === beforePlant.decor, `the press picks the chest up (${await inHand()}) and lays no houseplants`);
+  await press(page, 'Escape');
+  await wait(600);
+  check(same(await piece(page, 'chest'), ch), 'Back leaves the chest where it was');
+
+  // a pad: X picks the radio up, RB turns it, the right stick moves the build cursor, A puts it down
+  await page.evaluate(() => {
+    const pad = { id: 'virtual pad (STANDARD GAMEPAD)', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
+    navigator.getGamepads = () => [pad, null, null, null];
+    window.__pad = pad;
+  });
+  /** A pad button pressed for at least two frames (the pad is read once a frame, and a slow browser draws few). */
+  const button = async (i) => {
+    await idle();
+    const f0 = await page.evaluate((i) => { Object.assign(window.__pad.buttons[i], { pressed: true, value: 1 }); return window.solarbloom.frameNo; }, i);
+    await page.waitForFunction((f0) => window.solarbloom.frameNo >= f0 + 2, f0, { timeout: 60_000, polling: 50 });
+    await page.evaluate((i) => Object.assign(window.__pad.buttons[i], { pressed: false, value: 0 }), i);
+    await wait(500);
+  };
+  const stick = (x, y) => page.evaluate(([x, y]) => { window.__pad.axes[2] = x; window.__pad.axes[3] = y; }, [x, y]);
+  const cursorTo = async (x, z) => {
+    for (let i = 0; i < 120; i++) {
+      const at = await page.evaluate(() => { const g = window.solarbloom; const c = g.cursor ?? { x: 0, z: 0 }; return { x: g.bot.pose.x + c.x, z: g.bot.pose.z + c.z, yaw: g.camera.yaw }; });
+      const dx = x + 0.5 - at.x, dz = z + 0.5 - at.z;
+      if (Math.hypot(dx, dz) < 0.25) break;
+      const yr = (at.yaw * Math.PI) / 180;
+      const rx = dx * Math.cos(yr) - dz * Math.sin(yr), ry = -dx * Math.sin(yr) - dz * Math.cos(yr);
+      const m = Math.max(1, Math.hypot(rx, ry) / 0.6);
+      await stick(rx / m, -ry / m);
+      await wait(60);
+    }
+    await stick(0, 0);
+    await wait(600);
+  };
+  const radioWas = await piece(page, 'radio');
+  await visit(page, 'radio');
+  await button(2);
+  check((await inHand()) === 'furniture:radio', 'on a pad, X picks the radio up');
+  await button(5);
+  const padRot = await page.evaluate(() => window.solarbloom.buildRot);
+  check(padRot === (radioWas.rot + 1) % 4, `RB turns it (${radioWas.rot} → ${padRot})`);
+  const padPrompt = await promptGlyphs();
+  check(padPrompt.ok && padPrompt.turn.length === 2 && /LB|L1/.test(padPrompt.turn[0]) && /RB|R1/.test(padPrompt.turn[1]), `on a pad the prompt's Turn line shows both bumpers, no dash (${JSON.stringify(padPrompt)})`);
+  const padSpot = (await fitsIn('radio', await page.evaluate(() => { const b = window.solarbloom.bot.pose; return window.solarbloom.sim.house.roomAt(Math.floor(b.x), Math.floor(b.z))?.id; }))).find((s) => s.d >= 2.5);
+  check(!!padSpot, `a free square a few steps away for the pad cursor (${JSON.stringify(padSpot)})`);
+  if (padSpot) {
+    await cursorTo(padSpot.x, padSpot.z);
+    const padAim = await aimedAt();
+    check(JSON.stringify(padAim) === JSON.stringify([padSpot.x, padSpot.z]) && (await page.evaluate(() => window.solarbloom.bot.lastInput)) === 'pad', `the right stick moves the build cursor across the floor (${JSON.stringify(padAim)})`);
+    await shot(page, '5-pad-cursor.png');
+    await button(0);
+    await wait(800);
+    const padPut = await piece(page, 'radio');
+    check(padPut?.x === padSpot.to.x && padPut?.z === padSpot.to.z && padPut?.rot === padRot && (await inHand()) === 'pulse', `A puts it down there, turned (${JSON.stringify(padPut)})`);
+  }
+  await page.evaluate(() => {
+    navigator.getGamepads = () => [];
+    window.solarbloom.bot.lastInput = 'keys';
+  });
+  await wait(600);
+  await shot(page, '5-after-build-view.png');
+  const layout = await Promise.all(['bed', 'radio', 'chest'].map((id) => piece(page, id)));
+
   // saved: a reload keeps every move
   await page.evaluate(() => window.solarbloom.saveNow?.());
   await page.goto(`http://localhost:${PORT}/?slot=1&gfx=low`);
   await waitForGame(page);
   await wait(4000);
   const after = await Promise.all(['bed', 'radio', 'chest'].map((id) => piece(page, id)));
-  check(same(after[0], bed4) && same(after[1], radio4) && same(after[2], chestBefore), `after a reload the bed, the radio and the chest stand where they were (${JSON.stringify(after)})`);
+  check(same(after[0], bed4) && after.every((p, i) => same(p, layout[i])), `after a reload the bed, the radio and the chest stand where they were (${JSON.stringify(after)})`);
   await shot(page, '4-after-reload.png');
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 } catch (e) {

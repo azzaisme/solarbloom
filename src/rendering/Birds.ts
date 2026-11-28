@@ -1,17 +1,24 @@
 import * as pc from 'playcanvas';
 import { group, shape } from './Shapes';
 import { mat, PALETTE } from './Materials';
+import { playClip, type Critter, type CritterModels } from './CritterModels';
 
 interface Bird {
   root: pc.Entity;
   wings: pc.Entity[];
   offset: pc.Vec3;
   phase: number;
+  /** its songbird model once loaded (the placeholder gull is hidden then); it flaps with its `fly` clip */
+  model?: Critter;
 }
+
+/** Flock songbirds are drawn bigger than life (high overhead, they'd be specks at a songbird's 24 cm). */
+const FLOCK_LENGTH = 0.5;
 
 /**
  * Phase 4 E09.4: now and then a small flock of birds crosses the view, once life is coming back (the park at half
- * restored or more). Pooled (made once), no per-frame allocation, and off with reduced motion.
+ * restored or more). Pooled (made once), no per-frame allocation, and off with reduced motion. Each is a songbird
+ * (CritterModels) on its `fly` clip; until the model loads, a placeholder gull flaps by hand.
  */
 export class Birds {
   private flock: Bird[] = [];
@@ -26,7 +33,7 @@ export class Birds {
   /** Phase 5 E16: songbirds have arrived (20 thriving tree tiles): flocks pass more often. */
   resident = false;
 
-  constructor(parent: pc.Entity) {
+  constructor(parent: pc.Entity, models?: CritterModels) {
     this.root = group(parent, 'birds');
     this.root.enabled = false;
     for (let i = 0; i < 5; i++) {
@@ -39,7 +46,16 @@ export class Birds {
         w.tags.add(sd < 0 ? 'L' : 'R');
         return w;
       });
-      this.flock.push({ root: b, wings, offset: new pc.Vec3(((i % 3) - 1) * 0.6, (i % 2) * 0.25, -Math.floor(i / 2) * 0.55), phase: i * 1.3 });
+      const bird: Bird = { root: b, wings, offset: new pc.Vec3(((i % 3) - 1) * 0.6, (i % 2) * 0.25, -Math.floor(i / 2) * 0.55), phase: i * 1.3 };
+      this.flock.push(bird);
+      void models?.make('songbird', { length: FLOCK_LENGTH, shadows: false }).then((m) => {
+        if (!m || !b.parent) return;
+        for (const c of b.children) (c as pc.Entity).enabled = false; // the gull
+        b.addChild(m.holder);
+        playClip(m, 'fly', 0);
+        if (m.entity.anim) m.entity.anim.speed = 0.85 + 0.1 * i; // not all in step
+        bird.model = m;
+      });
     }
   }
 
@@ -68,6 +84,7 @@ export class Birds {
     this.root.setPosition(this.pos);
     for (const b of this.flock) {
       b.root.setLocalPosition(b.offset.x, b.offset.y + Math.sin(this.t * 2 + b.phase) * 0.08, b.offset.z);
+      if (b.model) continue; // flapping on its clip
       const flap = Math.sin(this.t * 12 + b.phase) * 40;
       for (const w of b.wings) w.setLocalEulerAngles(0, 0, w.tags.has('L') ? -flap : flap);
     }

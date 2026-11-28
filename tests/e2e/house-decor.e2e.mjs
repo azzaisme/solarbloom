@@ -154,8 +154,8 @@ try {
     await wait(4000);
     // The hologram aims where Bloombot faces, within reach: from the second spot it can land on the first pot, and
     // with a pot in hand the key then picks that pot up to move it (E23.11; the prompt says "Pick up the Flower pot").
-    // Holding a piece, Bloombot faces the way the camera looks (it strafes), so turn the camera, as a player would,
-    // until the hologram is on free ground where a pot may go. Bloombot faces the heading h with the camera's yaw at h - π.
+    // In the build view with keys alone the hologram is on the square in front of Bloombot, so turn Bloombot, as a player
+    // would, until it is on free ground where a pot may go.
     const aimFree = () =>
       page.evaluate(() => {
         const g = window.solarbloom;
@@ -164,7 +164,7 @@ try {
       });
     for (const heading of [null, Math.PI, Math.PI / 2, -Math.PI / 2, 0]) { // as it stands, then towards the house first
       if (heading !== null) {
-        await page.evaluate((h) => window.solarbloom.camera.turnTo(((h - Math.PI) * 180) / Math.PI, true), heading);
+        await page.evaluate((h) => window.solarbloom.bot.turnTo(h), heading);
         await page
           .waitForFunction((h) => { const d = window.solarbloom.bot.pose.facing - h; return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) < 0.05; }, heading, { timeout: 60_000, polling: 200 })
           .catch(() => {});

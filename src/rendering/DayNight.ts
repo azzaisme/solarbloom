@@ -113,6 +113,9 @@ export class DayNight {
     return 1 - this.dim * (1 - POWER.view.light);
   }
 
+  /** #photo-2: photo mode's brightness: a multiplier on the exposure (1 in play; a stop up is 2). */
+  exposureGain = 1;
+
   private get exposureKeep(): number {
     return 1 - this.dim * (1 - POWER.view.exposure);
   }
@@ -219,7 +222,7 @@ export class DayNight {
     // the rim's share of LOOK.rim.intensity: night's own strength by night
     this.rim = lerp(lerp(L.rimNight / Math.max(1e-6, LOOK.rim.intensity), 1, day), TWILIGHT.rimShare, tw) * (1 - oc * 0.5);
     // E23.7.5: night keeps the day's exposure: it is a blue moonlit look made of light and colour, not a darker picture
-    this.app.scene.exposure = LOOK.exposure * (1 - oc * 0.22) * (1 + (m.flash ?? 0) * 0.5) * this.exposureKeep;
+    this.app.scene.exposure = LOOK.exposure * (1 - oc * 0.22) * (1 + (m.flash ?? 0) * 0.5) * this.exposureKeep * this.exposureGain;
     // the sky: night, the warm band at dawn and dusk, and the weather's cloud
     this.sky.night = 1 - day;
     const edge = Math.min(Math.abs(f - DAY.dayShare), f, 1 - f); // distance to the nearer horizon

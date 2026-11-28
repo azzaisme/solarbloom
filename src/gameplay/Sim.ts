@@ -64,6 +64,7 @@ import { FarmExtras } from './FarmExtras';
 import { Weather } from './Weather';
 import { Seasons } from './Seasons';
 import { DecaySystem } from './DecaySystem';
+import { LaidPaths } from './LaidPaths';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -124,6 +125,8 @@ export class Sim {
   readonly landmarks: LandmarkSystem;
   /** #787: each region's works (power, water or drones) its landmark waits on. */
   readonly works: RegionWorks;
+  /** Footpaths and roads Bloombot laid (build mode's drag and fill). */
+  readonly paths: LaidPaths;
   /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
   readonly water: WaterSystem;
   /** E23.6.1: the crafting table (components; machine and decoration recipes). */
@@ -206,6 +209,7 @@ export class Sim {
       // #783: the workbench's square, then world giants: their trunk cells are solid, as a decoration's tile
       if (c.layer === GROUND) stampBench(this.state, c.tiles);
       if (c.layer === GROUND) stampGiants(this, c.tiles);
+      this.paths?.stampChunk(c); // laid footpaths and roads are the ground itself
     };
     // The world travels with the state (for saving) but is never part of its JSON.
     Object.defineProperty(state, 'world', { value: this.grid, enumerable: false, configurable: true, writable: true });
@@ -218,6 +222,7 @@ export class Sim {
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
     this.inventory = new Inventory(this);
+    this.paths = new LaidPaths(this);
     this.charge = new ChargeSystem(this);
     this.pulseLoad = new PulseLoad(this);
     this.rest = new RestSystem(this);

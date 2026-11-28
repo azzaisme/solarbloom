@@ -204,8 +204,12 @@ export const FIRST_DECOR = {
 };
 
 export const DECOR_GEN = {
-  /** how far from bloombot (tiles, centre to centre) a build may be aimed: Satisfactory-style reach */
-  reach: 3.6,
+  /**
+   * how far from bloombot (tiles, centre to centre) a build may be aimed. Build mode looks down on the ground from
+   * above (CameraController BUILD_VIEW), so the reach is about what its view shows: a run of path or pipe can be
+   * laid across it without walking.
+   */
+  reach: 12,
   /** most decorations a city can hold (keeps the save inside its limit, #3) */
   max: 4000,
 };

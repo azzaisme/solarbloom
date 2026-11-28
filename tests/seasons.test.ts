@@ -406,6 +406,7 @@ describe('#830: snow builds up as a real layer (SnowSheet)', () => {
     yAt: (_px: number, _pz: number, cx: number) => (cx === 3 ? 1.2 : 0),
   };
 
+  // the first test here loads SnowSheet, and with it PlayCanvas, cold: on a busy machine that alone can take ~20 s
   it('covers only the open cells, each at its own height', async () => {
     const { buildSnowSheet } = await import('../src/rendering/SnowSheet');
     const g = buildSnowSheet(ground, 0, 0, 4, 2);
@@ -417,7 +418,7 @@ describe('#830: snow builds up as a real layer (SnowSheet)', () => {
       if (g.pos[i] > 3.001) expect(g.pos[i + 1]).toBeCloseTo(1.2, 5);
       if (cx < 2 && g.pos[i] < 2.999) expect(g.pos[i + 1]).toBeCloseTo(0, 5);
     }
-  });
+  }, 60_000);
 
   it('banks down to nothing where it meets a pond, a machine or a terrace step, and is full depth inside', async () => {
     const { rimAt } = await import('../src/rendering/SnowSheet');

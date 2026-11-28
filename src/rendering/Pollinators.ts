@@ -7,6 +7,7 @@ import { hash01, tilesIn, type Rect } from './FaunaPlan';
 import { treeSpot, treeWorldOf, type TreeSpot } from './TreePlacement';
 import { PALETTE } from './Materials';
 import { PLANT_LOAD, PULSE_LOAD } from '../data/pulse';
+import type { Critter, CritterModels } from './CritterModels';
 
 /**
  * Look 3.16 (#143): small ambient life — bees and hoverflies working the flower drifts on Thriving / Radiant
@@ -16,7 +17,8 @@ import { PLANT_LOAD, PULSE_LOAD } from '../data/pulse';
  *
  * Purely decorative (never tapped, never grants anything), pooled (made once, parked at scale 0), seeded
  * (no Math.random), capped per quality tier, and gathered once a second rather than every frame. Reduced motion
- * and still screenshot runs (`?still`) switch it off.
+ * and still screenshot runs (`?still`) switch it off. The bees are the bumblebee's model (CritterModels), beating
+ * their wings with its flying clip; hoverflies and hawk-moths stay small shapes (owner, 28 Nov).
  */
 type Kind = 'bee' | 'hoverfly' | 'moth' | 'leaf' | 'petal' | 'treeLeaf';
 interface Crown {
@@ -37,6 +39,8 @@ interface Mote {
   /** falling petals and leaves: the ground they settle on, and when they landed */
   ground: number;
   landed: number;
+  /** a bee's model once loaded (the shapes are hidden then) */
+  model?: Critter;
 }
 
 const CAPS = {
@@ -64,6 +68,7 @@ export class Pollinators {
     private sim: Sim,
     private parent: pc.Entity,
     private batchId = -1,
+    private models?: CritterModels,
   ) {}
 
   get count() {
@@ -106,7 +111,17 @@ export class Pollinators {
     }
     root.setLocalScale(0, 0, 0);
     if (this.batchId >= 0) assignBatch(root, this.batchId);
-    return { kind, root, wings, pos: new pc.Vec3(), home: new pc.Vec3(), t: 0, life: 0, i, used: false, ground: 0, landed: 0 };
+    const m: Mote = { kind, root, wings, pos: new pc.Vec3(), home: new pc.Vec3(), t: 0, life: 0, i, used: false, ground: 0, landed: 0 };
+    if (kind === 'bee')
+      void this.models?.make('bumblebee', { length: 0.07, start: 'move', shadows: false }).then((c) => {
+        if (!c || !root.parent) return;
+        for (const ch of root.children) (ch as pc.Entity).enabled = false;
+        root.addChild(c.holder);
+        if (c.entity.anim) c.entity.anim.speed = 0.9 + (i % 3) * 0.1;
+        m.model = c;
+        m.wings = undefined; // its clip beats them
+      });
+    return m;
   }
 
   private place(m: Mote) {

@@ -36,6 +36,18 @@ describe('E23.11: the build menu catalogue', () => {
     for (const c of open.cost) expect(costWords(c)).toMatch(/^\d+ of \d+ \S/);
   });
 
+  it('footpaths, roads and grass are under Ground: open from the start and free; the footpath is in the first hotbar', () => {
+    const sim = makeSim(); // a new game: nothing unlocked
+    const items = buildItems(sim);
+    expect(buildTabs(items).map((t) => t.label)).toContain('Ground');
+    for (const tool of ['footpath', 'road', 'grass'] as const) {
+      const i = buildItem(sim, tool)!;
+      expect([i.tab, i.locked, i.cost], tool).toEqual(['paths', false, []]);
+      if (tool === 'footpath') expect(HOTBAR_DEFAULT).toContain(tool);
+      expect(items.some((q) => q.tool === tool)).toBe(true);
+    }
+  });
+
   it('says what is short in plain words, never with a slash', () => {
     const cost = [
       { id: 'copper' as const, name: 'Copper', have: 1, need: 2 },
@@ -64,5 +76,11 @@ describe('E23.11: the build menu catalogue', () => {
     const sim = makeSim();
     expect(HOTBAR_DEFAULT).toHaveLength(9);
     for (const t of HOTBAR_DEFAULT) if (t) expect(buildItem(sim, t), t).toBeDefined();
+  });
+
+  it('the default hotbar keeps a free button, so the first gift decoration has somewhere to go (#782)', () => {
+    // Game.offerDecor puts a gift on an empty button only: a full default bar would leave the Flower pot off it
+    expect(HOTBAR_DEFAULT).toContain('');
+    expect(HOTBAR_DEFAULT[8]).toBe('');
   });
 });

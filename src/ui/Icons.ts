@@ -164,6 +164,8 @@ const BODIES = {
   vase: P('M9 3h6v2.2c0 1.2 3.8 2.6 3.8 7.6 0 4.4-2.8 8.2-6.8 8.2s-6.8-3.8-6.8-8.2c0-5 3.8-6.4 3.8-7.6z', 'orange') + L('M6.4 11.6h11.2', '#fff3d6', 1.2),
   building: R(5, 3.5, 14, 17.5, 1.6, 'steel') + `<g fill="#ffe7a3">${[6.5, 10.5, 14.5].flatMap((y) => [8, 11.2, 14.4].map((x) => `<rect x="${x}" y="${y}" width="1.8" height="2.2" rx=".4"/>`)).join('')}</g>` + R(10.6, 17.5, 2.8, 3.5, .6, 'wood'),
   road: P('M8.5 3h7L21 21H3z', 'stone') + L('M12 5v2.6M12 10.4v3M12 16.4v3', '#ffe7a3', 1.6),
+  // a footpath: paving stones laid in a staggered run
+  footpath: P('M4 15.2h7.2v5H4zM12.8 15.2H20v5h-7.2zM8.4 9h7.2v5H8.4zM4 2.8h7.2v5H4zM12.8 2.8H20v5h-7.2z', 'stone'),
   boat: P('M2.5 12.5h19l-3.4 5.6H5.9z', 'wood') + L('M14.5 3.5 9 17', '#3a2a1a', 1.6) + P('M8.2 19.4l1.6-3.8 2 .8-1.6 3.8z', 'wood'),
   // E18: drone roles (Scout, Courier)
   telescope: L('M9 14l-3.5 7M12 14v7M15 14l3.5 7', '#3a2a1a', 1.6) + P('M3.5 11.2l13.8-6.4 1.6 3.4-13.8 6.4z', 'cream') + P('M16.6 4.2l3.2-1.5 2 4.3-3.2 1.5z', 'gold') + C(5, 13.4, 1.6, 'dark'),

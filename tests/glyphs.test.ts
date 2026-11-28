@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACTIONS, Bindings, defaultKeys } from '../src/app/Bindings';
-import { actionGlyph, GlyphTracker, keyGlyph, PAD_NAMES, padGlyph, padStyleFromId, type GlyphStyle, type PadStyle } from '../src/ui/Glyphs';
+import { actionGlyph, actionGlyphs, GlyphTracker, keyGlyph, PAD_NAMES, padGlyph, padStyleFromId, type GlyphStyle, type PadStyle } from '../src/ui/Glyphs';
 
 /** E22.3 (#340): glyphs that follow the device. */
 const STYLES: GlyphStyle[] = ['keys', 'xbox', 'ps', 'deck'];
@@ -22,6 +22,26 @@ describe('E22.3: glyphs', () => {
           expect(label(g), `${a.id} in ${style}`).not.toBe('Not bound');
         }
     }
+  });
+
+  it("Turn shows only the inputs that exist: R alone on keys (Turn back has no key), LB and RB on a pad, never a dash", () => {
+    const b = new Bindings();
+    const labels = (svg: string) => [...svg.matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1]);
+    const keys = actionGlyphs(b, ['rotateBack', 'rotate'], 'keys');
+    expect(labels(keys)).toEqual([label(keyGlyph('KeyR'))]);
+    expect(keys).not.toContain('—');
+    for (const s of PADS) {
+      const pad = actionGlyphs(b, ['rotateBack', 'rotate'], s);
+      expect(labels(pad), s).toEqual([label(padGlyph(s, 4)), label(padGlyph(s, 5))]);
+      expect(pad, s).not.toContain('Not bound');
+    }
+    // the player gives Turn back a key: it shows, back first
+    b.keys.rotateBack = ['KeyT'];
+    expect(labels(actionGlyphs(b, ['rotateBack', 'rotate'], 'keys'))).toEqual([label(keyGlyph('KeyT')), label(keyGlyph('KeyR'))]);
+    // nothing bound at all: the one case that still says so
+    b.keys.rotateBack = [];
+    b.keys.rotate = [];
+    expect(label(actionGlyphs(b, ['rotateBack', 'rotate'], 'keys'))).toBe('Not bound');
   });
 
   it('draws every key and mouse input the defaults use, and every pad button in each family', () => {

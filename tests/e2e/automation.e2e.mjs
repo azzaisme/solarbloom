@@ -2,7 +2,7 @@
 // on the real grid (solar panels beside the hub and the Assembler) and in game time:
 // - the jobs done by hand open it: things put in the store and taken out 8 times (the backpack), 12 Wire made at the
 //   crafting table;
-// - set down a supply crate and an Assembler from the build menu (Space or A places under the crosshair);
+// - set down a supply crate and an Assembler from the build menu (Space or A places on the build cursor's square);
 // - open the crate with Interact (E or A): the game pauses; put Copper in, set a courier route to another crate and
 //   change what it carries, all with the arrows / d-pad and Enter / A; Esc / B closes it;
 // - in the Assembler's panel, choose its input and output crates and Wire;
@@ -67,10 +67,10 @@ async function stand(page, x, z) {
 }
 
 /**
- * Places what is in hand with its corner at (x, z), aimed as in third person (#542): build mode places under the
- * crosshair, which rests a little ahead of bloombot, so bloombot steps until the ghost sits on the spot (as a player
- * walks the ghost over it), then Space or A places. The steps are moves to where bloombot stands next (the e2e's
- * own walking is not under test here). Returns whether something was built.
+ * Places what is in hand with its corner at (x, z). Build mode looks down on the ground and places on the build
+ * cursor's square (the pointer's with a mouse; here the cursor the pad's right stick moves, set straight onto the
+ * spot), so bloombot stands two squares off, the cursor goes on the spot, then Space or A places. Returns whether
+ * something was built.
  */
 async function place(page, dev, x, z) {
   await page.waitForFunction(() => window.solarbloom.bot.visuals.busy !== 'assemble', null, { timeout: 90000 }).catch(() => {});
@@ -81,37 +81,25 @@ async function place(page, dev, x, z) {
     const size = { crate: 1, assembler: 2 }[g.hud.currentTool];
     const cx = x + size / 2, cz = z + size / 2;
     const on = () => {
-      const p = g.crosshairPick();
+      const p = g.buildAim().p;
       const a = p && g.sim.build.anchorFor(g.hud.currentTool, p.fx, p.fz);
       return { ok: !!a && a.x === x && a.z === z, p };
     };
-    // start two tiles short of the spot, on the side bloombot can stand
+    // two squares short of the spot, on a side bloombot can stand
     for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
       const sx = cx + dx * (2 + (size - 1) / 2), sz = cz + dz * (2 + (size - 1) / 2);
       g.bot.cancelWalk();
       g.bot.teleport('g', sx, sz);
       if (Math.hypot(g.bot.pose.x - sx, g.bot.pose.z - sz) < 0.05) break;
     }
-    let last;
-    for (let i = 0; i < 12; i++) {
-      for (let f = 0; f < 3; f++) await frame();
-      const st = on();
-      if (st.ok) {
-        await frame();
-        if (on().ok) return { ok: true };
-        continue;
-      }
-      if (!st.p) break;
-      last = [st.p.fx, st.p.fz];
-      // step by how far the crosshair is from the spot's middle
-      const nx = g.bot.pose.x + (cx - st.p.fx), nz = g.bot.pose.z + (cz - st.p.fz);
-      g.bot.cancelWalk();
-      g.bot.teleport('g', nx, nz);
-    }
-    return { ok: false, last, pose: [g.bot.pose.x, g.bot.pose.z] };
+    g.pointer.inside = false; // no mouse: the build cursor aims
+    g.cursor = { x: cx - g.bot.pose.x, z: cz - g.bot.pose.z };
+    for (let f = 0; f < 3; f++) await frame();
+    const st = on();
+    return st.ok ? { ok: true } : { ok: false, last: st.p && [st.p.fx, st.p.fz], pose: [g.bot.pose.x, g.bot.pose.z] };
   }, { x, z });
   if (!aimed.ok) {
-    console.log(`   place ${x},${z}: the crosshair never rested on it (${JSON.stringify(aimed)})`);
+    console.log(`   place ${x},${z}: the build cursor never rested on it (${JSON.stringify(aimed)})`);
     return false;
   }
   const before = await page.evaluate(() => {

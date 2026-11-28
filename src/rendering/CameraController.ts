@@ -49,13 +49,17 @@ export interface CameraSnapshot {
   pitchOffset: number;
   follow: number;
   held: boolean;
+  /** #photo-2: photo mode's lens and lean (undefined and 0 in play) */
+  fovOverride: number | undefined;
+  roll: number;
 }
 
 /**
  * E21.22 (§14), rebuilt as a third-person camera: the exploration camera is a chase camera on a boom behind
  * bloombot. The mouse (pointer lock) or the right stick swings it freely round bloombot and tilts it from a little
  * below the shoulder (looking up at the sky) to high above; bloombot sits in the lower middle of the frame,
- * and the middle of the screen (the build crosshair) looks at the ground a few tiles past it.
+ * and the middle of the screen looks at the ground a few tiles past it. Building, it lifts to look down on the
+ * ground instead (`BUILD_VIEW`), so the pointer can pick a square.
  *
  * The zoom steps are boom lengths: `zoomSteps` keep the old zoom numbers (bigger is closer; 3.2 × 3.2 / distance)
  * so the rest of the game reads zoom as before, and `boom` turns a step's distance into world units.
@@ -91,6 +95,22 @@ export const EXPLORE = {
   minBoom: 0.28,
   /** seconds the boom takes to swing back out once a trunk is no longer in the way (it pulls in at once) */
   boomOut: 0.45,
+};
+
+/**
+ * Build mode is a top-down builder: with something in hand to build, the camera lifts off the boom to look down on
+ * the ground round bloombot, so a whole run of path or pipe is in view and the pointer (or the pad's cursor) picks
+ * squares on it. Leaving build mode eases back to the chase view the player had.
+ */
+export const BUILD_VIEW = {
+  /** degrees down: steep enough to read as a plan, with the fronts of machines and decorations still showing */
+  pitch: 70,
+  /** the camera's distance from bloombot for each zoom step (close, normal, far), world units */
+  dists: [11, 16, 23],
+  /** vertical field of view (degrees): a narrower lens, so squares keep their shape to the edge of the screen */
+  fov: 40,
+  /** seconds to ease up into the view (and back down) */
+  ease: 0.32,
 };
 
 /**
@@ -192,6 +212,13 @@ export class CameraController {
   pitchOffset = 0;
   /** E19.4.1: photo mode holds the view: glides, follows and eased zooms from the game leave it alone. */
   held = false;
+  /**
+   * #photo-2: photo mode's lens: a vertical field of view in degrees in place of the view's own (the camera stays
+   * where it is, so a long lens crops in and flattens the picture and a wide one opens it up). Undefined in play.
+   */
+  fovOverride?: number;
+  /** #photo-2: photo mode leans the horizon: degrees about the line of sight (positive: clockwise). Zero in play. */
+  roll = 0;
   /** E21.22: the exploration camera is on (bloombot play): pitch is the player's, not the zoom's */
   explore = false;
   /** E21.22: the pitch the view eases to (degrees, EXPLORE.pitchMin–pitchMax) */
@@ -203,6 +230,17 @@ export class CameraController {
   /** Third person: how far right of bloombot the camera looks over its shoulder (world units; build aiming) */
   shoulderGoal = 0;
   private shoulder = 0;
+  /** Build mode: 1 while the top-down build view is wanted (the game sets it), 0 for the chase view */
+  buildGoal = 0;
+  /** how much of the build view is showing now (eased) */
+  private buildK = 0;
+  /** the build view's distance (the game picks it from BUILD_VIEW.dists by the zoom step) */
+  buildDist = BUILD_VIEW.dists[1];
+  private buildDistNow = BUILD_VIEW.dists[1];
+  /** Is the top-down build view up (or on its way)? */
+  get building(): boolean {
+    return this.buildGoal > 0;
+  }
   /** E21.22: the ground's height under a point (world y), so the camera never ends below it */
   ground?: (x: number, z: number) => number;
   /** Giant trees: trunks the boom pulls in short of, canopies it stays under */
@@ -321,6 +359,7 @@ export class CameraController {
   /** Bloombot: turn the view around its target by some degrees (positive moves the camera to its right). */
   /** E21.22: tilts the view (degrees; positive looks down more), within 20°–60°. */
   pitchBy(degrees: number) {
+    if (this.buildGoal > 0) return; // the build view's tilt is fixed; the player's own waits for the chase view
     const [lo, hi] = this.indoor ? INDOOR.pitch : [EXPLORE.pitchMin, EXPLORE.pitchMax];
     this.pitchGoal = pc.math.clamp(this.pitchGoal + degrees, lo, hi);
   }
@@ -545,14 +584,14 @@ export class CameraController {
   /** E19.4.1: the view as it is now (photo mode keeps it to put back on the way out). */
   snapshot(): CameraSnapshot {
     const v = (p: pc.Vec3): [number, number, number] => [p.x, p.y, p.z];
-    return { target: v(this.target), goal: v(this.goal), yaw: this.yaw, yawGoal: this.yawGoal, zoom: this.zoom, zoomGoal: this.zoomGoal, minZoom: this.minZoom, maxZoom: this.maxZoom, pitchOffset: this.pitchOffset, follow: this.follow, held: this.held };
+    return { target: v(this.target), goal: v(this.goal), yaw: this.yaw, yawGoal: this.yawGoal, zoom: this.zoom, zoomGoal: this.zoomGoal, minZoom: this.minZoom, maxZoom: this.maxZoom, pitchOffset: this.pitchOffset, follow: this.follow, held: this.held, fovOverride: this.fovOverride, roll: this.roll };
   }
 
   /** E19.4.1: puts a snapshot back, at once (no glide). */
   restore(s: CameraSnapshot) {
     this.target.set(...s.target);
     this.goal.set(...s.goal);
-    Object.assign(this, { yaw: s.yaw, yawGoal: s.yawGoal, zoom: s.zoom, zoomGoal: s.zoomGoal, minZoom: s.minZoom, maxZoom: s.maxZoom, pitchOffset: s.pitchOffset, follow: s.follow, held: s.held });
+    Object.assign(this, { yaw: s.yaw, yawGoal: s.yawGoal, zoom: s.zoom, zoomGoal: s.zoomGoal, minZoom: s.minZoom, maxZoom: s.maxZoom, pitchOffset: s.pitchOffset, follow: s.follow, held: s.held, fovOverride: s.fovOverride, roll: s.roll });
     this.anchor = undefined;
     this.apply();
   }
@@ -576,6 +615,10 @@ export class CameraController {
       this.explorePitch += (this.pitchGoal - this.explorePitch) * e;
       this.lead.lerp(this.lead, this.leadGoal, e);
       this.shoulder += (this.shoulderGoal - this.shoulder) * (this.reducedMotion ? 1 : 1 - Math.exp(-dt / 0.25));
+      const be = this.reducedMotion ? 1 : 1 - Math.exp(-dt / (BUILD_VIEW.ease / 3));
+      this.buildK += (this.buildGoal - this.buildK) * be;
+      if (Math.abs(this.buildGoal - this.buildK) < 1e-3) this.buildK = this.buildGoal;
+      this.buildDistNow += (this.buildDist - this.buildDistNow) * be;
       // past a trunk, the boom swings back out smoothly (it pulled in at once, in `apply`)
       this.boomShown = this.boomFree <= this.boomShown || this.reducedMotion ? this.boomFree : this.boomShown + (this.boomFree - this.boomShown) * (1 - Math.exp(-dt / EXPLORE.boomOut));
     }
@@ -651,7 +694,25 @@ export class CameraController {
       this.viewHeight = this.dist * Math.tan((this.fov * Math.PI) / 360);
       pivot = EXPLORE.pivot * ch;
     }
+    // Build mode: up off the boom to look down on the ground round bloombot (inside the house the room's own view
+    // already looks down into it: it only tilts to its steepest).
+    const bk = smooth(pc.math.clamp(this.buildK, 0, 1)) * ch;
+    if (bk > 0) {
+      const steep = this.indoor ? INDOOR.pitch[1] : BUILD_VIEW.pitch;
+      this.pitch += (steep - this.pitch) * bk;
+      if (!this.indoor) {
+        this.fov += (BUILD_VIEW.fov - this.fov) * bk;
+        this.dist += (this.buildDistNow - this.dist) * bk;
+        this.viewHeight = this.dist * Math.tan((this.fov * Math.PI) / 360);
+        pivot *= 1 - bk; // it looks at the ground bloombot stands on, so the squares round it are centred
+      }
+    }
     if (this.pitchOffset) this.pitch = pc.math.clamp(this.pitch + this.pitchOffset, -20, 80);
+    if (this.fovOverride) {
+      // #photo-2: the lens changes, the camera stays put: the height in view follows the lens
+      this.fov = pc.math.clamp(this.fovOverride, 5, 120);
+      this.viewHeight = this.dist * Math.tan((this.fov * Math.PI) / 360);
+    }
     const c = this.cam;
     c.fov = this.fov;
     // Clip planes hug the view: near just in front of the closest ground on screen (and anything tall on it),
@@ -661,9 +722,10 @@ export class CameraController {
     // the city behind it. The sky dome is a backdrop that fits itself inside (Look 4.7).
     c.farClip = this.dist + this.hazeEnd + 10;
     const yr = (this.yaw * Math.PI) / 180;
-    // Over the shoulder: the pivot slides along the camera's right, so bloombot stands left of the crosshair.
-    const sh = this.shoulder * ch;
-    const t = this.explore ? new pc.Vec3(this.target.x + this.lead.x * ch + Math.cos(yr) * sh, this.target.y + pivot, this.target.z + this.lead.z * ch - Math.sin(yr) * sh) : this.target;
+    // Over the shoulder: the pivot slides along the camera's right, so bloombot stands left of the middle (not in the build view).
+    const sh = this.shoulder * ch * (1 - bk);
+    const ld = ch * (1 - bk); // no look-ahead from above: the ground stays still under the pointer
+    const t = this.explore ? new pc.Vec3(this.target.x + this.lead.x * ld + Math.cos(yr) * sh, this.target.y + pivot, this.target.z + this.lead.z * ld - Math.sin(yr) * sh) : this.target;
     const pr = (this.pitch * Math.PI) / 180;
     let x = t.x + this.dist * Math.cos(pr) * Math.sin(yr);
     let z = t.z + this.dist * Math.cos(pr) * Math.cos(yr);
@@ -678,7 +740,7 @@ export class CameraController {
       }
       y = Math.max(y, this.ground(x, z) + EXPLORE.clearance);
     }
-    if (this.explore && this.blockers && ch > 0.5) {
+    if (this.explore && this.blockers && ch > 0.5 && bk < 0.5) {
       // Giant trees: the boom pulls in short of a trunk between bloombot and the camera (at once, so it never shows
       // the inside of the bark; it swings back out in `update`), and the camera keeps under the canopy
       const B = this.blockers;
@@ -696,6 +758,7 @@ export class CameraController {
     } else this.boomFree = this.boomShown = 1;
     this.entity.setPosition(x, y, z);
     this.entity.lookAt(t);
+    if (this.roll) this.entity.rotateLocal(0, 0, -this.roll);
     this.markDirty();
   }
 

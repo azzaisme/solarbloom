@@ -24,3 +24,14 @@
 .bp-groups .bp-sketches ul { grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); }
 .bp-sketches .pn-btn { width: 100%; }
 .bp-sketches .pn-btn small { display: block; font-size: 16px; font-weight: 400; }
+
+@media (min-width: 640px) and (max-height: 540px) {
+  .tide-photo-page .sketch-page {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 0;
+  }
+  .tide-photo-page .sketch-page img { max-height: 36vh; }
+}

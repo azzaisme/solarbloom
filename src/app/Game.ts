@@ -32,7 +32,7 @@ import { isExtra } from '../gameplay/FarmExtras';
 import { ORCHARD } from '../data/farmExtras';
 import { FRUITS, isFruit } from '../data/fruit';
 import { fruitShort, fruitTip } from '../ui/FruitWords';
-import { EXPLORE } from '../rendering/CameraController';
+import { BUILD_VIEW, EXPLORE } from '../rendering/CameraController';
 import { furnitureAt, HOUSE, HOUSE_GROWTH, KEEPSAKES, OLD_CITY, PARK_SET, REGIONS, type HouseFurniture } from '../data/oldcity';
 import { HouseInterior } from '../rendering/HouseInterior';
 
@@ -60,6 +60,7 @@ import { Clouds } from '../rendering/Clouds';
 import { HedgeLine } from '../rendering/HedgeLine';
 import { Ruins } from '../rendering/Ruins';
 import { Fauna } from '../rendering/Fauna';
+import { CritterModels } from '../rendering/CritterModels';
 import { createModels } from '../rendering/Models';
 import { CameraController } from '../rendering/CameraController';
 import { setLeafTier, setTreeCursor } from '../rendering/Foliage';
@@ -114,7 +115,11 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { buildItem, costWords } from '../ui/BuildCatalog';
-import { decorType, furnitureType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
+import { decorType, furnitureType, Hud, laidTool, machineTool, type Settings, type Tool } from '../ui/Hud';
+import { dragCells, type Cell } from '../core/BuildShape';
+import { dragsAsRun } from './BuildDrag';
+import type { LaidKind } from '../core/types';
+import { LAID_A, LAID_NAME } from '../gameplay/LaidPaths';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { DroneStatus } from '../gameplay/DroneSystem';
@@ -135,7 +140,6 @@ import { nextGrowth, partsAdded, pieceOf, type BotGrowth } from '../data/botPart
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
 import { TideSketchbook } from '../ui/TideSketchbook';
-import type { OldCityPanel } from '../ui/OldCityPanel';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
@@ -144,12 +148,14 @@ import { decorAnchor, DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, decorSize, PLOT_OP
 import { chunkKey } from '../core/Grid';
 import { decorChunkKey, type Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
-import { type LoadResult, SaveService, type Slot } from './SaveService';
+import { type LoadResult, type SavedSketch, SaveService, type Slot } from './SaveService';
+import { tideDrawsPhoto } from './TidePhotoStory';
+import { capturePhotoSketch } from '../rendering/PhotoSketch';
 import { Loading, type LoadSteps } from '../ui/Loading';
 import { ModelLibrary, useModels } from '../rendering/Models';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
-import { padStick, PhotoMode } from './PhotoMode';
-import { PHOTO_FILTERS } from '../data/photo';
+import { padStick, type PhotoDir, PhotoMode } from './PhotoMode';
+import { frameRect, PHOTO_FILTERS, PHOTO_FRAMES, PHOTO_MAX_SIDE } from '../data/photo';
 import { sceneNow } from './PhotoScene';
 import { daylightAt, gameSecondsOf } from '../gameplay/Clock';
 import { GLOOMY } from '../gameplay/PowerEnv';
@@ -162,9 +168,11 @@ import { SnowSheets } from '../rendering/SnowSheet';
 import { fallingLeafColour, seasonLookAt, seasonShading, type SeasonLookNow } from '../rendering/SeasonLook';
 import { WeatherVisuals, type WeatherLook } from '../rendering/WeatherVisuals';
 import { buildRadio } from '../rendering/HouseRadio';
-import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
+import { downloadBlob, downloadCanvas, PhotoBar, pictureCanvas, pictureName } from '../ui/PhotoBar';
+import { PhotoShot } from '../ui/PhotoShot';
+import { ALBUM, albumStore, encodeJpeg, PhotoAlbum, shrinkBlob } from './PhotoAlbum';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
-import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
+import { actionGlyph, actionGlyphs, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
 import { ControlsTable } from '../ui/ControlsTable';
 import { crateName } from '../ui/CratePanel';
 import { materialIcon } from '../ui/MaterialIcons';
@@ -186,13 +194,24 @@ const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
 /** E27.2 (#680): a worked plot's art steps through this many looks as it grows back */
 const PLOT_GROWTH_STEPS = 4;
 /**
- * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
- * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
- * grid, within DECOR_GEN.reach tiles of bloombot, red where it can't go. Third person: the aim is the crosshair in
- * the middle of the screen (`crosshairPick`), for mouse and pad alike. Only the cursor view (no bloombot) aims with
- * the pointer, while it is over the world and was moved in the last MOUSE_AIM_MS.
+ * Build mode is a top-down builder (it replaces E19.2's over-the-shoulder crosshair). With something to build in
+ * hand (a machine, a core, a decoration, a pipe, a footpath or road, or Remove) the camera lifts to look down on
+ * the ground round bloombot (CameraController BUILD_VIEW) and the mouse pointer is free: a hologram sits on the
+ * square under it, snapped to the grid, within DECOR_GEN.reach squares of bloombot, red where it can't go. Without a
+ * mouse (a pad, or keys alone) the aim is a cursor square: the one in front of bloombot until the right stick moves
+ * it, then wherever the stick left it, carried along as bloombot walks.
+ *
+ * Holding Place and moving lays a run of squares (core/BuildShape: straight, or with one corner); with Fill on, the
+ * whole patch between where the hold began and ended. Letting go lays them. Pipes, footpaths, roads, one-square
+ * decorations and Remove drag; machines and big pieces are placed one at a time.
+ *
+ * The mouse aims while it is over the world and was moved (or pressed) in the last MOUSE_AIM_MS.
  */
 const MOUSE_AIM_MS = 8000;
+/** squares a second the pad's right stick moves the build cursor */
+const CURSOR_SPEED = 9;
+/** the most squares of a drag that get their own puff when it is laid (the rest land quietly) */
+const DRAG_PUFFS = 10;
 /** the shortest time between two quarter turns from the mouse wheel (a trackpad sends many small wheel events) */
 const WHEEL_TURN_MS = 140;
 /** #605: how long the gold arrow stays on Show me where's spot (unless bloombot gets there first). */
@@ -246,6 +265,10 @@ const OLD_DEAD_NAME: Record<string, string> = { sand: 'Dead sand', paving: 'Crac
 /** The d-pad's buttons (12–15) to the load wheel's directions; the arrow keys stand for the same buttons. */
 const WHEEL_DPAD: Record<number, 'up' | 'down' | 'left' | 'right'> = { 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
 const WHEEL_KEYS: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
+/** #photo-2: the arrow keys and the d-pad work photo mode's panel */
+const PHOTO_NAV_PAD: Record<number, PhotoDir> = WHEEL_DPAD;
+const PHOTO_NAV_KEYS: Record<string, PhotoDir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+const MOVE_ACTIONS = ['up', 'down', 'left', 'right'] as const;
 
 export class Game {
   readonly app: pc.Application;
@@ -317,6 +340,8 @@ export class Game {
   readonly ruins: Ruins;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
+  /** the Tripo models of the animals that live about the world (Fauna, butterflies, flocks, the farm's creatures) */
+  readonly critters: CritterModels;
   /**
    * Phase 5 E16: fauna caps tier (TUNING.ecosystem.caps). Hook for the graphics quality-tier selector (Look 1
    * lighting epic); until it sets this, "Fewer particles" means low and everything else high.
@@ -379,6 +404,10 @@ export class Game {
   /** E19.4.1 (#260): photo mode and its controls bar */
   private photo!: PhotoMode;
   private photoBar!: PhotoBar;
+  /** #photo-2: the picture just taken (Save or Dismiss), and the album the saved ones go to */
+  private photoShot!: PhotoShot;
+  private photoAlbum!: PhotoAlbum;
+  private photoPicture?: HTMLCanvasElement;
   /** E19 (#245): plot choices and unlocks (cosmetic; never read by the sim) */
   private cozy!: Cozy;
   /** E19.1.2: the plot the picker is open for, and the option it's previewing there */
@@ -389,6 +418,9 @@ export class Game {
   /** E21: the Old City's panels and held actions */
   private oc?: OldCityController;
   private tideSketchbook?: TideSketchbook;
+  private tidePhotoIntroQueued = false;
+  private tideFirstPhotoWriting = false;
+  private photoShutterPending = false;
   /** E21.8: the Keepers */
   private keepers?: KeeperVisuals;
   /** E23.2.3: sitting on benches and meditating at chargers */
@@ -417,6 +449,9 @@ export class Game {
     const loaded = lr.state;
     // E23.1.1: one rule set. Every new game is the Old City.
     const state = loaded ?? createInitialState(undefined);
+    if (state.tidePhoto?.introPending && this.saver.sketches().some((page) => page.photo === 'first')) {
+      state.tidePhoto.introPending = false;
+    }
     this.sim = new Sim(state, this.bus);
     // E23.7.1.2: a new game's choice of day (the game's own, or the real clock's); Settings shows the save's
     if (!loaded && opts.realClock) this.sim.clock.real = true;
@@ -533,7 +568,8 @@ export class Game {
       return this.sim.grid.tileWorld(t)[1] + SLAB_TOP + pavingOverlayLift(this.sim.grid, t);
     };
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
-    this.crops = new CropVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.critters = new CritterModels(this.app);
+    this.crops = new CropVisuals(this.sim, this.scene.world, this.app.graphicsDevice, this.critters);
     this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
     this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
@@ -550,13 +586,13 @@ export class Game {
       this.tillers.rebuildAll();
       this.cat.rebuildAll();
     };
-    this.birds = new Birds(this.scene.world);
+    this.birds = new Birds(this.scene.world, this.critters);
     this.birdHeart = new BirdHeart(this.scene.world, this.app.graphicsDevice);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
     this.hedgeLine = new HedgeLine(this.sim, this.scene.world, this.app.graphicsDevice);
-    this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
-    this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
-    this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
+    this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id, this.critters);
+    this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id, this.critters);
+    this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined, this.critters);
     this.nightFindVisuals = new NightFindVisuals(this.sim, this.scene.world, (x, z) => this.groundY(x, z));
     this.weatherVisuals = new WeatherVisuals(this.app, this.scene.world);
     this.outsideRadio = buildRadio(this.scene.world, (x, z) => this.groundY(x, z));
@@ -701,16 +737,29 @@ export class Game {
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
-      bot.strafe = () => this.aiming(); // aiming: bloombot faces where the camera looks and steps sideways
       bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active || !!this.oc?.busy;
       // E21.22: the right stick's up and down tilts the view (it zooms only in photo mode)
       bot.onZoom = (f) => (this.photo?.active ? this.photo.zoom(f) : this.camTurn(0, -(Math.log(f) / Math.log(1.8)) * 60));
       bot.onPad = (i) => {
+        // #photo-2: in photo mode the d-pad works the panel (Tide's lesson has no panel: its buttons keep their actions)
+        if (this.photoShot?.open) return PHOTO_NAV_PAD[i] ? this.photoShot.nav(PHOTO_NAV_PAD[i]) : i === 0 ? this.photoShot.press() : i === 1 ? this.photoShot.back() : undefined;
+        if (this.photo?.active && !this.photo.tutorial && PHOTO_NAV_PAD[i]) return this.photo.nav(PHOTO_NAV_PAD[i]);
+        // and A presses the row in hand (with none in hand it keeps its shortcut: hide bloombot)
+        if (this.photo?.active && i === 0 && this.photo.pressRow()) return;
         if (this.wheelPick(i)) return; // the load wheel is up: the d-pad picks a load
-        const a = this.resolveButton(i);
-        if (a === 'pulse' && this.beginMegaHold(i)) return;
+        // the bumpers change the panel's tab, as they do in the backpack (the owner, 28 Nov 2026)
+        const tab = this.photo?.active ? this.bindings.actionForButton(i, ['panel']) : undefined;
+        if ((tab === 'prevTab' || tab === 'nextTab') && this.photo.stepTab(tab === 'nextTab' ? 1 : -1)) return;
+        // photo mode gives the build buttons its own meanings, as its keys do: Remove picks a filter, and in Tide's
+        // lesson (no panel) the bumpers tilt. Every other button keeps its walking action (A, X, Y…).
+        const b = this.photo?.active ? this.bindings.actionForButton(i, ['build']) : undefined;
+        const a = b === 'rotate' || b === 'rotateBack' || b === 'removeMode' ? b : this.resolveButton(i);
+        if (a === 'pulse' && !this.photo?.active && this.beginMegaHold(i)) return;
+        if (!this.photo?.active && (a === 'pulse' || a === 'place') && this.beginDrag(i)) return; // build mode: held, it lays a run
         if (a && a !== 'sprint') this.doAction(a);
       };
+      // build mode: the right stick moves the build cursor (it turns the view while walking)
+      bot.onAim = (rx, ry, dt) => this.moveCursor(rx, ry, dt);
       // E22.4: the rebinding screen takes the next press; that press then does nothing else.
       bot.onButton = (i) => {
         if (!this.padListener) return;
@@ -802,9 +851,15 @@ export class Game {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
-      press: (b) => this.resolveKey(`Mouse${b}`) === 'pulse' && this.beginMegaHold(`Mouse${b}`),
-      release: (b) => this.endMegaHold(`Mouse${b}`),
-      cancelPress: () => { if (typeof this.megaHold?.input === 'string' && this.megaHold.input.startsWith('Mouse')) this.clearMegaHold(); },
+      press: (b) => this.buildPress(b) || (this.resolveKey(`Mouse${b}`) === 'pulse' && this.beginMegaHold(`Mouse${b}`)),
+      release: (b) => {
+        this.endMegaHold(`Mouse${b}`);
+        this.endDrag(`Mouse${b}`);
+      },
+      cancelPress: () => {
+        if (typeof this.megaHold?.input === 'string' && this.megaHold.input.startsWith('Mouse')) this.clearMegaHold();
+        if (typeof this.drag?.input === 'string' && this.drag.input.startsWith('Mouse')) this.cancelDrag();
+      },
       pan: (dx, dy, x, y) => {
         this.lastPanAt = performance.now();
         this.camera.pan(dx, dy, x, y);
@@ -1610,11 +1665,12 @@ export class Game {
   }
 
   /** "Quit to title" saves first (nothing in the menu loses progress), then goes to the title screen. */
-  quitToTitle() {
-    // E22.12: the loading screen covers the way out, as it covered the way in.
-    new Loading(!!this.settings.reducedMotion).show();
+  async quitToTitle() {
+    if (this.resetting) return;
     this.saveNow();
     this.resetting = true; // nothing writes after this save
+    // E22.12: the loading screen covers the way out, as it covered the way in.
+    await new Loading(!!this.settings.reducedMotion).show();
     setTimeout(() => (location.href = `${location.pathname}?title=1`), 60);
   }
 
@@ -1648,6 +1704,7 @@ export class Game {
 
   private selectTool(t: Tool) {
     if (this.cinematic) return;
+    this.cancelDrag();
     this.buildKey = '';
     this.sfx.click();
     this.hud.setTool(t);
@@ -1661,12 +1718,51 @@ export class Game {
   /** E19.4.1 (#260): photo mode, wired to the camera, bloombot, the HUD and the look. */
   private createPhotoMode() {
     const b = this.bot;
+    const self = this;
     this.photoBar = new PhotoBar(
       (a) => this.photo.action(a),
       (a) => this.hudKey(a),
-      (h) => this.photo.setHour(h),
-      () => this.sim.clock.hour() + this.sim.clock.minute() / 60,
+      {
+        setTab: (t) => this.photo.setTab(t),
+        adjust: (id, dir) => this.photo.adjust(id, dir),
+        setValue: (id, v) => this.photo.setValue(id, v),
+        setHour: (h) => this.photo.setHour(h),
+      },
     );
+    // #photo-2: the album (one per save slot, read once now), and the card that asks what to do with a new picture
+    this.photoAlbum = new PhotoAlbum(albumStore(), this.saver.slot, shrinkBlob);
+    this.photoAlbum.onChange = () => {
+      const bp = this.hud.backpack;
+      if (bp.isOpen && bp.current === 'collection') bp.show('collection');
+    };
+    void this.photoAlbum.load();
+    this.photoShot = new PhotoShot({
+      keep: async (replace) => {
+        const pic = this.photoPicture;
+        return !!pic && !!(await this.photoAlbum.keep({ encode: (side, quality) => encodeJpeg(pic, pic.width, pic.height, side, quality) }, replace));
+      },
+      exportFile: () => this.photoPicture && downloadCanvas(this.photoPicture),
+      fileSaved: desktopApi() ? 'Saved in Pictures › Solarbloom' : 'File saved',
+      full: () => this.photoAlbum.full,
+      best: () => this.photoAlbum.best.map((p) => ({ id: p.id, url: this.photoAlbum.url(p.id) })),
+      closed: (saved) => {
+        this.photoPicture = undefined;
+        if (saved && this.photo.active) this.photoBar.sketchNotice('Saved. It’s in Backpack → Collection.');
+      },
+    });
+    this.hud.backpack.album = {
+      best: () => this.photoAlbum.best,
+      others: () => this.photoAlbum.others,
+      bestMax: ALBUM.best,
+      url: (id) => this.photoAlbum.url(id),
+      remove: (id) => this.photoAlbum.remove(id),
+      exportFile: (id) => {
+        const p = this.photoAlbum.find(id);
+        if (p) downloadBlob(p.blob, pictureName(new Date(p.at), 'jpg'));
+      },
+    };
+    // #photo-2: where bloombot faced before "Looks at you" turned it to the camera
+    let facedWas: number | undefined;
     this.photo = new PhotoMode(
       {
         camera: this.camera,
@@ -1679,6 +1775,25 @@ export class Game {
           },
           setVisible: (v) => (b.visuals.root.enabled = v),
           pose: () => void b.visuals.play('cheer'),
+          // #photo-2: its own clips on the spot, a held visor face, and a turn to the camera (and back on leaving)
+          play: (pose) => {
+            if (pose !== 'stand') b.visuals.play(pose === 'wave' ? 'interact' : pose);
+          },
+          setFace: (face) => b.visuals.setFace(face === 'auto' ? 'happy' : face),
+          faceCamera: (on) => {
+            if (on) {
+              facedWas ??= b.pose.facing;
+              const c = this.camera.entity.getPosition();
+              const [x, , z] = b.world();
+              b.turnTo(Math.atan2(c.x - x, c.z - z));
+            } else if (facedWas !== undefined) {
+              b.turnTo(facedWas);
+              facedWas = undefined;
+            }
+          },
+          get seated() {
+            return !!self.resting?.active;
+          },
         },
         setHudHidden: (hidden) => {
           document.body.classList.toggle('photo', hidden);
@@ -1703,6 +1818,14 @@ export class Game {
         stick: () => padStick(),
         clockHour: () => this.sim.clock.hour() + this.sim.clock.minute() / 60,
         setFilter: (css) => ((this.app.graphicsDevice.canvas as HTMLCanvasElement).style.filter = css),
+        // #photo-2: the lens's blur and the vignette (the post stack), and the brightness (the exposure, in stops)
+        setLook: (l) => {
+          this.look.setPhotoLens(l && { focus: l.focus, blur: l.blur }, l?.vignette || undefined);
+          this.dayNight.exposureGain = l ? Math.pow(2, l.ev) : 1;
+        },
+        focusAt: () => this.photoFocusAt(),
+        hasPost: () => this.look.post.enabled,
+        hasPointer: () => this.bot?.lastInput !== 'pad',
       },
       this.bindings,
     );
@@ -1711,14 +1834,145 @@ export class Game {
   }
 
   /**
-   * E19.4.1: saves the canvas as a PNG, right after the next frame is drawn (the drawing buffer is only readable
+   * #photo-2: "Pick a spot": how far in front of the camera the world under the pointer is: bloombot when the
+   * pointer is on it, otherwise the ground there (undefined at the sky, or with the pointer off the picture).
+   */
+  private photoFocusAt(): number | undefined {
+    if (!this.pointer.inside) return undefined;
+    const cam = this.camera;
+    const eye = cam.entity.getPosition();
+    const fwd = cam.entity.forward;
+    const depth = (x: number, y: number, z: number) => (x - eye.x) * fwd.x + (y - eye.y) * fwd.y + (z - eye.z) * fwd.z;
+    const b = this.bot;
+    if (b && b.visuals.root.enabled) {
+      // bloombot's middle, within about its own width of the pointer's ray
+      const [x, y, z] = b.world();
+      const { o, d } = cam.ray(this.pointer.x, this.pointer.y);
+      const t = (x - o.x) * d.x + (y + 0.45 - o.y) * d.y + (z - o.z) * d.z;
+      if (t > 0 && Math.hypot(o.x + d.x * t - x, o.y + d.y * t - (y + 0.45), o.z + d.z * t - z) < 0.55) return depth(x, y + 0.45, z);
+    }
+    const g = cam.groundAt(this.pointer.x, this.pointer.y, 400);
+    return g ? depth(g.x, g.y, g.z) : undefined;
+  }
+
+  /**
+   * E19.4.1: takes the picture off the canvas, right after the next frame is drawn (the drawing buffer is only readable
    * then). The HUD is DOM over the canvas, so it is never in the picture. Where the canvas is see-through (no
    * post-processing), the haze colour fills in behind it.
+   *
+   * #photo-2: the picture is cut to the frame's shape. A double-size picture is drawn for the shutter alone: the
+   * canvas takes twice the pixels each way (no side past PHOTO_MAX_SIDE) for two frames (the post stack's targets
+   * follow on the first), the second is saved, and the canvas goes back to the screen's size.
    */
   private savePicture() {
-    this.app.once('frameend', () => saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color, PHOTO_FILTERS[this.photo.filter].css));
+    if (this.photoShutterPending) return;
+    this.photoShutterPending = true;
+    const filter = PHOTO_FILTERS[this.photo.filter].css;
+    const canvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const ratio = PHOTO_FRAMES[this.photo.frame].ratio;
+    const scale = Math.min(this.photo.pictureScale, PHOTO_MAX_SIDE / Math.max(1, canvas.width, canvas.height));
+    const big = scale > 1.01;
+    const shoot = () => {
+      this.photoShutterPending = false;
+      // #photo-2: nothing is kept yet: the picture is shown, and the player saves it to the album or dismisses it
+      // (Tide's lesson has no album step: Tide keeps that one)
+      const picture = pictureCanvas(canvas, LOOK.haze.color, filter, ratio ? frameRect(canvas.width, canvas.height, ratio) : undefined);
+      if (picture && this.photo.active && !this.photo.tutorial) {
+        this.photo.clearKeys();
+        this.photoPicture = picture;
+        this.photoShot.show(picture);
+      }
+      if (big) {
+        this.look.post.setLensScale(1);
+        this.app.setCanvasResolution(pc.RESOLUTION_AUTO);
+        this.app.resizeCanvas();
+        this.app.renderNextFrame = true;
+      }
+    };
+    if (big) {
+      this.look.post.setLensScale(scale); // the blur is in pixels: as wide in the big picture as on screen
+      this.app.setCanvasResolution(pc.RESOLUTION_FIXED, canvas.clientWidth * scale, canvas.clientHeight * scale);
+      this.app.once('frameend', () => {
+        this.app.once('frameend', shoot);
+        this.app.renderNextFrame = true;
+      });
+    } else this.app.once('frameend', shoot);
+    this.app.renderNextFrame = true;
+    this.photoBar.sketchNotice('');
     this.photoBar.flashNow();
     this.sfx.click();
+
+    if (this.sim.keepers.step('tide') === 'asleep' || this.tideFirstPhotoWriting) return;
+    const story = this.sim.state.tidePhoto ??= { introPending: false, misses: 0 };
+    const first = story.introPending;
+    if (!tideDrawsPhoto(story.misses, first, Math.random())) {
+      story.misses++;
+      this.save();
+      return;
+    }
+    const tutorial = this.photo.tutorial;
+    if (first) this.tideFirstPhotoWriting = true;
+    story.misses = 0;
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    // Queue the camera read at the shutter. Loading the pencil renderer can finish after the image is captured.
+    void Promise.all([
+      capturePhotoSketch(this.app, this.camera.cam, this.look.post.frame, LOOK.haze.color, filter),
+      import('../rendering/SketchPencil'),
+    ]).then(([capture, { drawPencil }]) => {
+      if (this.resetting) return;
+      const page: SavedSketch = {
+        seed,
+        title: first ? 'Our first picture' : 'From your camera',
+        note: first ? 'My first page since waking. I’m glad you were there.' : 'You caught a little piece of the city. I wanted to keep it.',
+        image: drawPencil(capture, seed),
+        photo: first ? 'first' : 'photo',
+      };
+      if (!this.saver.keepSketch(page)) throw new Error('The Collection could not save the page.');
+      if (first) story.introPending = false;
+      this.save();
+      if (first && tutorial && this.photo.active && this.photo.tutorial) {
+        this.photo.exit();
+        this.tideBook()?.showFirstPhoto(page);
+        this.syncPanelPause();
+      } else if (this.photo.active) {
+        this.photoBar.sketchNotice('Tide drew this one. It’s in your Collection.');
+      } else this.hud.toast('Tide drew your photo. Open it in Backpack → Collection.', 'gold', 4);
+    }).catch(() => {
+      if (this.resetting) return;
+      story.misses = Math.max(story.misses, 4);
+      this.save();
+      // The photo still downloads. The next eligible shot can try the sketch again.
+      if (this.photo.active) this.photoBar.sketchNotice('Tide couldn’t keep this sketch. Try another photo.');
+      else this.hud.toast('Tide couldn’t keep this sketch. Try another photo.', '', 4);
+    }).finally(() => {
+      if (first) this.tideFirstPhotoWriting = false;
+    });
+  }
+
+  private startTidePhotoIntro() {
+    if (!this.bot || !this.sim.state.tidePhoto?.introPending || this.photo.active) return;
+    this.photoBar.sketchNotice('');
+    this.photo.enter(true);
+    const tide = this.keepers?.headWorld('tide');
+    if (!tide) return;
+    const [x, y, z] = this.bot.world();
+    // The chase camera already lifts its pivot above the ground. Keep the faces above the toolbar.
+    const target: [number, number, number] = [(x + tide.x) / 2, y + 0.15, (z + tide.z) / 2];
+    // Look across the pair so standing one tile in front of Tide doesn't hide either character.
+    const side = Math.atan2(tide.z - z, x - tide.x) * 180 / Math.PI;
+    const yaw = Math.cos(side * Math.PI / 180) > 0 ? side + 180 : side;
+    const zoom = Math.max(2.5, Math.min(4.1, 4.5 / Math.max(1, Math.hypot(x - tide.x, z - tide.z))));
+    this.camera.restore({ ...this.camera.snapshot(), target, goal: target, yaw, yawGoal: yaw, zoom, zoomGoal: zoom, pitchOffset: 0 });
+  }
+
+  private tideBook(): TideSketchbook | undefined {
+    if (!this.oc) return undefined;
+    return this.tideSketchbook ??= new TideSketchbook(this.oc.panel, this.saver, async (seed) => {
+      const [{ captureFrog }, { drawPencil }] = await Promise.all([
+        import('../rendering/SketchCapture'), import('../rendering/SketchPencil'),
+      ]);
+      return drawPencil(await captureFrog(this.app, seed), seed);
+    });
   }
 
   /** E23.2.1: F / d-pad left: eat one snack (biomass or food) to recharge. */
@@ -1737,10 +1991,12 @@ export class Game {
     window.addEventListener('keyup', (e) => {
       this.heldKeys.delete(e.code);
       this.endMegaHold(e.code);
+      this.endDrag(e.code);
     });
     window.addEventListener('blur', () => {
       this.heldKeys.clear();
       this.clearMegaHold();
+      this.cancelDrag();
     });
     window.addEventListener('keydown', (e) => {
       this.heldKeys.add(e.code);
@@ -1752,6 +2008,24 @@ export class Game {
         return;
       }
       if (this.bot && this.photo.active) {
+        // #photo-2: the picture just taken is up: the keys are its buttons' (arrows move, Enter or Space press, Esc dismisses)
+        if (this.photoShot.open) {
+          e.preventDefault();
+          if (PHOTO_NAV_KEYS[e.code]) this.photoShot.nav(PHOTO_NAV_KEYS[e.code]);
+          else if (e.code === FIXED_KEY) this.photoShot.back();
+          else if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space')) this.photoShot.press();
+          return;
+        }
+        // #photo-2: the arrow keys work the panel (rows up and down, a change left and right), as the d-pad does,
+        // while the other movement keys pan (arrows that are the only movement keys keep panning)
+        const nav = PHOTO_NAV_KEYS[e.code];
+        if (nav && !this.photo.tutorial && MOVE_ACTIONS.every((m) => this.bindings.keys[m].some((c) => !c.startsWith('Arrow')))) {
+          e.preventDefault();
+          this.photo.nav(nav);
+          return;
+        }
+        // and Enter presses the row in hand, as the pad's A does
+        if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.photo.pressRow()) return e.preventDefault();
         // E19.4.1: photo mode reads the same map with its own meanings (PhotoMode); held keys pan.
         this.photo.key(e.code, true);
         const a = e.code === FIXED_KEY ? 'cancel' : this.bindings.actionForCode(e.code, ['build', 'world', 'any']);
@@ -1795,6 +2069,7 @@ export class Game {
         if (a === 'backpack' || a === 'debug' || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
         if (e.repeat && a !== 'rotate' && a !== 'rotateBack') return;
         if (a === 'pulse' && this.beginMegaHold(e.code)) return;
+        if ((a === 'pulse' || a === 'place') && this.beginDrag(e.code)) return; // build mode: held, it lays a run
         this.doAction(a);
         return;
       }
@@ -1823,6 +2098,7 @@ export class Game {
   /** Bloombot: one action from a key, mouse input or pad button. Movement and sprint are read by BotController. */
   private doAction(a: Action) {
     this.bot?.wake(); // #671: no idle moment while it plays
+    if (this.photoShot?.open) return; // #photo-2: the picture just taken has the keys and buttons
     if ((this.photo.active && a !== 'debug') || a === 'photo') {
       if (!this.cinematic || this.photo.active) this.photo.action(a);
       return;
@@ -1870,6 +2146,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'fillMode':
+        return this.toggleFill();
       case 'waterOverlay':
         return this.toggleWaterView();
       case 'powerOverlay':
@@ -1889,6 +2167,7 @@ export class Game {
       case 'sense':
         return this.senseNearby();
       case 'recentre':
+        this.cursor = undefined; // build mode: the cursor comes back to the square in front
         return this.camera.recentre();
       case 'debug':
         return this.changeSetting('debug', !this.settings.debug);
@@ -2102,10 +2381,11 @@ export class Game {
     const now = performance.now();
     if (now - this.wheelAt < WHEEL_TURN_MS) return;
     const a = this.resolveKey('Wheel');
-    if (a === 'rotate' || a === 'rotateBack') {
+    if ((a === 'rotate' || a === 'rotateBack') && this.turnable()) {
       this.wheelAt = now;
       this.turnBuild(factor > 1 ? 1 : -1);
-    } else if (a === 'zoomCamera') {
+    } else if (a === 'zoomCamera' || a === 'rotate' || a === 'rotateBack') {
+      // nothing in hand that turns (a path, a pipe, a machine): the wheel moves the build view in and out
       this.wheelAt = now;
       this.zoomStepBy(factor > 1 ? -1 : 1); // E21.22's zoom steps
     }
@@ -2175,7 +2455,13 @@ export class Game {
 
   /** May the mouse be captured now (bloombot's walking view with nothing open on top)? */
   private mayCapture(): boolean {
-    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen();
+    // building: the pointer stays free to pick squares (the look button's drag still turns the view)
+    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen() && !this.building();
+  }
+
+  /** Is the top-down build view up: something in hand to build, and nothing open over the world? */
+  private buildView(): boolean {
+    return !!this.bot && this.building() && !this.panelOpen() && !this.cinematic && !this.photo?.active && !this.overviewOn;
   }
 
   /** Hold to look: the look button pressed on the world captures the mouse until it is let go. */
@@ -2214,18 +2500,19 @@ export class Game {
     this.bot?.wake();
   }
 
-  /** Aiming a build now: something in hand, no panel, cinematic, photo or overview (bloombot strafes, the view goes over its shoulder). */
-  private aiming(): boolean {
-    return !!this.bot && this.building() && !this.panelOpen() && !this.cinematic && !this.photo?.active && !this.overviewOn;
-  }
-
   /** Per frame: lets go of the mouse when a panel, the menu, the map or a cinematic needs the pointer. */
   private updateMouseCapture() {
     if (this.mouseCaptured() && !this.mayCapture()) document.exitPointerLock?.();
     this.hud.root.classList.toggle('mouse-look', this.mouseCaptured());
-    const aiming = this.aiming();
-    this.hud.root.classList.toggle('aiming', aiming);
-    this.camera.shoulderGoal = aiming ? 0.75 : 0; // building: over bloombot's shoulder, so the hologram is in view
+    // building: the camera lifts to the top-down build view, at the distance of the zoom step in use
+    const view = this.buildView();
+    this.hud.root.classList.toggle('build-view', view);
+    this.camera.buildGoal = view ? 1 : 0;
+    this.camera.buildDist = BUILD_VIEW.dists[this.zoomStep] ?? BUILD_VIEW.dists[1];
+    if (!view) {
+      this.cancelDrag();
+      this.cursor = undefined; // the next build starts from the square in front again
+    }
     if (!this.lookHinted && this.bot && this.mayCapture() && !this.mouseCaptured() && this.bot.lastInput === 'keys' && typeof matchMedia !== 'undefined' && matchMedia('(any-pointer: fine)').matches) {
       this.lookHinted = true;
       // say what the player will see: the pointer hides, the camera turns, the pointer comes back
@@ -2319,6 +2606,7 @@ export class Game {
 
   /** Esc / B: closes or puts away the nearest thing; with nothing to close, Esc (not B) opens the menu. */
   private escape(fromCancel = false) {
+    if (this.drag) return this.cancelDrag(); // a run being dragged out: dropped, nothing laid
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
@@ -2952,6 +3240,11 @@ export class Game {
     return actionGlyph(this.bindings, a, this.glyphs.style);
   }
 
+  /** The Turn line's keys: back and forward, only those that are bound (on keys R alone, never a dash for back). */
+  private turnGlyph(): string {
+    return actionGlyphs(this.bindings, ['rotateBack', 'rotate'], this.glyphs.style);
+  }
+
   /** E22.2: the prompt for this frame: the Interact target (or why not), and Pulse when it also applies. */
   private promptModel(target: InteractTarget | undefined): PromptModel | undefined {
     if (this.resting?.active) return this.resting.prompt();
@@ -2998,22 +3291,23 @@ export class Game {
     if (tool === 'remove') {
       const occ = t && !dec ? this.sim.occupant(t) : undefined;
       const lights = occ ? this.sim.lights.onPole(occ) : undefined;
-      const name = decName ?? (lights ? (DECOR_OPTION[lights]?.name ?? 'lights') : occ && occ.type !== 'core' && !occ.starter ? machineName(occ) : t && t.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z) ? 'pipe' : undefined);
+      const name = decName ?? (lights ? (DECOR_OPTION[lights]?.name ?? 'lights') : occ && occ.type !== 'core' && !occ.starter ? machineName(occ) : t && t.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z) ? 'pipe' : t && t.roofId === GROUND && !t.occupantId && t.laid ? LAID_NAME[t.laid].toLowerCase() : undefined);
       return { glyph, text: name ? `Remove the ${name}` : 'Remove' };
     }
+    if (this.drag && this.drag.cells.length > 1) return { glyph, text: this.fillOn ? 'Let go to fill the patch' : 'Let go to lay the run' };
     // #875: a piece of furniture in hand: put it here (and turn it); a decoration in hand aimed at a piece picks it up
     const fk = furnitureType(tool);
     const held = fk ? this.sim.house.furniture().find((f) => f.id === fk) : undefined;
-    if (held) return { glyph, text: `Put ${held.name} here`, pulse: { glyph: this.glyph('rotateBack') + this.glyph('rotate'), text: 'Turn' } };
+    if (held) return { glyph, text: `Put ${held.name} here`, pulse: { glyph: this.turnGlyph(), text: 'Turn' } };
     const aimedPiece = t && this.sim.house.isInside(t.roofId) && !dec ? this.sim.house.furnitureAt(t.x, t.z) : undefined;
     const dk = decorType(tool);
     if (dk && decName) return { glyph, text: `Pick up the ${decName}` };
     if (dk && aimedPiece && this.sim.house.movable(aimedPiece)) return { glyph, text: `Move ${aimedPiece.name}` };
-    const name = dk ? DECOR_OPTION[dk]?.name : tool === 'pipe' ? 'pipe' : machineTool(tool) ? MACHINES[tool].name : undefined;
+    const name = dk ? DECOR_OPTION[dk]?.name : tool === 'pipe' ? 'pipe' : laidTool(tool) ? LAID_NAME[tool].toLowerCase() : machineTool(tool) ? MACHINES[tool].name : undefined;
     if (!name) return undefined;
-    const text = dk ? `Place the ${name}` : tool === 'pipe' ? 'Lay a pipe' : `Build ${/^[AEIOU]/i.test(name) ? 'an' : 'a'} ${name}`;
+    const text = dk ? `Place the ${name}` : tool === 'pipe' ? 'Lay a pipe' : laidTool(tool) ? `Lay ${LAID_A[tool]}` : `Build ${/^[AEIOU]/i.test(name) ? 'an' : 'a'} ${name}`;
     // a decoration turns: the turn buttons (back, then forward) under it
-    const turn = dk ? { glyph: this.glyph('rotateBack') + this.glyph('rotate'), text: 'Turn' } : undefined;
+    const turn = dk ? { glyph: this.turnGlyph(), text: 'Turn' } : undefined;
     // E23.11: the recipe as chips ("2 of 2 Timber": leaf when you have it, clay when short)
     const chips = (buildItem(this.sim, tool)?.cost ?? []).map((c) => ({ text: costWords(c), ok: c.have >= c.need }));
     return { glyph, text, pulse: turn, chips };
@@ -3027,17 +3321,17 @@ export class Game {
       bot: this.bot!,
       bindings: this.bindings,
       game: this,
-      talkToTide: (panel: OldCityPanel, talk: () => void) => {
-        this.tideSketchbook ??= new TideSketchbook(panel, this.saver, async (seed) => {
-          const [{ captureFrog }, { drawPencil }] = await Promise.all([
-            import('../rendering/SketchCapture'), import('../rendering/SketchPencil'),
-          ]);
-          return drawPencil(await captureFrog(this.app, seed), seed);
-        });
+      onTideWake: () => {
+        this.sim.state.tidePhoto = { introPending: true, misses: 0 };
+        this.tidePhotoIntroQueued = true;
+        this.save();
+      },
+      talkToTide: (talk: () => void) => {
         const keepers = this.sim.keepers;
         const talkLabel = keepers.giftFor('tide') ? 'Give Tide a gift'
           : keepers.step('tide') === 'request1' ? 'About your request' : 'Talk with Tide';
-        this.tideSketchbook.open(talk, talkLabel);
+        const firstPhoto = this.sim.state.tidePhoto?.introPending ? () => this.startTidePhotoIntro() : undefined;
+        this.tideBook()?.open(talk, talkLabel, firstPhoto);
         this.syncPanelPause();
       },
       // E23.9.1: a page read from its post opens the journal at it
@@ -3845,9 +4139,17 @@ export class Game {
   }
 
   private onHover(x: number, y: number) {
-    // Third person: bloombot's play has no cursor on the world (the map's overview aside); what bloombot faces,
-    // or the build crosshair, is what the preview shows.
-    if (this.bot && !this.overviewOn) return;
+    // Third person: walking, bloombot's play has no cursor on the world (the map's overview aside): what bloombot
+    // faces is what the preview shows.
+    if (this.bot && !this.overviewOn) {
+      // the build view is the one place bloombot's play has a pointer on the world: it picks the square to build on
+      if (this.buildView()) {
+        this.pointer = { x, y, inside: true };
+        this.pointerAt = performance.now();
+        this.bot.lastInput = 'keys'; // the mouse is in hand: prompts show keys, and the pointer aims
+      }
+      return;
+    }
     this.pointer = { x, y, inside: true };
     this.pointerAt = performance.now();
     if (this.cinematic || this.photo.active) return;
@@ -3908,6 +4210,7 @@ export class Game {
     if (dk) return this.previewDecor(p, x, y, dk);
     if (tool === 'remove') return this.previewRemove(p, x, y);
     if (tool === 'pipe') return this.previewPipe(p, x, y);
+    if (laidTool(tool)) return this.previewLaid(p, x, y, tool);
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -3974,68 +4277,67 @@ export class Game {
   private buildKey = '';
   private buildAt = 0;
 
-  /** Does the mouse aim builds (over the world, moved lately, and the pad isn't what was used last)? */
+  /**
+   * Does the mouse aim builds? Over the world and moved (or pressed) lately; with bloombot, only in the build view and
+   * while the pad isn't what was used last. A run being dragged out with the mouse keeps aiming with it.
+   */
   private mouseAims(): boolean {
-    return !this.bot && this.pointer.inside && performance.now() - this.pointerAt < MOUSE_AIM_MS;
+    // (a mouse-held run keeps its far end where the pointer was last seen, even once it slides off the world onto
+    // the build bar or out of the window)
+    if (typeof this.drag?.input === 'string' && this.drag.input.startsWith('Mouse')) return true;
+    if (!this.pointer.inside || performance.now() - this.pointerAt >= MOUSE_AIM_MS) return false;
+    return !this.bot || (this.buildView() && this.bot.lastInput !== 'pad');
   }
 
-  /** Where a build is aimed, and where on screen to say so: the pointer's tile, or the tile in front of bloombot. */
+  /** Where a build is aimed, and where on screen to say so: the pointer's square, or the build cursor's. */
   private buildAim(): { p?: Pick; x: number; y: number } {
     if (this.mouseAims()) return { p: this.pick(this.pointer.x, this.pointer.y), x: this.pointer.x, y: this.pointer.y };
-    if (this.bot) {
-      const p = this.crosshairPick();
-      if (p?.tile) {
-        const sc = this.botTileScreen(p.tile);
-        return { p, x: sc.x, y: sc.y };
-      }
-    }
-    const p = this.frontPick();
+    const p = this.cursorPick();
     const sc = p?.tile ? this.botTileScreen(p.tile) : { x: innerWidth / 2, y: innerHeight / 2 };
     return { p, x: sc.x, y: sc.y };
   }
 
   /**
-   * Third person: where the build crosshair (the middle of the screen) meets bloombot's ground, kept between one
-   * tile and the build reach from bloombot. Looking down places close, looking ahead places further; past the
-   * reach (or at the sky, or onto another layer) the aim stops at the reach in the direction the camera faces.
+   * The build cursor, for a pad or keys alone: where the right stick left it (squares from bloombot, so it comes
+   * along as bloombot walks), or the square in front of bloombot while the stick hasn't moved it.
    */
-  private crosshairPick(): Pick | undefined {
+  private cursor?: { x: number; z: number };
+
+  private cursorPick(): Pick | undefined {
     const b = this.bot;
     if (!b) return undefined;
-    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-    const hit = c.clientWidth ? this.pick(c.clientWidth / 2, c.clientHeight / 2) : undefined;
-    const reach = DECOR_GEN.reach - 0.5;
-    let fx: number;
-    let fz: number;
-    if (hit && hit.roofId === b.pose.roofId) {
-      fx = hit.fx;
-      fz = hit.fz;
-    } else {
-      const f = this.camera.entity.forward;
-      const l = Math.hypot(f.x, f.z) || 1;
-      fx = b.pose.x + (f.x / l) * reach;
-      fz = b.pose.z + (f.z / l) * reach;
-    }
-    let dx = fx - b.pose.x;
-    let dz = fz - b.pose.z;
-    let d = Math.hypot(dx, dz);
-    if (d < 1e-3) {
-      dx = Math.sin(b.pose.facing);
-      dz = Math.cos(b.pose.facing);
-      d = 1;
-    }
-    let want = Math.min(reach, Math.max(1, d));
-    fx = b.pose.x + (dx / d) * want;
-    fz = b.pose.z + (dz / d) * want;
-    // #782: the aim is measured to a point, reach to the square's middle: step back until that square is in reach,
-    // so a hologram at the edge of reach never lands on a square that then says "Too far"
-    while (want > 1 && !this.inReach(b.pose.roofId, Math.floor(fx), Math.floor(fz), 1)) {
-      want = Math.max(1, want - 0.25);
-      fx = b.pose.x + (dx / d) * want;
-      fz = b.pose.z + (dz / d) * want;
-    }
+    if (!this.cursor) return this.frontPick();
+    const fx = b.pose.x + this.cursor.x;
+    const fz = b.pose.z + this.cursor.z;
     const tile = this.sim.grid.get(b.pose.roofId, Math.floor(fx), Math.floor(fz));
-    return tile ? { roofId: b.pose.roofId, fx, fz, tile } : undefined;
+    return tile ? { roofId: b.pose.roofId, fx, fz, tile } : this.frontPick();
+  }
+
+  /**
+   * The pad's right stick in the build view: it moves the build cursor across the ground as the screen shows it
+   * (right is right, up is away), no further than bloombot's reach. True when the stick was used for that.
+   */
+  private moveCursor(rx: number, ry: number, dt: number): boolean {
+    const b = this.bot;
+    if (!b || !this.buildView() || this.hud.modalOpen) return false;
+    if (!rx && !ry) return true; // (the stick is the cursor's while building, even at rest)
+    if (!this.cursor) {
+      const f = b.front();
+      this.cursor = { x: f.x + 0.5 - b.pose.x, z: f.z + 0.5 - b.pose.z };
+    }
+    const yr = (this.camera.yaw * Math.PI) / 180;
+    const k = CURSOR_SPEED * dt * (this.settings.camSensitivity ?? 100) / 100;
+    // screen right is (cos, -sin) on the ground, screen up is (-sin, -cos)
+    this.cursor.x += (rx * Math.cos(yr) - ry * Math.sin(yr)) * k;
+    this.cursor.z += (-rx * Math.sin(yr) - ry * Math.cos(yr)) * k;
+    const d = Math.hypot(this.cursor.x, this.cursor.z);
+    const max = DECOR_GEN.reach - 0.5;
+    if (d > max) {
+      this.cursor.x *= max / d;
+      this.cursor.z *= max / d;
+    }
+    b.wake();
+    return true;
   }
 
   /** Is a footprint within bloombot's reach, on its layer? (Always, without bloombot.) */
@@ -4057,6 +4359,7 @@ export class Game {
   private updateBuildPreview(): boolean {
     if (!this.building() || this.cinematic || this.hud.modalOpen || this.hud.plotPickerOpen) return false;
     const b = this.bot!;
+    if (this.updateDrag()) return true; // a run being dragged out shows its own squares
     const { p, x, y } = this.buildAim();
     const t = p?.tile;
     const key = `${this.hud.currentTool}|${this.buildRot}|${p?.roofId}:${t?.x},${t?.z}|${t?.ground}|${t?.occupantId}|${Math.round(b.pose.x * 4)},${Math.round(b.pose.z * 4)}|${b.lastInput}|${Math.round(x)},${Math.round(y)}`;
@@ -4119,6 +4422,296 @@ export class Game {
     return this.sim.water.pipes.lay(p.roofId, t.x, t.z) ? 'build' : 'none';
   }
 
+  /** A footpath or road in hand: the square it would pave, and why not where it can't. */
+  private previewLaid(p: Pick, x: number, y: number, kind: LaidKind) {
+    const t = p.tile!;
+    this.overlays.hideRadius();
+    const why = this.laidProblem(kind, p.roofId, t.x, t.z);
+    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.08);
+    const how = `${this.press('E')} to lay · hold and move to lay a run${this.fillOn ? ' (Fill is on: a whole patch)' : ''}`;
+    this.hud.showTip(x, y, `<b>${LAID_NAME[kind]}</b>${kind === 'footpath' ? 'Paving stones to walk on.' : kind === 'road' ? 'A smooth road across open ground.' : 'Lawn over paving and bare ground.'} <small>Free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+  }
+
+  /** Why a footpath or road square can't go here: the ground's rules, a chosen plot, then bloombot's reach. */
+  private laidProblem(kind: LaidKind, roofId: string, x: number, z: number): string | undefined {
+    return this.sim.paths.layProblem(kind, roofId, x, z) ?? (this.cozy.plotUnder(roofId, x, z, 1) ? PLOT_IN_WAY : undefined) ?? (this.inReach(roofId, x, z, 1) ? undefined : TOO_FAR);
+  }
+
+  /** Lays one footpath or road square (free); it stays in hand for the next. */
+  private layPathAt(p: Pick, x: number, y: number, kind: LaidKind): ActResult {
+    const t = p.tile!;
+    const why = this.laidProblem(kind, p.roofId, t.x, t.z);
+    if (why) {
+      this.hud.showFail(why, x, y);
+      return 'none';
+    }
+    if (!this.sim.paths.lay(kind, p.roofId, t.x, t.z)) return 'none';
+    this.markLaid(t.x, t.z);
+    this.sfx.build();
+    this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.1), 6, { up: 1.0, size: 0.035, life: 0.6 });
+    this.buildKey = '';
+    return 'select';
+  }
+
+  /** Redraws the ground round a square whose paving changed (its neighbours draw the edge where grass meets it). */
+  private markLaid(x: number, z: number) {
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const t = this.sim.grid.peek(GROUND, x + dx, z + dz);
+        if (t) this.chunks.markTile(t);
+      }
+  }
+
+  // ───────────── Build mode: drag a run, or fill a patch ─────────────
+
+  /** Fill is on: a drag covers the whole patch between its ends (off: a run with at most one corner). */
+  fillOn = false;
+  /**
+   * A run being dragged out: the input that holds it (a key, `Mouse0`, or a pad button), what was in hand, the
+   * square it began on, the one it reaches now and the squares between (core/BuildShape).
+   */
+  private drag?: { input: string | number; tool: Tool; roofId: string; from: Cell; to: Cell; cells: Cell[]; key: string };
+
+  /** F / d-pad down in build mode: a drag fills the whole patch, or goes back to laying a run. */
+  private toggleFill() {
+    if (!this.building()) return;
+    this.fillOn = !this.fillOn;
+    this.hud.buildBar.fillOn = this.fillOn;
+    this.hud.buildBar.render(this.hud.currentTool);
+    this.buildKey = '';
+    if (this.drag) this.drag.key = '';
+    this.sfx.click();
+    if (this.fillOn && this.sim.salvage.see('tip:fill')) this.hud.toast('Fill is on: hold {pulse} and move to cover a whole patch<small>Press {fillMode} again to go back to laying a run.</small>', 'gold', 4.5);
+  }
+
+  /** Can what is in hand be laid by dragging? (app/BuildDrag: never a piece of the house's furniture) */
+  private dragTool(tool: Tool): boolean {
+    return dragsAsRun(tool, this.buildRot);
+  }
+
+  /**
+   * A mouse button went down on the world in the build view. The Place button begins a drag (or, for a piece that
+   * doesn't drag, places it at once); any other button drops a drag in progress. True: the press was used.
+   */
+  private buildPress(button: number): boolean {
+    if (!this.buildView()) return false;
+    const a = this.resolveKey(`Mouse${button}`);
+    if (a !== 'pulse' && a !== 'place') {
+      if (!this.drag) return false;
+      this.cancelDrag();
+      return true;
+    }
+    this.pointerAt = performance.now(); // a press counts as using the mouse: it aims
+    this.pointer.inside = true;
+    if (this.bot) this.bot.lastInput = 'keys';
+    if (!this.beginDrag(`Mouse${button}`)) this.botAct();
+    return true;
+  }
+
+  /**
+   * Place went down in the build view with something that drags in hand: the hold begins on the square aimed at.
+   * False when there is nothing to drag (the press then places as a single press does).
+   */
+  private beginDrag(input: string | number): boolean {
+    if (this.drag) return true;
+    if (!this.buildView() || this.paused || this.hud.modalOpen) return false;
+    const tool = this.hud.currentTool;
+    if (!this.dragTool(tool)) return false;
+    const p = this.buildAim().p;
+    if (!p?.tile || this.sim.grid.roof(p.roofId)?.preview) return false;
+    // a decoration in hand, aimed at one already placed or at a piece of the house's furniture: that press picks it up
+    // (or says the piece is built in), never the start of a run
+    if (decorType(tool) && this.cozy.decorOf(p.tile.occupantId)) return false;
+    if (decorType(tool) && this.sim.house.isInside(p.roofId) && this.sim.house.furnitureAt(p.tile.x, p.tile.z)) return false;
+    const at = { x: p.tile.x, z: p.tile.z };
+    this.drag = { input, tool, roofId: p.roofId, from: at, to: at, cells: [at], key: '' };
+    this.buildKey = '';
+    return true;
+  }
+
+  /** Drops a drag in progress: nothing is laid. */
+  private cancelDrag() {
+    if (!this.drag) return;
+    this.drag = undefined;
+    this.overlays.hideDrag();
+    this.buildKey = '';
+  }
+
+  /** The hold was let go: one square acts as a single press; more are laid (or lifted) together. */
+  private endDrag(input: string | number) {
+    const d = this.drag;
+    if (!d || d.input !== input) return;
+    this.drag = undefined;
+    this.overlays.hideDrag();
+    this.buildKey = '';
+    if (d.tool !== this.hud.currentTool || !this.buildView()) return;
+    if (d.cells.length <= 1) return this.botAct();
+    this.commitDrag(d.tool, d.roofId, d.cells);
+  }
+
+  /**
+   * Per frame while a run is dragged out: follows the aim to its far end, and shows the squares it would lay (green)
+   * and the ones it can't (red). True while more than one square is covered (it owns the preview then); with one
+   * square the usual hologram shows.
+   */
+  private updateDrag(): boolean {
+    const d = this.drag;
+    if (!d) return false;
+    if (d.tool !== this.hud.currentTool) {
+      this.cancelDrag();
+      return false;
+    }
+    if (typeof d.input === 'number') {
+      // a pad button: polled (there is no "button up" event)
+      const button = d.input;
+      const pads = [...(navigator.getGamepads?.() ?? [])].filter((pad) => pad?.connected);
+      if (!pads.length) this.cancelDrag();
+      else if (!pads.some((pad) => pad?.buttons[button]?.pressed)) this.endDrag(button);
+      if (!this.drag) return false;
+    }
+    const { p, x, y } = this.buildAim();
+    if (p?.tile && p.roofId === d.roofId) d.to = { x: p.tile.x, z: p.tile.z };
+    const b = this.bot!;
+    const key = `${d.to.x},${d.to.z}|${this.fillOn}|${this.buildRot}|${Math.round(b.pose.x * 2)},${Math.round(b.pose.z * 2)}`;
+    const now = performance.now();
+    if (key === d.key && now - this.buildAt < 300) return d.cells.length > 1;
+    d.key = key;
+    this.buildAt = now;
+    d.cells = dragCells(this.fillOn ? 'fill' : 'line', d.from, d.to);
+    if (d.cells.length <= 1) {
+      this.overlays.hideDrag();
+      this.buildKey = '';
+      return false;
+    }
+    const ok: TileData[] = [];
+    const bad: TileData[] = [];
+    let why: string | undefined;
+    let budget = this.dragBudget(d.tool);
+    for (const c of d.cells) {
+      const t = this.sim.grid.get(d.roofId, c.x, c.z);
+      if (!t) continue;
+      const r = this.dragCheck(d.tool, d.roofId, c.x, c.z);
+      if (r === 'skip') continue;
+      if (r === undefined && budget > 0) {
+        budget--;
+        ok.push(t);
+      } else {
+        bad.push(t);
+        why ??= r ?? this.dragShort(d.tool);
+      }
+    }
+    const removing = d.tool === 'remove';
+    // lifting shows in red (as Remove's single hologram does); laying shows what goes down in green, the rest red
+    this.overlays.showDrag(removing ? [] : ok, removing ? ok : bad);
+    this.overlays.hideGhost();
+    this.overlays.hideFrame();
+    this.overlays.hideRadius();
+    const n = ok.length;
+    const what = removing ? 'to lift' : 'to lay';
+    const count = `${n} square${n === 1 ? '' : 's'} ${what}`;
+    const rest = !removing && bad.length ? `<br><span class="bad">${bad.length} can’t go: ${why}</span>` : '';
+    this.hud.showTip(x, y, `<b>${this.dragName(d.tool)}</b>${count}${rest}<br><span class="ok">Let go to ${removing ? 'lift them' : 'lay them'} · ${this.hudKey('cancel')} to stop</span>`);
+    return true;
+  }
+
+  /** What a drag is laying, for its tip. */
+  private dragName(tool: Tool): string {
+    const dk = decorType(tool);
+    return tool === 'remove' ? '🧹 Remove' : tool === 'pipe' ? 'Pipe' : laidTool(tool) ? LAID_NAME[tool] : (DECOR_OPTION[dk ?? '']?.name ?? 'Decoration');
+  }
+
+  /** How many squares of this the pack (and the store in reach) can pay for: pipes are made; the rest are free. */
+  private dragBudget(tool: Tool): number {
+    return tool === 'pipe' ? this.sim.inventory.available('pipe') : Infinity;
+  }
+
+  /** What to say for the squares a drag can't pay for. */
+  private dragShort(tool: Tool): string {
+    return tool === 'pipe' ? 'not enough Pipes (the workbench makes them)' : 'it doesn’t fit';
+  }
+
+  /**
+   * One square of a drag: undefined when it can be laid (or lifted), 'skip' when there is nothing to do there (the
+   * same thing is already laid; nothing to lift), else why not.
+   */
+  private dragCheck(tool: Tool, roofId: string, x: number, z: number): string | undefined {
+    const t = this.sim.grid.get(roofId, x, z);
+    if (!t) return 'skip';
+    if (tool === 'remove') {
+      const has = !!this.cozy.decorOf(t.occupantId) || (roofId === GROUND && !t.occupantId && (this.sim.water.pipes.has(x, z) || !!t.laid));
+      return !has ? 'skip' : this.inReach(roofId, x, z, 1) ? undefined : TOO_FAR;
+    }
+    if (laidTool(tool)) return t.laid === tool ? 'skip' : this.laidProblem(tool, roofId, x, z);
+    if (tool === 'pipe') {
+      if (roofId === GROUND && this.sim.water.pipes.has(x, z)) return 'skip';
+      return this.sim.water.pipes.layProblem(roofId, x, z) ?? (this.inReach(roofId, x, z, 1) ? undefined : TOO_FAR);
+    }
+    const dk = decorType(tool);
+    return dk ? this.decorProblem(dk, roofId, x, z, this.buildRot) : 'skip';
+  }
+
+  /**
+   * Lays (or lifts) every square of a drag that can be, from where it began: one sound, a few puffs, one build
+   * gesture, and a note only if some squares were left out. Remove lifts decorations, pipes and paving, the top
+   * thing on each square; a machine is only ever taken down by a single press on it.
+   */
+  private commitDrag(tool: Tool, roofId: string, cells: Cell[]) {
+    const dk = decorType(tool);
+    let done = 0;
+    let left = 0;
+    let why: string | undefined;
+    const puffs: TileData[] = [];
+    for (const c of cells) {
+      const t = this.sim.grid.get(roofId, c.x, c.z);
+      if (!t) continue;
+      const r = this.dragCheck(tool, roofId, c.x, c.z);
+      if (r === 'skip') continue;
+      let ok = r === undefined;
+      if (ok) {
+        if (tool === 'remove') {
+          const d = this.cozy.decorOf(t.occupantId);
+          if (d) {
+            this.cozy.removeDecor(d.roofId, d.x, d.z);
+            this.markDecor(d.roofId, d.x, d.z);
+          } else if (this.sim.water.pipes.has(c.x, c.z)) ok = this.sim.water.pipes.lift(c.x, c.z);
+          else {
+            ok = this.sim.paths.lift(c.x, c.z);
+            if (ok) this.markLaid(c.x, c.z);
+          }
+        } else if (laidTool(tool)) {
+          ok = this.sim.paths.lay(tool, roofId, c.x, c.z);
+          if (ok) this.markLaid(c.x, c.z);
+        } else if (tool === 'pipe') ok = this.sim.water.pipes.lay(roofId, c.x, c.z);
+        else if (dk) {
+          ok = !this.cozy.placeDecor(dk, this.buildRot, roofId, c.x, c.z);
+          if (ok) this.markDecor(roofId, c.x, c.z);
+        }
+      }
+      if (ok) {
+        done++;
+        if (puffs.length < DRAG_PUFFS) puffs.push(t);
+      } else {
+        left++;
+        why ??= r ?? this.dragShort(tool);
+      }
+    }
+    this.buildKey = '';
+    this.botPreviewKey = '';
+    const removing = tool === 'remove';
+    if (!done) {
+      if (left) this.hud.showFail(why ?? 'It doesn’t fit here');
+      return;
+    }
+    for (const t of puffs) this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.15), removing ? 4 : 5, { up: removing ? 1.0 : 1.3, size: 0.035, life: 0.6 });
+    if (removing) this.sfx.click();
+    else this.sfx.build();
+    const b = this.bot;
+    const last = cells[cells.length - 1];
+    if (b && roofId === b.pose.roofId && !b.walking) b.faceToward(last.x + 0.5, last.z + 0.5);
+    this.botAnim('select'); // a light gesture, so the next run can begin straight away (assembling would make it wait)
+    if (left) this.hud.toast(`${done} of ${done + left} squares ${removing ? 'lifted' : 'laid'}<small>The rest were left: ${why}.</small>`, '', 3.2);
+  }
+
   private previewRemove(p: Pick, x: number, y: number) {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
@@ -4127,6 +4720,14 @@ export class Game {
       // E23.4.2.2: a pipe tile lifts back into the pack (its Pipe)
       this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.12);
       this.hud.showTip(x, y, `<b>🧹 Lift the pipe</b>${this.press('E')} to lift it (its Pipe goes back into your pack)`);
+      return;
+    }
+    const laid = !d && p.roofId === GROUND && !t.occupantId ? t.laid : undefined;
+    if (laid) {
+      // a footpath or road square lifts, and the ground under it comes back
+      this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.08);
+      const far = !this.inReach(p.roofId, t.x, t.z, 1);
+      this.hud.showTip(x, y, `<b>🧹 Lift the ${LAID_NAME[laid].toLowerCase()}</b>${far ? `<span class="bad">${TOO_FAR}</span>` : `${this.press('E')} to lift it · hold and move to lift a run`}`);
       return;
     }
     if (!d) {
@@ -4307,6 +4908,17 @@ export class Game {
         this.hud.toast(`${machineName(occ)} taken down<small>Everything it was built from is back in your backpack.</small>`, '', 2.4);
         return 'build';
       }
+    }
+    if (!d && !pickUp && p.roofId === GROUND && !t.occupantId && t.laid) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      if (!this.sim.paths.lift(t.x, t.z)) return 'none';
+      this.markLaid(t.x, t.z);
+      this.sfx.click();
+      this.buildKey = '';
+      return 'select';
     }
     if (!d) {
       this.hud.showFail('Aim at a decoration', x, y);
@@ -4667,11 +5279,16 @@ export class Game {
   }
 
   private onClick(x: number, y: number, button: number) {
+    // #photo-2: "Pick a spot": the press on the picture that sets the focus (other presses there do nothing: a drag pans)
+    if (this.photo.active && this.photo.picking && this.resolveKey(`Mouse${button}`) === 'pulse') {
+      this.pointer = { x, y, inside: true };
+      this.photo.action('pulse');
+    }
     if (this.cinematic || this.photo.active) return;
     if (this.bot) {
       // E22.1: mouse buttons are bindable: the pulse button uses the tool on the aimed tile (walking there first if
       // it's out of reach); any other bound button does its action.
-      // Third person: the pulse button acts on what bloombot faces (or, building, on the crosshair's hologram);
+      // Third person: the pulse button acts on what bloombot faces (or, building, on the hologram under the pointer: buildPress);
       // only the map's overview still takes a pointer (travel to a woken landmark).
       const a = this.resolveKey(`Mouse${button}`);
       if ((a === 'pulse' || a === 'place') && this.overviewOn) this.botClick(x, y);
@@ -4731,6 +5348,7 @@ export class Game {
     if (dk) return this.placeDecorAt(p, x, y, dk);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
     if (tool === 'pipe') return this.layPipeAt(p, x, y);
+    if (laidTool(tool)) return this.layPathAt(p, x, y, tool);
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -6203,9 +6821,14 @@ export class Game {
       this.updateMouseCapture();
       this.oc?.update(wdt);
       this.keepers?.update(wdt);
+      if (this.tidePhotoIntroQueued && !this.oc?.bubble.speaking() && !this.photo.active && !this.panelOpen() &&
+          !this.paused && !this.cinematic) {
+        this.tidePhotoIntroQueued = false;
+        this.startTidePhotoIntro();
+      }
       this.resting?.update(wdt);
       this.updateVisitors(wdt);
-      this.photo.update(dt);
+      if (!this.photoShot.open) this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
       // E24 (#609): the way to the goal spot (the one #605's card and Show me where use), on the map and in the world.
