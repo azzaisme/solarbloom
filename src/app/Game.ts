@@ -701,6 +701,7 @@ export class Game {
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
+      bot.strafe = () => this.aiming(); // aiming: bloombot faces where the camera looks and steps sideways
       bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active || !!this.oc?.busy;
       // E21.22: the right stick's up and down tilts the view (it zooms only in photo mode)
       bot.onZoom = (f) => (this.photo?.active ? this.photo.zoom(f) : this.camTurn(0, -(Math.log(f) / Math.log(1.8)) * 60));
@@ -2213,14 +2214,18 @@ export class Game {
     this.bot?.wake();
   }
 
+  /** Aiming a build now: something in hand, no panel, cinematic, photo or overview (bloombot strafes, the view goes over its shoulder). */
+  private aiming(): boolean {
+    return !!this.bot && this.building() && !this.panelOpen() && !this.cinematic && !this.photo?.active && !this.overviewOn;
+  }
+
   /** Per frame: lets go of the mouse when a panel, the menu, the map or a cinematic needs the pointer. */
   private updateMouseCapture() {
     if (this.mouseCaptured() && !this.mayCapture()) document.exitPointerLock?.();
     this.hud.root.classList.toggle('mouse-look', this.mouseCaptured());
-    const aiming = !!this.bot && this.building() && !this.panelOpen() && !this.cinematic && !this.photo?.active && !this.overviewOn;
+    const aiming = this.aiming();
     this.hud.root.classList.toggle('aiming', aiming);
     this.camera.shoulderGoal = aiming ? 0.75 : 0; // building: over bloombot's shoulder, so the hologram is in view
-    if (this.bot) this.bot.strafe = aiming; // aiming: bloombot faces where the camera looks and steps sideways
     if (!this.lookHinted && this.bot && this.mayCapture() && !this.mouseCaptured() && this.bot.lastInput === 'keys' && typeof matchMedia !== 'undefined' && matchMedia('(any-pointer: fine)').matches) {
       this.lookHinted = true;
       // say what the player will see: the pointer hides, the camera turns, the pointer comes back
