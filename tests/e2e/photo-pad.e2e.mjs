@@ -105,8 +105,10 @@ try {
   let s = await state();
   check(s.active && s.style === 'deck', `A opens photo mode, with the Deck's glyphs (${s.style})`);
   const help = await page.locator('#photoBar .pb-help').textContent();
-  check(/left stick/.test(help) && /d-pad/.test(help) && /A presses a row/.test(help), `the help line is the pad's: “${help}”`);
+  check(/left stick/.test(help) && /d-pad/.test(help) && /change the tab/.test(help), `the help line is the pad's: “${help}”`);
   check((await page.locator('#photoBar [data-glyph]').count()) > 0, 'rows with a button show its glyph');
+  const strip = await page.evaluate(() => { const t = document.querySelector('#photoBar .pb-tabs'); return [t.scrollWidth, t.clientWidth]; });
+  check(strip[0] <= strip[1], `all five tabs fit between L1 and R1 (${strip[0]} in ${strip[1]} px)`);
   await shot('pad-1-panel');
 
   // the d-pad walks the panel: tabs left and right, rows up and down, a slider left and right
@@ -135,10 +137,16 @@ try {
   await tap(Y);
   await tap(RT);
   await tap(VIEW);
+  s = await state();
+  check(s.freeze && s.filter === 'warm' && s.weather === 'sunny', 'Y freezes, RT picks a filter, View the weather');
+  // the bumpers change the tab, round the ends, as in the backpack
   await tap(RB, 2);
+  const two = (await state()).tab;
   await tap(LB);
   s = await state();
-  check(s.freeze && s.filter === 'warm' && s.weather === 'sunny' && s.tilt === 4, `Y freezes, RT picks a filter, View the weather, the bumpers tilt (${s.tilt}°)`);
+  check(two === 'view' && s.tab === 'frame' && s.tilt === 0, `R1 twice from Bloombot goes round to View, L1 back to Frame (${two}, ${s.tab})`);
+  await tap(LB);
+  check((await page.locator('#photoBar .pb-tabline svg.glyph').count()) === 2, 'the tabs show L1 and R1');
   // the sticks: left pans, right turns and zooms
   const was = s;
   await page.evaluate(() => window.stick([1, 0, 0, 0], 20));

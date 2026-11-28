@@ -323,8 +323,10 @@ button.pp-opt:hover { border-color: var(--leaf); background: var(--leaf-soft); }
 #photoBar button:disabled { cursor: default; }
 #photoBar button .pn-g { min-width: 0; }
 #photoBar button svg.glyph { width: 32px; height: 24px; }
-#photoBar .pb-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 14px; background: var(--paper-3); }
-#photoBar .pb-tabs [role=tab] { flex: 1 1 auto; min-height: 36px; padding: 0 8px; border-color: transparent; background: transparent; color: var(--ink-2); }
+#photoBar .pb-tabline { display: flex; align-items: center; gap: 4px; }
+#photoBar .pb-tabline svg.glyph { flex: none; width: 28px; height: 22px; }
+#photoBar .pb-tabs { flex: 1 1 auto; min-width: 0; display: flex; gap: 2px; padding: 3px; border-radius: 14px; background: var(--paper-3); }
+#photoBar .pb-tabs [role=tab] { flex: 1 1 auto; min-height: 36px; padding: 0 4px; border-color: transparent; background: transparent; color: var(--ink-2); }
 #photoBar .pb-tabs [role=tab][aria-selected="true"] { background: var(--key-bg); border-color: var(--line-2); color: var(--ink); }
 #photoBar .pb-tabs [role=tab].sel { border-color: var(--leaf-ink); box-shadow: 0 0 0 2px var(--leaf); }
 #photoBar .pb-rows { display: flex; flex-direction: column; gap: 2px; min-height: 228px; }

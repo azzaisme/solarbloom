@@ -564,6 +564,15 @@ export class PhotoMode {
     this.render();
   }
 
+  /** The pad's bumpers: the tab to the left or right (round the ends), as in the backpack. False in Tide's lesson. */
+  stepTab(dir: -1 | 1): boolean {
+    if (!this.active || this.tutorial) return false;
+    this.clean = false; // any press brings the panel back
+    const i = PHOTO_TABS.findIndex((t) => t.id === this.tab);
+    this.setTab(PHOTO_TABS[(i + dir + PHOTO_TABS.length) % PHOTO_TABS.length].id);
+    return true;
+  }
+
   /** The arrow keys or the d-pad: up and down choose a row (above the first: the tabs), left and right change it. */
   nav(dir: PhotoDir) {
     if (!this.active || this.tutorial) return;

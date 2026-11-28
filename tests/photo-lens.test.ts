@@ -114,6 +114,19 @@ describe('#photo-2: the panel', () => {
     expect(photo.pressRow()).toBe(false);
   });
 
+  it('the bumpers step the tab, round the ends; not in Tide’s lesson', () => {
+    const { photo, out } = setup();
+    photo.enter();
+    expect(photo.stepTab(-1)).toBe(true);
+    expect(out.bar?.tab).toBe('frame');
+    photo.stepTab(1);
+    photo.stepTab(1);
+    expect(out.bar?.tab).toBe('focus');
+    photo.exit();
+    photo.enter(true);
+    expect(photo.stepTab(1)).toBe(false);
+  });
+
   it('Tide’s lesson has no panel to walk', () => {
     const { photo, out } = setup();
     photo.enter(true);

@@ -95,13 +95,15 @@ export class PhotoBar {
       this.notice = '';
       return;
     }
+    const pad = this.keyFor('up') === '—'; // the pad moves and zooms with its sticks
     // the button's key or pad button, drawn for the device in hand (none when the action has no button)
     const k = (a: Action) => {
       const l = this.keyFor(a);
       // (#photo-2: the d-pad works the panel here, so an action on it has no button to show)
+      // (and on a pad the bumpers change the tab, so tilt has none either)
+      if (pad && !s.tutorial && (a === 'rotate' || a === 'rotateBack')) return '';
       return l && l !== '—' && !l.startsWith('D-pad') ? glyph(a) : '';
     };
-    const pad = this.keyFor('up') === '—'; // the pad moves and zooms with its sticks
     const move = `${this.keyFor('up')}${this.keyFor('left')}${this.keyFor('down')}${this.keyFor('right')}`;
     const title = `<span class="pb-title"><span class="pn-badge sky" aria-hidden="true">${icon('camera')}</span>Photo mode</span>`;
     const shutter = `<button class="pb-shutter" data-photo="pulse">${icon('camera', 's')}<span class="pb-shutter-l">Save picture</span>${k('pulse')}</button>`;
@@ -113,12 +115,12 @@ export class PhotoBar {
     } else {
       // one sentence for the hands in use: what moves the camera, and what works the panel
       const help = pad
-        ? `Move with the left stick; turn and zoom with the right stick. The d-pad works this panel, and ${this.keyFor('interact')} presses a row.`
+        ? `Move with the left stick; turn and zoom with the right stick. ${this.keyFor('prevTab')} and ${this.keyFor('nextTab')} change the tab, the d-pad works the rows, and ${this.keyFor('interact')} presses one.`
         : `Move with ${move}, zoom with the mouse wheel, and hold the right mouse button to turn. The arrow keys work this panel, and Enter presses a row.`;
       const tabs = PHOTO_TABS.map((t) => `<button role="tab" data-tab="${t.id}" aria-selected="false">${t.name}</button>`).join('');
       html =
         `<div class="pb-head">${title}${leave}</div>` +
-        `<div class="pb-tabs" role="tablist" aria-label="Photo settings">${tabs}</div>` +
+        `<div class="pb-tabline">${pad ? glyph('prevTab') : ''}<div class="pb-tabs" role="tablist" aria-label="Photo settings">${tabs}</div>${pad ? glyph('nextTab') : ''}</div>` +
         `<div class="pb-rows" role="tabpanel">${s.rows.map((r) => this.rowHtml(r, k)).join('')}</div>` +
         `<p class="pb-tip" role="status"></p>${shutter}<p class="pb-help">${help}</p>`;
     }

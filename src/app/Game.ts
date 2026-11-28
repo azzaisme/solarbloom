@@ -727,8 +727,11 @@ export class Game {
         // and A presses the row in hand (with none in hand it keeps its shortcut: hide bloombot)
         if (this.photo?.active && i === 0 && this.photo.pressRow()) return;
         if (this.wheelPick(i)) return; // the load wheel is up: the d-pad picks a load
-        // photo mode gives the build buttons its own meanings, as its keys do: the bumpers tilt (they don't turn
-        // the load wheel) and Remove picks a filter. Every other button keeps its walking action (A, X, Y…).
+        // the bumpers change the panel's tab, as they do in the backpack (the owner, 28 Nov 2026)
+        const tab = this.photo?.active ? this.bindings.actionForButton(i, ['panel']) : undefined;
+        if ((tab === 'prevTab' || tab === 'nextTab') && this.photo.stepTab(tab === 'nextTab' ? 1 : -1)) return;
+        // photo mode gives the build buttons its own meanings, as its keys do: Remove picks a filter, and in Tide's
+        // lesson (no panel) the bumpers tilt. Every other button keeps its walking action (A, X, Y…).
         const b = this.photo?.active ? this.bindings.actionForButton(i, ['build']) : undefined;
         const a = b === 'rotate' || b === 'rotateBack' || b === 'removeMode' ? b : this.resolveButton(i);
         if (a === 'pulse' && !this.photo?.active && this.beginMegaHold(i)) return;
