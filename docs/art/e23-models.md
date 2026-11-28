@@ -275,7 +275,7 @@ Batch A and the crops (B6), approved by the owner on 18 Nov 2026: 303 credits. M
 | otter | 2,940 / 3,000 | 720 | |
 | owl | 2,450 / 2,500 | 599 | |
 | magpie | 1,960 / 2,000 | 480 | |
-| frog | 980 / 1,000 | 240 | |
+| frog | 1,190 / 1,200 | 595 | the hopping Sketchfab frog (CC BY, 28 Nov); the small-animal class allows 1.2k |
 | bumblebee | 784 / 800 | 192 | |
 | songbird | 1,470 / 1,500 | 359 | |
 | koi | 980 / 1,000 | 240 | |

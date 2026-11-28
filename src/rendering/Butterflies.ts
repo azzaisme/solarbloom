@@ -5,6 +5,7 @@ import { PALETTE } from './Materials';
 import { assignBatch, group, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 import { hash01, tilesIn, type Rect } from './FaunaPlan';
+import { playClip, type Critter, type CritterModels } from './CritterModels';
 
 interface Fly {
   root: pc.Entity;
@@ -17,6 +18,8 @@ interface Fly {
   /** route leg (seeded stops) */
   leg: number;
   used: boolean;
+  /** its Tripo model once loaded (a butterfly, every third a swallowtail); the placeholder is hidden then */
+  model?: Critter;
 }
 
 const COLORS = [PALETTE.pink, PALETTE.flower[1], PALETTE.flower[2], PALETTE.pure.white, PALETTE.flower[4], PALETTE.fauna.butterflyBlue];
@@ -25,7 +28,8 @@ const COLORS = [PALETTE.pink, PALETTE.flower[1], PALETTE.flower[2], PALETTE.pure
  * Butterflies drift between blooming tiles near the view. Phase 5 E16: they arrive with the ecosystem's
  * butterfly unlock (TUNING.ecosystem.fauna), routes are seeded (no Math.random), the count follows the bloom
  * in view up to the quality tier's cap, and the tiles are gathered once a second instead of every frame.
- * Pooled: flies are made once and parked at scale 0 when not needed.
+ * Pooled: flies are made once and parked at scale 0 when not needed. Each loads the butterfly's or the swallowtail's
+ * model (CritterModels) and flaps with its clips: fast beats in flight, slow open and close at rest.
  */
 export class Butterflies {
   private flies: Fly[] = [];
@@ -41,6 +45,7 @@ export class Butterflies {
     private sim: Sim,
     private parent: pc.Entity,
     private batchId = -1,
+    private models?: CritterModels,
   ) {}
 
   /** Blooming (stage 2+) tiles in view on the ground, plus any unlocked rooftops. */
@@ -79,7 +84,15 @@ export class Butterflies {
     vshape(body, 'capsule', PALETTE.fauna.body, { scale: [0.014, 0.05, 0.014], rot: [90, 0, 0] });
     root.setLocalScale(0, 0, 0);
     if (this.batchId >= 0) assignBatch(root, this.batchId); // moving every frame: dynamic batch
-    this.flies.push({ root, wings, pos: new pc.Vec3(), target: new pc.Vec3(), rest: 0, phase: i * 1.7, speed: 0.6 + hash01(i, 7, 7) * 0.4, leg: i * 100, used: false });
+    const fly: Fly = { root, wings, pos: new pc.Vec3(), target: new pc.Vec3(), rest: 0, phase: i * 1.7, speed: 0.6 + hash01(i, 7, 7) * 0.4, leg: i * 100, used: false };
+    this.flies.push(fly);
+    void this.models?.make(i % 3 === 2 ? 'swallowtail' : 'butterfly', { start: 'move', shadows: false }).then((m) => {
+      if (!m || !root.parent) return;
+      body.enabled = false;
+      root.addChild(m.holder);
+      m.holder.enabled = fly.used;
+      fly.model = m;
+    });
   }
 
   /** Active flies (perf readout). */
@@ -106,6 +119,7 @@ export class Butterflies {
         }
         if (!use && f.used) f.root.setLocalScale(0, 0, 0);
         f.used = use;
+        if (f.model) f.model.holder.enabled = use; // (its clips stop while it's parked)
       });
     }
     this.flies.forEach((f, i) => {
@@ -134,6 +148,11 @@ export class Butterflies {
         f.root.setEulerAngles(0, (Math.atan2(dx, dz) * 180) / Math.PI, 0);
       }
       f.root.setPosition(f.pos);
+      if (f.model) {
+        playClip(f.model, f.rest > 0 ? 'sit' : 'move'); // wings slowly opening and closing at rest
+        if (f.model.entity.anim) f.model.entity.anim.speed = this.reducedMotion ? 0.3 : 1;
+        return;
+      }
       f.wings[0].setLocalEulerAngles(0, 0, flap);
       f.wings[1].setLocalEulerAngles(0, 0, -flap);
     });

@@ -18,6 +18,18 @@ import bpy
 from mathutils import Matrix, Vector
 
 FPS = 24
+# A rotation about X by +a swings a hanging bone's foot back (+Y). A front leg's lower joint is the wrist: it folds the
+# paw back (+). A hind leg's is the hock: it folds the paw forward (-). Checked against renders (no other test).
+FRONT_FLEX, HIND_FLEX = 1, -1
+HEAD_DOWN = 1     # the sign of a rotation about X that lowers a quad's head
+# how a quad with knees rests: grazing on its feet (a fawn), or sitting up on its haunches (a fox)
+REST_STYLE = {"fox": "haunch"}
+# how the animals that live about the world (Fauna.ts) get along: a rabbit hops (both hind feet together), a pigeon
+# walks with its head bobbing and pecks at rest, a duck floats (its feet tucked under, out of sight below the water)
+# and paddles, dabbling at rest. The rest move the way their kind does.
+GAIT = {"rabbit": "hop", "pigeon": "walk", "duck": "swim"}
+# birds that also get a flight (`fly`): the songbird flies in the flocks that cross the sky (Birds.ts)
+FLIES = {"songbird"}
 
 # ---------------------------------------------------------------- body plans
 # A bone: (name, parent, head, tail, kind). Points are (x, u, h): x across (-1 left … 1 right of the half-width),
@@ -62,10 +74,13 @@ def plan(base, **over):
 
 PLANS = {
     # kind, bones
-    "fox": ("quad", plan(QUAD, spine=((0, .52, .55), (0, .2, .58)), head=((0, .18, .65), (0, 0, .75)),
-                         tail=((0, .55, .55), (0, 1, .62)), legHL=((-.45, .48, .45), (-.45, .48, 0)),
-                         legHR=((.45, .48, .45), (.45, .48, 0)), legFL=((-.45, .2, .45), (-.45, .2, 0)),
-                         legFR=((.45, .2, .45), (.45, .2, 0)))),
+    # the standing fox (27 Nov), with knees
+    "fox": ("quad", plan(QUAD, spine=((0, .6, .38), (0, .3, .42)), head=((0, .3, .5), (0, .1, .7)),
+                         tail=((0, .65, .35), (0, 1, .5)),
+                         legFL=((-.38, .26, .3), (-.38, .26, .11)), legFR=((.38, .26, .3), (.38, .26, .11)),
+                         legHL=((-.38, .57, .3), (-.38, .59, .12)), legHR=((.38, .57, .3), (.38, .59, .12)),
+                         legFL2=((-.38, .26, .11), (-.38, .25, 0)), legFR2=((.38, .26, .11), (.38, .25, 0)),
+                         legHL2=((-.38, .59, .12), (-.38, .57, 0)), legHR2=((.38, .59, .12), (.38, .57, 0)))),
     "hedgehog": ("quad", plan(QUAD, tail=None, head=((0, .3, .45), (0, 0, .3)),
                               legFL=((-.4, .3, .2), (-.4, .3, 0)), legFR=((.4, .3, .2), (.4, .3, 0)),
                               legHL=((-.4, .7, .2), (-.4, .7, 0)), legHR=((.4, .7, .2), (.4, .7, 0)),
@@ -82,10 +97,13 @@ PLANS = {
                             tail=((0, .85, .55), (0, 1, .6)),
                             legFL=((-.45, .3, .3), (-.45, .3, 0)), legFR=((.45, .3, .3), (.45, .3, 0)),
                             legHL=((-.45, .72, .3), (-.45, .72, 0)), legHR=((.45, .72, .3), (.45, .72, 0)))),
+    # knees: each leg an upper bone (hip to knee) and a lower one (knee to hoof), named legXX and legXX2
     "fawn": ("quad", plan(QUAD, spine=((0, .75, .62), (0, .35, .65)), head=((0, .3, .72), (0, .1, .95)),
                           tail=((0, .85, .65), (0, 1, .6)),
-                          legFL=((-.4, .35, .58), (-.4, .35, 0)), legFR=((.4, .35, .58), (.4, .35, 0)),
-                          legHL=((-.4, .78, .58), (-.4, .78, 0)), legHR=((.4, .78, .58), (.4, .78, 0)))),
+                          legFL=((-.4, .35, .46), (-.4, .36, .24)), legFR=((.4, .35, .46), (.4, .36, .24)),
+                          legHL=((-.4, .78, .46), (-.4, .82, .28)), legHR=((.4, .78, .46), (.4, .82, .28)),
+                          legFL2=((-.4, .36, .24), (-.4, .35, 0)), legFR2=((.4, .36, .24), (.4, .35, 0)),
+                          legHL2=((-.4, .82, .28), (-.4, .79, 0)), legHR2=((.4, .82, .28), (.4, .79, 0)))),
     "frog": ("frog", plan(QUAD, tail=None, spine=((0, .7, .3), (0, .3, .6)), head=((0, .3, .65), (0, .05, .6)),
                           legFL=((-.45, .25, .35), (-.5, .2, 0)), legFR=((.45, .25, .35), (.5, .2, 0)),
                           legHL=((-.6, .7, .3), (-.75, .45, 0)), legHR=((.6, .7, .3), (.75, .45, 0)))),
@@ -108,6 +126,22 @@ PLANS = {
                            tail=((0, .65, .45), (0, 1, .45)),
                            legL=((-.15, .55, .45), (-.15, .55, 0)), legR=((.15, .55, .45), (.15, .55, 0)),
                            wingL=((-.6, .45, .65), (-.65, .9, .5)), wingR=((.6, .45, .65), (.65, .9, .5)))),
+    # the animals that live about the world (assets/raw/models/fauna/, owner 28 Nov)
+    "rabbit": ("quad", plan(QUAD, spine=((0, .78, .3), (0, .4, .45)), head=((0, .4, .45), (0, .12, .62)),
+                            tail=((0, .88, .22), (0, 1, .25)),
+                            legFL=((-.3, .3, .28), (-.3, .3, 0)), legFR=((.3, .3, .28), (.3, .3, 0)),
+                            legHL=((-.5, .72, .25), (-.5, .55, 0)), legHR=((.5, .72, .25), (.5, .55, 0)))),
+    "pigeon": ("bird", plan(BIRD, spine=((0, .6, .35), (0, .3, .62)), head=((0, .3, .62), (0, .05, .8)),
+                            tail=((0, .65, .4), (0, 1, .3)),
+                            legL=((-.18, .5, .28), (-.18, .5, 0)), legR=((.18, .5, .28), (.18, .5, 0)),
+                            wingL=((-.6, .4, .55), (-.7, .85, .4)), wingR=((.6, .4, .55), (.7, .85, .4)))),
+    "duck": ("bird", plan(BIRD, spine=((0, .6, .35), (0, .35, .55)), head=((0, .35, .6), (0, .1, .85)),
+                          tail=((0, .7, .4), (0, 1, .55)),
+                          legL=((-.2, .55, .25), (-.2, .5, 0)), legR=((.2, .55, .25), (.2, .5, 0)),
+                          wingL=((-.65, .45, .5), (-.75, .85, .5)), wingR=((.65, .45, .5), (.75, .85, .5)))),
+    # curled up asleep (facing -y: the head forward on the right, the tail round the left side to its nose)
+    "sleeping-cat": ("curl", {"spine": ((0, .85, .45), (0, .4, .55)), "head": ((.3, .4, .45), (.45, .08, .35)),
+                              "tail": ((-.55, .75, .15), (-.45, .1, .12))}),
     "bumblebee": ("insect", plan(INSECT, spine=((0, .8, .4), (0, .3, .45)), head=((0, .3, .45), (0, 0, .4)),
                                  wingL=((-.2, .45, .65), (-.95, .35, 1.0)), wingR=((.2, .45, .65), (.95, .35, 1.0)))),
     "butterfly": ("insect", INSECT),
@@ -185,6 +219,8 @@ def build(mesh, bones):
             continue
         if name == "spine":
             b.parent = eb["root"]
+        elif name.startswith("leg") and name.endswith("2"):
+            b.parent = eb[name[:-1]]         # the lower leg hangs from the upper one: the knee
         elif name.startswith("tail") and name != "tail" and name != "tail1":
             b.parent = eb["tail" + str(int(name[-1]) - 1)]
         elif name in ("head", "tail", "tail1") or name.startswith("wing") or name.startswith("legF") or \
@@ -201,7 +237,7 @@ def build(mesh, bones):
         cand = []
         for n, (a, b) in pts.items():
             if n.startswith("leg"):
-                side = -1 if n.endswith("L") else 1
+                side = -1 if n.rstrip("2").endswith("L") else 1
                 top = max(a.z, b.z) * 1.08
                 if p.z > top or (p.x - xc) * side < -W * 0.04 or abs(p.y - (a.y + b.y) / 2) > L * 0.22:
                     continue
@@ -217,10 +253,40 @@ def build(mesh, bones):
         for w, n in ws:
             if w / s > 0.02:
                 groups[n].add([v.index], w / s, "REPLACE")
+    if any(n.endswith("2") for n in bones):
+        # with knees the legs fold far (lying down), and weights by distance let the top of a leg drag the rump
+        # along: Blender's heat weights follow the body's shape instead (the root keeps no vertices of its own);
+        # if they fail for some vertex, the distance weights above stay
+        heat = heat_weights(mesh, ob, bones)
+        print("WEIGHTS", "heat" if heat else "distance (heat failed)", flush=True)
     mesh.parent = ob
     mod = mesh.modifiers.new("rig", "ARMATURE")
     mod.object = ob
     return ob, (W, L, H)
+
+
+def heat_weights(mesh, ob, bones):
+    keep = {g.name: {v.index: g.weight(v.index) for v in mesh.data.vertices if any(e.group == g.index for e in v.groups)}
+            for g in mesh.vertex_groups}
+    for g in list(mesh.vertex_groups):
+        mesh.vertex_groups.remove(g)
+    ob.data.bones["root"].use_deform = False
+    bpy.ops.object.select_all(action="DESELECT")
+    mesh.select_set(True)
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    mesh.modifiers.clear()                      # (parent_set adds its own; the caller adds "rig")
+    # pieces it cannot reach (the eye domes are separate islands) keep their distance weights
+    groups = {g.name: g for g in mesh.vertex_groups}
+    loose = [v.index for v in mesh.data.vertices if not any(e.weight > 1e-4 for e in v.groups)]
+    for n, ws in keep.items():
+        g = groups.get(n) or mesh.vertex_groups.new(name=n)
+        for i in loose:
+            if i in ws:
+                g.add([i], ws[i], "REPLACE")
+    print("HEAT", len(mesh.data.vertices) - len(loose), "vertices by heat,", len(loose), "by distance", flush=True)
+    return len(loose) < 0.25 * len(mesh.data.vertices)
 
 
 # ---------------------------------------------------------------- clips
@@ -248,7 +314,7 @@ def pose_key(ob, frame, rots, offs):
 
 
 def side(n):
-    return -1 if n.endswith("L") else 1
+    return -1 if n.rstrip("2").endswith("L") else 1
 
 
 def clip(ob, name, frames, fn, step=2):
@@ -275,15 +341,25 @@ def ease(a, b, t):
     return t * t * (3 - 2 * t)
 
 
-def clips_for(kind, bones, dims):
+def clips_for(kind, bones, dims, name=""):
     W, L, H = dims
-    legs = [b for b in bones if b.startswith("leg")]
+    gait = GAIT.get(name)
+    legs = [b for b in bones if b.startswith("leg") and not b.endswith("2")]     # the upper legs (or whole ones)
+    knees = {b: b + "2" for b in legs if b + "2" in bones}                       # their lower legs, where it has knees
     wings = [b for b in bones if b.startswith("wing")]
     has = lambda b: b in bones  # noqa: E731
 
     def top(b):
         """A leg's hip height (m): the higher end of its bone."""
         return max(bones[b][0][2], bones[b][1][2]) * H
+
+    def seg(b):
+        """A bone's length (m), across x left out."""
+        (x0, u0, h0), (x1, u1, h1) = bones[b]
+        return math.hypot((u1 - u0) * L, (h1 - h0) * H)
+
+    def flex(b):
+        return FRONT_FLEX if "F" in b else HIND_FLEX
 
     def spine_len():
         (x0, u0, h0), (x1, u1, h1) = bones["spine"]
@@ -292,7 +368,40 @@ def clips_for(kind, bones, dims):
     def sit_pose(k):
         """The sit, curl or roost pose, k from 0 (standing) to 1."""
         r, o = {}, {}
-        if kind == "quad":
+        if gait == "hop":
+            # a rabbit already sits low: it just settles a little lower, ears and all
+            o["root"] = Vector((0, 0, -0.04 * H * k))
+            r["spine"] = [(X, -3 * k)]
+        elif kind == "quad" and knees and REST_STYLE.get(name) == "haunch":
+            # sitting up on its haunches: the rump comes right down, each thigh lies forward along the ground with
+            # the lower leg standing under its front end (the hind paw up beside the front ones), the body tips well
+            # up and the front legs stand straight, a touch longer, so the chest sits high
+            hind = [b for b in legs if "H" in b]
+            front = [b for b in legs if "F" in b]
+            d = max(0.0, min(top(b) for b in hind) - 0.85 * min(seg(knees[b]) for b in hind))
+            stretch = 0.22
+            (_, u_piv, _), _ = bones["spine"]
+            reach = abs(u_piv - min(bones[b][0][1] for b in front)) * L       # spine pivot to shoulder, along the body
+            rise = d + stretch * min(top(b) for b in front)
+            pitch = math.degrees(math.asin(min(0.95, rise / reach)))
+            o["root"] = Vector((0, 0, -d * k))
+            r["spine"] = [(X, -pitch * k)]
+            r["head"] = [(X, 0.85 * pitch * k)]
+            for b in front:
+                r[b] = [(X, (pitch - 4) * k), (None, 1 + stretch * k)]
+            for b in hind:
+                r[b] = [(X, -84 * k)]
+                r[knees[b]] = [(X, 80 * k)]
+            if has("tail"):
+                r["tail"] = [(X, 0.7 * pitch * k), (Z, 100 * k)]   # down on the ground and round beside its feet
+        elif kind == "quad" and knees:
+            # at rest it stands and grazes: the head down to the grass, the back a touch lower at the front (a fawn
+            # folding its long legs right under it does not hold its shape with weights this simple)
+            r["head"] = [(X, HEAD_DOWN * 48 * k)]
+            r["spine"] = [(X, HEAD_DOWN * 5 * k)]
+            if has("tail"):
+                r["tail"] = [(X, 10 * k)]
+        elif kind == "quad":
             # the hips sink by d; the hind legs fold forward just enough to keep the feet on the ground, and the
             # body tips up just enough that the front feet stay down too
             hind = [b for b in legs if "H" in b]
@@ -352,14 +461,59 @@ def clips_for(kind, bones, dims):
             for i, b in enumerate(["tail1", "tail2", "tail3"]):
                 r[b] = [(Z, (6 + 4 * i) * S(t, 2, -0.12 * i))]
             r.pop("head", None)
+        if gait == "walk":
+            # pecking at the ground now and then, between looks about
+            r["head"] = [(X, HEAD_DOWN * 55 * max(0.0, S(t, 2, .1)) ** 4), (Z, 12 * S(t, 1))]
+        if gait == "swim":
+            # floating, dabbling: the head dips to the water, the tail waggles
+            return merge(sit_pose(1), ({"head": [(X, HEAD_DOWN * 70 * max(0.0, S(t, 1, .1)) ** 3), (Z, 8 * S(t, 1, .4))],
+                                        "tail": [(Z, 12 * S(t, 4))], "spine": [(X, 2 * S(t, 1))]}, {}))
         return r, o
+
+    def fly(t):
+        # flying: big slow wing beats, the feet tucked up, the body level
+        pr, po = sit_pose(1)
+        r = {b: v for b, v in pr.items() if b.startswith("leg")}
+        for b in wings:
+            r[b] = [(Y, -side(b) * (20 + 55 * S(t, 2)))]
+        r["spine"] = [(X, 3 * S(t, 2, .25))]
+        if has("tail"):
+            r["tail"] = [(X, -6)]
+        return r, {"root": Vector((0, 0, 0.04 * H * S(t, 2, .25)))}
 
     def follow(t):
         r, o = {}, {}
-        if kind == "quad":                 # a trot: diagonal pairs, a bob each step
+        if gait == "hop":                  # a rabbit's hop: the hind feet push off together, the front ones reach
+            n = 2
+            ph = (t * n) % 1
+            up = math.sin(math.pi * min(1, ph / 0.6)) if ph < 0.6 else 0
+            o["root"] = Vector((0, 0, 0.3 * H * up))
+            for b in legs:
+                r[b] = [(X, (32 if "H" in b else -30) * up)]
+            r["spine"] = [(X, -10 * up)]
+            r["head"] = [(X, 6 * up)]
+            if has("tail"):
+                r["tail"] = [(X, -15 * up)]
+        elif gait == "walk":               # a pigeon's walk: one foot then the other, the head bobbing with each step
+            for b in legs:
+                r[b] = [(X, 28 * S(t, 2, 0 if b.endswith("L") else 0.5))]
+            o["root"] = Vector((0, 0, 0.03 * H * abs(S(t, 2))))
+            r["head"] = [(X, HEAD_DOWN * 12 * S(t, 4))]
+            r["spine"] = [(Z, 3 * S(t, 2))]
+            if has("tail"):
+                r["tail"] = [(Z, 6 * S(t, 2))]
+        elif gait == "swim":               # paddling: a gentle rock, the tail waggling, the head nodding with the strokes
+            return merge(sit_pose(1), ({"spine": [(Z, 3 * S(t, 2)), (X, 2 * S(t, 2, .25))], "head": [(X, 5 * S(t, 2, .2))],
+                                        "tail": [(Z, 14 * S(t, 2))]}, {}))
+        elif kind == "quad":                 # a trot: diagonal pairs, a bob each step
             for b in legs:
                 pair = 0 if b in ("legFL", "legHR") else 0.5
                 r[b] = [(X, 26 * S(t, 2, pair))]
+                if b in knees:
+                    # the leg pushes back straight, then folds as it swings forward (its angle falling): the paw
+                    # lifts and comes through, the front one flipping back at the wrist, the hind one at the hock
+                    swing = max(0.0, -S(t, 2, pair + 0.25)) ** 0.7
+                    r[knees[b]] = [(X, flex(b) * (80 if "F" in b else 60) * swing)]
             o["root"] = Vector((0, 0, 0.04 * H * abs(S(t, 2))))
             r["spine"] = [(X, 2 * S(t, 4))]
             r["head"] = [(X, 4 * S(t, 4, .2))]
@@ -392,11 +546,16 @@ def clips_for(kind, bones, dims):
     def sit(t):
         pr, po = sit_pose(1)
         br = {"spine": [(X, 1.2 * S(t, 1))]}
+        if kind == "quad" and knees and REST_STYLE.get(name) != "haunch":       # grazing: little nibbles, the tail flicking now and then
+            br = {"head": [(X, HEAD_DOWN * 5 * max(0.0, S(t, 3)))], "spine": [(X, 1.0 * S(t, 1))]}
+            if has("tail"):
+                br["tail"] = [(Z, 18 * max(0.0, S(t, 2, 0.1)) ** 3)]
         if kind == "insect":
             br = {b: [(Y, -side(b) * 14 * S(t, 1))] for b in wings}   # slow open and close
         if kind == "fish":
             br = {b: [(Z, 4 * S(t, 1, -0.15 * i))] for i, b in enumerate(["tail1", "tail2", "tail3"])}
-        return merge((pr, po), (br, {}), ({"head": [(Z, 8 * S(t, 0.5))]} if has("head") and kind != "fish" else {}, {}))
+        look = {"head": [(Z, 8 * S(t, 0.5))]} if has("head") and kind != "fish" and not (kind == "quad" and knees and REST_STYLE.get(name) != "haunch") else {}
+        return merge((pr, po), (br, {}), (look, {}))
 
     def climb(t):
         # crouch (0–0.22), spring up (0.22–0.55), land (0.55–0.75), settle into the perch (0.75–1)
@@ -408,6 +567,8 @@ def clips_for(kind, bones, dims):
             for b in legs:
                 hind = "H" in b
                 r[b] = [(X, (-25 if hind else 25) * up + (20 if hind else -10) * crouch)]
+                if b in knees:
+                    r[knees[b]] = [(X, flex(b) * (60 * up + 35 * crouch))]
             r["spine"] = [(X, -10 * up)]
         if kind == "bird" or kind == "insect":
             for b in wings:
@@ -417,14 +578,27 @@ def clips_for(kind, bones, dims):
                 r[b] = [(Z, (16 + 10 * i) * S(t, 4, -0.15 * i))]
         return merge((r, o), sit_pose(ease(0.7, 1.0, t)))
 
-    return [("idle", 48, idle), ("follow", 24 if kind in ("bird", "frog") else 16, follow), ("sit", 48, sit),
-            ("climb", 36, climb)]
+    def sleep(t):
+        # asleep: slow breaths lift the back, the head stirs a little, the tail tip twitches now and then
+        breath = S(t, 1)
+        return ({"spine": [(X, -2.5 * breath)], "head": [(X, 2 * S(t, 1, .2)), (Z, 1.5 * S(t, 1, .5))],
+                 "tail": [(Z, 4 * S(t, 1, .3) + 6 * max(0.0, S(t, 2, .1)) ** 6)]},
+                {"root": Vector((0, 0, 0.015 * H * breath))})
+
+    if kind == "curl":                      # a sleeping cat never gets up: every clip is its breathing
+        return [("idle", 72, sleep), ("follow", 72, sleep), ("sit", 72, sleep), ("climb", 72, sleep)]
+    out = [("idle", 48, idle), ("follow", 24 if kind in ("bird", "frog") or gait else 16, follow), ("sit", 48, sit),
+           ("climb", 36, climb)]
+    if name in FLIES:
+        out.append(("fly", 12, fly))
+    return out
 
 
 def rig(path, kind, bones):
     mesh = load(path)
     ob, dims = build(mesh, bones)
-    for name, frames, fn in clips_for(kind, bones, dims):
+    animal = os.path.basename(path).split(".")[0]
+    for name, frames, fn in clips_for(kind, bones, dims, animal):
         clip(ob, name, frames, fn)
     for o in bpy.context.scene.objects:
         o.select_set(o in (ob, mesh))

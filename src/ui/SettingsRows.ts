@@ -2,6 +2,7 @@ import { appVersion, updates } from './version';
 import type { Row, SettingsTab } from './SettingsScreen';
 import { canFullScreen, isFullScreen, setFullScreen } from '../app/FullScreen';
 import { GLOW_STEPS } from '../data/look';
+import { CREDITS } from '../data/credits';
 
 /**
  * E22.11: what each Settings tab holds, shared by the title screen and the in-game menu. `inGame` adds what only
@@ -21,6 +22,17 @@ export interface RowContext {
   sound?: string;
 }
 
+const escHtml = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+
+/** Settings › Game › Credits: each work by someone else, as its licence asks (title, author, source, licence). */
+export function creditsHtml(): string {
+  return CREDITS.map(
+    (c) =>
+      `<p class="set-stats">${escHtml(c.what)}: “${escHtml(c.title)}” by ${escHtml(c.author)} (${escHtml(c.source)}), ` +
+      `licensed under ${escHtml(c.licence)} (${escHtml(c.licenceUrl)}). Changed for Solarbloom.</p>`,
+  ).join('');
+}
+
 export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
   switch (tab) {
     case 'game':
@@ -37,6 +49,8 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         ...(c.debug ? [{ kind: 'check', key: 'debug', label: 'Developer numbers in the corner (F3)' } as Row] : []),
         ...(c.debug ? [{ kind: 'select', key: 'speed', label: 'Game speed (developer)', options: [['1', 'Normal'], ['2', 'Two times'], ['3', 'Three times']], fallback: '1', numeric: true } as Row] : []),
         ...(c.inGame && c.stats ? [{ kind: 'heading', label: 'Your garden so far' } as Row, { kind: 'html', html: c.stats } as Row] : []),
+        { kind: 'heading', label: 'Credits' },
+        { kind: 'html', html: creditsHtml() },
       ];
     case 'controls':
       return []; // drawn by the host (E22.4)
