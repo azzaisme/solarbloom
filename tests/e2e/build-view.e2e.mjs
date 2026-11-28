@@ -295,15 +295,18 @@ const cursorTo = async (x, z) => {
     await page.waitForTimeout(60);
   }
   await stick(0, 0);
+  await frames(2);
   await settle(200);
 };
 await settle(1200);
 const yaw0 = await run(() => window.solarbloom.camera.yaw);
 await stick(0.9, 0);
+await frames(3); // the game reads the stick once a frame: hold it over a few
 await settle(500);
 await stick(0, 0);
+await frames(2);
 const moved = await run(() => ({ yaw: window.solarbloom.camera.yaw, cursor: window.solarbloom.cursor, input: window.solarbloom.bot.lastInput }));
-check(Math.abs(moved.yaw - yaw0) < 0.5 && !!moved.cursor && moved.input === 'pad', 'on a pad the right stick moves the build cursor and the view stays still');
+check(Math.abs(moved.yaw - yaw0) < 0.5 && !!moved.cursor && moved.input === 'pad', `on a pad the right stick moves the build cursor and the view stays still (${JSON.stringify({ yaw0, ...moved })})`);
 await cursorTo(home.x + 1, home.z);
 check(JSON.stringify(await aimed()) === JSON.stringify([home.x + 1, home.z]), 'the build cursor rests on the square it was moved to');
 await button(0, true);
@@ -346,6 +349,7 @@ if (walk) {
   // the view glides over to where bloombot now stands: wait until the ground is still under the pointer
   for (let k = 0, was = { x: -1, y: -1 }; k < 40; k++) {
     await settle(300);
+    await frames(2); // still between two drawn frames, not two reads inside one slow frame
     const now = await screenOf(walk.x, walk.z);
     if (Math.hypot(now.x - was.x, now.y - was.y) < 0.2) break;
     was = now;
@@ -366,6 +370,7 @@ if (walk) {
   await drawn();
   const green = await run(([w]) => [0, 1, 2].map((i) => window.solarbloom.sim.grid.get('g', w.x + i, w.z).feature), [walk]);
   const grassN = await run(() => window.solarbloom.sim.paths.count('grass'));
+  if (grassN !== 3) console.log('  grass squares:', JSON.stringify(await run(() => window.solarbloom.sim.state.laid?.grass ?? [])), 'walk', JSON.stringify(walk), 'fill', await run(() => window.solarbloom.fillOn));
   check(green.every((f) => f === 'lawn') && grassN === 3, `a drag of grass turns the paving to lawn (${green}; ${grassN} grass squares)`);
   await shot('11-grass-over-paving.png');
   await page.keyboard.press('KeyX');
