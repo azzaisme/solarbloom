@@ -138,7 +138,7 @@ const ON_GROUND: readonly Perch[] = ['beside', 'sniff', 'perchNear'];
  * front), `gapCost` for each unit its underside is off bloombot, and `turnCost` to sit turned. Its shape is its sit
  * clip looked at `poses` times across the loop, the same corner in each merged within 1/`poseGrid` (sittingShape).
  */
-const SETTLE = { step: 0.004, steps: 15, points: 240, fitEvery: 0.5, lift: 0.01, above: 0.005, gapCost: 20, behindCost: 6, turnCost: 0.1, near: 0.45, below: 0.35, budgetMs: 1.5, poses: 4, poseGrid: 250, fine: [0, 0.0125, -0.0125, 0.025, -0.025], stalk: { r: 0.06, long: 0.03, step: 0.015 }, climbMax: 0.15, groundSpots: [[0.42, 0.05], [0.42, 0.4], [0.75, 0.15], [0.7, 0.5], [-0.75, -0.1], [0.42, -0.3]] as const };
+const SETTLE = { step: 0.004, steps: 15, points: 240, fitEvery: 0.5, lift: 0.01, above: 0.005, gapCost: 20, maxGap: 0.01, behindCost: 6, turnCost: 0.1, near: 0.45, below: 0.35, budgetMs: 1.5, poses: 4, poseGrid: 250, fine: [0, 0.0125, -0.0125, 0.025, -0.025], stalk: { r: 0.06, long: 0.03, step: 0.015 }, climbMax: 0.15, groundSpots: [[0.42, 0.05], [0.42, 0.4], [0.75, 0.15], [0.7, 0.5], [-0.75, -0.1], [0.42, -0.3]] as const };
 /**
  * How far an animal on bloombot may move from its perch's anchor to find a place to rest (world units), and how far
  * down: near first, then further, then turned a quarter either way (a tall bird has no room on the shoulder
@@ -165,6 +165,8 @@ export class Visitors {
   private pool: Actor[] = [];
   private byVisit = new Map<Visit, Actor>();
   private rests = new Map<Visit, Rest>();
+  /** Where each animal on the ground round bloombot stands once it is there. */
+  private dest = new Map<Visit, pc.Vec3>();
   private clock = 0;
   private tmp = new pc.Vec3();
   private tmp2 = new pc.Vec3();
@@ -249,6 +251,7 @@ export class Visitors {
         a.root.enabled = false;
         this.byVisit.delete(v);
         this.rests.delete(v);
+        this.dest.delete(v);
       }
     }
     for (const v of visits) {
@@ -289,6 +292,7 @@ export class Visitors {
     // #576: sitting beside bloombot (its sit clip; the others there stand in their idle) on the ground or the seat,
     // not into it: an otter's sit pose tucks its legs under its root
     if (v.perch === 'beside') target.y += a.below ?? 0;
+    if (ON_GROUND.includes(v.perch)) this.dest.set(v, target.clone()); // (for the ones on bloombot to keep clear of)
     // where it comes from (and goes back to): VISIT.from away, in the visit's own direction
     const fx = target.x + Math.cos(v.from) * VISIT.from;
     const fz = target.z + Math.sin(v.from) * VISIT.from;
@@ -427,6 +431,9 @@ export class Visitors {
       // better where it sits on its underside than leans on a wing tip or an ear; and seen: behind bloombot (its
       // back, behind its head) it is hidden from the front
       const gap = Number.isFinite(under) ? Math.max(0, under - any) : 1;
+      // and never where only a tip touches and its body hangs in the air (a bumblebee on a wing tip, 4 cm over the
+      // arm): not resting at all; somewhere else, or the fallbacks below
+      if (gap > SETTLE.maxGap) return undefined;
       const behind = Math.max(0, -(dx * Math.sin(h.facing) + dz * Math.cos(h.facing)));
       const cost = Math.hypot(dx, dz) * 2 + behind * SETTLE.behindCost + Math.abs(feet - anchor.y) + gap * SETTLE.gapCost + (turn ? SETTLE.turnCost : 0);
       return { dx, dz, feet: feet - anchor.y, turn, cost };
@@ -597,6 +604,12 @@ export class Visitors {
       pos.copy(o.root.getPosition());
       if (ON_BOT.includes(w.perch) && r?.found && !r.ground) out.push(boxOf(placeShape(o.shape, pos.x, pos.y, pos.z, this.settledFacing(w.perch, facing) + r.turn, [])));
       else if (all) out.push({ x0: pos.x - o.foot.r, x1: pos.x + o.foot.r, y0: pos.y, y1: pos.y + o.foot.h, z0: pos.z - o.foot.r, z1: pos.z + o.foot.r });
+      else {
+        // one on the ground round bloombot (sniffing at its knees, beside it), where it is going to stand: bloombot's
+        // arms come low when it meditates, and a butterfly on one would sit in a hedgehog's back
+        const d = ON_BOT.includes(w.perch) ? (r?.ground ? pos : undefined) : this.dest.get(w);
+        if (d) out.push(boxOf(placeShape(o.shape, d.x, d.y, d.z, this.settledFacing(w.perch, facing), [])));
+      }
     }
     return out;
   }

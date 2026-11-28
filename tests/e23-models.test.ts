@@ -185,7 +185,8 @@ describe('E23.10.2: the E23 model list', () => {
         };
         expect(gltf.skins?.[0]?.joints.length ?? 0, `${f} has a skeleton`).toBeGreaterThanOrEqual(4);
         const clips = (gltf.animations ?? []).map((c) => c.name).sort();
-        expect(clips, `${f} clips`).toEqual(['climb', 'follow', 'idle', 'sit']);
+        // the songbird also flies, in the flocks that cross the sky (Birds.ts)
+        expect(clips, `${f} clips`).toEqual(a === 'songbird' ? ['climb', 'fly', 'follow', 'idle', 'sit'] : ['climb', 'follow', 'idle', 'sit']);
         for (const c of gltf.animations ?? []) expect(c.channels.length, `${f} ${c.name} moves`).toBeGreaterThan(0);
       }
     }

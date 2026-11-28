@@ -60,6 +60,7 @@ import { Clouds } from '../rendering/Clouds';
 import { HedgeLine } from '../rendering/HedgeLine';
 import { Ruins } from '../rendering/Ruins';
 import { Fauna } from '../rendering/Fauna';
+import { CritterModels } from '../rendering/CritterModels';
 import { createModels } from '../rendering/Models';
 import { CameraController } from '../rendering/CameraController';
 import { setLeafTier, setTreeCursor } from '../rendering/Foliage';
@@ -338,6 +339,8 @@ export class Game {
   readonly ruins: Ruins;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
+  /** the Tripo models of the animals that live about the world (Fauna, butterflies, flocks, the farm's creatures) */
+  readonly critters: CritterModels;
   /**
    * Phase 5 E16: fauna caps tier (TUNING.ecosystem.caps). Hook for the graphics quality-tier selector (Look 1
    * lighting epic); until it sets this, "Fewer particles" means low and everything else high.
@@ -563,7 +566,8 @@ export class Game {
       return this.sim.grid.tileWorld(t)[1] + SLAB_TOP + pavingOverlayLift(this.sim.grid, t);
     };
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
-    this.crops = new CropVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.critters = new CritterModels(this.app);
+    this.crops = new CropVisuals(this.sim, this.scene.world, this.app.graphicsDevice, this.critters);
     this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
     this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
@@ -580,13 +584,13 @@ export class Game {
       this.tillers.rebuildAll();
       this.cat.rebuildAll();
     };
-    this.birds = new Birds(this.scene.world);
+    this.birds = new Birds(this.scene.world, this.critters);
     this.birdHeart = new BirdHeart(this.scene.world, this.app.graphicsDevice);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
     this.hedgeLine = new HedgeLine(this.sim, this.scene.world, this.app.graphicsDevice);
-    this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
-    this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
-    this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
+    this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id, this.critters);
+    this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id, this.critters);
+    this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined, this.critters);
     this.nightFindVisuals = new NightFindVisuals(this.sim, this.scene.world, (x, z) => this.groundY(x, z));
     this.weatherVisuals = new WeatherVisuals(this.app, this.scene.world);
     this.outsideRadio = buildRadio(this.scene.world, (x, z) => this.groundY(x, z));
