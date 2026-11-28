@@ -74,12 +74,23 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
   right-button drag, turns it a full circle; C or a right stick click recentres it. The light was composed for
   the default angle, so other angles look flatter.
 - **Fixed distance, no zoom in play** (owner, 17 Nov 2026). The camera stays at the close view's distance.
-- **Build mode stays close** (E19.2, replacing #280's pull-back and zoom). With something to build in hand (a
-  machine, a superstructure core, a decoration, or the remove tool) the camera keeps the close view. A hologram
-  sits where you aim, snapped to the grid, within 3.6 tiles of bloombot, red with a reason where it can't go. The
-  mouse aims with a free pointer (while it's over the world and was moved in the last 8 s); the pad and the keys
-  aim at the tile in front of bloombot. The mouse wheel, + / - and (on the pad) the bumpers turn a decoration a
-  quarter turn; E / A places it, and it stays in hand for the next one.
+- **Build mode looks down** (owner, 28 Nov 2026, replacing E19.2's close view and the over-the-shoulder
+  crosshair). With something to build in hand (a machine, a pipe, a footpath or road, a decoration, or the remove
+  tool) the camera lifts to look down on the ground round bloombot (`BUILD_VIEW` in `rendering/CameraController`),
+  keeping the way it faced. A hologram sits on the square you aim at, within 12 tiles of bloombot, red with a
+  reason where it can't go. The mouse aims with a free pointer; the pad's right stick moves a build cursor; keys
+  alone aim at the tile in front of bloombot. The wheel and the bumpers turn a piece a quarter turn; Place puts
+  it down, and it stays in hand for the next one.
+- **Drag to lay a run, Fill to cover a patch** (owner, 28 Nov 2026). Holding Place and moving lays everything
+  from the first square to the last: a straight run, or one with a single corner (`core/BuildShape`). With Fill on
+  (F, or a click of the right stick) the drag covers the whole rectangle. It works for footpaths, roads, grass, pipes,
+  one-square decorations and Remove (which never takes machines in a drag). The squares show green or red before
+  you let go; Esc drops the drag; one drag lays at most 400.
+- **Footpaths and roads** (`gameplay/LaidPaths`) are ground bloombot lays: free, open from the start, on open
+  natural ground only, saved in `state.laid`. Remove lifts them and the seed's ground comes back. Sprinting along
+  one costs less charge (E23.6.7).
+- **Grass** (owner, 28 Nov 2026) is laid the same way, the other way round: it turns the city's paving (a market's
+  floor, a plaza, a walk) and bare ground into lawn, to be pulsed and planted like any lawn. The city's roads stay.
 - **The overview** stays on its own key (M / View) and is left by pressing it again or by walking.
 - **Lower quality tiers** keep the same camera with a shorter view distance and thicker haze (#272).
 - **Overview, fly-to and Home move the camera only.** Bloombot stays where it is, and the camera returns to it.
