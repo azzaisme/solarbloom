@@ -24,6 +24,12 @@ FRONT_FLEX, HIND_FLEX = 1, -1
 HEAD_DOWN = 1     # the sign of a rotation about X that lowers a quad's head
 # how a quad with knees rests: grazing on its feet (a fawn), or sitting up on its haunches (a fox)
 REST_STYLE = {"fox": "haunch"}
+# how the animals that live about the world (Fauna.ts) get along: a rabbit hops (both hind feet together), a pigeon
+# walks with its head bobbing and pecks at rest, a duck floats (its feet tucked under, out of sight below the water)
+# and paddles, dabbling at rest. The rest move the way their kind does.
+GAIT = {"rabbit": "hop", "pigeon": "walk", "duck": "swim"}
+# birds that also get a flight (`fly`): the songbird flies in the flocks that cross the sky (Birds.ts)
+FLIES = {"songbird"}
 
 # ---------------------------------------------------------------- body plans
 # A bone: (name, parent, head, tail, kind). Points are (x, u, h): x across (-1 left … 1 right of the half-width),
@@ -120,6 +126,22 @@ PLANS = {
                            tail=((0, .65, .45), (0, 1, .45)),
                            legL=((-.15, .55, .45), (-.15, .55, 0)), legR=((.15, .55, .45), (.15, .55, 0)),
                            wingL=((-.6, .45, .65), (-.65, .9, .5)), wingR=((.6, .45, .65), (.65, .9, .5)))),
+    # the animals that live about the world (assets/raw/models/fauna/, owner 28 Nov)
+    "rabbit": ("quad", plan(QUAD, spine=((0, .78, .3), (0, .4, .45)), head=((0, .4, .45), (0, .12, .62)),
+                            tail=((0, .88, .22), (0, 1, .25)),
+                            legFL=((-.3, .3, .28), (-.3, .3, 0)), legFR=((.3, .3, .28), (.3, .3, 0)),
+                            legHL=((-.5, .72, .25), (-.5, .55, 0)), legHR=((.5, .72, .25), (.5, .55, 0)))),
+    "pigeon": ("bird", plan(BIRD, spine=((0, .6, .35), (0, .3, .62)), head=((0, .3, .62), (0, .05, .8)),
+                            tail=((0, .65, .4), (0, 1, .3)),
+                            legL=((-.18, .5, .28), (-.18, .5, 0)), legR=((.18, .5, .28), (.18, .5, 0)),
+                            wingL=((-.6, .4, .55), (-.7, .85, .4)), wingR=((.6, .4, .55), (.7, .85, .4)))),
+    "duck": ("bird", plan(BIRD, spine=((0, .6, .35), (0, .35, .55)), head=((0, .35, .6), (0, .1, .85)),
+                          tail=((0, .7, .4), (0, 1, .55)),
+                          legL=((-.2, .55, .25), (-.2, .5, 0)), legR=((.2, .55, .25), (.2, .5, 0)),
+                          wingL=((-.65, .45, .5), (-.75, .85, .5)), wingR=((.65, .45, .5), (.75, .85, .5)))),
+    # curled up asleep (facing -y: the head forward on the right, the tail round the left side to its nose)
+    "sleeping-cat": ("curl", {"spine": ((0, .85, .45), (0, .4, .55)), "head": ((.3, .4, .45), (.45, .08, .35)),
+                              "tail": ((-.55, .75, .15), (-.45, .1, .12))}),
     "bumblebee": ("insect", plan(INSECT, spine=((0, .8, .4), (0, .3, .45)), head=((0, .3, .45), (0, 0, .4)),
                                  wingL=((-.2, .45, .65), (-.95, .35, 1.0)), wingR=((.2, .45, .65), (.95, .35, 1.0)))),
     "butterfly": ("insect", INSECT),
@@ -321,6 +343,7 @@ def ease(a, b, t):
 
 def clips_for(kind, bones, dims, name=""):
     W, L, H = dims
+    gait = GAIT.get(name)
     legs = [b for b in bones if b.startswith("leg") and not b.endswith("2")]     # the upper legs (or whole ones)
     knees = {b: b + "2" for b in legs if b + "2" in bones}                       # their lower legs, where it has knees
     wings = [b for b in bones if b.startswith("wing")]
@@ -345,7 +368,11 @@ def clips_for(kind, bones, dims, name=""):
     def sit_pose(k):
         """The sit, curl or roost pose, k from 0 (standing) to 1."""
         r, o = {}, {}
-        if kind == "quad" and knees and REST_STYLE.get(name) == "haunch":
+        if gait == "hop":
+            # a rabbit already sits low: it just settles a little lower, ears and all
+            o["root"] = Vector((0, 0, -0.04 * H * k))
+            r["spine"] = [(X, -3 * k)]
+        elif kind == "quad" and knees and REST_STYLE.get(name) == "haunch":
             # sitting up on its haunches: the rump comes right down, each thigh lies forward along the ground with
             # the lower leg standing under its front end (the hind paw up beside the front ones), the body tips well
             # up and the front legs stand straight, a touch longer, so the chest sits high
@@ -434,11 +461,51 @@ def clips_for(kind, bones, dims, name=""):
             for i, b in enumerate(["tail1", "tail2", "tail3"]):
                 r[b] = [(Z, (6 + 4 * i) * S(t, 2, -0.12 * i))]
             r.pop("head", None)
+        if gait == "walk":
+            # pecking at the ground now and then, between looks about
+            r["head"] = [(X, HEAD_DOWN * 55 * max(0.0, S(t, 2, .1)) ** 4), (Z, 12 * S(t, 1))]
+        if gait == "swim":
+            # floating, dabbling: the head dips to the water, the tail waggles
+            return merge(sit_pose(1), ({"head": [(X, HEAD_DOWN * 70 * max(0.0, S(t, 1, .1)) ** 3), (Z, 8 * S(t, 1, .4))],
+                                        "tail": [(Z, 12 * S(t, 4))], "spine": [(X, 2 * S(t, 1))]}, {}))
         return r, o
+
+    def fly(t):
+        # flying: big slow wing beats, the feet tucked up, the body level
+        pr, po = sit_pose(1)
+        r = {b: v for b, v in pr.items() if b.startswith("leg")}
+        for b in wings:
+            r[b] = [(Y, -side(b) * (20 + 55 * S(t, 2)))]
+        r["spine"] = [(X, 3 * S(t, 2, .25))]
+        if has("tail"):
+            r["tail"] = [(X, -6)]
+        return r, {"root": Vector((0, 0, 0.04 * H * S(t, 2, .25)))}
 
     def follow(t):
         r, o = {}, {}
-        if kind == "quad":                 # a trot: diagonal pairs, a bob each step
+        if gait == "hop":                  # a rabbit's hop: the hind feet push off together, the front ones reach
+            n = 2
+            ph = (t * n) % 1
+            up = math.sin(math.pi * min(1, ph / 0.6)) if ph < 0.6 else 0
+            o["root"] = Vector((0, 0, 0.3 * H * up))
+            for b in legs:
+                r[b] = [(X, (32 if "H" in b else -30) * up)]
+            r["spine"] = [(X, -10 * up)]
+            r["head"] = [(X, 6 * up)]
+            if has("tail"):
+                r["tail"] = [(X, -15 * up)]
+        elif gait == "walk":               # a pigeon's walk: one foot then the other, the head bobbing with each step
+            for b in legs:
+                r[b] = [(X, 28 * S(t, 2, 0 if b.endswith("L") else 0.5))]
+            o["root"] = Vector((0, 0, 0.03 * H * abs(S(t, 2))))
+            r["head"] = [(X, HEAD_DOWN * 12 * S(t, 4))]
+            r["spine"] = [(Z, 3 * S(t, 2))]
+            if has("tail"):
+                r["tail"] = [(Z, 6 * S(t, 2))]
+        elif gait == "swim":               # paddling: a gentle rock, the tail waggling, the head nodding with the strokes
+            return merge(sit_pose(1), ({"spine": [(Z, 3 * S(t, 2)), (X, 2 * S(t, 2, .25))], "head": [(X, 5 * S(t, 2, .2))],
+                                        "tail": [(Z, 14 * S(t, 2))]}, {}))
+        elif kind == "quad":                 # a trot: diagonal pairs, a bob each step
             for b in legs:
                 pair = 0 if b in ("legFL", "legHR") else 0.5
                 r[b] = [(X, 26 * S(t, 2, pair))]
@@ -511,8 +578,20 @@ def clips_for(kind, bones, dims, name=""):
                 r[b] = [(Z, (16 + 10 * i) * S(t, 4, -0.15 * i))]
         return merge((r, o), sit_pose(ease(0.7, 1.0, t)))
 
-    return [("idle", 48, idle), ("follow", 24 if kind in ("bird", "frog") else 16, follow), ("sit", 48, sit),
-            ("climb", 36, climb)]
+    def sleep(t):
+        # asleep: slow breaths lift the back, the head stirs a little, the tail tip twitches now and then
+        breath = S(t, 1)
+        return ({"spine": [(X, -2.5 * breath)], "head": [(X, 2 * S(t, 1, .2)), (Z, 1.5 * S(t, 1, .5))],
+                 "tail": [(Z, 4 * S(t, 1, .3) + 6 * max(0.0, S(t, 2, .1)) ** 6)]},
+                {"root": Vector((0, 0, 0.015 * H * breath))})
+
+    if kind == "curl":                      # a sleeping cat never gets up: every clip is its breathing
+        return [("idle", 72, sleep), ("follow", 72, sleep), ("sit", 72, sleep), ("climb", 72, sleep)]
+    out = [("idle", 48, idle), ("follow", 24 if kind in ("bird", "frog") or gait else 16, follow), ("sit", 48, sit),
+           ("climb", 36, climb)]
+    if name in FLIES:
+        out.append(("fly", 12, fly))
+    return out
 
 
 def rig(path, kind, bones):

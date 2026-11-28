@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import type { CritterKind, CritterModels } from './CritterModels';
 import type { MachineData, MachineType } from '../core/types';
 import { COMPOST } from '../data/compost';
 import { CROP_SEEDLING, cropModels, CROPS, PLANTER, type CropId } from '../data/crops';
@@ -73,6 +74,8 @@ export class CropVisuals {
     private parent: pc.Entity,
     /** draws the fruit trees (TreeGen meshes); without it (tests) they show only their stone ring */
     private device?: pc.GraphicsDevice,
+    /** the farm's creatures' Tripo models (CritterModels); without it (tests) they keep their placeholder shapes */
+    private critters?: CritterModels,
   ) {
     sim.bus.on('planter.changed', ({ machineId }) => this.refresh(machineId));
     sim.bus.on('farm.machine', ({ machineId }) => this.refresh(machineId));
@@ -130,6 +133,20 @@ export class CropVisuals {
   private anims = new Map<string, { e: pc.Entity; at: (t: number) => [number, number, number, number?] }[]>();
   private time = 0;
 
+  /**
+   * A farm creature's Tripo model, once loaded, in place of its placeholder shapes (hidden then): `e` is the group the
+   * animation moves, `length` its size in the world, `clip` the one it plays (flying, swimming, shuffling, idling).
+   */
+  private dress(e: pc.Entity, kind: CritterKind, length: number, clip: string) {
+    void this.critters?.make(kind, { length, start: clip }).then((c) => {
+      if (!c || !e.parent) return; // (rebuilt meanwhile)
+      for (const ch of e.children) (ch as pc.Entity).enabled = false;
+      const k = e.getLocalScale().x || 1; // (a placeholder group may be scaled up)
+      c.holder.setLocalScale(1 / k, 1 / k, 1 / k);
+      e.addChild(c.holder);
+    });
+  }
+
   private buildExtra(root: pc.Entity, m: MachineData) {
     const x = this.sim.farmExtras;
     const st = x.st(m);
@@ -142,10 +159,13 @@ export class CropVisuals {
         if ((st.ready ?? 0) >= 1) shape(root, 'sphere', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 0.2 }), { pos: [0, 0.16, 0.24], scale: [0.14, 0.08, 0.06] });
         if (x.hiveSettled(m))
           for (let i = 0; i < 4; i++) {
-            const bee = shape(root, 'sphere', mat(PALETTE.gold), { scale: [0.055, 0.045, 0.07] });
+            const bee = group(root, 'bee');
+            shape(bee, 'sphere', mat(PALETTE.gold), { scale: [0.055, 0.045, 0.07] });
+            this.dress(bee, 'bumblebee', 0.09, 'move');
             anim(bee, (t) => {
               const a = t * (1.2 + i * 0.3) + i * 1.7 + seed;
-              return [Math.cos(a) * (0.35 + i * 0.08), 0.5 + Math.sin(a * 2.3) * 0.12, Math.sin(a) * (0.35 + i * 0.08)];
+              // facing along its circle (a model faces +z: a turn of −a does it)
+              return [Math.cos(a) * (0.35 + i * 0.08), 0.5 + Math.sin(a * 2.3) * 0.12, Math.sin(a) * (0.35 + i * 0.08), (-a * 180) / Math.PI];
             });
           }
         return;
@@ -154,7 +174,9 @@ export class CropVisuals {
         if (!x.pondFilled(m)) return;
         shape(root, 'cylinder', mat(PALETTE.water, { gloss: 0.9, opacity: 0.8 }), { pos: [0, 0.07, 0], scale: [0.74, 0.01, 0.74] });
         for (let i = 0; i < 2; i++) {
-          const fish = shape(root, 'sphere', mat(PALETTE.terracotta, { gloss: 0.6 }), { scale: [0.1, 0.03, 0.04] });
+          const fish = group(root, 'fish');
+          shape(fish, 'sphere', mat(PALETTE.terracotta, { gloss: 0.6 }), { scale: [0.04, 0.03, 0.1] });
+          this.dress(fish, i ? 'golden-carp' : 'koi', 0.13, 'move');
           anim(fish, (t) => {
             const a = t * 0.6 + i * Math.PI + seed;
             return [Math.cos(a) * 0.22, 0.06, Math.sin(a) * 0.22, (-a * 180) / Math.PI];
@@ -196,6 +218,7 @@ export class CropVisuals {
         shape(bird, 'sphere', mat(PALETTE.terracotta), { scale: [0.07, 0.06, 0.09] });
         shape(bird, 'sphere', mat(PALETTE.stoneCreamTop), { pos: [0, 0.04, 0.05], scale: 0.05 });
         shape(bird, 'cone', mat(PALETTE.gold), { pos: [0, 0.04, 0.09], rot: [90, 0, 0], scale: [0.02, 0.04, 0.02] });
+        this.dress(bird, 'songbird', 0.2, 'idle');
         anim(bird, (t) => [0, 0.92 + Math.abs(Math.sin(t * 3 + seed)) * 0.02, 0.18, Math.sin(t * 0.7 + seed) * 40]);
         return;
       }
@@ -218,6 +241,7 @@ export class CropVisuals {
         hog.setLocalScale(1.3, 1.3, 1.3);
         shape(hog, 'sphere', mat(PALETTE.woodDead), { pos: [0, 0.06, 0], scale: [0.14, 0.1, 0.18] });
         shape(hog, 'cone', mat(PALETTE.stoneCreamTop), { pos: [0, 0.05, 0.11], rot: [90, 0, 0], scale: [0.05, 0.07, 0.05] });
+        this.dress(hog, 'hedgehog', 0.24, 'move');
         anim(hog, (t) => {
           const a = Math.sin(t * 0.25 + seed) * 0.9;
           return [0.42 * Math.cos(a), 0, 0.42 * Math.sin(a) + 0.1, 90 - (a * 180) / Math.PI];
@@ -230,6 +254,7 @@ export class CropVisuals {
         for (let i = 0; i < 3; i++) {
           const fly = group(root, 'butterfly');
           for (const s of [-1, 1]) shape(fly, 'box', mat(colours[i], { emissive: colours[i], emissiveIntensity: 0.25 }), { pos: [s * 0.05, 0, 0], rot: [0, 0, s * 25], scale: [0.09, 0.006, 0.08] });
+          this.dress(fly, i === 1 ? 'swallowtail' : 'butterfly', 0.12, 'move');
           anim(fly, (t) => {
             const a = t * (0.8 + i * 0.25) + i * 2.1 + seed;
             return [Math.cos(a) * 0.35, 0.35 + Math.abs(Math.sin(t * 6 + i)) * 0.08 + Math.sin(a * 2) * 0.06, Math.sin(a * 1.3) * 0.35, (-a * 180) / Math.PI];

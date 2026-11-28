@@ -44,9 +44,9 @@ MATCH = dict(PAL, eye="#050505")
 # region gets one list colour (the best one-to-one match), so a light tan chest stays apart from a brown back even
 # when shading pulls both toward the same palette colour. A colour may be listed twice (two regions, one colour).
 ANIMALS = {
-    "butterfly": (0.18, 600, ["orange", "charcoal"], {"upright": True, "wings": ("orange", "charcoal"), "no_eyes": True}),
+    "butterfly": (0.18, 600, ["orange", "charcoal"], {"upright": True, "wings": ("orange", "charcoal"), "no_eyes": True, "yaw": 90}),
     "swallowtail": (0.20, 600, ["golden_yellow", "charcoal"], {"upright": True, "wings": ("golden_yellow", "charcoal"),
-                                                           "no_eyes": True}),
+                                                           "no_eyes": True, "yaw": 90}),
     "bumblebee": (0.12, 800, ["golden_yellow", "charcoal", "cream", "eye"], {"regions": True, "yaw": 34}),
     "songbird": (0.24, 1500, ["warm_brown", "dark_brown", "orange", "cream", "charcoal"], {}),
     "squirrel": (0.31, 2000, ["orange", "cream", "charcoal"], {"regions": True, "yaw": 43}),
@@ -67,7 +67,12 @@ ANIMALS = {
     "fawn": (0.38, 2500, ["orange", "cream", "charcoal", "dark_brown"], {"regions": True}),
     "koi": (0.17, 1000, ["cream", "orange", "coral", "charcoal"], {"yaw": 31}),
     "golden-carp": (0.16, 1000, ["golden_yellow", "orange", "charcoal"], {}),
-    "rainbow-minnow": (0.10, 1000, ["bright_blue", "cool_grey_blue", "cream", "coral", "eye"],
+    # the animals that live about the world (Fauna.ts), written to assets/raw/models/fauna/ (owner, 28 Nov)
+    "rabbit": (0.30, 2000, ["warm_brown", "cream", "warm_brown", "eye"], {"regions": True, "yaw": 90}),
+    "pigeon": (0.27, 2000, ["cool_grey_blue", "deep_navy", "cream", "eye"], {"regions": True, "yaw": 90}),
+    "duck": (0.34, 2000, ["cream", "orange", "eye"], {"regions": True, "yaw": 90}),
+    "sleeping-cat": (0.36, 2500, ["orange", "warm_brown", "cream", "charcoal"], {"regions": True, "no_eyes": True, "yaw": 90}),  # eyes shut
+    "rainbow-minnow": (0.10, 1000,["bright_blue", "cool_grey_blue", "cream", "coral", "eye"],
                        {"eyes": [(-0.0145, -0.034, 0.033), (0.0145, -0.034, 0.033)]}),
 }
 FILL = 0.92  # aim a little under each budget
