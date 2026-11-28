@@ -135,7 +135,6 @@ import { nextGrowth, partsAdded, pieceOf, type BotGrowth } from '../data/botPart
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
 import { TideSketchbook } from '../ui/TideSketchbook';
-import type { OldCityPanel } from '../ui/OldCityPanel';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
 import { VISITORS } from '../data/wildlife';
@@ -144,7 +143,9 @@ import { decorAnchor, DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, decorSize, PLOT_OP
 import { chunkKey } from '../core/Grid';
 import { decorChunkKey, type Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
-import { type LoadResult, SaveService, type Slot } from './SaveService';
+import { type LoadResult, type SavedSketch, SaveService, type Slot } from './SaveService';
+import { tideDrawsPhoto } from './TidePhotoStory';
+import { capturePhotoSketch } from '../rendering/PhotoSketch';
 import { Loading, type LoadSteps } from '../ui/Loading';
 import { ModelLibrary, useModels } from '../rendering/Models';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
@@ -389,6 +390,9 @@ export class Game {
   /** E21: the Old City's panels and held actions */
   private oc?: OldCityController;
   private tideSketchbook?: TideSketchbook;
+  private tidePhotoIntroQueued = false;
+  private tideFirstPhotoWriting = false;
+  private photoShutterPending = false;
   /** E21.8: the Keepers */
   private keepers?: KeeperVisuals;
   /** E23.2.3: sitting on benches and meditating at chargers */
@@ -417,6 +421,9 @@ export class Game {
     const loaded = lr.state;
     // E23.1.1: one rule set. Every new game is the Old City.
     const state = loaded ?? createInitialState(undefined);
+    if (state.tidePhoto?.introPending && this.saver.sketches().some((page) => page.photo === 'first')) {
+      state.tidePhoto.introPending = false;
+    }
     this.sim = new Sim(state, this.bus);
     // E23.7.1.2: a new game's choice of day (the game's own, or the real clock's); Settings shows the save's
     if (!loaded && opts.realClock) this.sim.clock.real = true;
@@ -1591,11 +1598,12 @@ export class Game {
   }
 
   /** "Quit to title" saves first (nothing in the menu loses progress), then goes to the title screen. */
-  quitToTitle() {
-    // E22.12: the loading screen covers the way out, as it covered the way in.
-    new Loading(!!this.settings.reducedMotion).show();
+  async quitToTitle() {
+    if (this.resetting) return;
     this.saveNow();
     this.resetting = true; // nothing writes after this save
+    // E22.12: the loading screen covers the way out, as it covered the way in.
+    await new Loading(!!this.settings.reducedMotion).show();
     setTimeout(() => (location.href = `${location.pathname}?title=1`), 60);
   }
 
@@ -1697,9 +1705,89 @@ export class Game {
    * post-processing), the haze colour fills in behind it.
    */
   private savePicture() {
-    this.app.once('frameend', () => saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color, PHOTO_FILTERS[this.photo.filter].css));
+    if (this.photoShutterPending) return;
+    this.photoShutterPending = true;
+    const filter = PHOTO_FILTERS[this.photo.filter].css;
+    this.app.once('frameend', () => {
+      this.photoShutterPending = false;
+      saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color, filter);
+    });
+    this.app.renderNextFrame = true;
+    this.photoBar.sketchNotice('');
     this.photoBar.flashNow();
     this.sfx.click();
+
+    if (this.sim.keepers.step('tide') === 'asleep' || this.tideFirstPhotoWriting) return;
+    const story = this.sim.state.tidePhoto ??= { introPending: false, misses: 0 };
+    const first = story.introPending;
+    if (!tideDrawsPhoto(story.misses, first, Math.random())) {
+      story.misses++;
+      this.save();
+      return;
+    }
+    const tutorial = this.photo.tutorial;
+    if (first) this.tideFirstPhotoWriting = true;
+    story.misses = 0;
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    // Queue the camera read at the shutter. Loading the pencil renderer can finish after the image is captured.
+    void Promise.all([
+      capturePhotoSketch(this.app, this.camera.cam, this.look.post.frame, LOOK.haze.color, filter),
+      import('../rendering/SketchPencil'),
+    ]).then(([capture, { drawPencil }]) => {
+      if (this.resetting) return;
+      const page: SavedSketch = {
+        seed,
+        title: first ? 'Our first picture' : 'From your camera',
+        note: first ? 'My first page since waking. I’m glad you were there.' : 'You caught a little piece of the city. I wanted to keep it.',
+        image: drawPencil(capture, seed),
+        photo: first ? 'first' : 'photo',
+      };
+      if (!this.saver.keepSketch(page)) throw new Error('The Collection could not save the page.');
+      if (first) story.introPending = false;
+      this.save();
+      if (first && tutorial && this.photo.active && this.photo.tutorial) {
+        this.photo.exit();
+        this.tideBook()?.showFirstPhoto(page);
+        this.syncPanelPause();
+      } else if (this.photo.active) {
+        this.photoBar.sketchNotice('Tide drew this one. It’s in your Collection.');
+      } else this.hud.toast('Tide drew your photo. Open it in Backpack → Collection.', 'gold', 4);
+    }).catch(() => {
+      if (this.resetting) return;
+      story.misses = Math.max(story.misses, 4);
+      this.save();
+      // The photo still downloads. The next eligible shot can try the sketch again.
+      if (this.photo.active) this.photoBar.sketchNotice('Tide couldn’t keep this sketch. Try another photo.');
+      else this.hud.toast('Tide couldn’t keep this sketch. Try another photo.', '', 4);
+    }).finally(() => {
+      if (first) this.tideFirstPhotoWriting = false;
+    });
+  }
+
+  private startTidePhotoIntro() {
+    if (!this.bot || !this.sim.state.tidePhoto?.introPending || this.photo.active) return;
+    this.photoBar.sketchNotice('');
+    this.photo.enter(true);
+    const tide = this.keepers?.headWorld('tide');
+    if (!tide) return;
+    const [x, y, z] = this.bot.world();
+    // The chase camera already lifts its pivot above the ground. Keep the faces above the toolbar.
+    const target: [number, number, number] = [(x + tide.x) / 2, y + 0.15, (z + tide.z) / 2];
+    // Look across the pair so standing one tile in front of Tide doesn't hide either character.
+    const side = Math.atan2(tide.z - z, x - tide.x) * 180 / Math.PI;
+    const yaw = Math.cos(side * Math.PI / 180) > 0 ? side + 180 : side;
+    const zoom = Math.max(2.5, Math.min(4.1, 4.5 / Math.max(1, Math.hypot(x - tide.x, z - tide.z))));
+    this.camera.restore({ ...this.camera.snapshot(), target, goal: target, yaw, yawGoal: yaw, zoom, zoomGoal: zoom, pitchOffset: 0 });
+  }
+
+  private tideBook(): TideSketchbook | undefined {
+    if (!this.oc) return undefined;
+    return this.tideSketchbook ??= new TideSketchbook(this.oc.panel, this.saver, async (seed) => {
+      const [{ captureFrog }, { drawPencil }] = await Promise.all([
+        import('../rendering/SketchCapture'), import('../rendering/SketchPencil'),
+      ]);
+      return drawPencil(await captureFrog(this.app, seed), seed);
+    });
   }
 
   /** E23.2.1: F / d-pad left: eat one snack (biomass or food) to recharge. */
@@ -2992,17 +3080,17 @@ export class Game {
       bot: this.bot!,
       bindings: this.bindings,
       game: this,
-      talkToTide: (panel: OldCityPanel, talk: () => void) => {
-        this.tideSketchbook ??= new TideSketchbook(panel, this.saver, async (seed) => {
-          const [{ captureFrog }, { drawPencil }] = await Promise.all([
-            import('../rendering/SketchCapture'), import('../rendering/SketchPencil'),
-          ]);
-          return drawPencil(await captureFrog(this.app, seed), seed);
-        });
+      onTideWake: () => {
+        this.sim.state.tidePhoto = { introPending: true, misses: 0 };
+        this.tidePhotoIntroQueued = true;
+        this.save();
+      },
+      talkToTide: (talk: () => void) => {
         const keepers = this.sim.keepers;
         const talkLabel = keepers.giftFor('tide') ? 'Give Tide a gift'
           : keepers.step('tide') === 'request1' ? 'About your request' : 'Talk with Tide';
-        this.tideSketchbook.open(talk, talkLabel);
+        const firstPhoto = this.sim.state.tidePhoto?.introPending ? () => this.startTidePhotoIntro() : undefined;
+        this.tideBook()?.open(talk, talkLabel, firstPhoto);
         this.syncPanelPause();
       },
       // E23.9.1: a page read from its post opens the journal at it
@@ -6067,6 +6155,11 @@ export class Game {
       this.updateMouseCapture();
       this.oc?.update(wdt);
       this.keepers?.update(wdt);
+      if (this.tidePhotoIntroQueued && !this.oc?.bubble.speaking() && !this.photo.active && !this.panelOpen() &&
+          !this.paused && !this.cinematic) {
+        this.tidePhotoIntroQueued = false;
+        this.startTidePhotoIntro();
+      }
       this.resting?.update(wdt);
       this.updateVisitors(wdt);
       this.photo.update(dt);

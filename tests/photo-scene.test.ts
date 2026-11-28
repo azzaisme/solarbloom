@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Bindings } from '../src/app/Bindings';
 import { PhotoMode, type PhotoState } from '../src/app/PhotoMode';
+import { tideDrawsPhoto } from '../src/app/TidePhotoStory';
 import { sceneNow } from '../src/app/PhotoScene';
 import { GOLDEN_HOUR, PHOTO_FILTERS, PHOTO_WEATHERS } from '../src/data/photo';
 import { createInitialState } from '../src/core/GameState';
@@ -119,5 +120,26 @@ describe('E23.7.3: photo mode sets the time and the weather', () => {
     // and leaving puts the screen back on the game's own sky
     photo.exit();
     expect(sceneNow(sim, photo)).toEqual({ f: sim.clock.dayFraction(), weather: sim.weather.kind() });
+  });
+});
+
+describe('Tide’s first picture', () => {
+  it('guarantees the tutorial photo and a fifth regular shot after four misses', () => {
+    expect(tideDrawsPhoto(0, true, 0.99)).toBe(true);
+    for (let misses = 0; misses < 4; misses++) {
+      expect(tideDrawsPhoto(misses, false, 0.50)).toBe(false);
+      expect(tideDrawsPhoto(misses, false, 0.49)).toBe(true);
+    }
+    expect(tideDrawsPhoto(4, false, 0.99)).toBe(true);
+  });
+
+  it('shows Bloombot and freezes the scene for the introduction, restoring normal choices on exit', () => {
+    const { photo, out } = setup();
+    photo.hideBot = photo.clean = true;
+    photo.enter(true);
+    expect(out.bar).toMatchObject({ tutorial: true, hideBot: false, clean: false, freeze: true });
+    photo.exit();
+    photo.enter();
+    expect(out.bar).toMatchObject({ tutorial: false, hideBot: true, clean: true, freeze: false });
   });
 });

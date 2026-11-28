@@ -60,6 +60,7 @@ export interface PhotoBot {
 }
 
 export interface PhotoState {
+  tutorial?: boolean;
   freeze: boolean;
   hideBot: boolean;
   dof: boolean;
@@ -98,6 +99,8 @@ const MOVES: readonly [Action, number, number][] = [
 
 export class PhotoMode {
   active = false;
+  tutorial = false;
+  private tutorialSettings?: { hideBot: boolean; clean: boolean; freeze: boolean };
   /** options, kept for the session */
   freeze = false;
   hideBot = false;
@@ -122,7 +125,7 @@ export class PhotoMode {
   }
 
   get state(): PhotoState {
-    return { freeze: this.freeze, hideBot: this.hideBot, dof: this.dof, clean: this.clean, hour: this.hour, weather: this.weather, filter: this.filter };
+    return { tutorial: this.tutorial, freeze: this.freeze, hideBot: this.hideBot, dof: this.dof, clean: this.clean, hour: this.hour, weather: this.weather, filter: this.filter };
   }
 
   toggle() {
@@ -130,8 +133,14 @@ export class PhotoMode {
     else this.enter();
   }
 
-  enter() {
+  enter(tutorial = false) {
     if (this.active) return;
+    this.tutorial = tutorial;
+    if (tutorial) {
+      this.tutorialSettings = { hideBot: this.hideBot, clean: this.clean, freeze: this.freeze };
+      this.hideBot = this.clean = false;
+      this.freeze = true;
+    }
     const { camera, bot } = this.host;
     this.saved = { camera: camera.snapshot(), following: bot?.following };
     this.active = true;
@@ -156,6 +165,11 @@ export class PhotoMode {
     if (!this.active) return;
     const { camera, bot } = this.host;
     this.active = false;
+    this.tutorial = false;
+    if (this.tutorialSettings) {
+      Object.assign(this, this.tutorialSettings);
+      this.tutorialSettings = undefined;
+    }
     this.held.clear();
     const s = this.saved!;
     this.saved = undefined;
