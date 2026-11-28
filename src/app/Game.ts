@@ -149,8 +149,8 @@ import { capturePhotoSketch } from '../rendering/PhotoSketch';
 import { Loading, type LoadSteps } from '../ui/Loading';
 import { ModelLibrary, useModels } from '../rendering/Models';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
-import { padStick, PhotoMode } from './PhotoMode';
-import { PHOTO_FILTERS } from '../data/photo';
+import { padStick, type PhotoDir, PhotoMode } from './PhotoMode';
+import { frameRect, PHOTO_FILTERS, PHOTO_FRAMES, PHOTO_MAX_SIDE } from '../data/photo';
 import { sceneNow } from './PhotoScene';
 import { daylightAt, gameSecondsOf } from '../gameplay/Clock';
 import { GLOOMY } from '../gameplay/PowerEnv';
@@ -163,7 +163,9 @@ import { SnowSheets } from '../rendering/SnowSheet';
 import { fallingLeafColour, seasonLookAt, seasonShading, type SeasonLookNow } from '../rendering/SeasonLook';
 import { WeatherVisuals, type WeatherLook } from '../rendering/WeatherVisuals';
 import { buildRadio } from '../rendering/HouseRadio';
-import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
+import { downloadBlob, downloadCanvas, PhotoBar, pictureCanvas, pictureName } from '../ui/PhotoBar';
+import { PhotoShot } from '../ui/PhotoShot';
+import { ALBUM, albumStore, encodeJpeg, PhotoAlbum, shrinkBlob } from './PhotoAlbum';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
 import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
 import { ControlsTable } from '../ui/ControlsTable';
@@ -247,6 +249,10 @@ const OLD_DEAD_NAME: Record<string, string> = { sand: 'Dead sand', paving: 'Crac
 /** The d-pad's buttons (12–15) to the load wheel's directions; the arrow keys stand for the same buttons. */
 const WHEEL_DPAD: Record<number, 'up' | 'down' | 'left' | 'right'> = { 12: 'up', 13: 'down', 14: 'left', 15: 'right' };
 const WHEEL_KEYS: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
+/** #photo-2: the arrow keys and the d-pad work photo mode's panel */
+const PHOTO_NAV_PAD: Record<number, PhotoDir> = WHEEL_DPAD;
+const PHOTO_NAV_KEYS: Record<string, PhotoDir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+const MOVE_ACTIONS = ['up', 'down', 'left', 'right'] as const;
 
 export class Game {
   readonly app: pc.Application;
@@ -380,6 +386,10 @@ export class Game {
   /** E19.4.1 (#260): photo mode and its controls bar */
   private photo!: PhotoMode;
   private photoBar!: PhotoBar;
+  /** #photo-2: the picture just taken (Save or Dismiss), and the album the saved ones go to */
+  private photoShot!: PhotoShot;
+  private photoAlbum!: PhotoAlbum;
+  private photoPicture?: HTMLCanvasElement;
   /** E19 (#245): plot choices and unlocks (cosmetic; never read by the sim) */
   private cozy!: Cozy;
   /** E19.1.2: the plot the picker is open for, and the option it's previewing there */
@@ -711,9 +721,20 @@ export class Game {
       // E21.22: the right stick's up and down tilts the view (it zooms only in photo mode)
       bot.onZoom = (f) => (this.photo?.active ? this.photo.zoom(f) : this.camTurn(0, -(Math.log(f) / Math.log(1.8)) * 60));
       bot.onPad = (i) => {
+        // #photo-2: in photo mode the d-pad works the panel (Tide's lesson has no panel: its buttons keep their actions)
+        if (this.photoShot?.open) return PHOTO_NAV_PAD[i] ? this.photoShot.nav(PHOTO_NAV_PAD[i]) : i === 0 ? this.photoShot.press() : i === 1 ? this.photoShot.back() : undefined;
+        if (this.photo?.active && !this.photo.tutorial && PHOTO_NAV_PAD[i]) return this.photo.nav(PHOTO_NAV_PAD[i]);
+        // and A presses the row in hand (with none in hand it keeps its shortcut: hide bloombot)
+        if (this.photo?.active && i === 0 && this.photo.pressRow()) return;
         if (this.wheelPick(i)) return; // the load wheel is up: the d-pad picks a load
-        const a = this.resolveButton(i);
-        if (a === 'pulse' && this.beginMegaHold(i)) return;
+        // the bumpers change the panel's tab, as they do in the backpack (the owner, 28 Nov 2026)
+        const tab = this.photo?.active ? this.bindings.actionForButton(i, ['panel']) : undefined;
+        if ((tab === 'prevTab' || tab === 'nextTab') && this.photo.stepTab(tab === 'nextTab' ? 1 : -1)) return;
+        // photo mode gives the build buttons its own meanings, as its keys do: Remove picks a filter, and in Tide's
+        // lesson (no panel) the bumpers tilt. Every other button keeps its walking action (A, X, Y…).
+        const b = this.photo?.active ? this.bindings.actionForButton(i, ['build']) : undefined;
+        const a = b === 'rotate' || b === 'rotateBack' || b === 'removeMode' ? b : this.resolveButton(i);
+        if (a === 'pulse' && !this.photo?.active && this.beginMegaHold(i)) return;
         if (a && a !== 'sprint') this.doAction(a);
       };
       // E22.4: the rebinding screen takes the next press; that press then does nothing else.
@@ -1650,12 +1671,51 @@ export class Game {
   /** E19.4.1 (#260): photo mode, wired to the camera, bloombot, the HUD and the look. */
   private createPhotoMode() {
     const b = this.bot;
+    const self = this;
     this.photoBar = new PhotoBar(
       (a) => this.photo.action(a),
       (a) => this.hudKey(a),
-      (h) => this.photo.setHour(h),
-      () => this.sim.clock.hour() + this.sim.clock.minute() / 60,
+      {
+        setTab: (t) => this.photo.setTab(t),
+        adjust: (id, dir) => this.photo.adjust(id, dir),
+        setValue: (id, v) => this.photo.setValue(id, v),
+        setHour: (h) => this.photo.setHour(h),
+      },
     );
+    // #photo-2: the album (one per save slot, read once now), and the card that asks what to do with a new picture
+    this.photoAlbum = new PhotoAlbum(albumStore(), this.saver.slot, shrinkBlob);
+    this.photoAlbum.onChange = () => {
+      const bp = this.hud.backpack;
+      if (bp.isOpen && bp.current === 'collection') bp.show('collection');
+    };
+    void this.photoAlbum.load();
+    this.photoShot = new PhotoShot({
+      keep: async (replace) => {
+        const pic = this.photoPicture;
+        return !!pic && !!(await this.photoAlbum.keep({ encode: (side, quality) => encodeJpeg(pic, pic.width, pic.height, side, quality) }, replace));
+      },
+      exportFile: () => this.photoPicture && downloadCanvas(this.photoPicture),
+      fileSaved: desktopApi() ? 'Saved in Pictures › Solarbloom' : 'File saved',
+      full: () => this.photoAlbum.full,
+      best: () => this.photoAlbum.best.map((p) => ({ id: p.id, url: this.photoAlbum.url(p.id) })),
+      closed: (saved) => {
+        this.photoPicture = undefined;
+        if (saved && this.photo.active) this.photoBar.sketchNotice('Saved. It’s in Backpack → Collection.');
+      },
+    });
+    this.hud.backpack.album = {
+      best: () => this.photoAlbum.best,
+      others: () => this.photoAlbum.others,
+      bestMax: ALBUM.best,
+      url: (id) => this.photoAlbum.url(id),
+      remove: (id) => this.photoAlbum.remove(id),
+      exportFile: (id) => {
+        const p = this.photoAlbum.find(id);
+        if (p) downloadBlob(p.blob, pictureName(new Date(p.at), 'jpg'));
+      },
+    };
+    // #photo-2: where bloombot faced before "Looks at you" turned it to the camera
+    let facedWas: number | undefined;
     this.photo = new PhotoMode(
       {
         camera: this.camera,
@@ -1668,6 +1728,25 @@ export class Game {
           },
           setVisible: (v) => (b.visuals.root.enabled = v),
           pose: () => void b.visuals.play('cheer'),
+          // #photo-2: its own clips on the spot, a held visor face, and a turn to the camera (and back on leaving)
+          play: (pose) => {
+            if (pose !== 'stand') b.visuals.play(pose === 'wave' ? 'interact' : pose);
+          },
+          setFace: (face) => b.visuals.setFace(face === 'auto' ? 'happy' : face),
+          faceCamera: (on) => {
+            if (on) {
+              facedWas ??= b.pose.facing;
+              const c = this.camera.entity.getPosition();
+              const [x, , z] = b.world();
+              b.turnTo(Math.atan2(c.x - x, c.z - z));
+            } else if (facedWas !== undefined) {
+              b.turnTo(facedWas);
+              facedWas = undefined;
+            }
+          },
+          get seated() {
+            return !!self.resting?.active;
+          },
         },
         setHudHidden: (hidden) => {
           document.body.classList.toggle('photo', hidden);
@@ -1692,6 +1771,14 @@ export class Game {
         stick: () => padStick(),
         clockHour: () => this.sim.clock.hour() + this.sim.clock.minute() / 60,
         setFilter: (css) => ((this.app.graphicsDevice.canvas as HTMLCanvasElement).style.filter = css),
+        // #photo-2: the lens's blur and the vignette (the post stack), and the brightness (the exposure, in stops)
+        setLook: (l) => {
+          this.look.setPhotoLens(l && { focus: l.focus, blur: l.blur }, l?.vignette || undefined);
+          this.dayNight.exposureGain = l ? Math.pow(2, l.ev) : 1;
+        },
+        focusAt: () => this.photoFocusAt(),
+        hasPost: () => this.look.post.enabled,
+        hasPointer: () => this.bot?.lastInput !== 'pad',
       },
       this.bindings,
     );
@@ -1700,18 +1787,69 @@ export class Game {
   }
 
   /**
-   * E19.4.1: saves the canvas as a PNG, right after the next frame is drawn (the drawing buffer is only readable
+   * #photo-2: "Pick a spot": how far in front of the camera the world under the pointer is: bloombot when the
+   * pointer is on it, otherwise the ground there (undefined at the sky, or with the pointer off the picture).
+   */
+  private photoFocusAt(): number | undefined {
+    if (!this.pointer.inside) return undefined;
+    const cam = this.camera;
+    const eye = cam.entity.getPosition();
+    const fwd = cam.entity.forward;
+    const depth = (x: number, y: number, z: number) => (x - eye.x) * fwd.x + (y - eye.y) * fwd.y + (z - eye.z) * fwd.z;
+    const b = this.bot;
+    if (b && b.visuals.root.enabled) {
+      // bloombot's middle, within about its own width of the pointer's ray
+      const [x, y, z] = b.world();
+      const { o, d } = cam.ray(this.pointer.x, this.pointer.y);
+      const t = (x - o.x) * d.x + (y + 0.45 - o.y) * d.y + (z - o.z) * d.z;
+      if (t > 0 && Math.hypot(o.x + d.x * t - x, o.y + d.y * t - (y + 0.45), o.z + d.z * t - z) < 0.55) return depth(x, y + 0.45, z);
+    }
+    const g = cam.groundAt(this.pointer.x, this.pointer.y, 400);
+    return g ? depth(g.x, g.y, g.z) : undefined;
+  }
+
+  /**
+   * E19.4.1: takes the picture off the canvas, right after the next frame is drawn (the drawing buffer is only readable
    * then). The HUD is DOM over the canvas, so it is never in the picture. Where the canvas is see-through (no
    * post-processing), the haze colour fills in behind it.
+   *
+   * #photo-2: the picture is cut to the frame's shape. A double-size picture is drawn for the shutter alone: the
+   * canvas takes twice the pixels each way (no side past PHOTO_MAX_SIDE) for two frames (the post stack's targets
+   * follow on the first), the second is saved, and the canvas goes back to the screen's size.
    */
   private savePicture() {
     if (this.photoShutterPending) return;
     this.photoShutterPending = true;
     const filter = PHOTO_FILTERS[this.photo.filter].css;
-    this.app.once('frameend', () => {
+    const canvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const ratio = PHOTO_FRAMES[this.photo.frame].ratio;
+    const scale = Math.min(this.photo.pictureScale, PHOTO_MAX_SIDE / Math.max(1, canvas.width, canvas.height));
+    const big = scale > 1.01;
+    const shoot = () => {
       this.photoShutterPending = false;
-      saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color, filter);
-    });
+      // #photo-2: nothing is kept yet: the picture is shown, and the player saves it to the album or dismisses it
+      // (Tide's lesson has no album step: Tide keeps that one)
+      const picture = pictureCanvas(canvas, LOOK.haze.color, filter, ratio ? frameRect(canvas.width, canvas.height, ratio) : undefined);
+      if (picture && this.photo.active && !this.photo.tutorial) {
+        this.photo.clearKeys();
+        this.photoPicture = picture;
+        this.photoShot.show(picture);
+      }
+      if (big) {
+        this.look.post.setLensScale(1);
+        this.app.setCanvasResolution(pc.RESOLUTION_AUTO);
+        this.app.resizeCanvas();
+        this.app.renderNextFrame = true;
+      }
+    };
+    if (big) {
+      this.look.post.setLensScale(scale); // the blur is in pixels: as wide in the big picture as on screen
+      this.app.setCanvasResolution(pc.RESOLUTION_FIXED, canvas.clientWidth * scale, canvas.clientHeight * scale);
+      this.app.once('frameend', () => {
+        this.app.once('frameend', shoot);
+        this.app.renderNextFrame = true;
+      });
+    } else this.app.once('frameend', shoot);
     this.app.renderNextFrame = true;
     this.photoBar.sketchNotice('');
     this.photoBar.flashNow();
@@ -1821,6 +1959,24 @@ export class Game {
         return;
       }
       if (this.bot && this.photo.active) {
+        // #photo-2: the picture just taken is up: the keys are its buttons' (arrows move, Enter or Space press, Esc dismisses)
+        if (this.photoShot.open) {
+          e.preventDefault();
+          if (PHOTO_NAV_KEYS[e.code]) this.photoShot.nav(PHOTO_NAV_KEYS[e.code]);
+          else if (e.code === FIXED_KEY) this.photoShot.back();
+          else if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space')) this.photoShot.press();
+          return;
+        }
+        // #photo-2: the arrow keys work the panel (rows up and down, a change left and right), as the d-pad does,
+        // while the other movement keys pan (arrows that are the only movement keys keep panning)
+        const nav = PHOTO_NAV_KEYS[e.code];
+        if (nav && !this.photo.tutorial && MOVE_ACTIONS.every((m) => this.bindings.keys[m].some((c) => !c.startsWith('Arrow')))) {
+          e.preventDefault();
+          this.photo.nav(nav);
+          return;
+        }
+        // and Enter presses the row in hand, as the pad's A does
+        if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.photo.pressRow()) return e.preventDefault();
         // E19.4.1: photo mode reads the same map with its own meanings (PhotoMode); held keys pan.
         this.photo.key(e.code, true);
         const a = e.code === FIXED_KEY ? 'cancel' : this.bindings.actionForCode(e.code, ['build', 'world', 'any']);
@@ -1892,6 +2048,7 @@ export class Game {
   /** Bloombot: one action from a key, mouse input or pad button. Movement and sprint are read by BotController. */
   private doAction(a: Action) {
     this.bot?.wake(); // #671: no idle moment while it plays
+    if (this.photoShot?.open) return; // #photo-2: the picture just taken has the keys and buttons
     if ((this.photo.active && a !== 'debug') || a === 'photo') {
       if (!this.cinematic || this.photo.active) this.photo.action(a);
       return;
@@ -4632,6 +4789,11 @@ export class Game {
   }
 
   private onClick(x: number, y: number, button: number) {
+    // #photo-2: "Pick a spot": the press on the picture that sets the focus (other presses there do nothing: a drag pans)
+    if (this.photo.active && this.photo.picking && this.resolveKey(`Mouse${button}`) === 'pulse') {
+      this.pointer = { x, y, inside: true };
+      this.photo.action('pulse');
+    }
     if (this.cinematic || this.photo.active) return;
     if (this.bot) {
       // E22.1: mouse buttons are bindable: the pulse button uses the tool on the aimed tile (walking there first if
@@ -6162,7 +6324,7 @@ export class Game {
       }
       this.resting?.update(wdt);
       this.updateVisitors(wdt);
-      this.photo.update(dt);
+      if (!this.photoShot.open) this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
       // E24 (#609): the way to the goal spot (the one #605's card and Show me where use), on the map and in the world.
