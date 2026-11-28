@@ -33,7 +33,8 @@ const pngSize = (file) => {
   return [b.readUInt32BE(16), b.readUInt32BE(20)];
 };
 try {
-  for (const size of process.env.QUICK ? SIZES.slice(0, 1) : SIZES) {
+  // SIZE=deck (or desktop): just that size
+  for (const size of process.env.SIZE ? SIZES.filter((z) => z.name === process.env.SIZE) : SIZES) {
     console.log(size.name);
     const page = await browser.newPage({ viewport: { width: size.width, height: size.height }, acceptDownloads: true });
     const errors = [];

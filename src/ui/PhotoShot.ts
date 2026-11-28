@@ -16,6 +16,8 @@ export interface PhotoShotHost {
   keep(replace?: string): Promise<boolean>;
   /** downloads the picture as a file */
   exportFile(): void;
+  /** what the file button says once pressed (the desktop build names the folder the file went to) */
+  fileSaved?: string;
   /** the twelve good pictures are full */
   full(): boolean;
   /** the twelve, for the replace picker */
@@ -71,7 +73,7 @@ export class PhotoShot {
   private render() {
     const full = this.host.full();
     const msg = this.error || (this.picking ? 'Choose the picture this one replaces. It stays in your album as a small copy.' : full ? `Your ${ALBUM.best} best pictures are full. Keep this one as a small copy, or give it the place of one of them.` : '');
-    const file = `<button class="pn-btn" data-shot="file"${this.exported ? ' disabled' : ''}>${this.exported ? 'File saved' : 'Save as a file'}</button>`;
+    const file = `<button class="pn-btn" data-shot="file"${this.exported ? ' disabled' : ''}>${this.exported ? (this.host.fileSaved ?? 'File saved') : 'Save as a file'}</button>`;
     const buttons = this.picking
       ? `<div class="ps-grid">${this.host.best().map((p, i) => `<button data-shot="replace" data-id="${p.id}" aria-label="Replace picture ${i + 1}"><img src="${p.url}" alt=""></button>`).join('')}</div>` +
         `<div class="ps-row"><button class="pn-btn" data-shot="back">Back${glyph('cancel')}</button></div>`

@@ -724,9 +724,14 @@ export class Game {
         // #photo-2: in photo mode the d-pad works the panel (Tide's lesson has no panel: its buttons keep their actions)
         if (this.photoShot?.open) return PHOTO_NAV_PAD[i] ? this.photoShot.nav(PHOTO_NAV_PAD[i]) : i === 0 ? this.photoShot.press() : i === 1 ? this.photoShot.back() : undefined;
         if (this.photo?.active && !this.photo.tutorial && PHOTO_NAV_PAD[i]) return this.photo.nav(PHOTO_NAV_PAD[i]);
+        // and A presses the row in hand (with none in hand it keeps its shortcut: hide bloombot)
+        if (this.photo?.active && i === 0 && this.photo.pressRow()) return;
         if (this.wheelPick(i)) return; // the load wheel is up: the d-pad picks a load
-        const a = this.resolveButton(i);
-        if (a === 'pulse' && this.beginMegaHold(i)) return;
+        // photo mode gives the build buttons its own meanings, as its keys do: the bumpers tilt (they don't turn
+        // the load wheel) and Remove picks a filter. Every other button keeps its walking action (A, X, Y…).
+        const b = this.photo?.active ? this.bindings.actionForButton(i, ['build']) : undefined;
+        const a = b === 'rotate' || b === 'rotateBack' || b === 'removeMode' ? b : this.resolveButton(i);
+        if (a === 'pulse' && !this.photo?.active && this.beginMegaHold(i)) return;
         if (a && a !== 'sprint') this.doAction(a);
       };
       // E22.4: the rebinding screen takes the next press; that press then does nothing else.
@@ -1687,6 +1692,7 @@ export class Game {
         return !!pic && !!(await this.photoAlbum.keep({ encode: (side, quality) => encodeJpeg(pic, pic.width, pic.height, side, quality) }, replace));
       },
       exportFile: () => this.photoPicture && downloadCanvas(this.photoPicture),
+      fileSaved: desktopApi() ? 'Saved in Pictures › Solarbloom' : 'File saved',
       full: () => this.photoAlbum.full,
       best: () => this.photoAlbum.best.map((p) => ({ id: p.id, url: this.photoAlbum.url(p.id) })),
       closed: (saved) => {
@@ -1769,6 +1775,7 @@ export class Game {
         },
         focusAt: () => this.photoFocusAt(),
         hasPost: () => this.look.post.enabled,
+        hasPointer: () => this.bot?.lastInput !== 'pad',
       },
       this.bindings,
     );
@@ -1965,6 +1972,8 @@ export class Game {
           this.photo.nav(nav);
           return;
         }
+        // and Enter presses the row in hand, as the pad's A does
+        if (!e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.photo.pressRow()) return e.preventDefault();
         // E19.4.1: photo mode reads the same map with its own meanings (PhotoMode); held keys pan.
         this.photo.key(e.code, true);
         const a = e.code === FIXED_KEY ? 'cancel' : this.bindings.actionForCode(e.code, ['build', 'world', 'any']);

@@ -6,7 +6,7 @@ import { focalLength, focusFromSlider, focusToSlider, frameRect, PHOTO_FRAMES, P
 // Photo mode 2 (#photo-2): the lens, the focus, the light, bloombot's poses and the frame, as a panel of rows.
 // Presentation only: PhotoMode steers a camera and a host, and never the game.
 
-function setup(opts: { post?: boolean; seated?: boolean } = {}) {
+function setup(opts: { post?: boolean; seated?: boolean; pointer?: boolean } = {}) {
   const cam = { snapshot: () => ({}) as never, restore: () => {}, pitchOffset: 0, maxZoom: 4.2, held: false, fov: 50, fovOverride: undefined as number | undefined, roll: 0, zoomBy: () => {}, pan: () => {}, orbit: () => {}, recentre: () => {} };
   const out = { bar: undefined as PhotoState | undefined, look: undefined as PhotoLook | undefined, looks: 0, shots: 0, depth: 7.5 as number | undefined, poses: [] as PhotoPose[], faces: [] as PhotoFace[], facing: [] as boolean[], visible: true };
   const photo = new PhotoMode(
@@ -32,6 +32,7 @@ function setup(opts: { post?: boolean; seated?: boolean } = {}) {
       },
       focusAt: () => out.depth,
       hasPost: () => opts.post ?? true,
+      hasPointer: () => opts.pointer ?? true,
     },
     new Bindings(),
   );
@@ -86,6 +87,31 @@ describe('#photo-2: the panel', () => {
         if (r.action) shortcuts[r.id] = r.action;
       }
     expect(shortcuts).toEqual({ tilt: 'rotate', resetView: 'recentre', dof: 'eat', hour: 'pinNext', weather: 'map', filter: 'removeMode', hideBot: 'interact', freeze: 'buildMenu', clean: 'backpack' });
+  });
+
+  it('A (or Enter) presses the row in hand: a toggle, a button or a choice; on the tabs or a slider it keeps its own meaning', () => {
+    const { photo, out } = setup();
+    photo.enter();
+    expect(photo.pressRow()).toBe(false); // on the tabs
+    photo.nav('down'); // the lens: a slider
+    expect(photo.pressRow()).toBe(false);
+    photo.setTab('bot');
+    photo.nav('up');
+    photo.nav('up');
+    photo.nav('down'); // the first row: bloombot in the picture or not
+    expect(photo.pressRow()).toBe(true);
+    expect([out.bar?.hideBot, out.visible]).toEqual([true, false]);
+    photo.pressRow();
+    photo.nav('down'); // the pose: a choice steps on
+    expect(photo.pressRow()).toBe(true);
+    expect(out.poses).toEqual(['cheer']);
+    photo.setTab('frame');
+    for (let i = 0; i < 5; i++) photo.nav('down'); // the last row: hide the panel
+    expect(photo.pressRow()).toBe(true);
+    expect(out.bar?.clean).toBe(true);
+    expect(photo.pressRow()).toBe(false); // hidden: A is its shortcut again
+    photo.exit();
+    expect(photo.pressRow()).toBe(false);
   });
 
   it('Tide’s lesson has no panel to walk', () => {
@@ -191,6 +217,17 @@ describe('#photo-2: focus, brightness and the vignette', () => {
     out.depth = 500;
     photo.action('pulse');
     expect(out.look?.focus).toBe(PHOTO_LENS.focusMax);
+  });
+
+  it('“Pick a spot” needs a pointer: with a pad in hand the row says so and does nothing', () => {
+    const { photo, out } = setup({ pointer: false });
+    photo.enter();
+    photo.setTab('focus');
+    expect(row(out.bar, 'pick').off).toBe('This needs a mouse: use the slider above');
+    photo.adjust('pick');
+    expect(out.bar?.picking).toBe(false);
+    photo.setValue('focus', 0.5); // the slider still sets the focus
+    expect(out.look?.focus).toBeGreaterThan(0);
   });
 
   it('with the blur off its rows wait, and without post-processing the blur and vignette say why', () => {

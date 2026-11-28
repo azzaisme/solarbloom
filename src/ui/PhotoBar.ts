@@ -113,8 +113,8 @@ export class PhotoBar {
     } else {
       // one sentence for the hands in use: what moves the camera, and what works the panel
       const help = pad
-        ? 'Move with the left stick; turn and zoom with the right stick. The d-pad works this panel.'
-        : `Move with ${move}, zoom with the mouse wheel, and hold the right mouse button to turn. The arrow keys work this panel.`;
+        ? `Move with the left stick; turn and zoom with the right stick. The d-pad works this panel, and ${this.keyFor('interact')} presses a row.`
+        : `Move with ${move}, zoom with the mouse wheel, and hold the right mouse button to turn. The arrow keys work this panel, and Enter presses a row.`;
       const tabs = PHOTO_TABS.map((t) => `<button role="tab" data-tab="${t.id}" aria-selected="false">${t.name}</button>`).join('');
       html =
         `<div class="pb-head">${title}${leave}</div>` +

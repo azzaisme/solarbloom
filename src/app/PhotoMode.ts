@@ -188,6 +188,8 @@ export interface PhotoHost {
   focusAt?(): number | undefined;
   /** #photo-2: the graphics tier draws blur and vignette (Low has no post-processing) */
   hasPost?(): boolean;
+  /** #photo-2: a mouse is in hand (false on a pad: "Pick a spot" needs a pointer) */
+  hasPointer?(): boolean;
 }
 
 const MOVES: readonly [Action, number, number][] = [
@@ -517,7 +519,7 @@ export class PhotoMode {
       case 'focus':
         return { id, label: 'Sharp at', kind: 'slider', text: this.focus === undefined ? 'The middle' : `${this.focus.toFixed(1)} tiles`, value: this.focus === undefined ? 0.5 : focusToSlider(this.focus), min: 0, max: 1, step: 0.01, off: noBlur };
       case 'pick':
-        return { id, label: 'Focus', kind: 'button', text: this.picking ? 'Now press on the picture' : this.focus === undefined ? 'Pick a spot' : 'Back to the middle', on: this.picking, off: noBlur };
+        return { id, label: 'Focus', kind: 'button', text: this.picking ? 'Now press on the picture' : this.focus === undefined ? 'Pick a spot' : 'Back to the middle', on: this.picking, off: noBlur ?? (this.host.hasPointer?.() === false ? 'This needs a mouse: use the slider above' : undefined) };
       case 'blur':
         return { id, label: 'Strength', kind: 'slider', text: pct(this.blur), value: this.blur, min: 0, max: 1, step: 0.05, off: noBlur };
       case 'hour': {
@@ -581,6 +583,19 @@ export class PhotoMode {
       return this.render();
     }
     this.adjust(ids[this.row], d);
+  }
+
+  /**
+   * The pad's A (or Enter) on the row in hand: a toggle goes over, a button is pressed, a choice steps on. False
+   * when no row is in hand (on the tabs, in Tide's lesson, the panel hidden) or it is a slider: the press keeps
+   * its usual meaning then.
+   */
+  pressRow(): boolean {
+    if (!this.active || this.tutorial || this.clean || this.row < 0) return false;
+    const r = this.rows()[this.row];
+    if (!r || r.kind === 'slider') return false;
+    this.adjust(r.id, 1);
+    return true;
   }
 
   /** One step of a row: a slider a notch along, a choice to the next (or the one before), a toggle over, a button pressed. */
