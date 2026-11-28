@@ -577,6 +577,8 @@ export interface GameState {
    * the lamp). false: asleep. Unset (gardens saved before it could sleep) counts as awake, so no drone falls asleep.
    */
   oldDroneAwake?: boolean;
+  /** Tide's Photo Mode introduction and the number of eligible shots since the last sketch. */
+  tidePhoto?: { introPending: boolean; misses: number };
   upgrades: Record<string, number>;
   buffs: Buff[];
   /** City areas that have been revealed (frontier or further). Static area data comes from the seed. */

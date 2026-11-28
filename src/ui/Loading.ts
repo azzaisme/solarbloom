@@ -64,17 +64,30 @@ export function loadLine(s: LoadSteps): string {
 const WALK_URL = new URL('./loading/bot-walk.webp', import.meta.url).href;
 const TURN_URL = new URL('./loading/bot-turn.webp', import.meta.url).href;
 
-/**
- * Bloombot, the real model, waddling to and fro along the top of the card: it walks across, stops, turns to look at
- * us, turns away and walks back. All of it is CSS transforms and opacity on two frame strips (title.css, the
- * .ld-walker block), so it keeps its step smooth while the game is busy building the world. Reduced motion: it
- * stands facing us.
- */
-const BLOOMBOT =
-  `<div class="ld-walker" aria-hidden="true"><div class="ld-flip"><div class="ld-frame">` +
-  `<img class="ld-walk" src="${WALK_URL}" alt="" draggable="false">` +
-  `<img class="ld-turn" src="${TURN_URL}" alt="" draggable="false">` +
-  `</div></div></div>`;
+/** Decode the frame strips ahead of time and reuse the decoded image elements on the first visible frame. */
+let botFrames: Promise<HTMLImageElement[]> | undefined;
+export function preloadLoadingBot(): Promise<HTMLImageElement[]> {
+  return (botFrames ??= Promise.all([
+    loadBotStrip(WALK_URL, 'ld-walk'),
+    loadBotStrip(TURN_URL, 'ld-turn'),
+  ]).then((frames) => frames.filter((frame): frame is HTMLImageElement => frame !== undefined)));
+}
+
+async function loadBotStrip(url: string, className: string): Promise<HTMLImageElement | undefined> {
+  const image = new Image();
+  image.className = className;
+  image.alt = '';
+  image.draggable = false;
+  image.src = url;
+  try {
+    await image.decode();
+    return image;
+  } catch {
+    return undefined;
+  }
+}
+
+const BLOOMBOT = '<div class="ld-walker" aria-hidden="true"><div class="ld-flip"><div class="ld-frame"></div></div></div>';
 
 export class Loading {
   readonly el: HTMLElement;
@@ -85,6 +98,7 @@ export class Loading {
   constructor(reducedMotion = false, tip = TIPS[Math.floor(Math.random() * TIPS.length)]) {
     this.el = document.getElementById('loading') ?? document.createElement('div');
     this.el.id = 'loading';
+    this.el.hidden = true;
     this.el.className = `loading${reducedMotion ? ' still' : ''}`;
     this.el.setAttribute('role', 'status');
     this.el.innerHTML =
@@ -99,7 +113,10 @@ export class Loading {
     this.line = this.el.querySelector<HTMLElement>('.ld-line')!;
   }
 
-  show() {
+  async show() {
+    const frames = await preloadLoadingBot();
+    this.el.querySelector('.ld-frame')!.replaceChildren(...frames);
+    if (frames.length < 2) this.el.classList.add('still');
     this.shownAt = performance.now();
     this.el.hidden = false;
     this.el.classList.remove('gone');

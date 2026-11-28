@@ -6,6 +6,10 @@ export const SKETCH_WIDTH = 480;
 export const SKETCH_HEIGHT = 400;
 
 export interface SketchCapture {
+  width?: number;
+  height?: number;
+  /** Contrast and occlusion edges in a scene; studio studies use their object contours. */
+  sceneEdges?: { strength: Float32Array; direction: Float32Array };
   /** RGB view normals. Alpha is zero on paper and encodes object and depth elsewhere. */
   geometry: Uint8Array;
   /** Lit colour from the same camera, including the frog's markings. */
