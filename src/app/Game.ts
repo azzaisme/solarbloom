@@ -32,7 +32,7 @@ import { isExtra } from '../gameplay/FarmExtras';
 import { ORCHARD } from '../data/farmExtras';
 import { FRUITS, isFruit } from '../data/fruit';
 import { fruitShort, fruitTip } from '../ui/FruitWords';
-import { EXPLORE } from '../rendering/CameraController';
+import { BUILD_VIEW, EXPLORE } from '../rendering/CameraController';
 import { HOUSE, HOUSE_GROWTH, KEEPSAKES, OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { HouseInterior } from '../rendering/HouseInterior';
 
@@ -114,7 +114,10 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { buildItem, costWords } from '../ui/BuildCatalog';
-import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
+import { decorType, Hud, laidTool, machineTool, type Settings, type Tool } from '../ui/Hud';
+import { dragCells, type Cell } from '../core/BuildShape';
+import type { LaidKind } from '../core/types';
+import { LAID_A, LAID_NAME } from '../gameplay/LaidPaths';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { DroneStatus } from '../gameplay/DroneSystem';
@@ -189,13 +192,24 @@ const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
 /** E27.2 (#680): a worked plot's art steps through this many looks as it grows back */
 const PLOT_GROWTH_STEPS = 4;
 /**
- * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
- * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
- * grid, within DECOR_GEN.reach tiles of bloombot, red where it can't go. Third person: the aim is the crosshair in
- * the middle of the screen (`crosshairPick`), for mouse and pad alike. Only the cursor view (no bloombot) aims with
- * the pointer, while it is over the world and was moved in the last MOUSE_AIM_MS.
+ * Build mode is a top-down builder (it replaces E19.2's over-the-shoulder crosshair). With something to build in
+ * hand (a machine, a core, a decoration, a pipe, a footpath or road, or Remove) the camera lifts to look down on
+ * the ground round bloombot (CameraController BUILD_VIEW) and the mouse pointer is free: a hologram sits on the
+ * square under it, snapped to the grid, within DECOR_GEN.reach squares of bloombot, red where it can't go. Without a
+ * mouse (a pad, or keys alone) the aim is a cursor square: the one in front of bloombot until the right stick moves
+ * it, then wherever the stick left it, carried along as bloombot walks.
+ *
+ * Holding Place and moving lays a run of squares (core/BuildShape: straight, or with one corner); with Fill on, the
+ * whole patch between where the hold began and ended. Letting go lays them. Pipes, footpaths, roads, one-square
+ * decorations and Remove drag; machines and big pieces are placed one at a time.
+ *
+ * The mouse aims while it is over the world and was moved (or pressed) in the last MOUSE_AIM_MS.
  */
 const MOUSE_AIM_MS = 8000;
+/** squares a second the pad's right stick moves the build cursor */
+const CURSOR_SPEED = 9;
+/** the most squares of a drag that get their own puff when it is laid (the rest land quietly) */
+const DRAG_PUFFS = 10;
 /** the shortest time between two quarter turns from the mouse wheel (a trackpad sends many small wheel events) */
 const WHEEL_TURN_MS = 140;
 /** #605: how long the gold arrow stays on Show me where's spot (unless bloombot gets there first). */
@@ -735,8 +749,11 @@ export class Game {
         const b = this.photo?.active ? this.bindings.actionForButton(i, ['build']) : undefined;
         const a = b === 'rotate' || b === 'rotateBack' || b === 'removeMode' ? b : this.resolveButton(i);
         if (a === 'pulse' && !this.photo?.active && this.beginMegaHold(i)) return;
+        if (!this.photo?.active && (a === 'pulse' || a === 'place') && this.beginDrag(i)) return; // build mode: held, it lays a run
         if (a && a !== 'sprint') this.doAction(a);
       };
+      // build mode: the right stick moves the build cursor (it turns the view while walking)
+      bot.onAim = (rx, ry, dt) => this.moveCursor(rx, ry, dt);
       // E22.4: the rebinding screen takes the next press; that press then does nothing else.
       bot.onButton = (i) => {
         if (!this.padListener) return;
@@ -828,9 +845,15 @@ export class Game {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
-      press: (b) => this.resolveKey(`Mouse${b}`) === 'pulse' && this.beginMegaHold(`Mouse${b}`),
-      release: (b) => this.endMegaHold(`Mouse${b}`),
-      cancelPress: () => { if (typeof this.megaHold?.input === 'string' && this.megaHold.input.startsWith('Mouse')) this.clearMegaHold(); },
+      press: (b) => this.buildPress(b) || (this.resolveKey(`Mouse${b}`) === 'pulse' && this.beginMegaHold(`Mouse${b}`)),
+      release: (b) => {
+        this.endMegaHold(`Mouse${b}`);
+        this.endDrag(`Mouse${b}`);
+      },
+      cancelPress: () => {
+        if (typeof this.megaHold?.input === 'string' && this.megaHold.input.startsWith('Mouse')) this.clearMegaHold();
+        if (typeof this.drag?.input === 'string' && this.drag.input.startsWith('Mouse')) this.cancelDrag();
+      },
       pan: (dx, dy, x, y) => {
         this.lastPanAt = performance.now();
         this.camera.pan(dx, dy, x, y);
@@ -1658,6 +1681,7 @@ export class Game {
 
   private selectTool(t: Tool) {
     if (this.cinematic) return;
+    this.cancelDrag();
     this.buildKey = '';
     this.sfx.click();
     this.hud.setTool(t);
@@ -1944,10 +1968,12 @@ export class Game {
     window.addEventListener('keyup', (e) => {
       this.heldKeys.delete(e.code);
       this.endMegaHold(e.code);
+      this.endDrag(e.code);
     });
     window.addEventListener('blur', () => {
       this.heldKeys.clear();
       this.clearMegaHold();
+      this.cancelDrag();
     });
     window.addEventListener('keydown', (e) => {
       this.heldKeys.add(e.code);
@@ -2020,6 +2046,7 @@ export class Game {
         if (a === 'backpack' || a === 'debug' || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
         if (e.repeat && a !== 'rotate' && a !== 'rotateBack') return;
         if (a === 'pulse' && this.beginMegaHold(e.code)) return;
+        if ((a === 'pulse' || a === 'place') && this.beginDrag(e.code)) return; // build mode: held, it lays a run
         this.doAction(a);
         return;
       }
@@ -2096,6 +2123,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'fillMode':
+        return this.toggleFill();
       case 'waterOverlay':
         return this.toggleWaterView();
       case 'powerOverlay':
@@ -2115,6 +2144,7 @@ export class Game {
       case 'sense':
         return this.senseNearby();
       case 'recentre':
+        this.cursor = undefined; // build mode: the cursor comes back to the square in front
         return this.camera.recentre();
       case 'debug':
         return this.changeSetting('debug', !this.settings.debug);
@@ -2328,10 +2358,11 @@ export class Game {
     const now = performance.now();
     if (now - this.wheelAt < WHEEL_TURN_MS) return;
     const a = this.resolveKey('Wheel');
-    if (a === 'rotate' || a === 'rotateBack') {
+    if ((a === 'rotate' || a === 'rotateBack') && this.turnable()) {
       this.wheelAt = now;
       this.turnBuild(factor > 1 ? 1 : -1);
-    } else if (a === 'zoomCamera') {
+    } else if (a === 'zoomCamera' || a === 'rotate' || a === 'rotateBack') {
+      // nothing in hand that turns (a path, a pipe, a machine): the wheel moves the build view in and out
       this.wheelAt = now;
       this.zoomStepBy(factor > 1 ? -1 : 1); // E21.22's zoom steps
     }
@@ -2401,7 +2432,13 @@ export class Game {
 
   /** May the mouse be captured now (bloombot's walking view with nothing open on top)? */
   private mayCapture(): boolean {
-    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen();
+    // building: the pointer stays free to pick squares (the look button's drag still turns the view)
+    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen() && !this.building();
+  }
+
+  /** Is the top-down build view up: something in hand to build, and nothing open over the world? */
+  private buildView(): boolean {
+    return !!this.bot && this.building() && !this.panelOpen() && !this.cinematic && !this.photo?.active && !this.overviewOn;
   }
 
   /** Hold to look: the look button pressed on the world captures the mouse until it is let go. */
@@ -2444,10 +2481,15 @@ export class Game {
   private updateMouseCapture() {
     if (this.mouseCaptured() && !this.mayCapture()) document.exitPointerLock?.();
     this.hud.root.classList.toggle('mouse-look', this.mouseCaptured());
-    const aiming = !!this.bot && this.building() && !this.panelOpen() && !this.cinematic && !this.photo?.active && !this.overviewOn;
-    this.hud.root.classList.toggle('aiming', aiming);
-    this.camera.shoulderGoal = aiming ? 0.75 : 0; // building: over bloombot's shoulder, so the hologram is in view
-    if (this.bot) this.bot.strafe = aiming; // aiming: bloombot faces where the camera looks and steps sideways
+    // building: the camera lifts to the top-down build view, at the distance of the zoom step in use
+    const view = this.buildView();
+    this.hud.root.classList.toggle('build-view', view);
+    this.camera.buildGoal = view ? 1 : 0;
+    this.camera.buildDist = BUILD_VIEW.dists[this.zoomStep] ?? BUILD_VIEW.dists[1];
+    if (!view) {
+      this.cancelDrag();
+      this.cursor = undefined; // the next build starts from the square in front again
+    }
     if (!this.lookHinted && this.bot && this.mayCapture() && !this.mouseCaptured() && this.bot.lastInput === 'keys' && typeof matchMedia !== 'undefined' && matchMedia('(any-pointer: fine)').matches) {
       this.lookHinted = true;
       // say what the player will see: the pointer hides, the camera turns, the pointer comes back
@@ -2541,6 +2583,7 @@ export class Game {
 
   /** Esc / B: closes or puts away the nearest thing; with nothing to close, Esc (not B) opens the menu. */
   private escape(fromCancel = false) {
+    if (this.drag) return this.cancelDrag(); // a run being dragged out: dropped, nothing laid
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
@@ -3214,14 +3257,15 @@ export class Game {
     if (tool === 'remove') {
       const occ = t && !dec ? this.sim.occupant(t) : undefined;
       const lights = occ ? this.sim.lights.onPole(occ) : undefined;
-      const name = decName ?? (lights ? (DECOR_OPTION[lights]?.name ?? 'lights') : occ && occ.type !== 'core' && !occ.starter ? machineName(occ) : t && t.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z) ? 'pipe' : undefined);
+      const name = decName ?? (lights ? (DECOR_OPTION[lights]?.name ?? 'lights') : occ && occ.type !== 'core' && !occ.starter ? machineName(occ) : t && t.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z) ? 'pipe' : t && t.roofId === GROUND && !t.occupantId && t.laid ? LAID_NAME[t.laid].toLowerCase() : undefined);
       return { glyph, text: name ? `Remove the ${name}` : 'Remove' };
     }
+    if (this.drag && this.drag.cells.length > 1) return { glyph, text: this.fillOn ? 'Let go to fill the patch' : 'Let go to lay the run' };
     const dk = decorType(tool);
     if (dk && decName) return { glyph, text: `Pick up the ${decName}` };
-    const name = dk ? DECOR_OPTION[dk]?.name : tool === 'pipe' ? 'pipe' : machineTool(tool) ? MACHINES[tool].name : undefined;
+    const name = dk ? DECOR_OPTION[dk]?.name : tool === 'pipe' ? 'pipe' : laidTool(tool) ? LAID_NAME[tool].toLowerCase() : machineTool(tool) ? MACHINES[tool].name : undefined;
     if (!name) return undefined;
-    const text = dk ? `Place the ${name}` : tool === 'pipe' ? 'Lay a pipe' : `Build ${/^[AEIOU]/i.test(name) ? 'an' : 'a'} ${name}`;
+    const text = dk ? `Place the ${name}` : tool === 'pipe' ? 'Lay a pipe' : laidTool(tool) ? `Lay ${LAID_A[tool]}` : `Build ${/^[AEIOU]/i.test(name) ? 'an' : 'a'} ${name}`;
     // a decoration turns: the turn buttons (back, then forward) under it
     const turn = dk ? { glyph: this.glyph('rotateBack') + this.glyph('rotate'), text: 'Turn' } : undefined;
     // E23.11: the recipe as chips ("2 of 2 Timber": leaf when you have it, clay when short)
@@ -4055,9 +4099,17 @@ export class Game {
   }
 
   private onHover(x: number, y: number) {
-    // Third person: bloombot's play has no cursor on the world (the map's overview aside); what bloombot faces,
-    // or the build crosshair, is what the preview shows.
-    if (this.bot && !this.overviewOn) return;
+    // Third person: walking, bloombot's play has no cursor on the world (the map's overview aside): what bloombot
+    // faces is what the preview shows.
+    if (this.bot && !this.overviewOn) {
+      // the build view is the one place bloombot's play has a pointer on the world: it picks the square to build on
+      if (this.buildView()) {
+        this.pointer = { x, y, inside: true };
+        this.pointerAt = performance.now();
+        this.bot.lastInput = 'keys'; // the mouse is in hand: prompts show keys, and the pointer aims
+      }
+      return;
+    }
     this.pointer = { x, y, inside: true };
     this.pointerAt = performance.now();
     if (this.cinematic || this.photo.active) return;
@@ -4114,6 +4166,7 @@ export class Game {
     if (dk) return this.previewDecor(p, x, y, dk);
     if (tool === 'remove') return this.previewRemove(p, x, y);
     if (tool === 'pipe') return this.previewPipe(p, x, y);
+    if (laidTool(tool)) return this.previewLaid(p, x, y, tool);
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -4180,68 +4233,67 @@ export class Game {
   private buildKey = '';
   private buildAt = 0;
 
-  /** Does the mouse aim builds (over the world, moved lately, and the pad isn't what was used last)? */
+  /**
+   * Does the mouse aim builds? Over the world and moved (or pressed) lately; with bloombot, only in the build view and
+   * while the pad isn't what was used last. A run being dragged out with the mouse keeps aiming with it.
+   */
   private mouseAims(): boolean {
-    return !this.bot && this.pointer.inside && performance.now() - this.pointerAt < MOUSE_AIM_MS;
+    // (a mouse-held run keeps its far end where the pointer was last seen, even once it slides off the world onto
+    // the build bar or out of the window)
+    if (typeof this.drag?.input === 'string' && this.drag.input.startsWith('Mouse')) return true;
+    if (!this.pointer.inside || performance.now() - this.pointerAt >= MOUSE_AIM_MS) return false;
+    return !this.bot || (this.buildView() && this.bot.lastInput !== 'pad');
   }
 
-  /** Where a build is aimed, and where on screen to say so: the pointer's tile, or the tile in front of bloombot. */
+  /** Where a build is aimed, and where on screen to say so: the pointer's square, or the build cursor's. */
   private buildAim(): { p?: Pick; x: number; y: number } {
     if (this.mouseAims()) return { p: this.pick(this.pointer.x, this.pointer.y), x: this.pointer.x, y: this.pointer.y };
-    if (this.bot) {
-      const p = this.crosshairPick();
-      if (p?.tile) {
-        const sc = this.botTileScreen(p.tile);
-        return { p, x: sc.x, y: sc.y };
-      }
-    }
-    const p = this.frontPick();
+    const p = this.cursorPick();
     const sc = p?.tile ? this.botTileScreen(p.tile) : { x: innerWidth / 2, y: innerHeight / 2 };
     return { p, x: sc.x, y: sc.y };
   }
 
   /**
-   * Third person: where the build crosshair (the middle of the screen) meets bloombot's ground, kept between one
-   * tile and the build reach from bloombot. Looking down places close, looking ahead places further; past the
-   * reach (or at the sky, or onto another layer) the aim stops at the reach in the direction the camera faces.
+   * The build cursor, for a pad or keys alone: where the right stick left it (squares from bloombot, so it comes
+   * along as bloombot walks), or the square in front of bloombot while the stick hasn't moved it.
    */
-  private crosshairPick(): Pick | undefined {
+  private cursor?: { x: number; z: number };
+
+  private cursorPick(): Pick | undefined {
     const b = this.bot;
     if (!b) return undefined;
-    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-    const hit = c.clientWidth ? this.pick(c.clientWidth / 2, c.clientHeight / 2) : undefined;
-    const reach = DECOR_GEN.reach - 0.5;
-    let fx: number;
-    let fz: number;
-    if (hit && hit.roofId === b.pose.roofId) {
-      fx = hit.fx;
-      fz = hit.fz;
-    } else {
-      const f = this.camera.entity.forward;
-      const l = Math.hypot(f.x, f.z) || 1;
-      fx = b.pose.x + (f.x / l) * reach;
-      fz = b.pose.z + (f.z / l) * reach;
-    }
-    let dx = fx - b.pose.x;
-    let dz = fz - b.pose.z;
-    let d = Math.hypot(dx, dz);
-    if (d < 1e-3) {
-      dx = Math.sin(b.pose.facing);
-      dz = Math.cos(b.pose.facing);
-      d = 1;
-    }
-    let want = Math.min(reach, Math.max(1, d));
-    fx = b.pose.x + (dx / d) * want;
-    fz = b.pose.z + (dz / d) * want;
-    // #782: the aim is measured to a point, reach to the square's middle: step back until that square is in reach,
-    // so a hologram at the edge of reach never lands on a square that then says "Too far"
-    while (want > 1 && !this.inReach(b.pose.roofId, Math.floor(fx), Math.floor(fz), 1)) {
-      want = Math.max(1, want - 0.25);
-      fx = b.pose.x + (dx / d) * want;
-      fz = b.pose.z + (dz / d) * want;
-    }
+    if (!this.cursor) return this.frontPick();
+    const fx = b.pose.x + this.cursor.x;
+    const fz = b.pose.z + this.cursor.z;
     const tile = this.sim.grid.get(b.pose.roofId, Math.floor(fx), Math.floor(fz));
-    return tile ? { roofId: b.pose.roofId, fx, fz, tile } : undefined;
+    return tile ? { roofId: b.pose.roofId, fx, fz, tile } : this.frontPick();
+  }
+
+  /**
+   * The pad's right stick in the build view: it moves the build cursor across the ground as the screen shows it
+   * (right is right, up is away), no further than bloombot's reach. True when the stick was used for that.
+   */
+  private moveCursor(rx: number, ry: number, dt: number): boolean {
+    const b = this.bot;
+    if (!b || !this.buildView() || this.hud.modalOpen) return false;
+    if (!rx && !ry) return true; // (the stick is the cursor's while building, even at rest)
+    if (!this.cursor) {
+      const f = b.front();
+      this.cursor = { x: f.x + 0.5 - b.pose.x, z: f.z + 0.5 - b.pose.z };
+    }
+    const yr = (this.camera.yaw * Math.PI) / 180;
+    const k = CURSOR_SPEED * dt * (this.settings.camSensitivity ?? 100) / 100;
+    // screen right is (cos, -sin) on the ground, screen up is (-sin, -cos)
+    this.cursor.x += (rx * Math.cos(yr) - ry * Math.sin(yr)) * k;
+    this.cursor.z += (-rx * Math.sin(yr) - ry * Math.cos(yr)) * k;
+    const d = Math.hypot(this.cursor.x, this.cursor.z);
+    const max = DECOR_GEN.reach - 0.5;
+    if (d > max) {
+      this.cursor.x *= max / d;
+      this.cursor.z *= max / d;
+    }
+    b.wake();
+    return true;
   }
 
   /** Is a footprint within bloombot's reach, on its layer? (Always, without bloombot.) */
@@ -4263,6 +4315,7 @@ export class Game {
   private updateBuildPreview(): boolean {
     if (!this.building() || this.cinematic || this.hud.modalOpen || this.hud.plotPickerOpen) return false;
     const b = this.bot!;
+    if (this.updateDrag()) return true; // a run being dragged out shows its own squares
     const { p, x, y } = this.buildAim();
     const t = p?.tile;
     const key = `${this.hud.currentTool}|${this.buildRot}|${p?.roofId}:${t?.x},${t?.z}|${t?.ground}|${t?.occupantId}|${Math.round(b.pose.x * 4)},${Math.round(b.pose.z * 4)}|${b.lastInput}|${Math.round(x)},${Math.round(y)}`;
@@ -4325,6 +4378,298 @@ export class Game {
     return this.sim.water.pipes.lay(p.roofId, t.x, t.z) ? 'build' : 'none';
   }
 
+  /** A footpath or road in hand: the square it would pave, and why not where it can't. */
+  private previewLaid(p: Pick, x: number, y: number, kind: LaidKind) {
+    const t = p.tile!;
+    this.overlays.hideRadius();
+    const why = this.laidProblem(kind, p.roofId, t.x, t.z);
+    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.08);
+    const how = `${this.press('E')} to lay · hold and move to lay a run${this.fillOn ? ' (Fill is on: a whole patch)' : ''}`;
+    this.hud.showTip(x, y, `<b>${LAID_NAME[kind]}</b>${kind === 'footpath' ? 'Paving stones to walk on.' : kind === 'road' ? 'A smooth road across open ground.' : 'Lawn over paving and bare ground.'} <small>Free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+  }
+
+  /** Why a footpath or road square can't go here: the ground's rules, a chosen plot, then bloombot's reach. */
+  private laidProblem(kind: LaidKind, roofId: string, x: number, z: number): string | undefined {
+    return this.sim.paths.layProblem(kind, roofId, x, z) ?? (this.cozy.plotUnder(roofId, x, z, 1) ? PLOT_IN_WAY : undefined) ?? (this.inReach(roofId, x, z, 1) ? undefined : TOO_FAR);
+  }
+
+  /** Lays one footpath or road square (free); it stays in hand for the next. */
+  private layPathAt(p: Pick, x: number, y: number, kind: LaidKind): ActResult {
+    const t = p.tile!;
+    const why = this.laidProblem(kind, p.roofId, t.x, t.z);
+    if (why) {
+      this.hud.showFail(why, x, y);
+      return 'none';
+    }
+    if (!this.sim.paths.lay(kind, p.roofId, t.x, t.z)) return 'none';
+    this.markLaid(t.x, t.z);
+    this.sfx.build();
+    this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.1), 6, { up: 1.0, size: 0.035, life: 0.6 });
+    this.buildKey = '';
+    return 'select';
+  }
+
+  /** Redraws the ground round a square whose paving changed (its neighbours draw the edge where grass meets it). */
+  private markLaid(x: number, z: number) {
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const t = this.sim.grid.peek(GROUND, x + dx, z + dz);
+        if (t) this.chunks.markTile(t);
+      }
+  }
+
+  // ───────────── Build mode: drag a run, or fill a patch ─────────────
+
+  /** Fill is on: a drag covers the whole patch between its ends (off: a run with at most one corner). */
+  fillOn = false;
+  /**
+   * A run being dragged out: the input that holds it (a key, `Mouse0`, or a pad button), what was in hand, the
+   * square it began on, the one it reaches now and the squares between (core/BuildShape).
+   */
+  private drag?: { input: string | number; tool: Tool; roofId: string; from: Cell; to: Cell; cells: Cell[]; key: string };
+
+  /** F / d-pad down in build mode: a drag fills the whole patch, or goes back to laying a run. */
+  private toggleFill() {
+    if (!this.building()) return;
+    this.fillOn = !this.fillOn;
+    this.hud.buildBar.fillOn = this.fillOn;
+    this.hud.buildBar.render(this.hud.currentTool);
+    this.buildKey = '';
+    if (this.drag) this.drag.key = '';
+    this.sfx.click();
+    if (this.fillOn && this.sim.salvage.see('tip:fill')) this.hud.toast('Fill is on: hold {pulse} and move to cover a whole patch<small>Press {fillMode} again to go back to laying a run.</small>', 'gold', 4.5);
+  }
+
+  /** Can what is in hand be laid by dragging? A pipe, a footpath or road, a one-square decoration, or Remove. */
+  private dragTool(tool: Tool): boolean {
+    if (tool === 'pipe' || tool === 'remove' || laidTool(tool)) return true;
+    const dk = decorType(tool);
+    if (!dk || LIGHT[dk]?.line) return false;
+    const [w, d] = decorSize(dk, this.buildRot);
+    return w === 1 && d === 1;
+  }
+
+  /**
+   * A mouse button went down on the world in the build view. The Place button begins a drag (or, for a piece that
+   * doesn't drag, places it at once); any other button drops a drag in progress. True: the press was used.
+   */
+  private buildPress(button: number): boolean {
+    if (!this.buildView()) return false;
+    const a = this.resolveKey(`Mouse${button}`);
+    if (a !== 'pulse' && a !== 'place') {
+      if (!this.drag) return false;
+      this.cancelDrag();
+      return true;
+    }
+    this.pointerAt = performance.now(); // a press counts as using the mouse: it aims
+    this.pointer.inside = true;
+    if (this.bot) this.bot.lastInput = 'keys';
+    if (!this.beginDrag(`Mouse${button}`)) this.botAct();
+    return true;
+  }
+
+  /**
+   * Place went down in the build view with something that drags in hand: the hold begins on the square aimed at.
+   * False when there is nothing to drag (the press then places as a single press does).
+   */
+  private beginDrag(input: string | number): boolean {
+    if (this.drag) return true;
+    if (!this.buildView() || this.paused || this.hud.modalOpen) return false;
+    const tool = this.hud.currentTool;
+    if (!this.dragTool(tool)) return false;
+    const p = this.buildAim().p;
+    if (!p?.tile || this.sim.grid.roof(p.roofId)?.preview) return false;
+    // a decoration in hand, aimed at one already placed: that press picks it up
+    if (decorType(tool) && this.cozy.decorOf(p.tile.occupantId)) return false;
+    const at = { x: p.tile.x, z: p.tile.z };
+    this.drag = { input, tool, roofId: p.roofId, from: at, to: at, cells: [at], key: '' };
+    this.buildKey = '';
+    return true;
+  }
+
+  /** Drops a drag in progress: nothing is laid. */
+  private cancelDrag() {
+    if (!this.drag) return;
+    this.drag = undefined;
+    this.overlays.hideDrag();
+    this.buildKey = '';
+  }
+
+  /** The hold was let go: one square acts as a single press; more are laid (or lifted) together. */
+  private endDrag(input: string | number) {
+    const d = this.drag;
+    if (!d || d.input !== input) return;
+    this.drag = undefined;
+    this.overlays.hideDrag();
+    this.buildKey = '';
+    if (d.tool !== this.hud.currentTool || !this.buildView()) return;
+    if (d.cells.length <= 1) return this.botAct();
+    this.commitDrag(d.tool, d.roofId, d.cells);
+  }
+
+  /**
+   * Per frame while a run is dragged out: follows the aim to its far end, and shows the squares it would lay (green)
+   * and the ones it can't (red). True while more than one square is covered (it owns the preview then); with one
+   * square the usual hologram shows.
+   */
+  private updateDrag(): boolean {
+    const d = this.drag;
+    if (!d) return false;
+    if (d.tool !== this.hud.currentTool) {
+      this.cancelDrag();
+      return false;
+    }
+    if (typeof d.input === 'number') {
+      // a pad button: polled (there is no "button up" event)
+      const button = d.input;
+      const pads = [...(navigator.getGamepads?.() ?? [])].filter((pad) => pad?.connected);
+      if (!pads.length) this.cancelDrag();
+      else if (!pads.some((pad) => pad?.buttons[button]?.pressed)) this.endDrag(button);
+      if (!this.drag) return false;
+    }
+    const { p, x, y } = this.buildAim();
+    if (p?.tile && p.roofId === d.roofId) d.to = { x: p.tile.x, z: p.tile.z };
+    const b = this.bot!;
+    const key = `${d.to.x},${d.to.z}|${this.fillOn}|${this.buildRot}|${Math.round(b.pose.x * 2)},${Math.round(b.pose.z * 2)}`;
+    const now = performance.now();
+    if (key === d.key && now - this.buildAt < 300) return d.cells.length > 1;
+    d.key = key;
+    this.buildAt = now;
+    d.cells = dragCells(this.fillOn ? 'fill' : 'line', d.from, d.to);
+    if (d.cells.length <= 1) {
+      this.overlays.hideDrag();
+      this.buildKey = '';
+      return false;
+    }
+    const ok: TileData[] = [];
+    const bad: TileData[] = [];
+    let why: string | undefined;
+    let budget = this.dragBudget(d.tool);
+    for (const c of d.cells) {
+      const t = this.sim.grid.get(d.roofId, c.x, c.z);
+      if (!t) continue;
+      const r = this.dragCheck(d.tool, d.roofId, c.x, c.z);
+      if (r === 'skip') continue;
+      if (r === undefined && budget > 0) {
+        budget--;
+        ok.push(t);
+      } else {
+        bad.push(t);
+        why ??= r ?? this.dragShort(d.tool);
+      }
+    }
+    const removing = d.tool === 'remove';
+    // lifting shows in red (as Remove's single hologram does); laying shows what goes down in green, the rest red
+    this.overlays.showDrag(removing ? [] : ok, removing ? ok : bad);
+    this.overlays.hideGhost();
+    this.overlays.hideFrame();
+    this.overlays.hideRadius();
+    const n = ok.length;
+    const what = removing ? 'to lift' : 'to lay';
+    const count = `${n} square${n === 1 ? '' : 's'} ${what}`;
+    const rest = !removing && bad.length ? `<br><span class="bad">${bad.length} can’t go: ${why}</span>` : '';
+    this.hud.showTip(x, y, `<b>${this.dragName(d.tool)}</b>${count}${rest}<br><span class="ok">Let go to ${removing ? 'lift them' : 'lay them'} · ${this.hudKey('cancel')} to stop</span>`);
+    return true;
+  }
+
+  /** What a drag is laying, for its tip. */
+  private dragName(tool: Tool): string {
+    const dk = decorType(tool);
+    return tool === 'remove' ? '🧹 Remove' : tool === 'pipe' ? 'Pipe' : laidTool(tool) ? LAID_NAME[tool] : (DECOR_OPTION[dk ?? '']?.name ?? 'Decoration');
+  }
+
+  /** How many squares of this the pack (and the store in reach) can pay for: pipes are made; the rest are free. */
+  private dragBudget(tool: Tool): number {
+    return tool === 'pipe' ? this.sim.inventory.available('pipe') : Infinity;
+  }
+
+  /** What to say for the squares a drag can't pay for. */
+  private dragShort(tool: Tool): string {
+    return tool === 'pipe' ? 'not enough Pipes (the workbench makes them)' : 'it doesn’t fit';
+  }
+
+  /**
+   * One square of a drag: undefined when it can be laid (or lifted), 'skip' when there is nothing to do there (the
+   * same thing is already laid; nothing to lift), else why not.
+   */
+  private dragCheck(tool: Tool, roofId: string, x: number, z: number): string | undefined {
+    const t = this.sim.grid.get(roofId, x, z);
+    if (!t) return 'skip';
+    if (tool === 'remove') {
+      const has = !!this.cozy.decorOf(t.occupantId) || (roofId === GROUND && !t.occupantId && (this.sim.water.pipes.has(x, z) || !!t.laid));
+      return !has ? 'skip' : this.inReach(roofId, x, z, 1) ? undefined : TOO_FAR;
+    }
+    if (laidTool(tool)) return t.laid === tool ? 'skip' : this.laidProblem(tool, roofId, x, z);
+    if (tool === 'pipe') {
+      if (roofId === GROUND && this.sim.water.pipes.has(x, z)) return 'skip';
+      return this.sim.water.pipes.layProblem(roofId, x, z) ?? (this.inReach(roofId, x, z, 1) ? undefined : TOO_FAR);
+    }
+    const dk = decorType(tool);
+    return dk ? this.decorProblem(dk, roofId, x, z, this.buildRot) : 'skip';
+  }
+
+  /**
+   * Lays (or lifts) every square of a drag that can be, from where it began: one sound, a few puffs, one build
+   * gesture, and a note only if some squares were left out. Remove lifts decorations, pipes and paving, the top
+   * thing on each square; a machine is only ever taken down by a single press on it.
+   */
+  private commitDrag(tool: Tool, roofId: string, cells: Cell[]) {
+    const dk = decorType(tool);
+    let done = 0;
+    let left = 0;
+    let why: string | undefined;
+    const puffs: TileData[] = [];
+    for (const c of cells) {
+      const t = this.sim.grid.get(roofId, c.x, c.z);
+      if (!t) continue;
+      const r = this.dragCheck(tool, roofId, c.x, c.z);
+      if (r === 'skip') continue;
+      let ok = r === undefined;
+      if (ok) {
+        if (tool === 'remove') {
+          const d = this.cozy.decorOf(t.occupantId);
+          if (d) {
+            this.cozy.removeDecor(d.roofId, d.x, d.z);
+            this.markDecor(d.roofId, d.x, d.z);
+          } else if (this.sim.water.pipes.has(c.x, c.z)) ok = this.sim.water.pipes.lift(c.x, c.z);
+          else {
+            ok = this.sim.paths.lift(c.x, c.z);
+            if (ok) this.markLaid(c.x, c.z);
+          }
+        } else if (laidTool(tool)) {
+          ok = this.sim.paths.lay(tool, roofId, c.x, c.z);
+          if (ok) this.markLaid(c.x, c.z);
+        } else if (tool === 'pipe') ok = this.sim.water.pipes.lay(roofId, c.x, c.z);
+        else if (dk) {
+          ok = !this.cozy.placeDecor(dk, this.buildRot, roofId, c.x, c.z);
+          if (ok) this.markDecor(roofId, c.x, c.z);
+        }
+      }
+      if (ok) {
+        done++;
+        if (puffs.length < DRAG_PUFFS) puffs.push(t);
+      } else {
+        left++;
+        why ??= r ?? this.dragShort(tool);
+      }
+    }
+    this.buildKey = '';
+    this.botPreviewKey = '';
+    const removing = tool === 'remove';
+    if (!done) {
+      if (left) this.hud.showFail(why ?? 'It doesn’t fit here');
+      return;
+    }
+    for (const t of puffs) this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.15), removing ? 4 : 5, { up: removing ? 1.0 : 1.3, size: 0.035, life: 0.6 });
+    if (removing) this.sfx.click();
+    else this.sfx.build();
+    const b = this.bot;
+    const last = cells[cells.length - 1];
+    if (b && roofId === b.pose.roofId && !b.walking) b.faceToward(last.x + 0.5, last.z + 0.5);
+    this.botAnim('select'); // a light gesture, so the next run can begin straight away (assembling would make it wait)
+    if (left) this.hud.toast(`${done} of ${done + left} squares ${removing ? 'lifted' : 'laid'}<small>The rest were left: ${why}.</small>`, '', 3.2);
+  }
+
   private previewRemove(p: Pick, x: number, y: number) {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
@@ -4333,6 +4678,14 @@ export class Game {
       // E23.4.2.2: a pipe tile lifts back into the pack (its Pipe)
       this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.12);
       this.hud.showTip(x, y, `<b>🧹 Lift the pipe</b>${this.press('E')} to lift it (its Pipe goes back into your pack)`);
+      return;
+    }
+    const laid = !d && p.roofId === GROUND && !t.occupantId ? t.laid : undefined;
+    if (laid) {
+      // a footpath or road square lifts, and the ground under it comes back
+      this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.08);
+      const far = !this.inReach(p.roofId, t.x, t.z, 1);
+      this.hud.showTip(x, y, `<b>🧹 Lift the ${LAID_NAME[laid].toLowerCase()}</b>${far ? `<span class="bad">${TOO_FAR}</span>` : `${this.press('E')} to lift it · hold and move to lift a run`}`);
       return;
     }
     if (!d) {
@@ -4431,6 +4784,17 @@ export class Game {
         this.hud.toast(`${machineName(occ)} taken down<small>Everything it was built from is back in your backpack.</small>`, '', 2.4);
         return 'build';
       }
+    }
+    if (!d && !pickUp && p.roofId === GROUND && !t.occupantId && t.laid) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      if (!this.sim.paths.lift(t.x, t.z)) return 'none';
+      this.markLaid(t.x, t.z);
+      this.sfx.click();
+      this.buildKey = '';
+      return 'select';
     }
     if (!d) {
       this.hud.showFail('Aim at a decoration', x, y);
@@ -4798,7 +5162,7 @@ export class Game {
     if (this.bot) {
       // E22.1: mouse buttons are bindable: the pulse button uses the tool on the aimed tile (walking there first if
       // it's out of reach); any other bound button does its action.
-      // Third person: the pulse button acts on what bloombot faces (or, building, on the crosshair's hologram);
+      // Third person: the pulse button acts on what bloombot faces (or, building, on the hologram under the pointer: buildPress);
       // only the map's overview still takes a pointer (travel to a woken landmark).
       const a = this.resolveKey(`Mouse${button}`);
       if ((a === 'pulse' || a === 'place') && this.overviewOn) this.botClick(x, y);
@@ -4845,6 +5209,7 @@ export class Game {
     if (dk) return this.placeDecorAt(p, x, y, dk);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
     if (tool === 'pipe') return this.layPipeAt(p, x, y);
+    if (laidTool(tool)) return this.layPathAt(p, x, y, tool);
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);

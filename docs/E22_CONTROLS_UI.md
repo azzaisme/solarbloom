@@ -32,10 +32,12 @@ This epic is the controls and screens for E21 (The Old City). E21 names actions;
 | Zoom camera | Mouse wheel | D-pad down (cycles) |
 | Recentre camera | C | Click right stick |
 | Interact | E | A |
-| Pulse / use tool / place | Left mouse, or Space: on what bloombot faces; in build mode, on the hologram under the crosshair | X (place is also A in build mode) |
+| Pulse / use tool / place | Left mouse, or Space: on what bloombot faces; in build mode, on the square under the pointer. Hold and move to lay a run | X (place is also A in build mode: hold it and move the right stick to lay a run) |
 | Build menu | Q | Y |
 | Rotate piece (build mode) | R, or mouse wheel | LB / RB |
 | Remove mode (build mode) | X | Right trigger |
+| Fill (build mode): a drag covers the whole patch | F | Click right stick |
+| Move the build cursor (build mode) | Move the mouse | Right stick |
 | Hotbar slots | 1–9 | — (use the build menu) |
 | Backpack | Tab, or I | D-pad up |
 | Map | M | View |
@@ -47,9 +49,9 @@ This epic is the controls and screens for E21 (The Old City). E21 names actions;
 | Tabs in a panel | Q / E, or click | LB / RB |
 | Debug overlay | F3 | — |
 
-In build mode the mouse wheel rotates the piece and the camera zoom is paused.
+In build mode the mouse wheel rotates a decoration; with anything else in hand (a footpath, a road, a pipe, a machine, Remove) it steps the view nearer or further.
 
-**Third-person camera.** The camera is a chase camera on a boom behind bloombot: the mouse (captured) or the right stick swings it freely and tilts it from below bloombot's shoulder (-15°) to nearly overhead (70°); running with no camera input, it swings in behind bloombot after a moment. There is no cursor on the world while walking: every action goes to what bloombot faces. Build mode is about placing: a crosshair appears, the camera moves over bloombot's right shoulder, bloombot strafes to face the way the camera looks, and the hologram sits where the crosshair meets the ground, between one tile and the build reach. Settings › Accessibility › Camera: "Look around with the mouse" (on) and "Keep the view where I turn it" (no swing).
+**Third-person camera.** The camera is a chase camera on a boom behind bloombot: the mouse (captured) or the right stick swings it freely and tilts it from below bloombot's shoulder (-15°) to nearly overhead (70°); running with no camera input, it swings in behind bloombot after a moment. There is no cursor on the world while walking: every action goes to what bloombot faces. Build mode is a top-down builder (28 Nov 2026, replacing the over-the-shoulder crosshair): with something to build in hand the camera lifts to look down on the ground around bloombot (70°, three distances), the mouse pointer is free and the hologram sits on the square under it, within 12 squares of bloombot. On a pad the right stick moves a build cursor over the ground instead of turning the camera; with keys alone the aim is the square in front of bloombot. Holding Place and moving lays a run (straight, or with one corner); with Fill on, the whole patch between the two ends. Esc drops a drag. Footpaths, roads and grass (the Ground tab, free) are laid this way, and Remove lifts them; grass goes over paving and bare ground, so a market floor can become lawn. Settings › Accessibility › Camera: "Look around with the mouse" (on) and "Keep the view where I turn it" (no swing).
 
 ## The HUD
 

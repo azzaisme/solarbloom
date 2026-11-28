@@ -19,6 +19,23 @@ Photo mode is a camera now, not only a freed view. Code: `app/PhotoMode.ts` (the
 
 Open: a pad can't reach "Pick a spot" on a point (it has no pointer: the focus slider does the job); focus picks bloombot or the ground, not walls and roofs; the double-size picture was checked in headless software rendering only; the album's pictures are not yet used anywhere else in the game (#845's rooms could hang the twelve on the house's walls: not decided).
 
+# Build mode from above, drag and fill (28 Nov 2026)
+
+Owner, 28 Nov 2026: build mode should be a top-down builder, not over the shoulder, with a drag and a fill so a road or a footpath goes down quickly.
+
+| What | Status |
+|---|---|
+| Top-down build view | ✅ with something to build in hand the camera lifts to 70° over bloombot (`BUILD_VIEW`), the pointer is free and picks the square; the crosshair, the shoulder view and strafing are gone. Reach is 12 squares (was 3.6) |
+| Drag | ✅ hold Place and move: a straight run, or one corner (`core/BuildShape`); green and red squares show it first; Esc drops it. Footpaths, roads, pipes, one-square decorations and Remove |
+| Fill | ✅ F / click right stick, or the dock's Fill button: the drag covers the whole patch (400 squares at most) |
+| Footpaths and roads | ✅ new Ground tab, free and open from the start (`gameplay/LaidPaths`, saved in `state.laid`); Remove lifts them. Sprinting along one costs less charge, as E23.6.7 planned |
+| Grass | ✅ (owner, 28 Nov 2026: replace areas such as the market with patches of greenery) Grass, in the Ground tab, turns the city's paving and bare ground into lawn, by the square, the run or the patch. The lawn is as dead or as green as the square was, and is pulsed and planted like any lawn; Remove gives the paving back. Not over the city's roads, water or the jetty |
+| Pad | ✅ the right stick moves a build cursor, A held lays a run, a click of the right stick is Fill: checked with a virtual pad in the browser test; not yet played on a real pad |
+
+Checks: `tests/build-shape.test.ts`, `tests/laid-paths.test.ts` (quick set), `npm run test:build-view` (real mouse and keys in a browser; shots in `docs/review/build-view/`).
+
+Open: whether paths and grass should cost materials or unlock later; whether the view should square up to the ground instead of keeping the walking camera's angle; how this sits with the planned spline paths (#472).
+
 # E20: One game — bloombot first (#283)
 
 Direction audit, 17 Nov 2026: Solarbloom is a cozy restoration game where bloombot does the work; the idle engine stays underneath as bloombot's helpers.

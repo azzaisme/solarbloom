@@ -220,6 +220,46 @@ export class Overlays {
     for (const e of this.edges) e.enabled = false;
   }
 
+  /** Build mode's drag: the squares a drag will lay (green) and the ones it can't (red), each its own tile glow. */
+  private drag: { e: pc.Entity; mi: pc.MeshInstance }[] = [];
+  private dragMats = { ok: glowMaterial(TONE.ok, 1.1), bad: glowMaterial(TONE.bad, 1.1) };
+
+  /**
+   * Shows a drag's squares: `ok` ones in the placing green, `bad` ones in red. They stay until `hideDrag` (the
+   * radius tiles and the frame are separate, and keep working beside them).
+   */
+  showDrag(ok: readonly TileData[], bad: readonly TileData[]) {
+    const n = ok.length + bad.length;
+    const mesh = glowTileMesh(this.device, 1);
+    while (this.drag.length < n) {
+      const e = group(this.radiusRoot, 'dragTile');
+      const mi = new pc.MeshInstance(mesh, this.dragMats.ok);
+      e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false });
+      e.enabled = false;
+      this.drag.push({ e, mi });
+    }
+    this.drag.forEach(({ e, mi }, i) => {
+      const t = i < ok.length ? ok[i] : bad[i - ok.length];
+      if (!t) {
+        e.enabled = false;
+        return;
+      }
+      const [x, y, z] = this.sim.grid.tileWorld(t);
+      e.setPosition(x, y + SLAB_TOP + pavingOverlayLift(this.sim.grid, t) + 0.03, z);
+      mi.material = i < ok.length ? this.dragMats.ok : this.dragMats.bad;
+      e.enabled = true;
+    });
+  }
+
+  hideDrag() {
+    for (const d of this.drag) d.e.enabled = false;
+  }
+
+  /** How many drag squares are showing (tests and the review shots read it). */
+  get dragShown(): number {
+    return this.drag.filter((d) => d.e.enabled).length;
+  }
+
   update(dt: number, view?: MarkerView) {
     this.time += dt;
     this.holo.update(dt);

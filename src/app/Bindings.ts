@@ -27,6 +27,7 @@ export type Action =
   | 'rotate'
   | 'rotateBack'
   | 'removeMode'
+  | 'fillMode'
   | 'waterOverlay'
   | 'powerOverlay'
   | 'viewCycle'
@@ -107,6 +108,8 @@ export const ACTIONS: readonly ActionDef[] = [
   A('rotate', 'Turn the piece', 'build', 'build'),
   A('rotateBack', 'Turn the piece back', 'build', 'build'),
   A('removeMode', 'Take things down', 'build', 'build'),
+  // Build mode's drag: a run of squares, or (with Fill on) the whole patch between where it starts and ends
+  A('fillMode', 'Fill a whole patch when you drag: on or off', 'build', 'build'),
   A('waterOverlay', 'Water view (in build mode)', 'build', 'build'),
   A('powerOverlay', 'Power view (in build mode)', 'build', 'build'),
   // E23.11: the pad's build dock: d-pad up changes the view, left and right walk the hotbar slots
@@ -168,6 +171,7 @@ export function defaultKeys(): Record<Action, string[]> {
     rotate: ['KeyR', 'Wheel'],
     rotateBack: [],
     removeMode: ['KeyX'],
+    fillMode: ['KeyF'], // (F eats a snack while walking; build mode wins while something is in hand)
     waterOverlay: ['KeyV'],
     powerOverlay: ['KeyO'],
     // E23.11: the pad's d-pad jobs in build mode (keys can be given to them in Settings)
@@ -219,6 +223,7 @@ export function defaultPad(): Partial<Record<Action, number>> {
     rotate: 5,
     rotateBack: 4,
     removeMode: 7,
+    fillMode: 11, // click the right stick in build mode (the stick moves the build cursor there; walking, it senses)
     // E23.11: in build mode d-pad up changes the view (off, Power, Water) and left / right walk the hotbar slots;
     // walking, the same buttons open the backpack, eat and pin the next request. Water and Power views stay V / O.
     viewCycle: 12,

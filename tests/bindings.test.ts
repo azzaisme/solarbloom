@@ -22,6 +22,7 @@ const KEYS: [Action, string[]][] = [
   ['rotate', ['KeyR', 'Wheel']],
   ['sense', ['KeyR']], // VFX 1: R walking; R turns the piece only in build mode
   ['removeMode', ['KeyX']],
+  ['fillMode', ['KeyF']], // build mode from above: Fill on or off (F eats a snack only while walking)
   ['powerOverlay', ['KeyO']], // E23.3.4
   ['backpack', ['Tab', 'KeyI']],
   ['map', ['KeyM']],
@@ -47,6 +48,7 @@ const PAD: [Action, number | undefined][] = [
   ['rotateBack', 4], // LB
   ['rotate', 5], // RB
   ['removeMode', 7], // right trigger
+  ['fillMode', 11], // click the right stick in build mode (the stick moves the build cursor)
   ['powerOverlay', undefined], // E23.11: O on the keyboard; the pad's d-pad up changes the view instead
   ['waterOverlay', undefined],
   ['viewCycle', 12], // E23.11: d-pad up in build mode: off, Power, Water

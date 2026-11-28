@@ -1,5 +1,5 @@
 import type { AreaMode } from '../core/types';
-import type { BuildableType, MachineData } from '../core/types';
+import type { BuildableType, LaidKind, MachineData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import type { Sim } from '../gameplay/Sim';
 import { ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
@@ -21,7 +21,9 @@ import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
 /** E19.2: `decor:<id>` holds a decoration to place; `remove` aims at decorations to remove or pick up. */
 export type DecorTool = `decor:${string}`;
-export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | 'remove' | 'pipe';
+export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | 'remove' | 'pipe' | LaidKind;
+/** A footpath or road in hand (gameplay/LaidPaths): the ground itself, laid by the square, a run or a patch. */
+export const laidTool = (t: Tool): t is LaidKind => t === 'footpath' || t === 'road' || t === 'grass';
 /** E19.2: the decoration a tool holds, if it holds one. */
 export const decorType = (t: Tool) => (t.startsWith('decor:') ? t.slice(6) : undefined);
 /** A machine build tool (a machine type), not pulse, inspect, a core, a decoration or remove. */
@@ -219,11 +221,6 @@ export class Hud {
     this.loadWheel = new LoadWheel(this);
     this.dock = new Dock(this);
     this.root.innerHTML = iconize(this.template());
-    // Third person: the build crosshair in the middle of the screen (shown while aiming a build: `.aiming`)
-    const xh = document.createElement('div');
-    xh.className = 'crosshair';
-    xh.setAttribute('aria-hidden', 'true');
-    this.root.appendChild(xh);
     this.hotbar.wire();
     this.panels.wire();
     this.charge.wire();
