@@ -7,6 +7,7 @@ import { WATER } from './Water';
 import { catSpots, fountainPond, hash01, idHash, LOCAL_SPECIES, localSlots, supersIn, tilesIn, visitorSlots, wanderStop, type LocalSpecies, type Rect, type VisitorKind } from './FaunaPlan';
 import { mat, PALETTE } from './Materials';
 import { assignBatch, group, shape, vshape } from './Shapes';
+import { playClip, type Critter, type CritterKind, type CritterModels } from './CritterModels';
 import { SLAB_TOP } from './SceneBuilder';
 
 /**
@@ -19,9 +20,10 @@ import { SLAB_TOP } from './SceneBuilder';
  * - **Inert:** no colliders, no picking (picking is plane maths), no events, no access to the economy. Nothing
  *   here writes the simulation. With reduced motion they rest in place (fireflies go away).
  *
- * Meshy hook: each kind's `make*` builds its placeholder from primitives. When the reviewed Meshy models land
- * (docs/art/meshy-assets.md; the Lucky Cat entry covers the cat body), replace the body of the matching
- * `make*` with the loaded model and keep the returned parts (root, plus the named moving pieces).
+ * Models: each kind's `make*` builds a placeholder from primitives; the animals (all but the robots, fireflies and
+ * moths) then load their Tripo model (CritterModels: the visitors' own, and the duck, pigeon, rabbit and sleeping
+ * cat) and hide the placeholder once it is in. A modelled animal plays its clips (its walk, hop or swim while it
+ * moves, its idle while it rests) instead of the placeholder's moving parts.
  */
 
 type Kind = 'koi' | 'robots' | 'groundBirds' | 'cats' | 'fireflies' | 'mistMoths' | LocalSpecies;
@@ -44,7 +46,21 @@ interface Actor {
   key: string;
   phase: number;
   y: number;
+  /** its Tripo model, once loaded (the placeholder is hidden then) */
+  model?: Critter;
 }
+
+/** Which model each animal kind draws with; the koi pool mixes in the golden carp and rainbow minnow. */
+const MODEL_OF: Partial<Record<Kind, (i: number) => CritterKind>> = {
+  koi: (i) => (['koi', 'golden-carp', 'koi', 'rainbow-minnow'] as const)[i % 4],
+  groundBirds: () => 'songbird',
+  cats: () => 'sleeping-cat',
+  rabbits: () => 'rabbit',
+  pigeons: () => 'pigeon',
+  ducks: () => 'duck',
+  frogs: () => 'frog',
+  squirrels: () => 'squirrel',
+};
 
 export interface FaunaOptions {
   quality: 'low' | 'medium' | 'high';
@@ -80,6 +96,7 @@ export class Fauna {
     private sim: Sim,
     parent: pc.Entity,
     private batcher?: pc.BatchManager,
+    private models?: CritterModels,
   ) {
     this.root = group(parent, 'fauna');
     this.seed = sim.state.seed | 0;
@@ -285,7 +302,24 @@ export class Fauna {
     root.setLocalScale(0, 0, 0);
     const id = this.batchFor(kind);
     if (id >= 0) assignBatch(root, id);
-    return { root, parts, used: false, home: { x: 0, z: 0 }, from: new pc.Vec3(), to: new pc.Vec3(), leg: 0, t: 1, dur: 1, rest: 0, key: '', phase: 0, y: 0 };
+    const a: Actor = { root, parts, used: false, home: { x: 0, z: 0 }, from: new pc.Vec3(), to: new pc.Vec3(), leg: 0, t: 1, dur: 1, rest: 0, key: '', phase: 0, y: 0 };
+    const which = MODEL_OF[kind]?.(this.pools[kind].length);
+    if (which && this.models)
+      void this.models.make(which, { start: kind === 'koi' ? 'move' : 'idle' }).then((m) => {
+        if (!m || !root.parent) return; // (torn down meanwhile)
+        for (const c of root.children) (c as pc.Entity).enabled = false; // the placeholder
+        root.addChild(m.holder);
+        m.holder.enabled = a.used;
+        a.model = m;
+      });
+    return a;
+  }
+
+  /** A modelled animal's clip: its walk (hop, swim) while it moves, its idle at rest; held still with reduced motion. */
+  private clip(a: Actor, moving: boolean, rm: boolean) {
+    const m = a.model!;
+    playClip(m, moving ? 'move' : 'idle');
+    if (m.entity.anim) m.entity.anim.speed = rm ? 0 : 1;
   }
 
   private pool(kind: Kind, n: number): Actor[] {
@@ -334,6 +368,7 @@ export class Fauna {
       a.root.setPosition(a.from);
       a.root.setEulerAngles(0, s.rot ?? hash01(this.seed, a.leg, 4) * 360, 0);
       a.root.setLocalScale(1, 1, 1);
+      if (a.model) a.model.holder.enabled = true;
     }
     this.active[kind] = keep.size;
   }
@@ -343,6 +378,7 @@ export class Fauna {
     a.used = false;
     a.key = '';
     a.root.setLocalScale(0, 0, 0);
+    if (a.model) a.model.holder.enabled = false; // (its clips stop with it)
   }
 
   private replan(rect: Rect, opts: FaunaOptions) {
@@ -447,7 +483,8 @@ export class Fauna {
         a.root.setPosition(a.home.x + Math.cos(ang) * r, a.y, a.home.z + Math.sin(ang) * r);
         a.root.setEulerAngles(0, (-ang * 180) / Math.PI + (i % 2 ? 180 : 0), 0);
       } else if (!rm) this.walk(a, dt, 0.35, 2, okWater, 0.6);
-      if (!rm) a.parts[0].setLocalEulerAngles(0, Math.sin(t * 7 + a.phase) * 25, 0);
+      if (a.model) this.clip(a, true, rm); // always swimming
+      else if (!rm) a.parts[0].setLocalEulerAngles(0, Math.sin(t * 7 + a.phase) * 25, 0);
     }
     for (const a of this.pools.robots) {
       if (!a.used || rm) continue;
@@ -458,8 +495,14 @@ export class Fauna {
       arm.setLocalEulerAngles(moving ? 0 : 20 + Math.sin(t * 3 + a.phase) * 15, 0, 0); // waters the flowers while it rests
     }
     for (const a of this.pools.groundBirds) {
-      if (!a.used || rm) continue;
+      if (!a.used) continue;
+      if (a.model && rm) this.clip(a, false, rm);
+      if (rm) continue;
       const moving = this.walk(a, dt, 0.9, 2, okWalk, 1.6);
+      if (a.model) {
+        this.clip(a, moving, rm); // its hop and its pecking idle
+        continue;
+      }
       // hops: short parabolas while moving; pecks while resting
       const hop = moving ? Math.abs(Math.sin(a.t * Math.PI * 4)) * 0.05 : 0;
       const p = a.root.getPosition();
@@ -467,12 +510,18 @@ export class Fauna {
       a.parts[0].setLocalEulerAngles(moving ? 0 : Math.max(0, Math.sin(t * 5 + a.phase)) * 45, 0, 0);
     }
     for (const a of this.pools.cats) {
-      if (!a.used || rm) continue;
+      if (!a.used) continue;
+      if (a.model) {
+        this.clip(a, false, rm); // its clip breathes, stirs its head and sways its tail
+        continue;
+      }
+      if (rm) continue;
       const b = 1 + Math.sin(t * 1.6 + a.phase) * 0.04; // slow breathing
       a.parts[0].setLocalScale(CAT_S, CAT_S * b, CAT_S);
       a.parts[1].setLocalEulerAngles(0, Math.sin(t * 0.7 + a.phase) * 6, 0);
     }
     if (!rm) this.updateLocals(dt, t, okWalk, okWater);
+    else for (const sp of LOCAL_SPECIES) for (const a of this.pools[sp]) if (a.used && a.model) this.clip(a, false, true); // resting, held still
     for (const a of this.pools.mistMoths) {
       if (!a.used) continue;
       const k = a.phase;
@@ -505,12 +554,20 @@ export class Fauna {
           const moving = this.walk(a, dt, 0.3, 2, okWater, 3);
           const p = a.root.getPosition();
           a.root.setPosition(p.x, a.y + Math.sin(t * 2 + a.phase) * 0.006, p.z);
+          if (a.model) {
+            this.clip(a, moving, false); // paddling, or dabbling at rest
+            continue;
+          }
           a.parts[0].setLocalEulerAngles(moving ? 0 : Math.max(0, Math.sin(t * 1.5 + a.phase)) * 70, 0, 0);
           continue;
         }
         const speed = sp === 'squirrels' ? 1.6 : sp === 'rabbits' ? 1.1 : sp === 'frogs' ? 0.8 : 0.5;
         const rest = sp === 'frogs' ? 5 : sp === 'squirrels' ? 1.2 : 2.2;
         const moving = this.walk(a, dt, speed, sp === 'frogs' ? 1 : 2.5, okWalk, rest);
+        if (a.model) {
+          this.clip(a, moving, false); // its own hop, walk or scamper (the clip lifts it), its idle at rest
+          continue;
+        }
         const hops = sp === 'rabbits' ? 3 : sp === 'frogs' ? 2 : sp === 'squirrels' ? 6 : 0;
         const hop = moving && hops ? Math.abs(Math.sin(a.t * Math.PI * hops)) * (sp === 'squirrels' ? 0.03 : 0.07) : 0;
         const p = a.root.getPosition();
