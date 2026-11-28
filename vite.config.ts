@@ -26,7 +26,7 @@ const QUICK = [
   // E23: a living world
   'crafting', 'crafting-bench', 'research', 'drone-fuel', 'automation',
   // E23.7: time, weather and salvage
-  'clock', 'timers', 'photo-scene', 'weather',
+  'clock', 'timers', 'photo-scene', 'photo-lens', 'photo-album', 'weather',
   // E23.3: the power grid
   'power-grid', 'power-helpers', 'power-lights', 'moonlit-night', 'sun-moon', 'twilight-sky', 'sunlit-look',
   // E23.8: regions and the mainland

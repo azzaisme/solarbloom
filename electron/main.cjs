@@ -102,6 +102,20 @@ app.whenReady().then(() => {
   const capture = (permission) => permission === 'media' || permission === 'audioCapture' || permission === 'videoCapture';
   ses.setPermissionRequestHandler((_wc, permission, cb) => cb(!capture(permission))); // pointer lock and full screen still work
   ses.setPermissionCheckHandler((_wc, permission) => !capture(permission));
+  // Photo mode's "Save as a file" (#photo-2): pictures go straight into Pictures/Solarbloom. Without this the
+  // download opens a file dialog, which a controller can't work in Gaming Mode. A name already taken gets a number.
+  ses.on('will-download', (_event, item) => {
+    try {
+      const dir = path.join(app.getPath('pictures'), 'Solarbloom');
+      fs.mkdirSync(dir, { recursive: true });
+      const { name, ext } = path.parse(path.basename(item.getFilename()) || 'solarbloom.png');
+      let file = path.join(dir, name + ext);
+      for (let n = 2; fs.existsSync(file) && n < 1000; n++) file = path.join(dir, `${name}-${n}${ext}`);
+      item.setSavePath(file);
+    } catch {
+      /* the default (a dialog) is better than no picture */
+    }
+  });
   protocol.handle('app', (request) => {
     const { pathname } = new URL(request.url);
     const file = path.normalize(path.join(DIST, decodeURIComponent(pathname === '/' ? '/index.html' : pathname)));

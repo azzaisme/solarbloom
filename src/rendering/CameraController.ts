@@ -49,6 +49,9 @@ export interface CameraSnapshot {
   pitchOffset: number;
   follow: number;
   held: boolean;
+  /** #photo-2: photo mode's lens and lean (undefined and 0 in play) */
+  fovOverride: number | undefined;
+  roll: number;
 }
 
 /**
@@ -209,6 +212,13 @@ export class CameraController {
   pitchOffset = 0;
   /** E19.4.1: photo mode holds the view: glides, follows and eased zooms from the game leave it alone. */
   held = false;
+  /**
+   * #photo-2: photo mode's lens: a vertical field of view in degrees in place of the view's own (the camera stays
+   * where it is, so a long lens crops in and flattens the picture and a wide one opens it up). Undefined in play.
+   */
+  fovOverride?: number;
+  /** #photo-2: photo mode leans the horizon: degrees about the line of sight (positive: clockwise). Zero in play. */
+  roll = 0;
   /** E21.22: the exploration camera is on (bloombot play): pitch is the player's, not the zoom's */
   explore = false;
   /** E21.22: the pitch the view eases to (degrees, EXPLORE.pitchMin–pitchMax) */
@@ -574,14 +584,14 @@ export class CameraController {
   /** E19.4.1: the view as it is now (photo mode keeps it to put back on the way out). */
   snapshot(): CameraSnapshot {
     const v = (p: pc.Vec3): [number, number, number] => [p.x, p.y, p.z];
-    return { target: v(this.target), goal: v(this.goal), yaw: this.yaw, yawGoal: this.yawGoal, zoom: this.zoom, zoomGoal: this.zoomGoal, minZoom: this.minZoom, maxZoom: this.maxZoom, pitchOffset: this.pitchOffset, follow: this.follow, held: this.held };
+    return { target: v(this.target), goal: v(this.goal), yaw: this.yaw, yawGoal: this.yawGoal, zoom: this.zoom, zoomGoal: this.zoomGoal, minZoom: this.minZoom, maxZoom: this.maxZoom, pitchOffset: this.pitchOffset, follow: this.follow, held: this.held, fovOverride: this.fovOverride, roll: this.roll };
   }
 
   /** E19.4.1: puts a snapshot back, at once (no glide). */
   restore(s: CameraSnapshot) {
     this.target.set(...s.target);
     this.goal.set(...s.goal);
-    Object.assign(this, { yaw: s.yaw, yawGoal: s.yawGoal, zoom: s.zoom, zoomGoal: s.zoomGoal, minZoom: s.minZoom, maxZoom: s.maxZoom, pitchOffset: s.pitchOffset, follow: s.follow, held: s.held });
+    Object.assign(this, { yaw: s.yaw, yawGoal: s.yawGoal, zoom: s.zoom, zoomGoal: s.zoomGoal, minZoom: s.minZoom, maxZoom: s.maxZoom, pitchOffset: s.pitchOffset, follow: s.follow, held: s.held, fovOverride: s.fovOverride, roll: s.roll });
     this.anchor = undefined;
     this.apply();
   }
@@ -698,6 +708,11 @@ export class CameraController {
       }
     }
     if (this.pitchOffset) this.pitch = pc.math.clamp(this.pitch + this.pitchOffset, -20, 80);
+    if (this.fovOverride) {
+      // #photo-2: the lens changes, the camera stays put: the height in view follows the lens
+      this.fov = pc.math.clamp(this.fovOverride, 5, 120);
+      this.viewHeight = this.dist * Math.tan((this.fov * Math.PI) / 360);
+    }
     const c = this.cam;
     c.fov = this.fov;
     // Clip planes hug the view: near just in front of the closest ground on screen (and anything tall on it),
@@ -743,6 +758,7 @@ export class CameraController {
     } else this.boomFree = this.boomShown = 1;
     this.entity.setPosition(x, y, z);
     this.entity.lookAt(t);
+    if (this.roll) this.entity.rotateLocal(0, 0, -this.roll);
     this.markDirty();
   }
 

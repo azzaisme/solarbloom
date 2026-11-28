@@ -1,6 +1,7 @@
 import { Bindings, migrateBindings } from './Bindings';
 import { MAINLAND } from '../data/mainland';
 import { desktopApi, Game } from './Game';
+import { albumStore } from './PhotoAlbum';
 import { SaveService, type Slot, SLOT_COUNT } from './SaveService';
 import { parseSettings, SETTINGS_KEY } from './Settings';
 import { ControlsTable } from '../ui/ControlsTable';
@@ -109,7 +110,11 @@ export async function boot(canvas: HTMLCanvasElement) {
     slots: () => store.slots(),
     start: (slot, fresh, device, realClock) => void start(slot, fresh, device, realClock),
     rename: (slot, name) => void new SaveService(undefined, slot).rename(name),
-    remove: (slot) => new SaveService(undefined, slot).deleteSlot(),
+    remove: (slot) => {
+      new SaveService(undefined, slot).deleteSlot();
+      // #photo-2: a deleted garden takes its photo album with it (as it takes Tide's sketches)
+      void albumStore().clear(slot).catch(() => {});
+    },
     quit: desktopApi()?.quit,
     reducedMotion: !!settings.reducedMotion,
     earlierVersion: (slot) => new SaveService(undefined, slot).fromEarlierVersion(),
